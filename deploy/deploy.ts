@@ -43,7 +43,8 @@ const metaJson = html.match(/<script[^>]*id="deck-meta"[^>]*>([\s\S]*?)<\/script
 const visibility = metaJson ? (JSON.parse(metaJson).visibility ?? "public") : "public";
 if (visibility !== "public" && visibility !== "password") { console.error(`알 수 없는 visibility: ${visibility}`); process.exit(1); }
 
-const meta: Record<string, string> = { visibility };
+const lang = metaJson ? JSON.parse(metaJson).lang : undefined;
+const meta: Record<string, string> = { visibility, ...(lang === "en" || lang === "ko" ? { lang } : {}) };
 if (visibility === "password") {
   // 앱의 Export 메뉴는 비밀번호를 환경 변수로 넘긴다(명령줄과 로그에 남기지 않는다). 터미널에서는 숨김 입력으로 묻는다.
   const pw = process.env.SLIDEKIT_DEPLOY_PASSWORD ?? askHidden("덱 비밀번호: ");

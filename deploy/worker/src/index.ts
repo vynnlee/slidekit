@@ -8,7 +8,7 @@ type KV = {
   delete(key: string): Promise<void>;
 };
 export type Env = { DECKS: KV; COOKIE_SECRET: string };
-export type Meta = { visibility: "public" | "password"; salt?: string; hash?: string };
+export type Meta = { visibility: "public" | "password"; lang?: string; salt?: string; hash?: string };
 
 const enc = new TextEncoder();
 const ITER = 100_000; // Workers의 PBKDF2 반복 상한
@@ -45,7 +45,24 @@ async function validCookie(req: Request, secret: string, deck: string, now = Dat
   } catch { return false; }
 }
 
-const headers = { "X-Robots-Tag": "noindex", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer" };
+// script-src는 건드리지 않는다. 덱이 인라인 스크립트와 스타일을 쓴다.
+const headers = {
+  "X-Robots-Tag": "noindex", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer",
+  "Content-Security-Policy": "frame-ancestors 'none'",
+};
+
+const T = {
+  ko: { title: "비밀번호", hint: "이 덱은 비밀번호가 필요합니다", ph: "비밀번호", open: "열기", wrong: "비밀번호가 맞지 않습니다", locked: "시도가 너무 많습니다. 잠시 뒤 다시 시도하세요", none: "찾을 수 없습니다", denied: "허용되지 않은 요청입니다" },
+  en: { title: "Password", hint: "This deck is password protected", ph: "Password", open: "Open", wrong: "Incorrect password", locked: "Too many attempts. Try again later", none: "Not found", denied: "Request not allowed" },
+};
+type Msg = (typeof T)["ko"];
+// deck-meta.lang이 우선이고, 없으면 Accept-Language 첫 항목, 기본은 ko이다.
+const msgs = (req: Request, meta?: Meta | null): Msg => {
+  const l = meta?.lang ?? req.headers.get("Accept-Language")?.split(",")[0].trim().toLowerCase() ?? "";
+  return l.startsWith("en") ? T.en : T.ko;
+};
+const plain = (status: number, text: string, extra: Record<string, string> = {}) =>
+  new Response(text, { status, headers: { ...headers, "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", ...extra } });
 
 // (덱, IP)별 실패 횟수를 KV에 둔다. KV 만료는 최소 60초라 창 안에서만 유효한 start로 직접 판단한다.
 type Fails = { n: number; start: number };
@@ -54,43 +71,51 @@ async function failsOf(env: Env, key: string, now: number): Promise<Fails> {
   return f && now / 1000 - f.start < WINDOW ? f : { n: 0, start: now / 1000 };
 }
 
-const locked = (retry: number) => new Response("시도가 너무 많습니다. 잠시 뒤 다시 시도하세요", {
-  status: 429, headers: { ...headers, "Retry-After": String(Math.ceil(retry)), "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
-});
-
-const form = (err = "") => new Response(
-  `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>비밀번호</title>
-<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#000;color:#fff;font:16px system-ui}form{display:grid;gap:12px;width:260px}input,button{font:inherit;padding:10px;border-radius:8px;border:1px solid #444;background:#111;color:#fff}button{background:#fff;color:#000}p{margin:0;color:#f87}</style>
-<form method="post"><input type="password" name="password" placeholder="비밀번호" autofocus required>${err ? `<p>${err}</p>` : ""}<button>열기</button></form>`,
-  { status: err ? 401 : 200, headers: { ...headers, "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } },
+const form = (m: Msg, err = "") => new Response(
+  `<!doctype html><html lang="${m === T.en ? "en" : "ko"}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${m.title}</title>
+<style>
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:#000;color:#fff;font:16px system-ui,sans-serif}
+form{display:grid;gap:12px;width:min(280px,86vw)}
+p{margin:0;font-size:14px;color:#a3a3a3}
+p.e{color:#f87171}
+input,button{font:inherit;padding:11px 12px;border-radius:8px;border:1px solid #404040;background:#0a0a0a;color:#fff}
+button{background:#fff;color:#000;border-color:#fff;cursor:pointer}
+input:focus-visible,button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+</style>
+<form method="post"><p>${m.hint}</p><input type="password" name="password" placeholder="${m.ph}" aria-label="${m.ph}" autocomplete="current-password" autofocus required>${err ? `<p class="e" role="alert">${err}</p>` : ""}<button>${m.open}</button></form>`,
+  { status: err ? 401 : 200, headers: { ...headers, "Content-Type": "text/html; charset=utf-8", "Cache-Control": "private, no-store" } },
 );
 
 export async function handle(req: Request, env: Env, now = Date.now()): Promise<Response> {
   const deck = new URL(req.url).pathname.replace(/^\/|\/$/g, "");
-  if (!/^[\w-]+$/.test(deck)) return new Response("Not found", { status: 404 });
+  if (!/^[\w-]+$/.test(deck)) return plain(404, msgs(req).none);
   const meta: Meta | null = JSON.parse((await env.DECKS.get(`meta:${deck}`)) ?? "null");
   const html = meta && (await env.DECKS.get(`html:${deck}`));
-  if (!meta || !html) return new Response("Not found", { status: 404 });
+  if (!meta || !html) return plain(404, msgs(req, meta).none);
+  const m = msgs(req, meta);
 
   const page = (cache: string) => new Response(html, { headers: { ...headers, "Content-Type": "text/html; charset=utf-8", "Cache-Control": cache } });
   if (meta.visibility !== "password") return page("public, max-age=60");
   if (!meta.salt || !meta.hash) return new Response("Misconfigured", { status: 500 });
 
   if (req.method === "POST") {
+    // 로그인 CSRF 방지: 다른 사이트에서 온 폼 전송은 거부한다. SameSite=Strict 쿠키가 나머지를 막는다.
+    const origin = req.headers.get("Origin");
+    if (origin && new URL(origin).host !== new URL(req.url).host) return plain(403, m.denied);
     const key = `rl:${deck}:${req.headers.get("cf-connecting-ip") ?? "unknown"}`;
     const fails = await failsOf(env, key, now);
-    if (fails.n >= MAX_FAILS) return locked(fails.start + WINDOW - now / 1000); // 맞는 비밀번호도 잠금 중이면 거부한다
+    if (fails.n >= MAX_FAILS) return plain(429, m.locked, { "Retry-After": String(Math.ceil(fails.start + WINDOW - now / 1000)) }); // 맞는 비밀번호도 잠금 중이면 거부한다
     const pw = (await req.formData().catch(() => null))?.get("password");
     const { hash } = await hashPassword(typeof pw === "string" ? pw : "", meta.salt);
     if (!same(unb64(hash), unb64(meta.hash))) {
       fails.n++;
       await env.DECKS.put(key, JSON.stringify(fails), { expirationTtl: WINDOW });
-      return form("비밀번호가 맞지 않습니다");
+      return form(m, m.wrong);
     }
     await env.DECKS.delete(key);
     return new Response(null, { status: 303, headers: { ...headers, Location: `/${deck}`, "Set-Cookie": await makeCookie(env.COOKIE_SECRET, deck, now) } });
   }
-  return (await validCookie(req, env.COOKIE_SECRET, deck)) ? page("private, no-store") : form();
+  return (await validCookie(req, env.COOKIE_SECRET, deck)) ? page("private, no-store") : form(m);
 }
 
 export default { fetch: handle };

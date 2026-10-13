@@ -53,3 +53,30 @@ test("성공하면 카운터 삭제", async () => {
   expect(store["rl:sec:4.4.4.4"]).toBeUndefined();
   for (let i = 0; i < 4; i++) expect((await post("틀림", "4.4.4.4", t0)).status).toBe(401);
 });
+
+test("폼과 오류 문구는 meta.lang, 없으면 Accept-Language, 기본 ko", async () => {
+  store["html:en"] = "<p>x</p>"; store["meta:en"] = JSON.stringify({ visibility: "password", lang: "en", ...pw });
+  expect(await (await get("en")).text()).toContain("Password");
+  expect(await (await get("sec")).text()).toContain("비밀번호");
+  store["meta:nolang"] = JSON.stringify({ visibility: "password", ...pw }); store["html:nolang"] = "x";
+  const en = await handle(new Request("https://x/nolang", { headers: { "Accept-Language": "en-US,ko;q=0.5" } }), env);
+  expect(await en.text()).toContain("This deck is password protected");
+  expect(await (await handle(new Request("https://x/none", { headers: { "Accept-Language": "en" } }), env)).text()).toBe("Not found");
+  expect(await (await get("none")).text()).toBe("찾을 수 없습니다");
+});
+test("보안 헤더와 캐시", async () => {
+  for (const r of [await get("open"), await get("sec"), await post("틀림", "9.9.9.9")]) {
+    expect(r.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(r.headers.get("Referrer-Policy")).toBe("no-referrer");
+    expect(r.headers.get("Content-Security-Policy")).toBe("frame-ancestors 'none'");
+  }
+  expect((await get("open")).headers.get("Cache-Control")).toBe("public, max-age=60");
+  expect((await get("sec")).headers.get("Cache-Control")).toBe("private, no-store");
+  const ok = await post("열쇠", "8.8.8.8");
+  expect((await get("sec", ok.headers.get("Set-Cookie")!.split(";")[0])).headers.get("Cache-Control")).toBe("private, no-store");
+});
+test("다른 사이트 Origin의 폼 전송은 403, 같은 Origin은 통과", async () => {
+  const send = (origin: string) => handle(new Request("https://x/sec", { method: "POST", headers: { Origin: origin, "cf-connecting-ip": "7.7.7.7" }, body: new URLSearchParams({ password: "열쇠" }) }), env);
+  expect((await send("https://evil.com")).status).toBe(403);
+  expect((await send("https://x")).status).toBe(303);
+});

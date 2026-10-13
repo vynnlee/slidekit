@@ -24,3 +24,8 @@ test("어긴 샘플은 규칙별로 잡힌다", () => {
   expect(bad("노트</aside>", "노트</aside><aside data-notes>b</aside>")).toContain("notes");
   expect(bad("</body>", "<script>addEventListener('keydown',e=>{if(e.code==='Space')go()})</script></body>")).toContain("nav");
 });
+
+test("속성 안의 >와 생략된 닫는 태그에도 거짓 오류가 없다", () => {
+  const h = ok.replace('data-title="장"', 'data-title="A > B"').replace("<h1>장</h1>", "<h1>A > B</h1><ul><li>a<li>b</ul><p>열린 문단");
+  expect(rules(h)).toEqual([]);
+});

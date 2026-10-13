@@ -4,7 +4,7 @@ import { join } from "node:path";
 export type Issue = { level: "error" | "warn"; rule: string; msg: string };
 
 const KINDS = ["cover", "chapter", "content", "end"];
-const VOID = new Set(["meta", "link", "br", "img", "hr", "input", "source", "col", "area", "base", "wbr"]);
+const VOID = new Set(["p", "li", "dt", "dd", "option", /* 닫는 태그 생략 가능 */ "meta", "link", "br", "img", "hr", "input", "source", "col", "area", "base", "wbr"]);
 const BAD_CHARS = /[—–·・•]|\p{Extended_Pictographic}/u;
 
 export function lint(html: string): Issue[] {
@@ -46,12 +46,12 @@ export function lint(html: string): Issue[] {
   let cur: Sl | null = null;
   let last = 0;
   const wrappers: string[] = [];
-  for (const m of body.matchAll(/<(\/?)([a-zA-Z][\w-]*)([^>]*)>/g)) {
+  for (const m of body.matchAll(/<(\/?)([a-zA-Z][\w-]*)((?:"[^"]*"|'[^']*'|[^>"'])*)>/g)) {
     const [, close, tag0, attrs] = m;
     const tag = tag0.toLowerCase();
     if (cur) cur.text += body.slice(last, m.index);
     last = m.index! + m[0].length;
-    if (close) { if (stack.at(-1) === tag) stack.pop(); if (tag === "section" && stack.length === 0) cur = null; continue; }
+    if (close) { const k = stack.lastIndexOf(tag); if (k >= 0) stack.length = k; /* 생략된 닫는 태그(li, p)를 건너뛴다 */ if (tag === "section" && stack.length === 0) cur = null; continue; }
     const at = (n: string) => attrs.match(new RegExp(`\\b${n}=(?:"([^"]*)"|'([^']*)')`))?.[1] ?? attrs.match(new RegExp(`\\b${n}=(?:'([^']*)')`))?.[1] ?? null;
     if (/\b(?:id|class)=["'][^"']*\b(viewport|stage)\b/i.test(attrs)) wrappers.push(tag);
     if (stack.length === 0 && !["section", "script"].includes(tag)) add("error", "wrapper", `body 직계에 <${tag}>가 있다(슬라이드만 둔다)`);

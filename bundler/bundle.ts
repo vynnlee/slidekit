@@ -12,6 +12,12 @@ const deckDir = join(root, "decks", name);
 const cache = process.env.SLIDEKIT_CACHE ?? join(homedir(), ".cache", "slidekit", "fonts");
 
 const isLocal = (u: string) => !/^(data:|https?:|\/\/|#|mailto:|about:)/i.test(u);
+/* url (relative to a base dir) -> file path: drop ?query and #hash, decode %xx, stay inside the repo */
+function localPath(base: string, u: string) {
+  const p = resolve(base, decodeURIComponent(u.split(/[?#]/)[0]).replace(/^\//, ""));
+  if (p !== root && !p.startsWith(root + "/")) throw new Error(`asset outside the repo: ${u}`);
+  return p;
+}
 async function dataUri(file: string) {
   const f = Bun.file(file);
   if (!(await f.exists())) throw new Error(`missing asset: ${file}`);
@@ -27,7 +33,7 @@ async function replaceAsync(s: string, re: RegExp, fn: (m: RegExpMatchArray) => 
 /* url(...) inside CSS, resolved against the file the CSS came from */
 const inlineCssUrls = (css: string, base: string) =>
   replaceAsync(css, /url\(\s*(['"]?)([^)'"]+)\1\s*\)/g, async (m) =>
-    isLocal(m[2]) ? `url("${await dataUri(resolve(base, m[2]))}")` : m[0]);
+    isLocal(m[2]) ? `url("${await dataUri(localPath(base, m[2]))}")` : m[0]);
 
 let html = await Bun.file(join(deckDir, "index.html")).text();
 
@@ -39,7 +45,10 @@ html = html.replace(/<link\b[^>]*>\s*/g, (tag) => {
   if (!href) return tag;
   for (const f of new URL(href.replace(/&amp;/g, "&")).searchParams.getAll("family")) {
     const [family, axes = ""] = f.split(":");
-    const weights = (axes.split("@")[1] ?? "400").split(";").map(Number).filter(Boolean);
+    // wght@400;700, wght@100..900, ital,wght@0,400;1,700 모두 받는다. 비면 400.
+    const tags = axes.split("@")[0].split(","), wi = Math.max(0, tags.indexOf("wght"));
+    const weights = (axes.split("@")[1] ?? "").split(";").flatMap((t) => t.split(",")[wi]?.split("..") ?? []).map(Number).filter(Boolean);
+    if (!weights.length) weights.push(400);
     fonts.push({ family, weights });
   }
   return "";
@@ -49,19 +58,21 @@ html = html.replace(/<link\b[^>]*>\s*/g, (tag) => {
 html = await replaceAsync(html, /<link\b[^>]*rel="stylesheet"[^>]*>/g, async (m) => {
   const href = m[0].match(/href="([^"]+)"/)?.[1];
   if (!href || !isLocal(href)) return m[0];
-  const file = resolve(deckDir, href);
+  const file = localPath(deckDir, href);
   const css = await inlineCssUrls(await Bun.file(file).text(), dirname(file));
   return `<style>\n${css.replace(/<\/style/gi, "<\\/style")}</style>`;
 });
 html = await replaceAsync(html, /<script\b[^>]*\bsrc="([^"]+)"[^>]*><\/script>/g, async (m) => {
   if (!isLocal(m[1])) return m[0];
-  const js = await Bun.file(resolve(deckDir, m[1])).text();
-  return `<script>\n${js.replace(/<\/script/gi, "<\\/script")}</script>`;
+  const js = await Bun.file(localPath(deckDir, m[1])).text();
+  const attrs = m[0].match(/^<script\b([^>]*)>/)![1].replace(/\s+src="[^"]*"/, ""); // type="module" 등은 유지
+  return `<script${attrs}>\n${js.replace(/<\/script/gi, "<\\/script")}</script>`;
 });
 
 /* 3. images and CSS urls in style blocks */
-html = await replaceAsync(html, /(<(?:img|source|image)\b[^>]*?\b(?:xlink:)?(?:src|href)=")([^"]+)(")/g, async (m) =>
-  isLocal(m[2]) ? m[1] + (await dataUri(resolve(deckDir, m[2]))) + m[3] : m[0]);
+html = await replaceAsync(html, /(<(?:img|source|image|video|audio|track)\b[^>]*?\b(?:xlink:)?(?:src|href|poster)=")([^"]+)(")/g, async (m) =>
+  isLocal(m[2]) ? m[1] + (await dataUri(localPath(deckDir, m[2]))) + m[3] : m[0]);
+html = await replaceAsync(html, /(\sstyle=")([^"]*url\([^"]*)(")/g, async (m) => m[1] + (await inlineCssUrls(m[2], deckDir)) + m[3]);
 html = await replaceAsync(html, /(<style\b[^>]*>)([\s\S]*?)(<\/style>)/g, async (m) => m[1] + (await inlineCssUrls(m[2], deckDir)) + m[3]);
 
 /* 4. font subsets: only the characters this deck uses */

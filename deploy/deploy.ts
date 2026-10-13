@@ -19,7 +19,7 @@ const env = { ...process.env, CLOUDFLARE_API_TOKEN: token };
 
 function wrangler(...args: string[]) {
   const r = Bun.spawnSync(["bunx", "wrangler", ...args], { cwd: workerDir, env, stdout: "inherit", stderr: "inherit" });
-  if (r.exitCode !== 0) process.exit(r.exitCode ?? 1);
+  if (r.exitCode !== 0) throw new Error(`wrangler 실패 (종료 코드 ${r.exitCode})`); // finally가 임시 폴더를 지우도록 throw
 }
 
 function askHidden(label: string) {
@@ -53,8 +53,9 @@ if (visibility === "password") {
 const tmp = mkdtempSync(join(tmpdir(), "slidekit-"));
 try {
   writeFileSync(join(tmp, "meta.json"), JSON.stringify(meta), { mode: 0o600 });
-  wrangler("kv", "key", "put", `html:${arg}`, "--binding", "DECKS", "--remote", "--path", join(root, "dist", `${arg}.html`));
+  // meta를 먼저 올린다. 공개에서 비밀번호로 바꿀 때 html만 새것이고 meta는 옛 public인 상태를 막는다.
   wrangler("kv", "key", "put", `meta:${arg}`, "--binding", "DECKS", "--remote", "--path", join(tmp, "meta.json"));
+  wrangler("kv", "key", "put", `html:${arg}`, "--binding", "DECKS", "--remote", "--path", join(root, "dist", `${arg}.html`));
 } finally {
   rmSync(tmp, { recursive: true, force: true });
 }

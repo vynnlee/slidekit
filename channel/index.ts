@@ -100,11 +100,15 @@ async function listen() {
         while ((i = buf.indexOf("\n\n")) >= 0) {
           const block = buf.slice(0, i);
           buf = buf.slice(i + 2);
-          const ev = block.match(/^event: (.*)$/m)?.[1];
-          const data = block.match(/^data: (.*)$/m)?.[1];
+          // 줄 단위로 읽는다. 정규식 $ 는 U+2028 같은 줄 구분자에서도 끊긴다.
+          const lines = block.split("\n");
+          const ev = lines.find((l) => l.startsWith("event: "))?.slice(7);
+          const data = lines.filter((l) => l.startsWith("data: ")).map((l) => l.slice(6)).join("\n");
           if (ev === "comment" && data) {
-            const { deck, comment } = JSON.parse(data);
-            await push(deck, comment);
+            try {
+              const { deck, comment } = JSON.parse(data);
+              await push(deck, comment);
+            } catch (e) { console.error("[slidekit channel] 이벤트 처리 실패:", e); }
           }
         }
       }

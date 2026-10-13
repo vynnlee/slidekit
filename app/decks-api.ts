@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { cp, mkdir, rename, stat } from "node:fs/promises";
+import { cp, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 
 const root = join(import.meta.dir, "..");
 const decks = join(root, "decks");
@@ -69,6 +69,54 @@ export async function trashDeck(req: Request & { params: { folder: string } }) {
   return Response.json({ ok: true });
 }
 
+// ---- 휴지통(decks/.trash/<이름>-<타임스탬프>) ----
+const trashDir = join(decks, ".trash");
+const ENTRY = /^(.+)-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/;
+
+function parseEntry(entry: string) {
+  const m = SRC.test(entry) ? entry.match(ENTRY) : null;
+  return m ? { folder: m[1], deletedAt: `${m[2]}T${m[3]}:${m[4]}:${m[5]}.${m[6]}Z` } : null;
+}
+
+export async function listTrash() {
+  const names = await readdir(trashDir).catch(() => [] as string[]);
+  const items = await Promise.all(names.map(async (entry) => {
+    const p = parseEntry(entry);
+    if (!p) return null;
+    const html = await Bun.file(join(trashDir, entry, "index.html")).text().catch(() => "");
+    const title = html.match(/<title>([^<]*)<\/title>/)?.[1] ?? p.folder;
+    return { entry, ...p, title };
+  }));
+  return Response.json(items.filter(Boolean).sort((a, b) => b!.deletedAt.localeCompare(a!.deletedAt)));
+}
+
+type EntryReq = Request & { params: { entry: string } };
+
+export async function restoreDeck(req: EntryReq) {
+  const p = parseEntry(req.params.entry);
+  const from = join(trashDir, req.params.entry);
+  if (!p || !(await exists(from))) return err("Not in trash", 404);
+  let name = p.folder;
+  if (await exists(join(decks, name))) {
+    name = `${p.folder}-restored`;
+    for (let i = 2; await exists(join(decks, name)); i++) name = `${p.folder}-restored-${i}`;
+  }
+  await rename(from, join(decks, name));
+  if (name !== p.folder) await patchMeta(name, (m) => { if ("id" in m) m.id = name; });
+  return Response.json({ folder: name });
+}
+
+// 영구 삭제는 이 경로에서만 한다. 원래 폴더 이름을 body.confirm으로 받아야 지운다.
+export async function purgeDeck(req: EntryReq) {
+  const p = parseEntry(req.params.entry);
+  const from = join(trashDir, req.params.entry);
+  if (!p || !(await exists(from))) return err("Not in trash", 404);
+  const { confirm } = (await req.json().catch(() => ({}))) as { confirm?: unknown };
+  if (confirm !== p.folder) return err("Type the deck name to confirm", 400);
+  await rm(from, { recursive: true });
+  return Response.json({ ok: true });
+}
+
 // 연결 상태 표시가 쓰는 가벼운 응답
 export const routes = {
   "/api/ping": () => new Response("ok"),
@@ -76,4 +124,7 @@ export const routes = {
   "/api/decks/:folder/rename": { POST: renameDeck },
   // "/api/decks/:folder"는 편집기의 저장(PUT)이 쓰므로 휴지통은 별도 경로로 둔다.
   "/api/decks/:folder/trash": { POST: trashDeck },
+  "/api/trash": { GET: listTrash },
+  "/api/trash/:entry/restore": { POST: restoreDeck },
+  "/api/trash/:entry/purge": { POST: purgeDeck },
 };

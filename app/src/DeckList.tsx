@@ -9,6 +9,7 @@ import { Field } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
 import { CommandMenu, CommandMenuDialog, CommandMenuEmpty, CommandMenuFooter, CommandMenuInput, CommandMenuList, type CommandMenuItemData } from "@/components/ui/command-menu";
 import { Shell } from "./Shell";
+import { TrashList } from "./TrashList";
 import { go } from "./App";
 import { deckUrl, type DeckEntry } from "@/lib/deck";
 import { cn } from "@/lib/utils";
@@ -98,6 +99,7 @@ export function DeckList() {
   const [view, setView] = useState(() => pref("slidekit:list-view", ["grid", "list"], "grid"));
   const [sort, setSort] = useState<Sort>(() => pref("slidekit:list-sort", ["date", "title"], "date"));
   const [palette, setPalette] = useState(false);
+  const [trashView, setTrashView] = useState(false);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [err, setErr] = useState("");
@@ -191,6 +193,7 @@ export function DeckList() {
             <span className="px-2 text-subtitle font-medium">slidekit</span>
             <Button variant="ghost" size="compact" leadingIcon={Search} className="ml-auto text-muted-foreground" onClick={() => setPalette(true)}>Search ⌘K</Button>
             <Button variant="ghost" size="compact" leadingIcon={ArrowDownUp} onClick={cycleSort}>{SORTS[sort]}</Button>
+            <Button variant="ghost" size="compact" leadingIcon={Trash2} active={trashView} aria-pressed={trashView} onClick={() => setTrashView((t) => !t)}>Trash</Button>
             <Tooltip content={view === "grid" ? "View as list" : "View as grid"} side="bottom">
               <Button variant="ghost" size="icon-compact" aria-label="Toggle view" onClick={() => setView(view === "grid" ? "list" : "grid")}>{view === "grid" ? <List /> : <LayoutGrid />}</Button>
             </Tooltip>
@@ -199,6 +202,7 @@ export function DeckList() {
         }
       >
         <div className="p-4">
+          {trashView ? <TrashList onRestored={load} /> : <>
           {loadErr && (
             <p role="alert" className="flex items-center gap-2 text-caption text-muted-foreground">
               Could not load decks.<Button variant="ghost" size="compact" onClick={load}>Retry</Button>
@@ -235,6 +239,7 @@ export function DeckList() {
               ))}
             </CardGroup>
           )}
+          </>}
         </div>
       </Shell>
 

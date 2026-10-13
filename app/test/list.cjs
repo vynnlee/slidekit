@@ -90,6 +90,35 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   check('.trash 폴더는 정적 서빙 안 함', (await ctx.request.get(BASE + '/decks/.trash/x/index.html')).status() === 404);
   check('없는 덱 삭제는 404', (await ctx.request.post(BASE + '/api/decks/nope-nope/trash', { data: {} })).status() === 404);
   check('경로 이탈 이름 거부', (await ctx.request.post(BASE + '/api/decks/..%2Fapp/rename', { data: { name: 'zz-e2e-x' } })).status() === 404);
+  // 휴지통 보기: 복구(이름 충돌은 -restored), 영구 삭제는 이름 입력 필요
+  await page.goto(BASE + '/');
+  await page.getByRole('button', { name: 'Trash', exact: true }).click();
+  await page.getByRole('button', { name: 'Restore zz-e2e-a' }).waitFor();
+  check('휴지통 목록에 삭제한 덱', (await page.getByRole('button', { name: 'Restore zz-e2e-a' }).count()) === 1);
+  await post('/api/decks', { name: 'zz-e2e-b' }); // 원래 이름을 비워 두지 않으면 -restored가 된다
+  await page.getByRole('button', { name: 'Restore zz-e2e-a' }).click();
+  check('이름 충돌 복구는 -restored', await until(async () => (await ids()).includes('zz-e2e-b-restored')), await ids());
+  check('복구본 메타 id 갱신', fs.readFileSync(path.join(DECKS, 'zz-e2e-b-restored', 'index.html'), 'utf8').includes('"id":"zz-e2e-b-restored"'));
+  await ctx.request.post(BASE + '/api/decks/zz-e2e-b/trash', { data: {} });
+  await page.reload();
+  await page.getByRole('button', { name: 'Trash', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete zz-e2e-b forever' }).click();
+  const forever = page.getByRole('dialog').getByRole('button', { name: 'Delete forever' });
+  check('이름을 입력하기 전에는 영구 삭제 비활성', await forever.isDisabled());
+  await page.getByRole('dialog').getByLabel('Deck name').fill('zz-e2e-b');
+  check('이름을 입력하면 활성', await until(async () => !(await forever.isDisabled())));
+  await forever.click();
+  const trashed = () => fs.existsSync(path.join(DECKS, '.trash')) ? fs.readdirSync(path.join(DECKS, '.trash')).filter((d) => d.startsWith('zz-e2e-b-2')) : [];
+  check('영구 삭제', await until(async () => trashed().length === 0), trashed());
+  check('휴지통 API 목록', Array.isArray(await (await ctx.request.get(BASE + '/api/trash')).json()));
+  await post('/api/decks', { name: 'zz-e2e-p2' });
+  await ctx.request.post(BASE + '/api/decks/zz-e2e-p2/trash', { data: {} });
+  const e2 = (await (await ctx.request.get(BASE + '/api/trash')).json()).find((i) => i.folder === 'zz-e2e-p2');
+  check('이름 없이 purge 거부', (await post(`/api/trash/${e2.entry}/purge`, {})).status() === 400);
+  check('다른 이름으로 purge 거부', (await post(`/api/trash/${e2.entry}/purge`, { confirm: 'x' })).status() === 400);
+  check('경로 이탈 entry 거부', (await post('/api/trash/..%2F..%2Fapp/purge', { confirm: 'app' })).status() === 404);
+  check('없는 entry 복구는 404', (await post('/api/trash/nope-2026-01-01T00-00-00-000Z/restore', {})).status() === 404);
+  check('이름과 일치하면 purge', (await post(`/api/trash/${e2.entry}/purge`, { confirm: 'zz-e2e-p2' })).status() === 200);
   cleanup();
 
   // 연결 상태 표시와 렌더 오류 경계

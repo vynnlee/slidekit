@@ -5,4 +5,4 @@ routes = [{ pattern = "static.vynnlee.com", custom_domain = true }]
 
 [[kv_namespaces]]
 binding = "DECKS"
-id = "REPLACE_WITH_KV_NAMESPACE_ID" # bunx wrangler kv namespace create DECKS 의 결과
+id = "b368a418ca274335947e4c4074eedd8c" # bunx wrangler kv namespace create DECKS 의 결과

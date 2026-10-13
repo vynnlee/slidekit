@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, MonitorPlay } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp, MonitorPlay } from "lucide-react";
+import { TextArea } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -14,8 +15,14 @@ import type { Comment, DeckEntry } from "@/lib/deck";
 
 const KEYS: [string, string][] = [
   ["Cmd+S", "저장"], ["Cmd+Z", "실행 취소"], ["Shift+Cmd+Z", "다시 실행"], ["Delete", "선택 삭제"], ["Cmd+D", "복제"],
-  ["위 아래 방향키", "슬라이드 이동"], ["더블클릭", "텍스트 편집"], ["Enter", "편집 끝"], ["Esc", "선택 해제"], ["Cmd+\\", "패널 접기"], ["Cmd+/", "단축키 안내"],
+  ["위 아래 방향키", "슬라이드 이동"], ["더블클릭", "텍스트 편집"], ["Enter", "편집 끝"], ["Esc", "선택 해제"], ["Cmd+\\", "패널 접기"], ["Cmd+E", "노트 접기"], ["Cmd+/", "단축키 안내"],
 ];
+// 슬라이드 원문에서 노트(aside[data-notes])의 글자만 꺼낸다. 앞뒤 공백은 보기용으로만 뗀다.
+const noteOf = (html: string) => {
+  const t = document.createElement("template");
+  t.innerHTML = html;
+  return t.content.querySelector("aside[data-notes]")?.textContent?.trim() ?? "";
+};
 type Shell_ = { prefix: string; suffix: string };
 
 export function Editor({ id }: { id: string }) {
@@ -32,6 +39,12 @@ export function Editor({ id }: { id: string }) {
   const [help, setHelp] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{ key: string; text: string } | null>(null);
+  const [notesOpen, setNotesOpen] = useState(() => localStorage.getItem("slidekit:notesOpen") !== "0");
+  const [notesH, setNotesH] = useState(() => Number(localStorage.getItem("slidekit:notesH")) || 140);
+  useEffect(() => { localStorage.setItem("slidekit:notesOpen", notesOpen ? "1" : "0"); }, [notesOpen]);
+  useEffect(() => { localStorage.setItem("slidekit:notesH", String(notesH)); }, [notesH]);
+  useEffect(() => { setDraft(null); }, [index, selId]);
 
   const canvas = useRef<CanvasApi>(null);
   const unitsRef = useRef<Unit[]>([]), indexRef = useRef(0), shellRef = useRef<Shell_ | null>(null);
@@ -234,6 +247,7 @@ export function Editor({ id }: { id: string }) {
       e.preventDefault();
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "\\", metaKey: e.metaKey, ctrlKey: e.ctrlKey, cancelable: true }));
     } else if (mod && k === "s") { e.preventDefault(); save(); }
+    else if (mod && k === "e") { e.preventDefault(); setNotesOpen((v) => !v); }
     else if (mod && k === "/") { e.preventDefault(); setHelp((v) => !v); }
     else if (typing) return;
     else if (mod && k === "z") { e.preventDefault(); e.shiftKey ? restore(future.current, past.current) : restore(past.current, future.current); }
@@ -286,12 +300,46 @@ export function Editor({ id }: { id: string }) {
         }
         right={
           <Inspector sel={sel} slide={canvas.current?.slide(index) ?? null} selId={selId} tab={tab} onTab={setTab}
-            comments={comments} onJump={jump} onStyle={style} onAttr={attr} onNotes={notes} />
+            comments={comments} onJump={jump} onStyle={style} onAttr={attr} />
         }
       >
+        <div className="flex h-full flex-col">
+        <div className="min-h-0 flex-1">
         <Canvas ref={canvas} shell={shell} folder={folder} units={units} index={index} sel={sel} comments={comments}
           onSel={pickSel} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
           onComment={postComment} onMarker={(cid) => { setTab("comments"); const c = comments.find((x) => x.id === cid); if (c) jump(c); }} />
+        </div>
+        <div className="shrink-0 border-t border-border" style={{ height: notesOpen ? notesH : undefined }}>
+          {notesOpen && (
+            <div
+              className="-mt-1 h-2 cursor-row-resize"
+              onPointerDown={(e) => {
+                const y0 = e.clientY, h0 = notesH;
+                const mv = (m: PointerEvent) => setNotesH(Math.max(64, Math.min(window.innerHeight * 0.6, h0 + y0 - m.clientY)));
+                const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
+                window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+              }}
+            />
+          )}
+          <div className="flex h-7 items-center gap-1 px-3">
+            <span className="text-caption text-muted-foreground">노트</span>
+            <span className="ml-auto" />
+            <Tooltip content="노트 접기 Cmd+E" side="top">
+              <Button aria-label="노트 접기" variant="ghost" size="icon-compact" onClick={() => setNotesOpen((v) => !v)}>{notesOpen ? <ChevronDown /> : <ChevronUp />}</Button>
+            </Tooltip>
+          </div>
+          {notesOpen && (
+            <div className="px-2 pb-2" style={{ height: notesH - 36 }}>
+              <TextArea
+                className="h-full"
+                placeholder="마크다운으로 쓰는 발표자 노트"
+                value={draft?.key === units[index]?.key ? draft.text : noteOf(units[index]?.html ?? "")}
+                onChange={(e) => { setDraft({ key: units[index].key, text: e.target.value }); notes(e.target.value); }}
+              />
+            </div>
+          )}
+        </div>
+        </div>
       </Shell>
       <Dialog open={help} onOpenChange={setHelp}>
         <DialogContent size="sm">

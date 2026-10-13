@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Field, TextArea } from "@/components/ui/field";
+import { Field } from "@/components/ui/field";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
 import { Tabs, TabsList, TabItem, TabPanel } from "@/components/ui/tabs";
 import { textual } from "./Canvas";
@@ -44,7 +44,6 @@ type Props = {
   onJump(c: Comment): void;
   onStyle(prop: string, value: string): void;
   onAttr(name: string, value: string | null): void;
-  onNotes(text: string): void;
 };
 
 export function Inspector(p: Props) {
@@ -66,7 +65,6 @@ export function Inspector(p: Props) {
   };
 
   const kind = p.slide?.getAttribute("data-slide") ?? "content";
-  const notes = p.slide?.querySelector(":scope > aside[data-notes]")?.textContent?.trim() ?? "";
 
   return (
     <Tabs value={p.tab} onValueChange={p.onTab}>
@@ -93,7 +91,6 @@ export function Inspector(p: Props) {
           )}
           <Row label="종류"><Pick value={KINDS.some(([k]) => k === kind) ? kind : "content"} items={KINDS} onChange={(v) => p.onAttr("data-slide", v)} /></Row>
           <Row label="장 제목"><Field defaultValue={p.slide?.getAttribute("data-title") ?? ""} onChange={(e) => p.onAttr("data-title", e.target.value || null)} /></Row>
-          <TextArea rows={5} placeholder="노트" defaultValue={notes} onChange={(e) => p.onNotes(e.target.value)} />
         </div>
       </TabPanel>
       <TabPanel value="comments">

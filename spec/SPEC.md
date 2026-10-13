@@ -53,7 +53,7 @@
 
 ### 노트
 
-`<aside data-notes>`를 슬라이드의 자식으로 둔다. 슬라이드당 하나, 평문이다. 엔진은 항상 숨기고(`display:none`), 앱에는 `textContent`를 앞뒤 공백 제거 후 문자열로 넘긴다. 문단은 빈 줄로 나눈다.
+`<aside data-notes>`를 슬라이드의 자식으로 둔다. 슬라이드당 하나이고 내용은 마크다운 원문(CommonMark 범위)이다. 엔진은 항상 숨기고(`display:none`), 앱에는 `textContent`를 앞뒤 공백 제거 후 문자열로 넘긴다. 마크다운은 렌더하지 않고 원문 그대로 넘기며, 렌더는 앱이 한다(원시 HTML은 렌더하지 않고 이스케이프한다). 글자에 `<`, `&`가 있으면 파일에는 `&lt;`, `&amp;`로 적힌다.
 
 ## 3. 화면
 
@@ -226,7 +226,7 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
 }
 ```
 
-- `slides`는 문서 순서 전체이고 `n`은 슬라이드 번호다. `steps`는 `data-steps`(없으면 1)다. `title`은 `data-title`이 없으면 `null`이다. `notes`는 2절 규칙의 문자열이다.
+- `slides`는 문서 순서 전체이고 `n`은 슬라이드 번호다. `steps`는 `data-steps`(없으면 1)다. `title`은 `data-title`이 없으면 `null`이다. `notes`는 2절 규칙의 마크다운 원문 문자열이다.
 - `chapters`는 `chapter` 슬라이드만 문서 순서로 모은 목차다.
 - 발표자 화면의 구성: 현재 슬라이드 iframe과 다음 슬라이드 iframe(`goto`로 `slide+1`, step 1)에 `?embed=1`을 쓰고, 노트와 장 위치는 `info`에서 읽는다. 위치 변화는 BroadcastChannel `state`와 iframe `state`를 함께 듣는다.
 
@@ -323,7 +323,7 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
 
 - 텍스트: 글자만 담은 요소(자식이 `b`, `i`, `span`, `code`, `br` 같은 인라인뿐)를 `contenteditable="plaintext-only"`로 고친다. `Enter`나 포커스 이동으로 끝낸다. `chapter` 슬라이드의 `h1`을 고치면 `data-title`도 같은 글자로 맞춘다(2절).
 - 스타일: 선택한 요소의 인라인 `style`(`font-size`, `font-weight`, `text-align`, `color`)만 바꾼다. 클래스와 덱 CSS는 건드리지 않는다.
-- 슬라이드: 순서 변경, 복제, 삭제, 추가(본문 슬라이드), 종류(`data-slide`), 장 제목(`data-title`), 노트(`<aside data-notes>`)를 바꾼다. 복제본은 루트 `id`와 `data-steps`를 잃는다(`id`가 겹치지 않게, stepper는 `id`로 붙으므로 복제본은 일반 슬라이드가 된다).
+- 슬라이드: 순서 변경, 복제, 삭제, 추가(본문 슬라이드), 종류(`data-slide`), 장 제목(`data-title`), 노트(`<aside data-notes>`)를 바꾼다. 노트는 캔버스 아래 pane에서 마크다운 원문으로 고치고 `textContent`로 써서 `<`, `&`가 이스케이프된다. 노트가 없던 슬라이드는 입력할 때 `aside`를 만들고, 비우면 `aside`를 지운다. 복제본은 루트 `id`와 `data-steps`를 잃는다(`id`가 겹치지 않게, stepper는 `id`로 붙으므로 복제본은 일반 슬라이드가 된다).
 - 도식(`svg`)과 인터랙션 내부는 편집하지 않는다. 선택과 코멘트, 삭제와 복제는 된다.
 - 편집기가 iframe 문서에 넣는 선택용 스타일은 `<head>`에만 들어가고 저장되지 않는다. 선택 표시와 호버 외곽선은 덱 DOM이 아니라 앱 쪽 레이어에 그린다.
 

@@ -9,6 +9,7 @@ import { Shell } from "./Shell";
 import { go } from "./App";
 import { deckUrl, type DeckEntry, type Info, type Pos } from "@/lib/deck";
 import { startPresentation, warmScreens } from "@/lib/present";
+import { markdown } from "@/lib/markdown";
 
 const VIEW_KEY = "slidekit:view";
 const VIEW_ITEMS = { current: "현재 슬라이드", next: "다음 슬라이드", notes: "노트", timer: "타이머", clock: "현재 시각", chapters: "장 위치" } as const;
@@ -187,7 +188,10 @@ export function Presenter({ id }: { id: string }) {
           </div>
         )}
         {view.notes && (
-          <p className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap text-title text-muted-foreground">{slide?.notes}</p>
+          <div
+            className="min-h-0 flex-1 overflow-auto text-title text-muted-foreground [&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_h1]:font-semibold [&_h2]:font-semibold [&_h3]:font-semibold [&_li]:ml-5 [&_ol]:list-decimal [&_p+*]:mt-2 [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-hover [&_pre]:p-2 [&_strong]:text-foreground [&_ul]:list-disc"
+            dangerouslySetInnerHTML={{ __html: markdown(slide?.notes ?? "") }}
+          />
         )}
       </div>
     </Shell>

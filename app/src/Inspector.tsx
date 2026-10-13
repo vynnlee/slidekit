@@ -19,6 +19,7 @@ import { SegmentedControl, type SegmentedOption } from "@/components/ui/segmente
 import { InspectorSection } from "@/components/ui/inspector-section";
 import { SidesField } from "@/components/ui/sides-field";
 import { AlignBox } from "@/components/ui/align-box";
+import { Card, CardGroup, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { textual } from "./Canvas";
 import type { Comment } from "@/lib/deck";
 
@@ -26,7 +27,7 @@ type Items = readonly (readonly [string, string])[];
 
 const KINDS: Items = [["cover", "Cover"], ["chapter", "Chapter"], ["content", "Content"], ["end", "End"]];
 const WEIGHTS: Items = [["300", "Light"], ["400", "Regular"], ["500", "Medium"], ["600", "Semibold"], ["700", "Bold"], ["800", "Extra bold"]];
-const DISPLAYS: Items = [["block", "Block"], ["flex", "Flex"], ["grid", "Grid"], ["inline-block", "Inline"], ["none", "None"]];
+const DISPLAYS: Items = [["block", "Block"], ["flex", "Flex"], ["grid", "Grid"], ["inline", "Inline"], ["inline-block", "Inline block"], ["inline-flex", "Inline flex"], ["none", "None"]];
 const POSITIONS: Items = [["static", "Static"], ["relative", "Relative"], ["absolute", "Absolute"]];
 const BLENDS: Items = [["normal", "Normal"], ["multiply", "Multiply"], ["screen", "Screen"], ["overlay", "Overlay"], ["darken", "Darken"], ["lighten", "Lighten"], ["difference", "Difference"]];
 const BORDER_STYLES: Items = [["solid", "Solid"], ["dashed", "Dashed"], ["dotted", "Dotted"]];
@@ -424,14 +425,19 @@ export function Inspector(p: Props) {
       <TabPanel value="comments">
         <div className="flex flex-col gap-2 pt-3">
           {p.comments.length === 0 && <p className="text-caption text-muted-foreground">Select an element and leave a comment</p>}
-          {p.comments.map((c) => (
-            <button key={c.id} onClick={() => p.onJump(c)} className="flex flex-col gap-0.5 rounded-lg bg-hover p-2 text-left">
-              <span className="truncate text-micro text-muted-foreground">{c.slideDeleted ? "Slide deleted" : c.slide} {c.excerpt}</span>
-              <span className="whitespace-pre-wrap text-body">{c.text}</span>
-              {c.reply && <span className="mt-1 whitespace-pre-wrap border-l-2 border-border pl-2 text-body text-muted-foreground">{c.reply}</span>}
-              {!c.reply && c.status === "open" && <span className="text-micro text-muted-foreground">Waiting for a reply</span>}
-            </button>
-          ))}
+          <CardGroup columns={1} separated>
+            {p.comments.map((c) => (
+              <Card key={c.id} onClick={() => p.onJump(c)} label={c.text}>
+                <CardHeader>
+                  <CardTitle className="whitespace-pre-wrap">{c.text}</CardTitle>
+                  <CardDescription className="whitespace-pre-wrap">
+                    {c.slideDeleted ? "Slide deleted" : `Slide ${c.slide}`} {c.excerpt}
+                    {c.reply ? `\n${c.reply}` : c.status === "open" ? "\nWaiting for a reply" : ""}
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            ))}
+          </CardGroup>
         </div>
       </TabPanel>
     </Tabs>

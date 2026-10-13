@@ -163,6 +163,12 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   const tw = page.getByLabel('top stroke width'); await tw.fill('4'); await tw.press('Enter'); await sleep(300);
   check('변별 stroke 두께', /border(-top)?-width:\s*4px/.test(await styleOf()), await styleOf());
 
+  // 색 팝오버: 스와치를 누르면 Fluid ColorPicker가 열린다
+  const hx = await page.getByLabel('Text color hex').boundingBox();
+  if (hx) { await page.mouse.click(hx.x - 18, hx.y + hx.height / 2); await sleep(500); }
+  check('스와치 클릭으로 색 선택기 열림', hx && (await page.getByLabel('Hue').count()) > 0);
+  await page.keyboard.press('Escape'); await sleep(300);
+
   check('페이지 오류 없음', errors.length === 0, errors.slice(0, 3));
   await browser.close();
   process.exit(fail ? 1 : 0);

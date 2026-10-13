@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Field } from "@/components/ui/field";
+import { ColorPickerPopover } from "@/components/ui/color-picker";
 
 interface Rgba { r: number; g: number; b: number; a: number }
 
@@ -90,26 +91,13 @@ export function ColorField({ value, onChange, "aria-label": ariaLabel, allowNone
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      <div
-        className={cn(
-          "relative size-5 shrink-0 overflow-hidden rounded-md focus-within:ring-2 focus-within:ring-focus-ring",
-          // 투명 격자
-          "bg-[conic-gradient(var(--border)_25%,transparent_0_50%,var(--border)_0_75%,transparent_0)] bg-[length:0.5rem_0.5rem]"
-        )}
-      >
-        {/* 색 값은 데이터라 인라인으로 칠한다 */}
-        <span className="absolute inset-0" style={{ background: value || "transparent" }} />
-        <input
-          type="color"
-          aria-label={`${ariaLabel} swatch`}
-          value={toHex(base)}
-          onChange={(e) => {
-            const p = parseColor(e.target.value);
-            if (p) onChange(serialize({ ...p, a: base.a }));
-          }}
-          className="absolute inset-0 size-full cursor-pointer opacity-0"
-        />
-      </div>
+      <ColorPickerPopover
+        value={base.a < 1 ? `${toHex(base)}${hex2(Math.round(base.a * 255))}` : toHex(base)}
+        onValueChange={(_, c) => onChange(serialize({ r: Math.round(c.r), g: Math.round(c.g), b: Math.round(c.b), a: c.a }))}
+        triggerShowValue={false}
+        format="hex"
+        size="compact"
+      />
       <Field
         aria-label={`${ariaLabel} hex`}
         placeholder="None"

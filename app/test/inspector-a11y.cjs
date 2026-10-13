@@ -40,7 +40,8 @@ const findAxe = () => {
   // 패널 안의 조작 요소를 모은다.
   const controls = () => panel().evaluate((root) => {
     const vis = (e) => { const r = e.getBoundingClientRect(); const s = getComputedStyle(e); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
-    const nameOf = (e) => (e.getAttribute('aria-label') || (e.getAttribute('aria-labelledby') && document.getElementById(e.getAttribute('aria-labelledby'))?.textContent) || (e.labels && e.labels[0]?.textContent) || e.getAttribute('title') || (e.textContent || '').trim() || e.getAttribute('placeholder') || '').trim();
+    const visibleText = (e) => { const c = e.cloneNode(true); c.querySelectorAll('[aria-hidden=true],[hidden]').forEach((n) => n.remove()); return (c.textContent || '').trim(); };
+    const nameOf = (e) => (e.getAttribute('aria-label') || (e.getAttribute('aria-labelledby') && document.getElementById(e.getAttribute('aria-labelledby'))?.textContent) || (e.labels && e.labels[0]?.textContent) || e.getAttribute('title') || visibleText(e) || e.getAttribute('placeholder') || '').trim();
     return [...root.querySelectorAll('input,button,select,textarea,[role=radio],[role=tab],[role=combobox],[role=switch],[role=slider],[tabindex]')]
       .filter(vis).map((e) => ({ tag: e.tagName.toLowerCase(), role: e.getAttribute('role'), name: nameOf(e), disabled: e.disabled || e.getAttribute('aria-disabled') === 'true', tab: e.tabIndex, label: e.getAttribute('aria-label') }));
   });
@@ -48,32 +49,63 @@ const findAxe = () => {
   // Tab 순서와 포커스 링: 패널 첫 요소에서 Tab을 눌러 패널을 벗어날 때까지 기록한다.
   const tabWalk = async (state) => {
     await panel().evaluate((root) => { const f = root.querySelector('input,button,[role=tab],[tabindex="0"]'); f && f.focus(); });
+    const probe = () => page.evaluate(() => {
+      const e = document.activeElement; const aside = document.querySelector('aside[aria-label="Properties"]');
+      if (!e || !aside || !aside.contains(e)) return null;
+      const r = e.getBoundingClientRect();
+      let ring = false, n = e;
+      for (let k = 0; k < 4 && n && !ring; k++, n = n.parentElement) {
+        const s = getComputedStyle(n);
+        ring = (s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) > 0) || (s.boxShadow && s.boxShadow !== 'none');
+      }
+      const c = e.cloneNode(true); c.querySelectorAll('[aria-hidden=true]').forEach((x) => x.remove());
+      return { name: e.getAttribute('aria-label') || (c.textContent || '').trim().slice(0, 24) || e.tagName, top: Math.round(r.top), left: Math.round(r.left), ring, id: e.getAttribute('aria-label') + '|' + Math.round(r.top) + '|' + Math.round(r.left) };
+    });
     const seq = [];
+    let stuck = 0;
     for (let i = 0; i < 80; i++) {
-      const info = await page.evaluate(() => {
-        const e = document.activeElement; const aside = document.querySelector('aside[aria-label="Properties"]');
-        if (!e || !aside.contains(e)) return null;
+      const info = await probe();
+      if (!info) break;
+      if (seq.length && seq.at(-1).id === info.id) { if (++stuck >= 2) break; } else stuck = 0;
+      if (!seq.length || seq.at(-1).id !== info.id) seq.push(info);
+      await page.keyboard.press('Tab');
+    }
+    const left = await probe();
+    if (stuck >= 2) {
+      check('높음', 'order', state, 'Tab 키가 패널 안에서 포커스를 다음 컨트롤로 옮긴다(캔버스 선택 순환에 가로채이지 않는다)', false, { stuckOn: seq.at(-1)?.name, stops: seq.length, hint: 'Editor.tsx keyRef의 Tab 처리(typing 조건에 button, tab, radio가 빠짐)' });
+    } else check('높음', 'order', state, 'Tab 키가 패널 안에서 포커스를 다음 컨트롤로 옮긴다(캔버스 선택 순환에 가로채이지 않는다)', true);
+    // 포커스 링과 시각 순서는 DOM 순서의 컨트롤을 직접 focus()해서 본다(Tab 가로채임과 별개로 검사).
+    await page.keyboard.press('Shift'); // 키보드 모달리티로 바꿔 :focus-visible이 적용되게 한다
+    const dom = await panel().evaluate((root) => {
+      const vis = (e) => { const r = e.getBoundingClientRect(); const s = getComputedStyle(e); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && !e.disabled; };
+      // 탭은 포커스만으로 활성화되어 패널 내용이 바뀌므로 맨 뒤에서 검사한다.
+      const sel = 'input,button,select,textarea,[role=radio],[role=tab],[role=combobox],[role=switch],[tabindex="0"]';
+      const els = [...root.querySelectorAll(sel)].filter(vis).filter((e) => !e.querySelector(sel)).sort((a, b) => (a.getAttribute('role') === 'tab') - (b.getAttribute('role') === 'tab'));
+      return els.map((e) => {
+        e.focus();
         const r = e.getBoundingClientRect();
         let ring = false, n = e;
         for (let k = 0; k < 4 && n && !ring; k++, n = n.parentElement) {
           const s = getComputedStyle(n);
           ring = (s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) > 0) || (s.boxShadow && s.boxShadow !== 'none');
         }
-        return { name: e.getAttribute('aria-label') || (e.textContent || '').trim().slice(0, 24) || e.tagName, top: Math.round(r.top), left: Math.round(r.left), ring };
+        const c = e.cloneNode(true); c.querySelectorAll('[aria-hidden=true]').forEach((x) => x.remove());
+        return { name: e.getAttribute('aria-label') || (c.textContent || '').trim().slice(0, 24) || e.tagName, top: Math.round(r.top), left: Math.round(r.left), ring, focused: document.activeElement === e, tab: e.getAttribute('role') === 'tab' };
       });
-      if (!info) break;
-      seq.push(info);
-      await page.keyboard.press('Tab');
-    }
-    const noRing = seq.filter((s) => !s.ring).map((s) => s.name);
-    check('높음', 'nofocus', state, '모든 Tab 정지점에 포커스 링(outline 또는 box-shadow)이 보인다', noRing.length === 0, noRing);
+    });
+    const unfocusable = dom.filter((d) => !d.focused).map((d) => d.name);
+    check('높음', 'nofocus', state, '모든 컨트롤이 focus() 가능하다', unfocusable.length === 0, unfocusable);
+    const noRing = dom.filter((d) => d.focused && !d.ring).map((d) => d.name);
+    check('높음', 'nofocus', state, '모든 컨트롤에 포커스 링(outline 또는 box-shadow)이 보인다', noRing.length === 0, noRing);
     const bad = [];
-    for (let i = 1; i < seq.length; i++) {
-      const a = seq[i - 1], b = seq[i], dy = b.top - a.top;
+    const ordered = dom.filter((d) => !d.tab); // 탭은 검사 순서상 맨 뒤에 둔 것이라 순서 검사에서 뺀다
+    for (let i = 1; i < ordered.length; i++) {
+      const a = ordered[i - 1], b = ordered[i], dy = b.top - a.top;
       if (dy < -4 || (Math.abs(dy) <= 8 && b.left < a.left - 2)) bad.push(`${a.name} -> ${b.name}`);
     }
-    check('중간', 'order', state, 'Tab 순서가 시각 순서(위에서 아래, 왼쪽에서 오른쪽)와 같다', bad.length === 0, bad.slice(0, 5));
-    return seq;
+    check('중간', 'order', state, 'DOM(Tab) 순서가 시각 순서(위에서 아래, 왼쪽에서 오른쪽)와 같다', bad.length === 0, bad.slice(0, 5));
+    await page.getByRole('tab', { name: 'Design' }).click().catch(() => {}); await sleep(300); // 탭 포커스로 바뀐 패널을 되돌린다
+    return dom;
   };
 
   const audit = async (state) => {
@@ -82,7 +114,8 @@ const findAxe = () => {
     check('높음', 'name', state, '모든 컨트롤에 접근 가능한 이름이 있다', unnamed.length === 0, unnamed);
     const iconOnly = cs.filter((c) => c.tag === 'button' && c.name && !c.label && c.name.length <= 1).map((c) => c.name);
     check('낮음', 'name', state, '아이콘 버튼은 aria-label이 있다(텍스트 한 글자 제외)', iconOnly.length === 0, iconOnly);
-    const unreachable = cs.filter((c) => !c.disabled && c.tab < 0 && c.tag !== 'div').map((c) => c.name);
+    // radio와 tab은 roving tabindex(그룹당 한 곳만 0)가 정상이라 제외한다.
+    const unreachable = cs.filter((c) => !c.disabled && c.tab < 0 && c.tag !== 'div' && c.role !== 'radio' && c.role !== 'tab').map((c) => c.name);
     check('중간', 'nofocus', state, 'tabindex -1 로 키보드에서 빠진 컨트롤이 없다(radio 그룹 제외)', unreachable.filter((n) => n).length === 0, unreachable);
     const seq = await tabWalk(state);
     check('중간', 'order', state, '패널에 Tab 정지점이 있다', seq.length > 0, seq.length);
@@ -123,6 +156,7 @@ const findAxe = () => {
     const h = fr().locator('[data-active] h1, [data-active] h2').first();
     await h.click(); await sleep(400);
     await audit('text');
+    await h.click(); await sleep(400); // Tab 순환으로 선택이 바뀌었을 수 있어 다시 고른다
 
     // 숫자 필드 동작: Rotation(-360..360, step 1)과 Opacity(0..100)
     const field = (n) => panel().getByRole('textbox', { name: n, exact: true });
@@ -163,7 +197,7 @@ const findAxe = () => {
       check('중간', 'value', 'text', '빈 값 커밋은 NaN이나 빈 칸이 아니라 속성 해제(기본값 표시)다', /^\d/.test(emptyV) && !(await canvasInlineHasBad()), emptyV);
 
       // 스크럽 한 번 = undo 한 건, Cmd+Z / Shift+Cmd+Z가 패널과 캔버스에 일치
-      await field('Opacity').focus(); await page.keyboard.press('Meta+a'); await page.keyboard.type('80'); await page.keyboard.press('Enter'); await sleep(300);
+      await field('Opacity').focus(); await page.keyboard.press('Meta+a'); await page.keyboard.type('80'); await page.keyboard.press('Enter'); await sleep(1400); // 편집기가 0.8초 안의 같은 변경을 한 undo로 묶으므로 간격을 둔다
       const start = await num('Opacity');
       const lab = field('Opacity').locator('xpath=preceding-sibling::span[1]');
       const bb = await lab.boundingBox();
@@ -173,10 +207,17 @@ const findAxe = () => {
         await page.mouse.up(); await sleep(400);
         const scrubbed = await num('Opacity');
         check('중간', 'undo', 'text', '스크럽이 값을 바꿨다(검증 전제)', scrubbed !== start, [start, scrubbed]);
+        const reselect = async (label) => {
+          const kept = (await field('Opacity').count()) > 0;
+          check('중간', 'undo', 'text', `${label} 뒤에도 요소 선택과 패널이 유지된다`, kept);
+          if (!kept) { await h.click(); await sleep(500); }
+        };
         await page.keyboard.press('Meta+z'); await sleep(500);
+        await reselect('Cmd+Z');
         check('높음', 'undo', 'text', '스크럽 한 번이 Cmd+Z 한 번으로 모두 되돌려진다', (await num('Opacity')) === start, [start, await num('Opacity')]);
         check('높음', 'undo', 'text', 'Cmd+Z 뒤 패널 값과 캔버스 값이 일치', Math.abs((await canvasOpacity()) - (await num('Opacity'))) < 0.6, [await canvasOpacity(), await num('Opacity')]);
         await page.keyboard.press('Meta+Shift+z'); await sleep(500);
+        await reselect('Shift+Cmd+Z');
         check('높음', 'undo', 'text', 'Shift+Cmd+Z가 스크럽 값을 복원하고 캔버스와 일치', (await num('Opacity')) === scrubbed && Math.abs((await canvasOpacity()) - scrubbed) < 0.6, [scrubbed, await num('Opacity'), await canvasOpacity()]);
       } else check('중간', 'undo', 'text', 'Opacity 라벨(스크럽 핸들) 위치를 찾았다', false);
     } else check('중간', 'value', 'text', 'Opacity 필드가 있다', false);

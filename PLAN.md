@@ -27,6 +27,11 @@
 | 덱 보관 | `slidekit/decks/<덱이름>/` |
 | 첫 예제 | 디자이너를 위한 바이브 코딩 워크숍 덱 |
 | 첫 버전 | 규격 + 발표 |
+| 런타임 | Bun (서버, 코멘트 채널, 번들러, `slidekit` 명령) |
+| 앱 화면 | React + Tailwind v4 + shadcn/ui + Fluid Functionalism 컴포넌트 |
+| 덱 엔진 | 순수 HTML/CSS/JS. 덱은 파일 하나로 어디서나 열려야 하므로 React를 넣지 않는다. |
+| 도메인 | vynnlee.com은 Cloudflare에서 관리 중 |
+| 저장소 | github.com/vynnlee/slidekit (비공개) |
 
 ## 구성 요소
 
@@ -34,8 +39,8 @@
 slidekit/
 ├── spec/        규격 문서 (SPEC.md)
 ├── engine/      덱 안에서 도는 런타임 (화면 맞춤, 이동, 목차, 번호, 발표 동기화)
-├── app/         로컬 웹앱 (덱 목록, 발표자 화면, 편집기, 코멘트)
-├── channel/     코멘트를 Claude Code 세션으로 보내는 MCP 서버
+├── app/         로컬 웹앱 (덱 목록, 발표자 화면, 편집기, 코멘트). 덱은 iframe 안에 띄운다.
+├── channel/     코멘트를 Claude Code 세션으로 보내는 MCP 서버 (Claude Code가 자식 프로세스로 띄움)
 ├── bundler/     덱을 HTML 파일 하나로 묶는 명령
 ├── deploy/      static.vynnlee.com 배포 (Cloudflare)
 └── decks/       강의 덱 모음
@@ -88,6 +93,8 @@ slidekit/
 
 ## 코멘트 흐름 (2단계 이후)
 
+앱 서버와 채널 서버는 따로 돈다. 앱 서버는 발표할 때도 항상 떠 있고, 채널 서버는 Claude Code 세션이 켜져 있을 때만 떠서 앱 서버에 연결한다.
+
 1. 앱에서 요소를 클릭하고 코멘트를 쓰면 로컬 서버(127.0.0.1)로 보낸다. 덱, 슬라이드 번호, 요소 경로, 요소 텍스트 일부를 함께 담는다.
 2. 서버는 코멘트를 `decks/<덱>/comments.json`에 저장한다.
 3. channel MCP 서버가 열려 있는 Claude Code 세션으로 코멘트를 보낸다.
@@ -118,7 +125,5 @@ slidekit/
 
 ## 아직 정하지 않은 것
 
-- vynnlee.com DNS가 Cloudflare에 있는지
 - 앱 실행 방식 (예: `slidekit` 명령으로 서버를 띄우고 브라우저를 여는 방식)
-- 기술 선택 (Node 또는 Bun, 프레임워크 없이 갈지)
 - 덱 비밀번호를 어디에 보관할지 (덱 파일에는 넣지 않는다)

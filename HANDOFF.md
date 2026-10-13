@@ -32,6 +32,7 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 - mac-cloud는 열에 약하다. 빌드, 타입 검사, 브라우저 테스트는 팀 전체에서 한 번에 하나: `mkdir /tmp/slidekit-heavy.lock`(잡을 때 `echo <이름> > .../pid`로 표시, 끝나면 내 표시일 때만 `rm -rf`), `taskpolicy -b`, 작업자 1개. 서브에이전트는 빌드와 테스트를 직접 돌리지 않는다.
 - 담당: engine-dev(engine, bundler, deploy, channel, guard, 스킬, SPEC 1~8절), editor-dev(편집기와 속성 패널, SPEC 9절), app-dev(앱 서버와 발표자 화면, 덱 목록). 남의 영역 결함은 고치지 않고 team-lead에게 파일, 줄, 재현 방법으로 보고한다.
 - 커밋: 내 파일만 `git add`(남의 미커밋 변경이 섞인 파일은 내 hunk만 index에 올린다). 한국어 한 줄 제목, 끝에 trailer 두 줄(Co-Authored-By, Claude-Session). 푸시는 사용자가 한다. 서버는 내가 띄운 PID만 종료.
+- 커밋 전 비밀 값 검사: `.githooks/pre-commit`(`git config core.hooksPath .githooks`, 저장소 로컬 설정). 값은 키체인에만 두고, 비밀이 아닌 오탐은 `scripts/scan-secrets.allow`에 등록한다. 설정은 clone마다 다시 해야 한다.
 - 모든 UI, 덱 문구에 문구 규칙 적용(아래).
 
 ## 확정된 결정과 선호

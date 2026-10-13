@@ -1,0 +1,9 @@
+#!/bin/sh
+# 커밋 전 비밀 값 검사. 활성화: git config core.hooksPath .githooks (저장소 로컬 설정)
+# 우회가 필요하면 비밀이 아닌 값을 scripts/scan-secrets.allow에 등록한다(git commit --no-verify는 쓰지 않는다).
+PATH="$HOME/.local/share/mise/shims:/opt/local/bin:$PATH"
+if ! command -v bun >/dev/null 2>&1; then
+  echo "pre-commit: bun을 찾지 못해 비밀 값 검사를 할 수 없다. 커밋을 중단한다." >&2
+  exit 1
+fi
+exec bun "$(git rev-parse --show-toplevel)/scripts/scan-secrets.ts"

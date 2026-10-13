@@ -126,6 +126,21 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('base 없이 저장하면 400', (await put({ source: fs.readFileSync(FILE, 'utf8') })) === 400);
   fs.writeFileSync(CF, '[]');
 
+  // 속성 패널: 값이 인라인 style로 들어가고 저장 파일에 남는다
+  await page.keyboard.press('Escape'); await page.keyboard.press('Tab'); await sleep(400);
+  const op = page.getByLabel('Opacity', { exact: true });
+  await op.fill('50'); await op.press('Enter'); await sleep(400);
+  const styled = await page.evaluate(() => [...document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll('[style*="opacity"]')].length);
+  check('Opacity 입력이 요소 style에 반영', styled === 1, styled);
+  await op.focus(); await op.press('ArrowUp'); await sleep(300);
+  check('화살표로 증가(51)', (await op.inputValue()) === '51', await op.inputValue());
+  await page.getByRole('button', { name: 'Add stroke' }).click(); await sleep(300);
+  check('Add stroke로 Stroke 필드 표시', (await page.getByLabel('Stroke width', { exact: true }).count()) > 0);
+  await page.locator('body').click({ position: { x: 5, y: 5 } }); await page.keyboard.press('Meta+s'); await sleep(1000);
+  const saved = fs.readFileSync(FILE, 'utf8');
+  check('저장 파일에 opacity와 border 반영', /opacity:\s*0\.51/.test(saved) && /border:\s*1px solid/.test(saved), saved.match(/style="[^"]*opacity[^"]*"/));
+  await page.keyboard.press('Meta+z'); await page.keyboard.press('Meta+z'); await sleep(300);
+
   check('페이지 오류 없음', errors.length === 0, errors.slice(0, 3));
   await browser.close();
   process.exit(fail ? 1 : 0);

@@ -63,7 +63,9 @@ export function Editor({ id }: { id: string }) {
 
   // 불러오기
   const load = useCallback(async (folder: string, keepIndex = 0) => {
-    const r = await fetch(`/api/decks/${folder}/source`).then((r) => r.json());
+    const res = await fetch(`/api/decks/${folder}/source`);
+    if (!res.ok) throw new Error(`Could not load the deck (${res.status})`);
+    const r = await res.json();
     const d = splitDeck(r.source);
     past.current = []; future.current = [];
     savedRef.current = r.source; mtime.current = r.mtime;
@@ -76,14 +78,14 @@ export function Editor({ id }: { id: string }) {
   }, []);
 
   useEffect(() => {
-    fetch("/api/decks").then((r) => r.json()).then((l: DeckEntry[]) => {
+    fetch("/api/decks").then((r) => { if (!r.ok) throw new Error(`Could not load decks (${r.status})`); return r.json(); }).then((l: DeckEntry[]) => {
       const d = l.find((x) => x.id === id) ?? null;
       setDeck(d);
       if (d) {
         load(d.folder).catch((e) => setErr(String(e)));
-        fetch(`/api/comments?deck=${d.folder}`).then((r) => (r.ok ? r.json() : [])).then(setComments).catch(() => {});
+        fetch(`/api/comments?deck=${d.folder}`).then((r) => { if (!r.ok) throw new Error(`Could not load comments (${r.status})`); return r.json(); }).then(setComments).catch((e) => setErr(String(e.message ?? e)));
       }
-    });
+    }).catch((e) => setErr(String(e.message ?? e)));
   }, [id, load]);
 
   // 코멘트와 파일 변경 이벤트(SSE)
@@ -98,10 +100,14 @@ export function Editor({ id }: { id: string }) {
     on("reply", (d) => upsert(d.comment));
     on("comments", (d) => setComments(d.comments));
     on("deck-changed", async () => {
-      const r = await fetch(`/api/decks/${folder}/source`).then((r) => r.json());
-      if (r.source === savedRef.current) return; // 우리가 쓴 저장
-      if (dirtyRef.current) setChanged(true);
-      else load(folder, indexRef.current);
+      try {
+        const res = await fetch(`/api/decks/${folder}/source`);
+        if (!res.ok) throw new Error(`Could not check the file (${res.status})`);
+        const r = await res.json();
+        if (r.source === savedRef.current) return; // 우리가 쓴 저장
+        if (dirtyRef.current) setChanged(true);
+        else await load(folder, indexRef.current);
+      } catch (e: any) { setErr(String(e.message ?? e)); }
     });
     return () => es.close();
   }, [folder, load]);
@@ -113,9 +119,10 @@ export function Editor({ id }: { id: string }) {
   }, []);
 
   // 기록. 같은 coalesce 키가 0.8초 안에 이어지면 하나로 묶는다.
+  const scrub = useRef(false); // 숫자 필드를 끄는 동안은 한 번의 실행 취소로 묶는다
   const record = (coalesce?: string) => {
     const now = Date.now();
-    if (!(coalesce && last.current?.key === coalesce && now - last.current.t < 800)) {
+    if (!(coalesce && last.current?.key === coalesce && (scrub.current || now - last.current.t < 800))) {
       past.current.push(unitsRef.current);
       if (past.current.length > 200) past.current.shift();
       future.current = [];
@@ -197,7 +204,8 @@ export function Editor({ id }: { id: string }) {
     const i = sel ? all.indexOf(sel) : -1;
     pickSel(all[i < 0 ? (dir > 0 ? 0 : all.length - 1) : (i + dir + all.length) % all.length]);
   };
-  const style = (prop: string, v: string) => { (sel as HTMLElement | null)?.style.setProperty(prop, v); commit("style:" + prop); };
+  const style = (prop: string, v: string) => { const el = sel as HTMLElement | null; if (!el) return; if (v) el.style.setProperty(prop, v); else el.style.removeProperty(prop); commit("style:" + prop); };
+  const slideStyle = (prop: string, v: string) => { const s = canvas.current?.slide(indexRef.current); if (!s) return; if (v) s.style.setProperty(prop, v); else s.style.removeProperty(prop); commit("slide:" + prop); };
   const attr = (name: string, v: string | null) => {
     const s = canvas.current?.slide(indexRef.current);
     if (!s) return;
@@ -265,7 +273,7 @@ export function Editor({ id }: { id: string }) {
 
   keyRef.current = (e) => {
     const t = e.target as HTMLElement, mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
-    const typing = t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
+    const typing = t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || !!t.closest?.('[role=dialog],[role=menu],[role=listbox],[role=radiogroup]');
     if (mod && k === "\\" && e.view !== window) {
       e.preventDefault();
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "\\", metaKey: e.metaKey, ctrlKey: e.ctrlKey, cancelable: true }));
@@ -279,7 +287,7 @@ export function Editor({ id }: { id: string }) {
     else if (!mod && e.key === "Tab") { e.preventDefault(); cycle(e.shiftKey ? -1 : 1); }
     else if (mod && k === "z") { e.preventDefault(); e.shiftKey ? restore(future.current, past.current) : restore(past.current, future.current); }
     else if (mod && k === "d") { e.preventDefault(); dupSelected(); }
-    else if (!mod && (e.key === "Delete" || e.key === "Backspace")) { e.preventDefault(); delSelected(); }
+    else if (!mod && (e.key === "Delete" || e.key === "Backspace")) { if (!sel) return; e.preventDefault(); delSelected(); }
     else if (!mod && e.key === "Escape") pickSel(null);
     else if (!mod && (e.key === "ArrowDown" || e.key === "ArrowRight")) { e.preventDefault(); setIndex(indexRef.current + 1); }
     else if (!mod && (e.key === "ArrowUp" || e.key === "ArrowLeft")) { e.preventDefault(); setIndex(indexRef.current - 1); }
@@ -328,7 +336,7 @@ export function Editor({ id }: { id: string }) {
         }
         right={
           <Inspector sel={sel} slide={canvas.current?.slide(index) ?? null} selId={selId} tab={tab} onTab={setTab}
-            comments={comments} onJump={jump} onStyle={style} onAttr={attr} />
+            comments={comments} onJump={jump} onStyle={style} onAttr={attr} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; }} />
         }
       >
         <div className="flex h-full flex-col">

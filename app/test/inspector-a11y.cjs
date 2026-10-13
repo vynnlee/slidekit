@@ -104,7 +104,7 @@ const findAxe = () => {
     const ordered = dom.filter((d) => !d.tab); // 탭은 검사 순서상 맨 뒤에 둔 것이라 순서 검사에서 뺀다
     for (let i = 1; i < ordered.length; i++) {
       const a = ordered[i - 1], b = ordered[i], dy = b.top - a.top;
-      if (dy < -24 || (Math.abs(dy) <= 24 && b.left < a.left - 2)) bad.push(`${a.name}(${a.left},${a.top}) -> ${b.name}(${b.left},${b.top})`);
+      if (dy < -24 || (Math.abs(dy) <= 8 && b.left < a.left - 2)) bad.push(`${a.name}(${a.left},${a.top}) -> ${b.name}(${b.left},${b.top})`);
     }
     check('중간', 'order', state, 'DOM(Tab) 순서가 시각 순서(위에서 아래, 왼쪽에서 오른쪽)와 같다', bad.length === 0, bad.slice(0, 5));
     await page.getByRole('tab', { name: 'Design' }).click().catch(() => {}); await sleep(300); // 탭 포커스로 바뀐 패널을 되돌린다

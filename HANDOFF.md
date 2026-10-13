@@ -48,7 +48,7 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 
 - 주소 `static.vynnlee.com/<덱>`, 덱마다 공개 또는 비밀번호. Worker와 KV(`DECKS`, id는 `deploy/worker/wrangler.toml`), 비밀번호는 PBKDF2 해시로 KV meta에 두고 쿠키 서명, 시도 제한은 덱과 IP별 15분 5회.
 - Cloudflare 토큰은 키체인 `slidekit-cloudflare-token`(2026-10-13 생성, 이름 slidekit-static-deploy, 값은 출력 금지). 쓰는 법과 범위는 `deploy/README.md`. `COOKIE_SECRET`은 `wrangler secret`.
-- 2026-10-13 기준 `static.vynnlee.com`이 응답하지 않아 첫 Worker 배포(`bun run deploy --worker`)는 아직 안 한 것으로 본다. 확인 후 진행.
+- 2026-10-13에 Worker(`slidekit-static`)와 워크숍 덱(public)을 배포했다: https://static.vynnlee.com/vibe-coding-workshop . mac-cloud의 로컬 DNS 캐시가 실패 결과를 들고 있어 `curl`이 000(DNS 실패)일 수 있다. 그때는 `dig +short @1.1.1.1 static.vynnlee.com`의 IP로 `curl --resolve static.vynnlee.com:443:<IP> ...`로 확인한다(캐시 비우기는 sudo 필요). 응답 없음을 미배포로 판단하지 않는다.
 - 배포 순서: meta를 먼저, html을 나중에 올린다(공개에서 비밀번호로 바꿀 때 노출 방지).
 
 ## 알려진 한계

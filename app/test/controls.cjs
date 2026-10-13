@@ -77,6 +77,10 @@ const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' 
   const op1 = await reset.evaluate((e) => getComputedStyle(e).opacity);
   check('Reset은 호버 때만 보인다', op0 === '0' && op1 === '1', [op0, op1]);
 
+  // ColorField: hex가 잘리지 않는다
+  const hexFit = await page.locator('[data-state=Set] input[aria-label="Color set hex"]').evaluate((e) => [e.scrollWidth, e.clientWidth]);
+  check('hex 입력이 잘리지 않는다', hexFit[0] <= hexFit[1], hexFit);
+
   // 비활성
   const dis = page.locator('[data-state=Disabled] input[aria-label="Number disabled"]');
   check('비활성 NumberField는 입력할 수 없다', await dis.isDisabled());

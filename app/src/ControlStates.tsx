@@ -34,7 +34,7 @@ export function ControlStates() {
   return (
     <div className="min-h-screen bg-background p-6 text-foreground">
       <h1 className="mb-4 text-title font-semibold">Control states</h1>
-      <div className="grid items-center gap-x-3 gap-y-3" style={{ gridTemplateColumns: "96px repeat(7, 132px)" }}>
+      <div className="grid items-center gap-x-3 gap-y-3" style={{ gridTemplateColumns: "96px repeat(7, 170px)" }}>
         <div />
         {STATES.map((s) => <div key={s} className="text-caption text-muted-foreground">{s}</div>)}
 

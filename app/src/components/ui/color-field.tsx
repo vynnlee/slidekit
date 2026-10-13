@@ -122,7 +122,7 @@ export function ColorField({ value, onChange, "aria-label": ariaLabel, allowNone
         onChange={(e) => setHexDraft(e.target.value)}
         onBlur={commitHex}
         onKeyDown={enterToBlur}
-        className={cn("flex-1 uppercase placeholder:normal-case")}
+        className={cn("min-w-20 flex-1 uppercase placeholder:normal-case")}
       />
       <Field
         aria-label={`${ariaLabel} opacity percent`}
@@ -131,7 +131,7 @@ export function ColorField({ value, onChange, "aria-label": ariaLabel, allowNone
         onChange={(e) => setAlphaDraft(e.target.value)}
         onBlur={commitAlpha}
         onKeyDown={enterToBlur}
-        className={cn("w-12 shrink-0 px-1.5 text-right")}
+        className={cn("w-10 shrink-0 px-1.5 text-right")}
       />
     </div>
   );

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Eye, EyeOff, Image as ImageIcon, Shapes, Square, Type } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, EyeOff, Frame, Image as ImageIcon, Shapes, Square, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { textual } from "./Canvas";
@@ -8,6 +8,8 @@ import { textual } from "./Canvas";
 type Props = {
   slide: HTMLElement | null;
   sel: Element | null;
+  slideName: string;
+  onSelectSlide(): void;
   rev: unknown; // 슬라이드가 바뀔 때마다 달라져 트리를 다시 그린다
   onSelect(el: Element): void;
   onHover(el: Element | null): void;
@@ -19,11 +21,23 @@ type Props = {
 const SKIP = /^(SCRIPT|STYLE|TEMPLATE)$/;
 const kids = (el: Element) => (el instanceof SVGElement ? [] : [...el.children].filter((c) => !SKIP.test(c.tagName) && !c.matches("aside[data-notes]")));
 
-const nameOf = (el: Element) => {
+// 이름 규칙: data-name, 글자 첫 줄, 태그별 기본 이름(Figma에 가까운 말)
+const clip = (t: string) => (t.length > 24 ? t.slice(0, 24) + "…" : t);
+const nameOf = (el: Element): string => {
   const n = el.getAttribute("data-name");
   if (n) return n;
-  if (!(el instanceof SVGElement) && textual(el)) return (el.textContent ?? "").trim().split("\n")[0].slice(0, 28);
-  return el.tagName.toLowerCase() + (el.id ? `#${el.id}` : "");
+  const tag = el.tagName.toLowerCase();
+  if (el instanceof SVGElement) return "Vector";
+  if (tag === "img") return "Image";
+  if (tag === "button") return "Button";
+  if (tag === "a") return "Link";
+  if (tag === "ul" || tag === "ol") return "List";
+  if (textual(el)) return clip((el.textContent ?? "").trim().split("\n")[0].trim());
+  if (el.children.length) {
+    const d = el.ownerDocument.defaultView?.getComputedStyle(el).display ?? "";
+    return d.includes("flex") || d.includes("grid") ? "Auto layout" : "Frame";
+  }
+  return tag.charAt(0).toUpperCase() + tag.slice(1);
 };
 const iconOf = (el: Element) => (el instanceof SVGElement ? Shapes : el.tagName === "IMG" ? ImageIcon : textual(el) ? Type : Square);
 
@@ -33,6 +47,7 @@ export function LayerTree(p: Props) {
   const [drag, setDrag] = useState<Element | null>(null);
   const [drop, setDrop] = useState<{ el: Element; after: boolean } | null>(null);
   const selRow = useRef<HTMLDivElement>(null);
+  const [slideOpen, setSlideOpen] = useState(true);
 
   // 선택한 요소의 조상은 펼친다
   useEffect(() => {
@@ -101,9 +116,23 @@ export function LayerTree(p: Props) {
     );
   };
 
+  const rootSel = p.sel === null;
   return (
     <div role="tree" aria-label="Layers" className="flex flex-col gap-px p-2" onMouseLeave={() => p.onHover(null)}>
-      {kids(p.slide).map((c) => row(c, 0))}
+      <div role="treeitem" aria-selected={rootSel} aria-expanded={slideOpen}>
+        <div onClick={p.onSelectSlide} style={{ paddingLeft: 4 }}
+          className={`flex h-7 cursor-default items-center gap-1 rounded-md pr-1 text-body ${rootSel ? "bg-hover text-foreground" : "text-muted-foreground hover:bg-hover"}`}>
+          <span className="flex size-4 shrink-0 items-center justify-center">
+            <button aria-label={slideOpen ? "Collapse slide" : "Expand slide"} className="flex size-4 items-center justify-center rounded hover:text-foreground"
+              onClick={(e) => { e.stopPropagation(); setSlideOpen((v) => !v); }}>
+              {slideOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+            </button>
+          </span>
+          <Frame className="size-3.5 shrink-0" />
+          <span className="min-w-0 flex-1 truncate">{p.slideName}</span>
+        </div>
+        {slideOpen && <div role="group">{kids(p.slide).map((c) => row(c, 1))}</div>}
+      </div>
     </div>
   );
 }

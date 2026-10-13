@@ -382,7 +382,7 @@ export function Editor({ id }: { id: string }) {
                   marked={new Set(comments.filter((c) => !c.slideDeleted && c.status === "open").map((c) => c.slide))} origin={origin.current}
                   onSelect={setIndex} onMove={moveSlide} onDuplicate={dupSlide} onDelete={delSlide} onAdd={addSlide} />
               ) : (
-                <LayerTree slide={canvas.current?.slide(index) ?? null} sel={sel} rev={units} onSelect={pickSel} onHover={(el) => canvas.current?.hover(el)}
+                <LayerTree slide={canvas.current?.slide(index) ?? null} sel={sel} rev={units} slideName={canvas.current?.slide(index)?.getAttribute("data-title") || `Slide ${index + 1}`} onSelectSlide={() => pickSel(null)} onSelect={pickSel} onHover={(el) => canvas.current?.hover(el)}
                   onToggleHidden={toggleHidden} onRename={renameEl} onMove={moveEl} />
               )}
             </div>

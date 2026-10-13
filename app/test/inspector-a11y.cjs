@@ -95,7 +95,7 @@ const findAxe = () => {
     });
     const unfocusable = dom.filter((d) => !d.focused).map((d) => d.name);
     check('높음', 'nofocus', state, '모든 컨트롤이 focus() 가능하다', unfocusable.length === 0, unfocusable);
-    const noRing = dom.filter((d) => d.focused && !d.ring).map((d) => d.name);
+    const noRing = dom.filter((d) => d.focused && !d.ring && !d.tab).map((d) => d.name); // 탭은 아래 tabRing에서 따로 본다
     check('높음', 'nofocus', state, '모든 컨트롤에 포커스 링(outline 또는 box-shadow)이 보인다', noRing.length === 0, noRing);
     const bad = [];
     const ordered = dom.filter((d) => !d.tab); // 탭은 검사 순서상 맨 뒤에 둔 것이라 순서 검사에서 뺀다
@@ -108,6 +108,30 @@ const findAxe = () => {
     return dom;
   };
 
+  // Fluid 탭의 포커스 링은 outline이 아니라 탭 목록 안의 별도 요소이고 :focus-visible일 때만 켜진다.
+  // 그래서 프로그램 focus()가 아니라 실제 Shift+Tab으로 탭에 도달해서 링 요소가 탭 바깥에 있는지 본다.
+  const tabRing = async (state) => {
+    const ok = await panel().evaluate((root) => {
+      const tabs = [...root.querySelectorAll('[role=tab]')];
+      if (!tabs.length) return false;
+      const after = [...root.querySelectorAll('input,button,[role=radio]')].filter((e) => !tabs.includes(e) && e.getBoundingClientRect().width > 0 && (tabs.at(-1).compareDocumentPosition(e) & Node.DOCUMENT_POSITION_FOLLOWING));
+      if (!after[0]) return false;
+      after[0].focus(); return true;
+    });
+    await page.keyboard.press('Shift+Tab'); await sleep(150);
+    const onTab = ok && (await page.evaluate(() => document.activeElement?.getAttribute('role') === 'tab'));
+    check('높음', 'order', state, 'Shift+Tab으로 키보드가 탭에 도달한다', onTab);
+    if (!onTab) return;
+    const g = await page.evaluate(() => {
+      const t = document.activeElement, tr = t.getBoundingClientRect();
+      const ring = [...t.closest('[role=tablist]').querySelectorAll('*')].find((e) => /focus-ring/.test(String(e.className)) && getComputedStyle(e).pointerEvents === 'none' && e.getBoundingClientRect().width > 0);
+      if (!ring) return null;
+      const b = ring.getBoundingClientRect();
+      return { left: tr.left - b.left, top: tr.top - b.top, right: b.right - tr.right, bottom: b.bottom - tr.bottom };
+    });
+    check('높음', 'nofocus', state, '키보드로 탭에 도달하면 포커스 링 요소가 탭 바깥에 보인다', !!g && g.left >= 0.5 && g.top >= 0.5 && g.right >= 0.5 && g.bottom >= 0.5, g);
+  };
+
   const audit = async (state) => {
     const cs = await controls();
     const unnamed = cs.filter((c) => !c.name).map((c) => c.tag + (c.role ? `[${c.role}]` : ''));
@@ -118,6 +142,7 @@ const findAxe = () => {
     const unreachable = cs.filter((c) => !c.disabled && c.tab < 0 && c.tag !== 'div' && c.role !== 'radio' && c.role !== 'tab').map((c) => c.name);
     check('중간', 'nofocus', state, 'tabindex -1 로 키보드에서 빠진 컨트롤이 없다(radio 그룹 제외)', unreachable.filter((n) => n).length === 0, unreachable);
     const seq = await tabWalk(state);
+    if (state === 'slide' || state === 'text') await tabRing(state);
     check('중간', 'order', state, '패널에 Tab 정지점이 있다', seq.length > 0, seq.length);
     // 좁은 폭(256px): 가로 스크롤과 잘림
     const w = await panel().evaluate((root) => {

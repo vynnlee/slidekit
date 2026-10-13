@@ -5,7 +5,7 @@
          t.id      // 'e2e-editor' (편집기 주소 /edit/<id>)
          t.file    // 사본 index.html 절대 경로, t.commentsFile  // comments.json 경로
          t.cleanup()  // 사본 삭제(프로세스 종료 때도 자동 삭제)
-   decks/_*/는 .gitignore에 있어 커밋되지 않는다. */
+   decks 아래 _로 시작하는 폴더는 .gitignore에 있어 커밋되지 않는다. */
 const fs = require('fs');
 const path = require('path');
 

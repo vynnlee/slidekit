@@ -310,6 +310,11 @@ const findAxe = () => {
       // 슬라이드 선택: 필름스트립 옵션이 있으면 그것을, 없으면(이전 레이아웃) 좌측 draggable 행을 쓴다.
       const strip = page.locator('[data-testid="filmstrip"] [role="option"]');
       await ((await strip.count()) ? strip : page.locator('[draggable="true"]')).nth(idx).click(); await sleep(700);
+      // 컨테이너는 Layers 행(자식이 있는 행)을 눌러 정확히 고른다. 행이 없으면 아래 좌표 클릭을 쓴다.
+      if (state === 'container') {
+        const row = page.getByTestId('layer-row').filter({ has: page.locator('button[aria-label=Expand], button[aria-label=Collapse]') }).first();
+        if (await row.count()) { await row.click({ position: { x: 70, y: 10 } }).catch(() => {}); await sleep(500); return audit(state); }
+      }
       const el = fr().locator(`[data-active] ${selector}`).first();
       const box = await el.boundingBox().catch(() => null);
       if (!box) return console.log(`SKIP ${state}: 요소가 보이지 않음`);

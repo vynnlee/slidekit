@@ -62,6 +62,9 @@ const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.
     // 넓은 화면에서는 왼쪽 패널의 썸네일도 iframe이라 가장 큰 것을 캔버스로 본다.
     const canvas = await page.evaluate(() => [...document.querySelectorAll('iframe')].map((f) => f.getBoundingClientRect().toJSON()).sort((a, b) => b.width * b.height - a.width * a.height)[0]);
     check(`[${tag}] 캔버스가 보인다`, inside(canvas, w, h) && canvas.width > 300, canvas);
+    // 필름스트립은 모든 폭에서 보이고 가로 스크롤 없이 화면 안에 있다(패널이 접혀도 그대로).
+    const film = await page.locator('section[data-testid="filmstrip"]').boundingBox().catch(() => null);
+    check(`[${tag}] 필름스트립이 보인다`, !film || (film.x >= -1 && film.x + film.width <= w + 1 && film.height > 20), film);
     const asides = () => page.locator('aside[aria-label]').count();
     if (w <= 1100) {
       check(`[${tag}] 좁은 폭에서 패널은 기본 접힘`, (await asides()) === 0, await asides());

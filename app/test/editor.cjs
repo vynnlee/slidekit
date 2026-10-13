@@ -201,6 +201,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('편집 중 Cmd+B가 strong으로 감쌈', await h1.evaluate((e) => !!e.querySelector('strong')));
   await page.keyboard.press('Enter'); await sleep(300);
 
+  check('색 스와치 버튼에 이름', (await page.getByRole('button', { name: /color swatch$/ }).count()) > 0);
   check('페이지 오류 없음', errors.length === 0, errors.slice(0, 3));
   await browser.close();
   process.exit(fail ? 1 : 0);

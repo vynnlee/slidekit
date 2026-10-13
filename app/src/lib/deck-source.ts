@@ -88,7 +88,8 @@ export function serializeSlide(el: Element) {
     e.removeAttribute("contenteditable");
     if (e === c) e.removeAttribute("inert");
   }
-  return c.outerHTML;
+  // outerHTML은 boolean 속성을 =""로 쓴다. SPEC 형태(`data-notes`)로 되돌린다.
+  return c.outerHTML.replace(/(<aside\b[^>]*\sdata-notes)=""/g, "$1");
 }
 
 export const newSlideHtml = () =>

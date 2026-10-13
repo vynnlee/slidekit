@@ -94,6 +94,7 @@ export function ColorField({ value, onChange, "aria-label": ariaLabel, allowNone
       <ColorPickerPopover
         value={base.a < 1 ? `${toHex(base)}${hex2(Math.round(base.a * 255))}` : toHex(base)}
         onValueChange={(_, c) => onChange(serialize({ r: Math.round(c.r), g: Math.round(c.g), b: Math.round(c.b), a: c.a }))}
+        triggerAriaLabel={`${ariaLabel} swatch`}
         triggerShowValue={false}
         format="hex"
         size="compact"

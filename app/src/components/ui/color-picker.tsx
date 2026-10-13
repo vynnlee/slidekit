@@ -118,6 +118,8 @@ interface ColorPickerProps
 
 interface ColorPickerPopoverProps extends ColorPickerProps {
   triggerLabel?: string;
+  /** 스와치 버튼의 접근 가능한 이름(보이는 라벨이 없을 때). */
+  triggerAriaLabel?: string;
   triggerLabelPosition?: "left" | "right";
   /** Shows the color as 6-digit hex next to the tile (alpha left out; the
    *  tile shows it). Default true. */
@@ -2217,6 +2219,7 @@ const ColorPickerPopover = forwardRef<HTMLDivElement, ColorPickerPopoverProps>(
   (
     {
       triggerLabel,
+      triggerAriaLabel,
       triggerLabelPosition = "left",
       triggerShowValue = true,
       triggerShowRemove = false,
@@ -2311,6 +2314,7 @@ const ColorPickerPopover = forwardRef<HTMLDivElement, ColorPickerPopoverProps>(
       >
         <div ref={ref} className="inline-flex">
           <Popover.Trigger
+            aria-label={triggerAriaLabel}
             className={cn(
               "flex items-center border border-border bg-transparent hover:bg-hover transition-colors duration-80 outline-none focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)] cursor-pointer",
               sizeClasses.gap,

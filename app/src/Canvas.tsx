@@ -61,12 +61,18 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   const slides = () => [...(doc()?.querySelectorAll<HTMLElement>("#sk-stage > [data-slide]") ?? [])];
   const cur = () => slides()[P.current.index] ?? null;
 
+  const buildTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const build = useCallback((units: Unit[]) => {
     shown.current = { keys: units.map((u) => u.key), html: new Map(units.map((u) => [u.key, u.html])) };
-    const html = previewHtml({ ...P.current.shell, units }, units, P.current.folder, { embed: true });
-    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-    urlRef.current = URL.createObjectURL(new Blob([html], { type: "text/html" }));
-    setUrl(urlRef.current);
+    const go = () => {
+      const html = previewHtml({ ...P.current.shell, units }, units, P.current.folder, { embed: true });
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+      urlRef.current = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+      setUrl(urlRef.current);
+    };
+    // 처음 한 번은 잠깐 미뤄 레이어 썸네일이 먼저 그려지게 한다
+    clearTimeout(buildTimer.current);
+    if (urlRef.current) go(); else buildTimer.current = setTimeout(go, 250);
   }, []);
 
   useImperativeHandle(ref, () => ({

@@ -18,6 +18,10 @@
 - mac-local에서 확인할 것: 외장 모니터 발표 시작(권한 팝업, 창 배치, 전체화면, 두 창 동기화).
 - 팀 운영: 무거운 작업은 `/tmp/slidekit-heavy.lock`(mkdir 잠금)으로 한 번에 하나만 돌린다.
 
+- 2단계 완료: `/edit/:id` 편집기(레이어, 캔버스 편집, 속성 패널, 마크다운 노트 pane, 저장, 코멘트 UI), 코멘트 API와 채널 MCP(`channel/`). 실제 Claude 세션 연결은 아직 확인 안 함.
+- 3단계 완료(코드): `slidekit bundle <덱>`(392KB 한 파일), `slidekit deploy <덱>`(Cloudflare Worker + KV, 실제 배포 전). 사용자 준비 사항은 `deploy/README.md`.
+- 미리보기: `PORT=3220 bun run app/server.ts`와 `UP=3220 PORT=3221 bun app/preview-proxy.ts`, https://mac-cloud.tail5a652b.ts.net:3221
+
 ## 1단계 계획 (완료, 기록용)
 
 PLAN.md "단계별 계획" 1단계를 순서대로 진행한다.

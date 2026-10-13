@@ -28,6 +28,7 @@ type Props = {
   onDelete(): void;
   onComment(text: string): Promise<void>;
   onMarker(id: string): void;
+  onReady(): void;
 };
 
 const INLINE = /^(B|I|EM|STRONG|SPAN|CODE|A|BR|SMALL|MARK|U|S|SUB|SUP|KBD)$/;
@@ -158,6 +159,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       P.current.onKey(e);
     }, true);
     goto();
+    P.current.onReady();
   };
 
   // 오버레이: 선택 상자, 호버 상자, 선택 컨트롤, 코멘트 표시. iframe 안 좌표가 곧 이 영역의 좌표다.

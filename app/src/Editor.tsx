@@ -306,7 +306,7 @@ export function Editor({ id }: { id: string }) {
         <div className="flex h-full flex-col">
         <div className="min-h-0 flex-1">
         <Canvas ref={canvas} shell={shell} folder={folder} units={units} index={index} sel={sel} comments={comments}
-          onSel={pickSel} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
+          onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
           onComment={postComment} onMarker={(cid) => { setTab("comments"); const c = comments.find((x) => x.id === cid); if (c) jump(c); }} />
         </div>
         <div className="shrink-0 border-t border-border" style={{ height: notesOpen ? notesH : undefined }}>

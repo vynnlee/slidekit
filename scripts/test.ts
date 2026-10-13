@@ -23,6 +23,8 @@ const waitUp = async (url: string) => { for (let i = 0; i < 50; i++) { if (await
 
 const deckFile = join(root, "decks/vibe-coding-workshop/index.html");
 const backup = join(root, "decks/.vibe-test-backup.html");
+const commentsFile = join(root, "decks/vibe-coding-workshop/comments.json");
+const hadComments = existsSync(commentsFile);
 let failed = "";
 try {
   const steps: [string, () => Promise<boolean> | boolean][] = [
@@ -44,7 +46,7 @@ try {
       try {
         await waitUp("http://127.0.0.1:3241/api/decks");
         return await run(["node", "app/test/editor.cjs"], { PW: PW!, CHROME: CHROME!, BASE: "http://127.0.0.1:3241" });
-      } finally { app.kill(); await app.exited; copyFileSync(backup, deckFile); Bun.spawnSync(["rm", "-f", backup]); }
+      } finally { app.kill(); await app.exited; copyFileSync(backup, deckFile); Bun.spawnSync(["rm", "-f", backup, ...(hadComments ? [] : [commentsFile])]); }
     }],
   ];
   if (!PW || !CHROME) throw new Error("playwright-core 또는 headless shell을 찾지 못함");

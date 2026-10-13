@@ -13,6 +13,7 @@ export type Comment = {
   reply?: string;
   createdAt: string;
   repliedAt?: string;
+  slideDeleted?: boolean; // 저장 때 슬라이드가 지워진 코멘트. 지우지 않고 표시만 한다
 };
 
 // SSE 구독자. 이벤트는 comment, reply, deck-changed.
@@ -107,3 +108,19 @@ export const routes = {
     return new Response(stream, { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } });
   },
 };
+
+// 저장 때 슬라이드 번호가 바뀐 것을 코멘트에 반영한다. map은 옛 번호 -> 새 번호이고, 없는 번호는 삭제된 슬라이드다.
+export function remap(deck: string, map: Record<string, number>) {
+  if (!validDeck(deck)) return;
+  const list = load(deck);
+  let changed = false;
+  for (const c of list) {
+    if (c.slideDeleted) continue;
+    const to = map[c.slide];
+    if (to === undefined) { c.slideDeleted = true; changed = true; }
+    else if (to !== c.slide) { c.slide = to; changed = true; }
+  }
+  if (!changed) return;
+  save(deck, list);
+  emit("comments", { deck, comments: list });
+}

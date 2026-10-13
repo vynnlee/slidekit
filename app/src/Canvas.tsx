@@ -13,6 +13,7 @@ export type CanvasApi = {
   slide(i: number): HTMLElement | null;
   edit(el: Element): void;
   select(el: Element | null): void;
+  zoom(dir: 1 | -1 | 0): void; // 0은 맞춤
 };
 
 type Props = {
@@ -42,6 +43,8 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   const box = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
+  const [zoom, setZoom] = useState(1);
+  const zoomBy = useCallback((dir: 1 | -1 | 0, f = 1.15) => setZoom((z) => (dir === 0 ? 1 : Math.max(0.25, Math.min(4, z * (dir > 0 ? f : 1 / f))))), []);
   const [url, setUrl] = useState("");
   const urlRef = useRef("");
   const [composing, setComposing] = useState(false);
@@ -87,6 +90,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     slide: (i) => slides()[i] ?? null,
     edit: (el) => startEdit(el as HTMLElement),
     select: (el) => P.current.onSel(el),
+    zoom: (d) => zoomBy(d),
   }));
 
   useEffect(() => { build(p.units); /* 처음 한 번 */ }, []); // eslint-disable-line
@@ -104,6 +108,18 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Cmd+휠(트랙패드 핀치 포함)로 확대와 축소
+  const onWheel = useCallback((e: WheelEvent) => {
+    if (!(e.metaKey || e.ctrlKey)) return;
+    e.preventDefault();
+    zoomBy(e.deltaY < 0 ? 1 : -1, 1 + Math.min(Math.abs(e.deltaY), 40) / 200);
+  }, [zoomBy]);
+  useEffect(() => {
+    const el = box.current!;
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [onWheel]);
 
   const goto = useCallback(() => {
     frame.current?.contentWindow?.postMessage({ source: "slidekit", v: 1, type: "goto", slide: P.current.index + 1 }, location.origin);
@@ -158,6 +174,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       if (ed && (e.key === "Escape" || (e.key === "Enter" && !e.shiftKey))) { e.preventDefault(); e.stopPropagation(); ed.blur(); return; }
       P.current.onKey(e);
     }, true);
+    d.addEventListener("wheel", onWheel, { passive: false });
     goto();
     P.current.onReady();
   };
@@ -183,21 +200,21 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       if (!show || !r) bar.current.style.display = "none";
       else { bar.current.style.display = "flex"; bar.current.style.transform = `translate(${Math.max(0, r.left)}px,${r.top > 36 ? r.top - 34 : r.bottom + 6}px)`; }
     }
-    if (pop.current && r) pop.current.style.transform = `translate(${Math.max(0, Math.min(r.left, size.w - 260))}px,${Math.min(r.bottom + 6, size.h - 130)}px)`;
+    if (pop.current && r) pop.current.style.transform = `translate(${Math.max(0, Math.min(r.left, size.w * zoom - 260))}px,${Math.min(r.bottom + 6, size.h * zoom - 130)}px)`;
     const sl = cur();
     markers.current?.querySelectorAll<HTMLElement>("[data-path]").forEach((m) => {
       const t = sl ? byPath(sl, m.dataset.path!) : null;
       const mr = put(m, t);
       if (mr) m.style.transform = `translate(${mr.right - 6}px,${mr.top - 6}px)`;
     });
-  }, [size.w, size.h]);
+  }, [size.w, size.h, zoom]);
   useEffect(() => { place(); const t = setInterval(place, 60); return () => clearInterval(t); });
 
-  const here = p.comments.filter((c) => c.slide === p.index + 1);
+  const here = p.comments;
 
   return (
-    <div ref={box} className="flex h-full w-full items-center justify-center overflow-hidden">
-      <div className="relative shrink-0 overflow-hidden rounded-lg bg-black shadow-surface-3" style={{ width: size.w, height: size.h }}>
+    <div ref={box} className="flex h-full w-full overflow-auto">
+      <div className="relative m-auto shrink-0 overflow-hidden rounded-lg bg-black shadow-surface-3" style={{ width: size.w * zoom, height: size.h * zoom }}>
         {url && <iframe ref={frame} src={url} onLoad={attach} title="캔버스" className="absolute inset-0 h-full w-full border-0" />}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div ref={hoverBox} className="absolute left-0 top-0 hidden border border-focus-ring/60" />

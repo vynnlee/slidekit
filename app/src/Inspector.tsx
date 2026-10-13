@@ -98,7 +98,7 @@ export function Inspector(p: Props) {
           {p.comments.length === 0 && <p className="text-caption text-muted-foreground">요소를 선택하고 코멘트를 남기세요</p>}
           {p.comments.map((c) => (
             <button key={c.id} onClick={() => p.onJump(c)} className="flex flex-col gap-0.5 rounded-lg bg-hover p-2 text-left">
-              <span className="truncate text-micro text-muted-foreground">{c.slide} {c.excerpt}</span>
+              <span className="truncate text-micro text-muted-foreground">{c.slideDeleted ? "슬라이드 삭제됨" : c.slide} {c.excerpt}</span>
               <span className="whitespace-pre-wrap text-body">{c.text}</span>
               {c.reply && <span className="mt-1 whitespace-pre-wrap border-l-2 border-border pl-2 text-body text-muted-foreground">{c.reply}</span>}
               {!c.reply && c.status === "open" && <span className="text-micro text-muted-foreground">답 기다리는 중</span>}

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Shell } from "./Shell";
-import { Canvas, type CanvasApi } from "./Canvas";
+import { Canvas, textual, type CanvasApi } from "./Canvas";
 import { Layers } from "./Layers";
 import { Inspector } from "./Inspector";
 import { go } from "./App";
@@ -15,7 +15,7 @@ import type { Comment, DeckEntry } from "@/lib/deck";
 
 const KEYS: [string, string][] = [
   ["Cmd+S", "저장"], ["Cmd+Z", "실행 취소"], ["Shift+Cmd+Z", "다시 실행"], ["Delete", "선택 삭제"], ["Cmd+D", "복제"],
-  ["위 아래 방향키", "슬라이드 이동"], ["더블클릭", "텍스트 편집"], ["Enter", "편집 끝"], ["Esc", "선택 해제"], ["Cmd+\\", "패널 접기"], ["Cmd+E", "노트 접기"], ["Cmd+/", "단축키 안내"],
+  ["위 아래 방향키", "슬라이드 이동"], ["더블클릭", "텍스트 편집"], ["Enter", "편집 끝"], ["Esc", "선택 해제"], ["Tab", "다음 요소 선택"], ["Cmd+휠, Cmd+0", "확대 축소, 맞춤"], ["Cmd+\\", "패널 접기"], ["Cmd+E", "노트 접기"], ["Cmd+/", "단축키 안내"],
 ];
 // 슬라이드 원문에서 노트(aside[data-notes])의 글자만 꺼낸다. 앞뒤 공백은 보기용으로만 뗀다.
 const noteOf = (html: string) => {
@@ -49,6 +49,7 @@ export function Editor({ id }: { id: string }) {
   const canvas = useRef<CanvasApi>(null);
   const unitsRef = useRef<Unit[]>([]), indexRef = useRef(0), shellRef = useRef<Shell_ | null>(null);
   const savedRef = useRef(""), mtime = useRef(0);
+  const origin = useRef(new Map<string, number>()); // 슬라이드 key -> 마지막 저장(불러오기) 때의 번호. 코멘트 번호가 이 기준이다
   const past = useRef<Unit[][]>([]), future = useRef<Unit[][]>([]);
   const last = useRef<{ key: string; t: number } | null>(null);
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
@@ -69,6 +70,7 @@ export function Editor({ id }: { id: string }) {
     setSaved(r.source); setChanged(false); setSel(null);
     const i = Math.min(keepIndex, d.units.length - 1);
     unitsRef.current = d.units;
+    origin.current = new Map(d.units.map((u, i) => [u.key, i + 1]));
     setShell({ prefix: d.prefix, suffix: d.suffix }); setUnitsState(d.units); setIndexState(i); indexRef.current = i;
     canvas.current?.apply(d.units);
   }, []);
@@ -94,6 +96,7 @@ export function Editor({ id }: { id: string }) {
     const upsert = (c: Comment) => setComments((l) => (l.some((x) => x.id === c.id) ? l.map((x) => (x.id === c.id ? c : x)) : [...l, c]));
     on("comment", (d) => upsert(d.comment));
     on("reply", (d) => upsert(d.comment));
+    on("comments", (d) => setComments(d.comments));
     on("deck-changed", async () => {
       const r = await fetch(`/api/decks/${folder}/source`).then((r) => r.json());
       if (r.source === savedRef.current) return; // 우리가 쓴 저장
@@ -182,6 +185,18 @@ export function Editor({ id }: { id: string }) {
     sel.after(c); pickSel(c); commit();
   };
 
+  // Tab: 선택 가능한 요소(글자 요소, 도식, 이미지)를 문서 순서로 돈다.
+  const cycle = (dir: 1 | -1) => {
+    const s = canvas.current?.slide(indexRef.current);
+    if (!s) return;
+    const all = [...s.querySelectorAll("*")].filter((e) =>
+      !e.closest("aside[data-notes]") &&
+      (e.tagName === "svg" ? !e.parentElement?.closest("svg")
+        : !e.closest("svg") && (e.tagName === "IMG" || (textual(e) && !(e.parentElement && textual(e.parentElement))))));
+    if (!all.length) return;
+    const i = sel ? all.indexOf(sel) : -1;
+    pickSel(all[i < 0 ? (dir > 0 ? 0 : all.length - 1) : (i + dir + all.length) % all.length]);
+  };
   const style = (prop: string, v: string) => { (sel as HTMLElement | null)?.style.setProperty(prop, v); commit("style:" + prop); };
   const attr = (name: string, v: string | null) => {
     const s = canvas.current?.slide(indexRef.current);
@@ -204,18 +219,22 @@ export function Editor({ id }: { id: string }) {
   // 저장: 임시 파일에 쓰고 rename은 서버가 한다. 읽은 뒤 파일이 바뀌었으면 409.
   const save = async (force = false) => {
     if (!deck || !shellRef.current || (!dirtyRef.current && !force)) return true;
-    const body = compose({ ...shellRef.current, units: unitsRef.current });
+    const us = unitsRef.current;
+    const body = compose({ ...shellRef.current, units: us });
+    const slideMap: Record<number, number> = {};
+    us.forEach((u, i) => { const o = origin.current.get(u.key); if (o && !(o in slideMap)) slideMap[o] = i + 1; });
     setStatus("saving");
     const prev = savedRef.current;
     savedRef.current = body;
     try {
       const r = await fetch(`/api/decks/${deck.folder}`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source: body, base: mtime.current, force }),
+        body: JSON.stringify({ source: body, base: mtime.current, force, slideMap }),
       });
       if (r.status === 409) { savedRef.current = prev; setChanged(true); setStatus("idle"); return false; }
       if (!r.ok) throw new Error(String(r.status));
       mtime.current = (await r.json()).mtime;
+      origin.current = new Map(us.map((u, i) => [u.key, i + 1]));
       setSaved(body); setChanged(false); setStatus("idle");
       return true;
     } catch {
@@ -225,8 +244,9 @@ export function Editor({ id }: { id: string }) {
   };
 
   const postComment = async (t: string) => {
+    if (!deck || !sel || !t || !(await save())) return; // 번호가 파일과 맞도록 먼저 저장한다
     const s = canvas.current?.slide(indexRef.current);
-    if (!deck || !s || !sel || !t) return;
+    if (!s) return;
     const body = { deck: deck.folder, slide: indexRef.current + 1, path: pathOf(s, sel), excerpt: (sel.textContent ?? "").trim().slice(0, 80), text: t };
     const r = await fetch("/api/comments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!r.ok) return setErr("코멘트를 보내지 못했습니다");
@@ -234,9 +254,12 @@ export function Editor({ id }: { id: string }) {
     setComments((l) => (l.some((c) => c.id === id) ? l : [...l, { id, slide: body.slide, path: body.path, excerpt: body.excerpt, text: t, status: "open", createdAt: new Date().toISOString() }]));
     setTab("comments");
   };
+  const slideOf = (n: number) => unitsRef.current.findIndex((u) => origin.current.get(u.key) === n);
   const jump = (c: Comment) => {
-    setIndex(c.slide - 1);
-    const s = canvas.current?.slide(c.slide - 1);
+    const i = slideOf(c.slide);
+    if (c.slideDeleted || i < 0) return;
+    setIndex(i);
+    const s = canvas.current?.slide(i);
     pickSel((s && byPath(s, c.path)) ?? null);
   };
 
@@ -250,6 +273,10 @@ export function Editor({ id }: { id: string }) {
     else if (mod && k === "e") { e.preventDefault(); setNotesOpen((v) => !v); }
     else if (mod && k === "/") { e.preventDefault(); setHelp((v) => !v); }
     else if (typing) return;
+    else if (mod && k === "0") { e.preventDefault(); canvas.current?.zoom(0); }
+    else if (mod && (k === "=" || k === "+")) { e.preventDefault(); canvas.current?.zoom(1); }
+    else if (mod && k === "-") { e.preventDefault(); canvas.current?.zoom(-1); }
+    else if (!mod && e.key === "Tab") { e.preventDefault(); cycle(e.shiftKey ? -1 : 1); }
     else if (mod && k === "z") { e.preventDefault(); e.shiftKey ? restore(future.current, past.current) : restore(past.current, future.current); }
     else if (mod && k === "d") { e.preventDefault(); dupSelected(); }
     else if (!mod && (e.key === "Delete" || e.key === "Backspace")) { e.preventDefault(); delSelected(); }
@@ -296,6 +323,7 @@ export function Editor({ id }: { id: string }) {
         }
         left={
           <Layers shell={shell} folder={folder} units={units} index={index}
+            marked={new Set(comments.filter((c) => !c.slideDeleted && c.status === "open").map((c) => c.slide))} origin={origin.current}
             onSelect={setIndex} onMove={moveSlide} onDuplicate={dupSlide} onDelete={delSlide} onAdd={addSlide} />
         }
         right={
@@ -305,7 +333,8 @@ export function Editor({ id }: { id: string }) {
       >
         <div className="flex h-full flex-col">
         <div className="min-h-0 flex-1">
-        <Canvas ref={canvas} shell={shell} folder={folder} units={units} index={index} sel={sel} comments={comments}
+        <Canvas ref={canvas} shell={shell} folder={folder} units={units} index={index} sel={sel}
+          comments={comments.filter((c) => !c.slideDeleted && c.slide === origin.current.get(units[index]?.key ?? ""))}
           onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
           onComment={postComment} onMarker={(cid) => { setTab("comments"); const c = comments.find((x) => x.id === cid); if (c) jump(c); }} />
         </div>

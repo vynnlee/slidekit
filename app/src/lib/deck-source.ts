@@ -47,6 +47,8 @@ export function previewHtml(doc: Doc, units: Unit[], folder: string, opts: { emb
   s = s.replace(/<html\b/i, opts.embed ? "<html data-sk-embed" : "<html");
   s = s.replace(/<head[^>]*>/i, (h) => h + base);
   if (opts.thumb) {
+    // 외부 글꼴 링크는 렌더를 막으므로 뺀다(썸네일은 대체 글꼴로 그린다).
+    s = s.replace(/<link\b[^>]*href=["']https?:[^>]*>/gi, "");
     // 스크립트를 쓰지 않는 정적 썸네일: 엔진 대신 무대를 직접 만든다.
     s = s.replace(/<script\b(?![^>]*application\/json)[^>]*>[\s\S]*?<\/script>/gi, "");
     s = s.replace(/<section\b/i, '<div id="sk-stage" style="transform:none"><section').replace(/<\/section>(?![\s\S]*<\/section>)/i, "</section></div>");

@@ -10,20 +10,25 @@ const W = 196, S = W / 1920;
 const Thumb = memo(function Thumb({ shell, unit, folder }: { shell: { prefix: string; suffix: string }; unit: Unit; folder: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [seen, setSeen] = useState(false);
+  // 화면에 들어오면 잠깐 뒤에 한 번만 만든다. 빨리 지나가는 스크롤에는 만들지 않고, 만든 뒤에는 유지해 깜박임이 없다.
   useEffect(() => {
-    const io = new IntersectionObserver(([e]) => setSeen(e.isIntersecting), { rootMargin: "300px" });
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const io = new IntersectionObserver(([e]) => {
+      clearTimeout(t);
+      if (e.isIntersecting) t = setTimeout(() => { setSeen(true); io.disconnect(); }, 60);
+    }, { rootMargin: "120px" });
     io.observe(ref.current!);
-    return () => io.disconnect();
+    return () => { clearTimeout(t); io.disconnect(); };
   }, []);
   const doc = useMemo(
     () => (seen ? previewHtml({ ...shell, units: [unit] }, [unit], folder, { thumb: true }) : ""),
     [seen, shell, unit.html, folder], // eslint-disable-line
   );
   return (
-    <div ref={ref} className="relative overflow-hidden rounded-md bg-black" style={{ width: W, height: W * 0.5625 }}>
+    <div ref={ref} className="relative overflow-hidden rounded-md bg-hover" style={{ width: W, height: W * 0.5625 }}>
       {doc && (
         <iframe
-          sandbox="" srcDoc={doc} tabIndex={-1} title="" loading="lazy"
+          sandbox="" srcDoc={doc} tabIndex={-1} title=""
           className="pointer-events-none absolute left-0 top-0 border-0"
           style={{ width: 1920, height: 1080, transform: `scale(${S})`, transformOrigin: "0 0" }}
         />
@@ -37,6 +42,8 @@ type Props = {
   folder: string;
   units: Unit[];
   index: number;
+  marked: Set<number>; // 열린 코멘트가 있는 슬라이드 번호(저장 기준)
+  origin: Map<string, number>;
   onSelect(i: number): void;
   onMove(from: number, to: number): void;
   onDuplicate(i: number): void;
@@ -78,8 +85,9 @@ export function Layers(p: Props) {
           {drop === i && drag !== null && <div className="absolute inset-x-0 -top-1 h-0.5 rounded bg-focus-ring" />}
           {drop === i + 1 && i === p.units.length - 1 && drag !== null && <div className="absolute inset-x-0 -bottom-1 h-0.5 rounded bg-focus-ring" />}
           <span className={`w-5 shrink-0 pt-1 text-right text-caption tabular-nums ${i === p.index ? "text-foreground" : "text-muted-foreground"}`}>{i + 1}</span>
-          <div className={`rounded-md ring-2 ${i === p.index ? "ring-focus-ring" : "ring-transparent"}`}>
+          <div className={`relative rounded-md ring-2 ${i === p.index ? "ring-focus-ring" : "ring-transparent"}`}>
             <Thumb shell={p.shell} unit={u} folder={p.folder} />
+            {p.marked.has(p.origin.get(u.key) ?? -1) && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-focus-ring ring-2 ring-black" />}
           </div>
         </div>
       ))}

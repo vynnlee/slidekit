@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { remap } from "./comments";
 import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 
 const decksDir = join(import.meta.dir, "..", "decks");
@@ -20,7 +21,7 @@ export const routes = {
     PUT: async (req: Request & { params: { folder: string } }) => {
       const { folder } = req.params;
       if (!folderOk(folder)) return bad("deck", 404);
-      const b = (await req.json().catch(() => null)) as { source?: unknown; base?: unknown; force?: unknown } | null;
+      const b = (await req.json().catch(() => null)) as { source?: unknown; base?: unknown; force?: unknown; slideMap?: unknown } | null;
       if (!b || typeof b.source !== "string") return bad("source");
       if (!/data-slidekit=/.test(b.source) || !/<section\b[^>]*\bdata-slide\b/.test(b.source)) return bad("not a slidekit deck");
       const file = join(decksDir, folder, "index.html");
@@ -28,6 +29,8 @@ export const routes = {
       const tmp = `${file}.tmp-${process.pid}`;
       writeFileSync(tmp, b.source);
       renameSync(tmp, file);
+      // 순서 변경과 삭제를 코멘트의 슬라이드 번호에 반영한다(옛 번호 -> 새 번호)
+      if (b.slideMap && typeof b.slideMap === "object") remap(folder, b.slideMap as Record<string, number>);
       return Response.json({ mtime: statSync(file).mtimeMs });
     },
   },

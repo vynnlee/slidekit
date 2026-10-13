@@ -257,6 +257,68 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     check('hash jump into stepper slide runs enter(true) then goto(1)', (await t.evaluate(() => log.join())) === 'B:enter:true,B:goto:1', await t.evaluate(() => log));
     check('stepper tests: no exceptions', te.length === 0, te); await t.close(); }
 
+  /* declarative steps (data-step) */
+  const dsBody = '<section data-slide="content"><h2>one</h2></section>' +
+    '<section data-slide="content"><h2 id="t">two</h2><p id="a" data-step="2">A</p><p id="b" data-step="3">B</p><p id="b2" data-step="3" data-step-effect="fade">B2</p><p id="n" data-step="2" data-step-effect="none">N</p></section>' +
+    '<section data-slide="content"><h2>three</h2></section>';
+  page('dstep', dsBody);
+  page('dstep-more', '<section data-slide="content" data-steps="4"><p id="a" data-step="2">A</p></section><section data-slide="content"><h2>x</h2></section>');
+  page('dstep-custom', '<section data-slide="content" id="c"><p id="a" data-step="2">A</p><p id="z" data-step="3">Z</p></section><section data-slide="content"><h2>x</h2></section>',
+    `<script>window.log = []; var s = 1; SlideKit.stepper(document.getElementById('c'), { enter: function () { s = 1; }, next: function () { log.push('next'); if (s >= 3) return false; s++; return true; }, prev: function () { if (s <= 1) return false; s--; return true; }, get: function () { return s; }, goto: function (n) { s = n; } });</script>`);
+  const vis = (p, id) => p.evaluate((id) => getComputedStyle(document.getElementById(id)).visibility, id);
+  { const d = await ctx.newPage(); const de = []; d.on('pageerror', (e) => de.push(String(e)));
+    await d.goto(BASE + '/__t/dstep#1'); await d.waitForSelector('#sk-stage'); await sleep(200);
+    const key = async (k, n) => { for (let i = 0; i < (n || 1); i++) await d.keyboard.press(k); await sleep(750); };
+    await key('ArrowRight');
+    check('data-step: step 1 hides later elements, layout kept', (await vis(d, 'a')) === 'hidden' && (await d.evaluate(() => document.getElementById('a').getBoundingClientRect().height)) > 0 && (await hash(d)) === '#2');
+    await key('ArrowRight');
+    check('data-step: next reveals step 2 only (stays on slide)', (await vis(d, 'a')) === 'visible' && (await vis(d, 'n')) === 'visible' && (await vis(d, 'b')) === 'hidden' && (await hash(d)) === '#2');
+    await key('ArrowRight');
+    check('data-step: step 3 reveals the rest', (await vis(d, 'b')) === 'visible' && (await vis(d, 'b2')) === 'visible' && (await hash(d)) === '#2');
+    await key('ArrowRight');
+    check('data-step: after the last step the next slide opens', (await hash(d)) === '#3');
+    await key('ArrowLeft');
+    check('data-step: coming back enters at the last step', (await hash(d)) === '#2' && (await vis(d, 'b')) === 'visible' && (await vis(d, 'a')) === 'visible');
+    await key('ArrowLeft');
+    check('data-step: prev hides the last step', (await vis(d, 'b')) === 'hidden' && (await vis(d, 'a')) === 'visible' && (await hash(d)) === '#2');
+    await key('ArrowLeft'); await key('ArrowLeft');
+    check('data-step: prev from step 1 goes to the previous slide', (await hash(d)) === '#1');
+    await d.evaluate(() => { location.hash = '#2'; }); await sleep(500);
+    check('data-step: hash entry shows step 1', (await vis(d, 'a')) === 'hidden' && (await hash(d)) === '#2');
+    check('data-step: duplicate-free, no errors', de.length === 0, de);
+    await d.keyboard.press('o'); await sleep(300);
+    const thumb = await d.evaluate(() => [...document.querySelectorAll('#sk-overview [data-step]')].map((e) => getComputedStyle(e).visibility));
+    check('data-step: overview copies show step 1', thumb.length === 4 && thumb.every((v) => v === 'hidden'), thumb);
+    await d.keyboard.press('Escape');
+    await d.emulateMedia({ media: 'print' }); await sleep(100);
+    const pv = await d.evaluate(() => [...document.querySelectorAll('#sk-stage [data-step]')].map((e) => getComputedStyle(e).visibility + getComputedStyle(e).opacity));
+    check('data-step: print shows every step', pv.length === 4 && pv.every((v) => v === 'visible1'), pv);
+    await d.emulateMedia({ media: 'screen' });
+    await d.close(); }
+  { const A = await ctx.newPage(), B = await ctx.newPage();
+    await A.goto(BASE + '/__t/dstep?sync=1#2'); await B.goto(BASE + '/__t/dstep?sync=1#2'); await A.waitForSelector('#sk-stage'); await B.waitForSelector('#sk-stage'); await sleep(300);
+    await A.keyboard.press('ArrowRight'); await A.keyboard.press('ArrowRight'); await sleep(500);
+    check('data-step: sync carries the step', (await vis(B, 'b')) === 'visible' && (await vis(B, 'a')) === 'visible' && (await hash(B)) === '#2');
+    await A.close(); await B.close(); }
+  { const m = await ctx.newPage(); await m.goto(BASE + '/__t/dstep-more#1'); await m.waitForSelector('#sk-stage');
+    let n = 0; while ((await hash(m)) === '#1' && n < 10) { await m.keyboard.press('ArrowRight'); await sleep(60); n++; }
+    check('data-step: data-steps larger than the max N wins (4 steps)', n === 4, n); await m.close(); }
+  { const c = await ctx.newPage(); await c.goto(BASE + '/__t/dstep-custom#1'); await c.waitForSelector('#sk-stage'); await sleep(200);
+    await c.keyboard.press('ArrowRight'); await sleep(100);
+    check('data-step: a registered custom stepper wins', (await c.evaluate(() => log.includes('next'))) && (await hash(c)) === '#1', await c.evaluate(() => log)); await c.close(); }
+  { const rc = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' });
+    await rc.route('**/__t/*', (x) => x.fulfill({ contentType: 'text/html', body: pages.dstep }));
+    const r = await rc.newPage(); await r.goto(BASE + '/__t/dstep#2'); await r.waitForSelector('#sk-stage');
+    check('data-step: reduced motion has no transition', (await r.evaluate(() => getComputedStyle(document.getElementById('a')).transitionDuration)) === '0s'); await rc.close(); }
+  await ctx.route(BASE + '/__e', (r) => r.fulfill({ contentType: 'text/html', body: '<iframe id="f" src="/__t/dstep?embed=1" style="width:800px;height:450px"></iframe><script>window.log=[];addEventListener("message",e=>{if(e.source===document.getElementById("f").contentWindow)log.push(e.data)})</script>' }));
+  { const h2 = await ctx.newPage(); await h2.goto(BASE + '/__e'); await sleep(900);
+    const rd = await h2.evaluate(() => log.find((m) => m.type === 'ready'));
+    check('data-step: info reports steps from data-step (3)', rd && rd.info.slides[1].steps === 3 && rd.info.slides[0].steps === 1, rd && rd.info.slides.map((s) => s.steps));
+    await h2.evaluate(() => document.getElementById('f').contentWindow.postMessage({ source: 'slidekit', v: 1, type: 'goto', slide: 2, step: 3 }, location.origin)); await sleep(500);
+    const st = await h2.evaluate(() => log.filter((m) => m.type === 'state').pop());
+    const fr2 = h2.frames().find((f) => f !== h2.mainFrame());
+    check('data-step: embed goto(slide, step) shows that step', st && st.slide === 2 && st.step === 3 && (await fr2.evaluate(() => getComputedStyle(document.getElementById('b')).visibility)) === 'visible', st); await h2.close(); }
+
   { const pr = await open(DECK + '#' + tokIdx); const buf = await pr.pdf({ preferCSSPageSize: true, printBackground: true });
     const pages = (buf.toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length;
     check('print: one page per slide (53), 16:9', pages === 53 && /MediaBox \[0 0 1440 810\]/.test(buf.toString('latin1')), pages); await pr.close(); }

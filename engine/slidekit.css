@@ -17,6 +17,7 @@
   --sk-fs-h2: 68px;
   --sk-fs-body: 36px;
   --sk-fs-small: 28px;
+  --sk-step-ms: 280ms;
 }
 
 html, body { height: 100%; margin: 0; background: var(--sk-bg); color: var(--sk-fg); overflow: hidden; }
@@ -43,6 +44,16 @@ p { font-size: var(--sk-fs-body); line-height: 1.65; color: var(--sk-muted); mar
 @keyframes sk-in { from { opacity: .0001; } to { opacity: 1; } }
 
 aside[data-notes] { display: none; }
+
+/* declarative steps: data-step="N" shows the element from step N on (layout is kept while hidden) */
+[data-step] { transition: opacity var(--sk-step-ms) ease, transform var(--sk-step-ms) ease, visibility 0s; }
+[data-step]:not([data-shown]) { visibility: hidden; opacity: 0; transition-delay: 0s, 0s, var(--sk-step-ms); }
+[data-step]:not([data-shown]):not([data-step-effect="fade"]):not([data-step-effect="none"]) { transform: translateY(16px); }
+[data-step][data-step-effect="none"] { transition: none; }
+[data-step-instant] [data-step] { transition: none !important; }
+@media (prefers-reduced-motion: reduce) { [data-step] { transition: none; } }
+/* the editor canvas can show every step while editing */
+html[data-sk-show-steps] [data-step] { visibility: visible !important; opacity: 1 !important; transform: none !important; }
 
 /* page number, progress, number entry */
 #sk-page, #sk-num { position: absolute; bottom: 40px; z-index: 3; font-size: 24px; font-variant-numeric: tabular-nums; }
@@ -78,4 +89,5 @@ aside[data-notes] { display: none; }
   [data-slide] { position: relative; inset: auto; width: 1920px; height: 1080px; visibility: visible; animation: none; break-after: page; break-inside: avoid; }
   section[data-slide]:last-of-type { break-after: auto; }
   #sk-overview, #sk-num, #sk-page, #sk-progress { display: none !important; }
+  [data-step] { visibility: visible !important; opacity: 1 !important; transform: none !important; transition: none !important; }
 }

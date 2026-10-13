@@ -28,6 +28,24 @@
     return e;
   }
 
+  /* stepper for data-step elements. Jumps (enter, goto) are instant; next and prev animate through CSS. */
+  function autoStepper(s, els) {
+    var cur = 1;
+    function apply(k, instant) {
+      cur = k;
+      if (instant) s.el.setAttribute('data-step-instant', '');
+      els.forEach(function (x) { x.toggleAttribute('data-shown', Number(x.getAttribute('data-step')) <= k); });
+      if (instant) { void s.el.offsetWidth; s.el.removeAttribute('data-step-instant'); }
+    }
+    return {
+      enter: function (forward) { apply(forward ? 1 : s.steps, true); },
+      next: function () { if (cur >= s.steps) return false; apply(cur + 1); return true; },
+      prev: function () { if (cur <= 1) return false; apply(cur - 1); return true; },
+      get: function () { return cur; },
+      goto: function (n) { apply(Math.max(1, Math.min(s.steps, n)), true); }
+    };
+  }
+
   function start() {
     var root = document.documentElement;
     if (root.getAttribute('data-slidekit') !== '1') {
@@ -67,11 +85,23 @@
         if (!(steps >= 2 && Math.floor(steps) === steps)) { console.warn('[slidekit] invalid data-steps "' + raw + '"', e); steps = 1; }
       }
       var note = e.querySelector(':scope > aside[data-notes]');
-      return { el: e, n: i + 1, kind: kind, title: title || null, chapter: chapterNo, steps: steps,
-               notes: note ? note.textContent.trim() : '' };
+      /* declarative steps: data-step="N" (integer >= 2) reveals the element from step N on */
+      var stepEls = [].filter.call(e.querySelectorAll('[data-step]'), function (x) {
+        var n = Number(x.getAttribute('data-step'));
+        if (n >= 2 && Math.floor(n) === n) return true;
+        if (n !== 1) console.warn('[slidekit] invalid data-step "' + x.getAttribute('data-step') + '"', x);
+        return false;
+      });
+      stepEls.forEach(function (x) { steps = Math.max(steps, Number(x.getAttribute('data-step'))); });
+      var s = { el: e, n: i + 1, kind: kind, title: title || null, chapter: chapterNo, steps: steps,
+                notes: note ? note.textContent.trim() : '', auto: null };
+      if (stepEls.length) s.auto = autoStepper(s, stepEls);
+      return s;
     });
+    slides.forEach(function (s) { if (s.auto) s.auto.enter(true); }); /* every slide starts at step 1 (overview copies show this) */
     var chapters = slides.filter(function (s) { return s.kind === 'chapter'; });
-    var stepperOf = function (i) { return slides[i].steps > 1 ? steppers.get(slides[i].el) : null; };
+    /* a stepper registered with SlideKit.stepper wins over the declarative one */
+    var stepperOf = function (i) { return slides[i].steps > 1 ? steppers.get(slides[i].el) || slides[i].auto : null; };
 
     /* page number, progress, number entry */
     var pageEl, progEl, numEl = make('div', 'sk-num');

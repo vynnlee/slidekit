@@ -20,3 +20,6 @@ Inspector parts live in `components/ui/` (demo and checks: `/dev/inspector`, `ap
 
 ## deckFonts (`app/src/lib/deck-fonts.ts`)
 `deckFonts(shell.prefix): string[]` returns the font families this deck declares (`@font-face`, Google Fonts `<link>`, `--sk-font` tokens; no generic or system names). Show them first in the Typography font family Select, above the generic list; `familyNames(css value)` splits a `font-family` value.
+
+## Declarative steps (engine, for the Inspector)
+Elements with `data-step="N"` (integer >= 2) appear from step N; `data-step-effect` is `rise` (default), `fade` or `none`. Add to Appearance: a NumberField "Appears at step" (min 1; value 1 removes the attribute) and a Select "Effect" (Rise, Fade, None; default removes the attribute). While editing, put `data-sk-show-steps` on the canvas `<html>` to show all steps. Spec: SPEC 6.3.

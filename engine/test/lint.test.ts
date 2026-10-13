@@ -29,3 +29,15 @@ test("속성 안의 >와 생략된 닫는 태그에도 거짓 오류가 없다",
   const h = ok.replace('data-title="장"', 'data-title="A > B"').replace("<h1>장</h1>", "<h1>A > B</h1><ul><li>a<li>b</ul><p>열린 문단");
   expect(rules(h)).toEqual([]);
 });
+
+test("data-step: 정수 2 이상만 허용하고 빈 단계는 경고", () => {
+  const slide = (body: string) => ok.replace("<h1>끝</h1>", body);
+  const lintOf = (h: string) => lint(h);
+  expect(lintOf(slide('<h1 data-step="2">a</h1><p data-step="3">b</p>')).filter((i) => i.rule === "data-step")).toEqual([]);
+  expect(rules(slide('<h1 data-step="1">a</h1>'))).toContain("data-step");
+  expect(rules(slide('<h1 data-step="x">a</h1>'))).toContain("data-step");
+  expect(rules(slide('<h1 data-step="2.5">a</h1>'))).toContain("data-step");
+  const gap = lintOf(slide('<h1 data-step="2">a</h1><p data-step="4">b</p>')).filter((i) => i.rule === "data-step");
+  expect(gap.map((i) => i.level)).toEqual(["warn"]);
+  expect(rules(slide('<h1 data-step="2">a</h1><p data-step="4">b</p>'))).not.toContain("data-step");
+});

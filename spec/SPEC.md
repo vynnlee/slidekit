@@ -47,7 +47,7 @@
 
 - 위 네 값 외의 값은 `content`로 처리하고 콘솔에 경고한다.
 - `data-title`: 장 제목. `chapter`는 필수이고, 다른 종류에서는 선택이다(있으면 전체 보기에 표시). 화면에 글자를 그리는 일은 하지 않으므로 같은 글자를 `<h1>`에도 적는다.
-- `data-steps="N"`: 슬라이드 안에서 N단계로 나뉘는 장(6절). 없으면 1.
+- `data-steps="N"`: 슬라이드 안에서 N단계로 나뉘는 장(6절). 없으면 1. 슬라이드 안 요소의 `data-step`(6.3절)에서 계산한 단계 수보다 작게 선언해도 큰 쪽이 쓰인다.
 - 장 번호: `chapter` 슬라이드를 위에서부터 1, 2, 3으로 센다. 각 슬라이드는 자신이 속한 장 번호를 가진다. 첫 `chapter` 앞의 슬라이드는 0이다.
 - 목차는 `chapter`의 `data-title`로 엔진이 만든다(전체 보기, 앱의 장 목록). 목차 슬라이드는 규격에 없다.
 - 슬라이드 번호는 1부터 센다. 외부로 나가는 모든 값(URL 해시, 메시지)도 1부터 센다.
@@ -90,6 +90,7 @@
 | `--sk-fs-h2` | `68px` | `h2` |
 | `--sk-fs-body` | `36px` | 본문 `p` |
 | `--sk-fs-small` | `28px` | 작은 글자 |
+| `--sk-step-ms` | `280ms` | 선언형 단계 등장(`data-step`)의 전환 시간 |
 
 엔진 CSS는 `body` 배경과 글자색, 글꼴, `h1`, `h2`, `p`의 크기를 위 토큰으로 정한다. 색은 `color-scheme: dark`를 전제한다. 기본값은 워크숍 덱의 현재 값이다.
 
@@ -160,6 +161,26 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
 - 다른 슬라이드에서 들어오면 엔진이 `enter(forward)`를 부른다. 앞으로 오면 `true`, 뒤로 오면 `false`다.
 - 동기화나 앱 명령으로 `(slide, step)`에 직접 이동하면 `enter(true)` 뒤에 `goto(step)`을 부른다.
 - `SlideKit.stepper`는 엔진 시작 전후 어느 때든 부를 수 있다.
+#### 선언형 단계 (`data-step`)
+
+JS 없이 슬라이드 안 요소를 단계마다 나타나게 한다(Keynote의 build, reveal.js의 fragment).
+
+```html
+<section data-slide="content">
+  <h2>세 가지 원칙</h2>
+  <p data-step="2">첫째</p>
+  <p data-step="3" data-step-effect="fade">둘째</p>
+</section>
+```
+
+- `data-step="N"`: N은 2 이상 정수. 이 요소는 N단계부터 보인다. 속성이 없거나 1이면 처음부터 보인다. 정수가 아니거나 1 이하이면 엔진이 경고하고 무시한다.
+- 슬라이드의 단계 수는 `data-steps`와 요소의 `data-step` 최댓값 중 큰 쪽이다(둘 중 하나만 있어도 된다).
+- 같은 슬라이드에 `SlideKit.stepper`로 등록한 구현이 있으면 그쪽이 우선이고 `data-step`은 동작하지 않는다(요소는 숨겨진 채로 남는다).
+- 이동 규칙은 위 stepper와 같다. 앞으로는 단계가 먼저이고 끝나면 다음 슬라이드, 뒤로도 같으며 뒤에서 들어오면 마지막 단계다. 동기화, `info`의 `steps`, `state`의 `step`, embed의 `goto(slide, step)`도 같은 숫자를 쓴다. 해시 진입은 1단계다.
+- 숨김 상태는 `visibility:hidden`과 `opacity:0`이고 자리는 그대로 차지한다(레이아웃이 움직이지 않는다). 효과는 `data-step-effect`: `rise`(기본, 투명도와 16px 위로 올라오기), `fade`(투명도만), `none`(즉시). 시간은 `--sk-step-ms`(기본 280ms)이고 `prefers-reduced-motion: reduce`이면 전환이 없다. 이동(`enter`, `goto`, 해시, 동기화)으로 단계가 바뀔 때는 전환 없이 바로 바뀐다.
+- 전체 보기 축소판은 1단계 모습이다. 인쇄(`@media print`)는 모든 단계를 보인다. 편집기 캔버스가 모든 단계를 한 번에 보여 주려면 `<html data-sk-show-steps>`를 붙인다.
+- 편집기 지원: Inspector의 Appearance에 "Appears at step" NumberField(min 1, 1이면 속성 삭제)와 effect Select(Rise, Fade, None)를 넣으면 된다.
+
 - 슬라이드 상태 변화(진입과 이탈)를 알아야 하는 덱 코드는 슬라이드 요소의 `sk:enter`, `sk:leave` 이벤트(버블링)를 듣거나 `data-active` 속성을 읽는다.
 
 ### 6.4 URL 쿼리 모드

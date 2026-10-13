@@ -40,7 +40,7 @@ export function lint(html: string): Issue[] {
   const bodyM = rest.match(/<body\b[^>]*>([\s\S]*)<\/body>/i);
   const body = bodyM ? bodyM[1] : "";
   if (!bodyM) add("error", "body", "<body>가 없다");
-  type Sl = { kind: string; title: string | null; steps: number; id: string | null; notes: number; text: string };
+  type Sl = { kind: string; title: string | null; steps: number; id: string | null; notes: number; text: string; dsteps: string[] };
   const slides: Sl[] = [];
   const stack: string[] = [];
   let cur: Sl | null = null;
@@ -54,11 +54,12 @@ export function lint(html: string): Issue[] {
     if (close) { const k = stack.lastIndexOf(tag); if (k >= 0) stack.length = k; /* 생략된 닫는 태그(li, p)를 건너뛴다 */ if (tag === "section" && stack.length === 0) cur = null; continue; }
     const at = (n: string) => attrs.match(new RegExp(`\\b${n}=(?:"([^"]*)"|'([^']*)')`))?.[1] ?? attrs.match(new RegExp(`\\b${n}=(?:'([^']*)')`))?.[1] ?? null;
     if (/\b(?:id|class)=["'][^"']*\b(viewport|stage)\b/i.test(attrs)) wrappers.push(tag);
+    if (cur) { const ds = at("data-step"); if (ds !== null) cur.dsteps.push(ds.trim()); }
     if (stack.length === 0 && !["section", "script"].includes(tag)) add("error", "wrapper", `body 직계에 <${tag}>가 있다(슬라이드만 둔다)`);
     if (stack.length === 0 && tag === "section") {
       const kind = at("data-slide");
       if (kind === null) add("error", "slide", "body 직계 <section>에 data-slide가 없다");
-      cur = { kind: kind ?? "", title: at("data-title"), steps: Number(at("data-steps") ?? 1), id: at("id"), notes: 0, text: "" };
+      cur = { kind: kind ?? "", title: at("data-title"), steps: Number(at("data-steps") ?? 1), id: at("id"), notes: 0, text: "", dsteps: [] };
       slides.push(cur);
     } else if (cur && tag === "aside" && /\bdata-notes\b/.test(attrs)) {
       if (stack.length !== 1) add("error", "notes", `슬라이드 ${slides.length}: aside[data-notes]는 슬라이드의 직계 자식이어야 한다`);
@@ -80,6 +81,10 @@ export function lint(html: string): Issue[] {
       }
     }
     if (s.notes > 1) add("error", "notes", `슬라이드 ${n}: 노트 aside가 ${s.notes}개`);
+    const bad = s.dsteps.filter((v) => !/^\d+$/.test(v) || Number(v) < 2);
+    if (bad.length) add("error", "data-step", `슬라이드 ${n}: data-step은 2 이상의 정수여야 한다(잘못된 값: ${[...new Set(bad)].join(", ")}). 처음부터 보이는 요소에는 속성을 달지 않는다`);
+    const have = new Set(s.dsteps.filter((v) => /^\d+$/.test(v)).map(Number));
+    for (const k of [...have].sort((a, b) => a - b)) if (k >= 3 && !have.has(k - 1)) add("warn", "data-step", `슬라이드 ${n}: 단계 ${k}가 있는데 단계 ${k - 1}에 요소가 없다(빈 단계)`);
     if (s.steps > 1) {
       const reg = scripts.some((c) => /SlideKit\.stepper\s*\(/.test(c.body) && (!s.id || c.body.includes(s.id)));
       if (!s.id) add("error", "steps", `슬라이드 ${n}: data-steps가 있는데 id가 없다`);

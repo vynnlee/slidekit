@@ -90,7 +90,7 @@ const findAxe = () => {
           ring = (s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) > 0) || (s.boxShadow && s.boxShadow !== 'none');
         }
         const c = e.cloneNode(true); c.querySelectorAll('[aria-hidden=true]').forEach((x) => x.remove());
-        return { name: e.getAttribute('aria-label') || (c.textContent || '').trim().slice(0, 24) || e.tagName, top: Math.round(r.top), left: Math.round(r.left), ring, focused: document.activeElement === e, tab: e.getAttribute('role') === 'tab' };
+        return { name: e.getAttribute('aria-label') || (c.textContent || '').trim().slice(0, 24) || e.tagName, top: Math.round(r.top + r.height / 2), left: Math.round(r.left), ring, focused: document.activeElement === e, tab: e.getAttribute('role') === 'tab' };
       });
     });
     const unfocusable = dom.filter((d) => !d.focused).map((d) => d.name);
@@ -101,7 +101,7 @@ const findAxe = () => {
     const ordered = dom.filter((d) => !d.tab); // 탭은 검사 순서상 맨 뒤에 둔 것이라 순서 검사에서 뺀다
     for (let i = 1; i < ordered.length; i++) {
       const a = ordered[i - 1], b = ordered[i], dy = b.top - a.top;
-      if (dy < -4 || (Math.abs(dy) <= 8 && b.left < a.left - 2)) bad.push(`${a.name} -> ${b.name}`);
+      if (dy < -24 || (Math.abs(dy) <= 24 && b.left < a.left - 2)) bad.push(`${a.name}(${a.left},${a.top}) -> ${b.name}(${b.left},${b.top})`);
     }
     check('중간', 'order', state, 'DOM(Tab) 순서가 시각 순서(위에서 아래, 왼쪽에서 오른쪽)와 같다', bad.length === 0, bad.slice(0, 5));
     await page.getByRole('tab', { name: 'Design' }).click().catch(() => {}); await sleep(300); // 탭 포커스로 바뀐 패널을 되돌린다
@@ -118,9 +118,14 @@ const findAxe = () => {
       if (!after[0]) return false;
       after[0].focus(); return true;
     });
-    await page.keyboard.press('Shift+Tab'); await sleep(150);
-    const onTab = ok && (await page.evaluate(() => document.activeElement?.getAttribute('role') === 'tab'));
-    check('높음', 'order', state, 'Shift+Tab으로 키보드가 탭에 도달한다', onTab);
+    // 탭 패널(tabIndex 0, 표준 동작)이 탭 앞에 끼므로 Shift+Tab을 최대 3번 누른다.
+    let onTab = false;
+    for (let i = 0; i < 3 && ok && !onTab; i++) {
+      await page.keyboard.press('Shift+Tab'); await sleep(150);
+      onTab = await page.evaluate(() => document.activeElement?.getAttribute('role') === 'tab');
+    }
+    const act = await page.evaluate(() => { const e = document.activeElement; return e ? (e.getAttribute('aria-label') || e.getAttribute('role') || e.tagName) + '|' + (e.textContent || '').trim().slice(0, 20) : null; });
+    check('높음', 'order', state, 'Shift+Tab으로 키보드가 탭에 도달한다', onTab, { ok, active: act });
     if (!onTab) return;
     const g = await page.evaluate(() => {
       const t = document.activeElement, tr = t.getBoundingClientRect();

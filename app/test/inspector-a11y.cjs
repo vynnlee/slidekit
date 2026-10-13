@@ -334,6 +334,8 @@ const findAxe = () => {
     await page.getByRole('tab', { name: 'Design' }).click(); await sleep(300);
 
     // 5) 섹션 접기 상태가 새로고침 후에도 유지된다
+    // 새로고침 뒤와 같은 상태(텍스트 요소 선택)에서 비교하도록 먼저 제목을 다시 고른다.
+    await fr().locator('[data-active] h1, [data-active] h2').first().click(); await sleep(500);
     const heads = () => panel().locator('button[aria-expanded]');
     const n = await heads().count();
     if (n > 0) {

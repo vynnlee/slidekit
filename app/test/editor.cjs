@@ -279,6 +279,8 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   for (let i = 0; i < 12; i++) { await layers.nth(i).click(); await sleep(500); if (await fr().locator('[data-active] img').count()) break; }
   await fr().locator('[data-active] img').first().click(); await sleep(500);
   check('이미지 Fit과 Position 컨트롤', (await page.getByLabel('Image fit', { exact: true }).count()) === 1 && (await page.getByLabel('Image position', { exact: true }).count()) === 1);
+  const pr = await page.getByRole('complementary', { name: 'Properties' }).boundingBox(), fitB = await page.getByLabel('Image fit', { exact: true }).boundingBox(), posB = await page.getByLabel('Image position', { exact: true }).boundingBox();
+  check('Fit과 Position이 패널 안에서 겹치지 않음', pr && fitB && posB && fitB.x + fitB.width <= pr.x + pr.width && posB.x + posB.width <= pr.x + pr.width && (posB.y >= fitB.y + fitB.height - 1 || posB.x >= fitB.x + fitB.width), [pr, fitB, posB]);
   check('이미지에는 Fill 섹션이 없음', (await page.getByRole('button', { name: 'Add fill' }).count()) === 0);
   const hb = await page.getByRole('button', { name: 'Show in layers' }).boundingBox();
   check('선택 헤더가 한 줄', hb && hb.height <= 30, hb && hb.height);

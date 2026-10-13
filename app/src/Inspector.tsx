@@ -351,16 +351,14 @@ export function Inspector(p: Props) {
 
             {el.tagName === "IMG" && (
               <InspectorSection id="image" title="Image">
-                <Grid>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-micro text-muted-foreground">Fit</span>
-                    <Pick label="Image fit" value={val("object-fit")} items={FITS} onChange={(v) => set("object-fit", v)} />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-micro text-muted-foreground">Position</span>
-                    <Pick label="Image position" value={POSITION_OF[val("object-position")] ?? "center"} items={OBJECT_POSITIONS} onChange={(v) => set("object-position", v)} />
-                  </div>
-                </Grid>
+                <div className="flex flex-col gap-1">
+                  <span className="text-micro text-muted-foreground">Fit</span>
+                  <Pick label="Image fit" value={val("object-fit")} items={FITS} onChange={(v) => set("object-fit", v)} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-micro text-muted-foreground">Position</span>
+                  <Pick label="Image position" value={POSITION_OF[val("object-position")] ?? "center"} items={OBJECT_POSITIONS} onChange={(v) => set("object-position", v)} />
+                </div>
               </InspectorSection>
             )}
 

@@ -3,6 +3,7 @@ import { DeckList } from "./DeckList";
 import { Presenter } from "./Presenter";
 import { Editor } from "./Editor";
 import { InspectorDemo } from "./InspectorDemo";
+import { TokensDemo } from "./TokensDemo";
 
 export function go(path: string) {
   history.pushState(null, "", path);
@@ -17,6 +18,7 @@ export function App() {
     return () => window.removeEventListener("popstate", on);
   }, []);
   if (path === "/dev/inspector") return <InspectorDemo />;
+  if (path === "/dev/tokens") return <TokensDemo />;
   const p = path.match(/^\/present\/([^/]+)/);
   if (p) return <Presenter id={decodeURIComponent(p[1])} />;
   const e = path.match(/^\/edit\/([^/]+)/);

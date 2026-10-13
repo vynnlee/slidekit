@@ -6,3 +6,9 @@ Inspector parts live in `components/ui/` (demo and checks: `/dev/inspector`, `ap
 - `AlignBox` `{direction: "row"|"column", justify, align, onChange(justify, align)}` 3x3 flex alignment.
 - `SidesField` `{label, values: {top,right,bottom,left}, onChange(sides[], v), unit?}`: pair or four fields, expand toggle.
 - Toggle button: `<Button size="compact" variant="ghost" aria-pressed>` with a lucide icon, wrapped in `Tooltip`.
+
+## TokensPanel (deck tokens, `app/src/TokensPanel.tsx`)
+`<TokensPanel prefix={shell.prefix} onPrefixChange={(next) => setShell({ ...shell, prefix: next })} canvas={canvasDoc} />`
+- `prefix`: deck text before the first slide (holds `<head><style>`). `onPrefixChange(next)`: fires once per change (debounced 400ms, scrub fires at end), so make it ONE undo entry. `canvas`: canvas iframe `Document`, enables live preview via inline `:root` properties (the canvas should reload from the new prefix after commit).
+- Sections: Colors, Fonts, Spacing, Text sizes, Deck variables. Only `:root` variables are edited (`lib/deck-tokens.ts`, SPEC 9.4). Put it in the Inspector when no element is selected.
+- Demo and check: `/dev/tokens?deck=<folder>`, `node app/test/tokens.cjs`, `bun test app/test/deck-tokens.test.ts`.

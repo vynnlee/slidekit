@@ -61,7 +61,7 @@ Bun.serve({
     "/present/:id": index,
     "/edit/:id": index,
     "/dev/inspector": index,
-    "/dev/inspector": index,
+    "/dev/tokens": index,
     "/api/decks": { GET: async () => Response.json(await listDecks()), POST: createDeck },
     ...commentRoutes,
     ...editorRoutes,

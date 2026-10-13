@@ -118,7 +118,7 @@
 |---|---|
 | `ArrowRight`, `ArrowDown` | 앞으로. stepper가 있으면 단계 먼저, 끝나면 다음 슬라이드 |
 | `ArrowLeft`, `ArrowUp` | 뒤로. 같은 규칙 |
-| `F` | 전체화면 토글. 화면에 버튼을 두지 않는다 |
+| `F` | 전체화면 토글. 화면에 버튼을 두지 않는다. `F`와 `O`는 한글 입력 상태에서도 동작하도록 `e.code`(`KeyF`, `KeyO`)로 받는다 |
 | `O` | 전체 보기 토글 |
 | 숫자 + `Enter` | 해당 번호의 장 슬라이드로 이동 |
 | `Esc` | 전체 보기 닫기, 숫자 입력 취소 |
@@ -165,7 +165,7 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
 | `?sync=1` | BroadcastChannel 동기화를 켠다(6.5) |
 | `?embed=1` | 부모 앱이 조종하는 임베드 모드(6.6) |
 
-둘 다 없으면 단독 덱이다. 동기화하지 않고 부모와 통신하지 않는다.
+둘 다 없으면 단독 덱이다. 동기화하지 않고 부모와 통신하지 않는다. 둘을 함께 쓰면 `embed`가 우선하고 `sync`는 무시한다.
 
 ### 6.5 BroadcastChannel 동기화
 
@@ -274,6 +274,7 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
 | `.slide.on{animation:in .35s}` 및 `@keyframes in` | 삭제. 엔진이 준다 |
 | `.slide.on svg.wf-bot{animation:wf-bob ...}` (99줄) | `[data-slide][data-active] svg.wf-bot` |
 | `h1`(120px), `h2`(68px), `p`(36px), `.small`(28px) 크기 | `--sk-fs-*` 토큰이 같은 값을 준다. 덱 CSS의 중복 선언은 삭제 |
+| 마지막 장이 `cover` 모양(gap 40px, h1 96px)을 쓰면 덱 CSS에서 `[data-slide="cover"],[data-slide="end"]`를 함께 선택한다 |
 | `.cover{gap:40px}`, `.cover h1`, `.cover-head`, `.cover .sub`, `.meta*` | 선택자 `.cover`를 `[data-slide="cover"]`로 바꾸고 `.cover-head`, `.sub`, `.meta`는 그대로 |
 | `.section h1{font-size:132px}`, `.section .icon-lg` | 선택자 `.section`을 `[data-slide="chapter"]`로 |
 | `.tok-slide{align-items:center; padding-block:90px}` | 그대로 둔다(`class="tok-slide"` 유지) |

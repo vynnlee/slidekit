@@ -11,7 +11,14 @@
 2. **HTML 슬라이드 동향 리서치** (요약은 아래)
 3. **slidekit 기획 인터뷰** → PLAN.md 작성, 기술 구성 확정, GitHub 비공개 저장소 생성
 
-## 다음 할 일: 1단계 (규격 + 발표)
+## 진행 현황 (2026-10-13)
+
+- 1단계 완료: `spec/SPEC.md`, `engine/`(Playwright 48항목 통과, `engine/test/verify.cjs`), 워크숍 덱 규격 변환, `app/`(덱 목록, 발표자 화면, 발표 시작).
+- 앱 실행: `bun run slidekit`(127.0.0.1:3200). tailnet 미리보기는 Bun 개발 서버가 Host 헤더를 막으므로 `NODE_ENV=production`으로 띄운다.
+- mac-local에서 확인할 것: 외장 모니터 발표 시작(권한 팝업, 창 배치, 전체화면, 두 창 동기화).
+- 팀 운영: 무거운 작업은 `/tmp/slidekit-heavy.lock`(mkdir 잠금)으로 한 번에 하나만 돌린다.
+
+## 1단계 계획 (완료, 기록용)
 
 PLAN.md "단계별 계획" 1단계를 순서대로 진행한다.
 

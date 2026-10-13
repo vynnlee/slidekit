@@ -137,9 +137,9 @@ export function Presenter({ id }: { id: string }) {
   const chapterNo = slide?.chapter ?? 0;
   const chapter = info?.chapters[chapterNo - 1];
   const src = deckUrl(deck.folder, "?embed=1");
-  // 부모 칸(container-type:size)에 맞춰 16:9 상자를 가능한 크게 잡는다.
-const frame = "aspect-video w-[min(100cqw,calc(100cqh*16/9))] overflow-hidden rounded-lg bg-black shadow-surface-3";
-const cell = "flex min-h-0 min-w-0 items-center justify-center [container-type:size]";
+  // 부모 칸의 폭과 화면 높이 58vh 안에서 16:9 상자를 가능한 크게 잡는다. 남는 높이는 노트가 쓴다.
+const frame = "aspect-video w-[min(100cqw,calc(58vh*16/9))] overflow-hidden rounded-lg bg-black shadow-surface-3";
+const cell = "flex min-h-0 min-w-0 items-start justify-center [container-type:inline-size]";
 
   return (
     <Shell
@@ -199,7 +199,7 @@ const cell = "flex min-h-0 min-w-0 items-center justify-center [container-type:s
     >
       <div className="flex h-full min-h-0 flex-col gap-3 p-4">
         {(view.current || view.next) && (
-          <div className="flex min-h-0 flex-[3] gap-4">
+          <div className="flex shrink-0 gap-4">
             <div className={cn(cell, view.current ? "flex-[5]" : "hidden")}>
               <div className={frame}><iframe ref={curRef} src={src} title="Current slide" className="pointer-events-none h-full w-full border-0" /></div>
             </div>
@@ -227,8 +227,8 @@ const cell = "flex min-h-0 min-w-0 items-center justify-center [container-type:s
             tabIndex={0}
             aria-label="Speaker notes"
             style={{ fontSize: notesSize, lineHeight: 1.5 }}
-            className="min-h-0 flex-[2] overflow-auto rounded-lg text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-focus-ring [&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_h1]:font-semibold [&_h2]:font-semibold [&_h3]:font-semibold [&_li]:ml-5 [&_ol]:list-decimal [&_p+*]:mt-2 [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-hover [&_pre]:p-2 [&_strong]:text-foreground [&_ul]:list-disc"
-            dangerouslySetInnerHTML={{ __html: slide?.notes ? markdown(slide.notes) : "<p>No notes</p>" }}
+            className="min-h-0 flex-1 overflow-auto rounded-lg text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-focus-ring [&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_h1]:text-[1.4em] [&_h1]:font-semibold [&_h2]:text-[1.2em] [&_h2]:font-semibold [&_h3]:font-semibold [&_a]:text-foreground [&_li]:ml-5 [&_ol]:list-decimal [&_p+*]:mt-2 [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-hover [&_pre]:p-2 [&_strong]:text-foreground [&_ul]:list-disc"
+            dangerouslySetInnerHTML={{ __html: slide?.notes ? markdown(slide.notes) : '<p class="text-caption opacity-50">No notes</p>' }}
           />
         )}
       </div>

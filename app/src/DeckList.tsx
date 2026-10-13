@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { ArrowDownUp, LayoutGrid, List, MonitorPlay, Pencil, Plus, Presentation, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDownUp, LayoutGrid, List, MonitorPlay, Pencil, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardGroup, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -8,10 +8,56 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { CommandMenu, CommandMenuDialog, CommandMenuEmpty, CommandMenuFooter, CommandMenuInput, CommandMenuList, type CommandMenuItemData } from "@/components/ui/command-menu";
 import { Shell } from "./Shell";
 import { go } from "./App";
-import type { DeckEntry } from "@/lib/deck";
+import { deckUrl, type DeckEntry } from "@/lib/deck";
 
 const SORTS = { date: "Date", title: "Name" } as const;
 type Sort = keyof typeof SORTS;
+// 표지 썸네일: 1920x1080 임베드 iframe을 축소한다. 화면에 들어오면 잠깐 뒤 한 번만 만들고 유지한다.
+function Thumb({ deck, width: fixed }: { deck: DeckEntry; width?: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [w, setW] = useState(fixed ?? 280);
+  useEffect(() => {
+    if (fixed) return;
+    const ro = new ResizeObserver(([e]) => setW(e.contentRect.width));
+    ro.observe(ref.current!);
+    return () => ro.disconnect();
+  }, []);
+  const width = w;
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const io = new IntersectionObserver(([e]) => {
+      clearTimeout(t);
+      if (e.isIntersecting) t = setTimeout(() => { setSeen(true); io.disconnect(); }, 60);
+    }, { rootMargin: "120px" });
+    io.observe(ref.current!);
+    return () => { clearTimeout(t); io.disconnect(); };
+  }, []);
+  return (
+    <div ref={ref} className="relative shrink-0 overflow-hidden rounded-md bg-hover" style={{ width: fixed ?? "100%", aspectRatio: "16 / 9" }}>
+      {seen && (
+        <iframe
+          src={deckUrl(deck.folder, "?embed=1")} title={deck.title} tabIndex={-1} loading="lazy"
+          className="pointer-events-none absolute left-0 top-0 origin-top-left border-0 bg-black"
+          style={{ width: 1920, height: 1080, transform: `scale(${width / 1920})` }}
+        />
+      )}
+    </div>
+  );
+}
+
+const ago = (iso?: string) => {
+  if (!iso) return "";
+  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 1) return "just now";
+  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto", style: "narrow" });
+  return m < 60 ? rtf.format(-m, "minute") : m < 1440 ? rtf.format(-Math.round(m / 60), "hour") : rtf.format(-Math.round(m / 1440), "day");
+};
+const Badge = ({ deck }: { deck: DeckEntry }) => (
+  <span className="shrink-0 rounded bg-hover px-1.5 text-caption text-muted-foreground">{deck.visibility === "password" ? "Password" : "Public"}</span>
+);
+const meta = (d: DeckEntry) => [d.slides != null && `${d.slides} slides`, ago(d.modified)].filter(Boolean).join("  ");
+
 const pref = <T extends string>(k: string, ok: readonly T[], d: T) => { const v = localStorage.getItem(k) as T; return ok.includes(v) ? v : d; };
 
 export function DeckList() {
@@ -76,28 +122,28 @@ export function DeckList() {
             <CardGroup columns={3} separated>
               {sorted.map((d) => (
                 <Card key={d.id} onClick={() => open(d)} label={d.title}>
+                  <Thumb deck={d} />
                   <CardHeader>
                     <CardTitle>{d.title}</CardTitle>
-                    <CardDescription>{sub(d)}</CardDescription>
+                    <CardDescription>{sub(d)}  {meta(d)}</CardDescription>
                   </CardHeader>
                 </Card>
               ))}
             </CardGroup>
           ) : (
-            <ul className="flex flex-col">
+            <CardGroup columns={1} separated>
               {sorted.map((d) => (
-                <li key={d.id}>
-                  <button
-                    onClick={() => open(d)}
-                    className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-body outline-none hover:bg-hover focus-visible:ring-2 focus-visible:ring-focus-ring"
-                  >
-                    <Presentation className="size-3.5 shrink-0 text-muted-foreground" />
-                    <span className="min-w-0 flex-1 truncate">{d.title}</span>
-                    <span className="shrink-0 text-caption text-muted-foreground tabular-nums">{sub(d)}</span>
-                  </button>
-                </li>
+                <Card key={d.id} onClick={() => open(d)} label={d.title}>
+                  <div className="flex items-center gap-3">
+                    <Thumb deck={d} width={56} />
+                    <span className="min-w-0 flex-1 truncate text-body">{d.title}</span>
+                    <Badge deck={d} />
+                    <span className="shrink-0 text-caption text-muted-foreground tabular-nums">{meta(d)}</span>
+                    <span className="hidden shrink-0 text-caption text-muted-foreground tabular-nums sm:inline">{sub(d)}</span>
+                  </div>
+                </Card>
               ))}
-            </ul>
+            </CardGroup>
           )}
         </div>
       </Shell>

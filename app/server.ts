@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { join, normalize, sep } from "node:path";
-import { readdir } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import index from "./index.html";
 import { routes as commentRoutes } from "./comments";
 import { routes as editorRoutes } from "./editor-api";
@@ -31,7 +31,9 @@ async function listDecks() {
       const m = html.match(/<script[^>]*id="deck-meta"[^>]*>([\s\S]*?)<\/script>/);
       try { if (m) meta = JSON.parse(m[1]); } catch {}
       const title = (meta.title as string) ?? html.match(/<title>([^<]*)<\/title>/)?.[1] ?? d.name;
-      return { ...meta, date: meta.date as string | undefined, title, folder: d.name, id: (meta.id as string) ?? d.name };
+      const slides = (html.match(/<section\b[^>]*\bdata-slide=/g) ?? []).length;
+      const modified = (await stat(join(root, "decks", d.name, "index.html"))).mtime.toISOString();
+      return { ...meta, date: meta.date as string | undefined, title, folder: d.name, id: (meta.id as string) ?? d.name, slides, modified };
     }),
   );
   return decks.filter(Boolean).sort((a, b) => String(b!.date ?? "").localeCompare(String(a!.date ?? "")));

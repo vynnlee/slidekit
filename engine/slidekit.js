@@ -51,6 +51,7 @@
     var els = [].filter.call(document.body.children, function (c) { return c.matches('section[data-slide]'); });
     if (!els.length) { console.warn('[slidekit] no <section data-slide> found'); return; }
     var stage = make('div', 'sk-stage');
+    stage.setAttribute('role', 'main');
     document.body.insertBefore(stage, els[0]);
     els.forEach(function (e) { stage.appendChild(e); });
 
@@ -189,6 +190,7 @@
 
     /* overview: inert clones of every slide, grouped by chapter, placed after the stage */
     var ov = make('div', 'sk-overview'), thumbs = [], sel = 0, group, grid;
+    ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Slide overview'); ov.tabIndex = 0;
     slides.forEach(function (s, i) {
       if (!group || s.kind === 'chapter') {
         group = make('div', '', 'sk-ov-group');

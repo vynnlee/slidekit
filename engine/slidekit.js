@@ -147,6 +147,10 @@
       catch (err) { /* opaque origin, e.g. file: */ }
     }
 
+    /* print shows every slide; the active stepper slide prints in its first step */
+    window.addEventListener('beforeprint', function () { var st = stepperOf(cur); if (st) st.goto(1); });
+    window.addEventListener('afterprint', function () { var st = stepperOf(cur); if (st) st.goto(step); });
+
     /* initial position from the hash */
     var h = parseInt((location.hash || '').slice(1), 10);
     show(isNaN(h) ? 0 : h - 1, 'jump', 1, true);

@@ -193,6 +193,92 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const bad = errors.filter((e) => !/Failed to load resource|ERR_FAILED|net::/.test(e));
   check('no console errors or warnings', bad.length === 0, bad);
 
+  /* edge cases: own pages, console noise is expected and not counted above */
+  const pages = {};
+  const page = (name, body, extra) => { pages[name] = '<!doctype html><html data-slidekit="1"><head><meta charset="utf-8"><link rel="stylesheet" href="/engine/slidekit.css"></head><body>' + body + '<script src="/engine/slidekit.js"></script>' + (extra || '') + '</body></html>'; };
+  await ctx.route('**/__t/*', (r) => r.fulfill({ contentType: 'text/html', body: pages[r.request().url().split('/__t/')[1].split('?')[0]] || '' }));
+  const sec = (n, attrs) => Array.from({ length: n }, (_, i) => '<section data-slide="content"' + (attrs ? attrs(i) : '') + '><h2>s' + (i + 1) + '</h2></section>').join('');
+
+  for (const [h, want] of [['#999', 53], ['#0', 1], ['#-5', 1], ['#abc', 1]]) {
+    const q = await open(DECK + h);
+    check('hash ' + h + ' clamps to slide ' + want, (await active(q)) === want && (await hash(q)) === '#' + want, [await active(q), await hash(q)]);
+    await q.close();
+  }
+  const q2 = await open(DECK + '#3'); await q2.evaluate(() => { location.hash = '#9999'; }); await sleep(200);
+  check('hashchange out of range clamps', (await active(q2)) === 53, await active(q2));
+  await q2.close();
+
+  page('zero', '<h1>no slides</h1>');
+  { const z = await ctx.newPage(); const ze = []; z.on('pageerror', (e) => ze.push(String(e))); const zw = []; z.on('console', (m) => { if (m.type() === 'warning') zw.push(m.text()); });
+    await z.goto(BASE + '/__t/zero'); await sleep(300);
+    check('zero slides: no exception, warns, no stage', ze.length === 0 && zw.some((t) => /no <section data-slide>/.test(t)) && !(await z.$('#sk-stage')), [ze, zw]); await z.close(); }
+
+  page('dup', sec(3, () => ' id="x"'));
+  { const d = await ctx.newPage(); const de = []; d.on('pageerror', (e) => de.push(String(e)));
+    await d.goto(BASE + '/__t/dup#1'); await d.waitForSelector('#sk-stage');
+    await d.keyboard.press('ArrowRight'); await d.keyboard.press('ArrowRight'); await d.keyboard.press('ArrowRight');
+    check('duplicate ids: no exception, navigation works', de.length === 0 && (await active(d)) === 3 && (await hash(d)) === '#3', [de, await active(d)]);
+    await d.keyboard.press('o'); await d.keyboard.press('Enter'); await sleep(100);
+    check('duplicate ids: overview works', de.length === 0 && (await active(d)) === 3); await d.close(); }
+
+  for (const [mode, want] of [['reduce', 'none'], ['no-preference', 'sk-in']]) {
+    const c2 = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: mode });
+    const r = await c2.newPage(); await r.route('**/__t/*', (x) => x.fulfill({ contentType: 'text/html', body: pages.dup }));
+    await r.goto(BASE + '/__t/dup'); await r.waitForSelector('#sk-stage');
+    const an = await r.evaluate(() => getComputedStyle(document.querySelector('[data-slide][data-active]')).animationName);
+    check('reduced-motion ' + mode + ': animation ' + want, an === want, an); await c2.close();
+  }
+
+  page('stp', sec(5, (i) => i === 0 || i === 1 || i === 2 ? ' data-steps="3" id="a' + i + '"' : i === 3 ? ' data-steps="2" id="a3"' : ''),
+    `<script>
+      window.log = [];
+      function mk(name, bad) { var s = 1; var o = { enter: function (f) { log.push(name + ':enter:' + f); s = f ? 1 : 3; }, next: function () { if (s >= 3) return false; s++; log.push(name + ':next'); return true; },
+        prev: function () { if (s <= 1) return false; s--; log.push(name + ':prev'); return true; }, get: function () { return s; }, goto: function (n) { s = n; log.push(name + ':goto:' + n); } }; if (bad) delete o.goto; return o; }
+      SlideKit.stepper(document.getElementById('a0'), mk('A'));
+      SlideKit.stepper(document.getElementById('a3'), mk('D', true));
+      window.addEventListener('load', function () { SlideKit.stepper(document.getElementById('a1'), mk('B')); });
+    </script>`);
+  { const t = await ctx.newPage(); const te = []; t.on('pageerror', (e) => te.push(String(e)));
+    const warns = []; t.on('console', (m) => { if (m.type() === 'warning') warns.push(m.text()); });
+    await t.goto(BASE + '/__t/stp#1'); await t.waitForSelector('#sk-stage'); await sleep(200);
+    const key = async (k, n) => { for (let i = 0; i < n; i++) await t.keyboard.press(k); };
+    await key('ArrowRight', 2);
+    check('stepper registered before start works (A step 3, still slide 1)', (await active(t)) === 1 && await t.evaluate(() => log.includes('A:next')), await t.evaluate(() => log));
+    await key('ArrowRight', 1); await key('ArrowRight', 2);
+    check('stepper registered after start works (B reaches slide 2, step 3)', (await active(t)) === 2 && (await t.evaluate(() => log.filter((x) => x === 'B:next').length)) === 2, [await active(t), await t.evaluate(() => log)]);
+    await key('ArrowRight', 1);
+    check('unregistered data-steps slide acts as plain slide', (await active(t)) === 3 && true);
+    await key('ArrowRight', 1);
+    check('rejected stepper (missing goto) warns and is a plain slide', (await active(t)) === 4 && warns.some((w) => /missing: goto/.test(w)), warns);
+    await key('ArrowLeft', 2); await key('ArrowLeft', 1);
+    check('going back into a stepper slide calls enter(false) (B on step 3)', (await active(t)) === 2 && await t.evaluate(() => log.includes('B:enter:false')), await t.evaluate(() => log));
+    await t.evaluate(() => { log.length = 0; location.hash = '#4'; }); await sleep(100);
+    await t.evaluate(() => { location.hash = '#2'; }); await sleep(200);
+    check('hash jump into stepper slide runs enter(true) then goto(1)', (await t.evaluate(() => log.join())) === 'B:enter:true,B:goto:1', await t.evaluate(() => log));
+    check('stepper tests: no exceptions', te.length === 0, te); await t.close(); }
+
+  { const pr = await open(DECK + '#' + tokIdx); const buf = await pr.pdf({ preferCSSPageSize: true, printBackground: true });
+    const pages = (buf.toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length;
+    check('print: one page per slide (53), 16:9', pages === 53 && /MediaBox \[0 0 1440 810\]/.test(buf.toString('latin1')), pages); await pr.close(); }
+
+  /* wrong origin: host on localhost, deck on 127.0.0.1 */
+  const LOCAL = BASE.replace('127.0.0.1', 'localhost');
+  await ctx.route(LOCAL + '/__x', (r) => r.fulfill({ contentType: 'text/html', body: '<iframe id="f" src="' + BASE + '/__t/dup?embed=1" style="width:800px;height:450px"></iframe><script>window.log=[];addEventListener("message",e=>log.push(e.data))</script>' }));
+  { const x = await ctx.newPage(); await x.goto(LOCAL + '/__x'); await sleep(1000);
+    const fx = x.frames().find((f) => f !== x.mainFrame());
+    await x.evaluate(() => document.getElementById('f').contentWindow.postMessage({ source: 'slidekit', v: 1, type: 'goto', slide: 3 }, '*')); await sleep(300);
+    const at = await fx.evaluate(() => [].findIndex.call(document.querySelectorAll('#sk-stage > [data-slide]'), (e) => e.hasAttribute('data-active')) + 1);
+    check('embed: cross-origin parent message rejected, nothing sent to it', at === 1 && (await x.evaluate(() => log.length)) === 0, [at, await x.evaluate(() => log)]); await x.close(); }
+  { const x = await ctx.newPage(); await ctx.route('**/__y', (r) => r.fulfill({ contentType: 'text/html', body: '<iframe id="f" src="/__t/dup?embed=1" style="width:800px;height:450px"></iframe>' }));
+    await x.goto(BASE + '/__y'); await sleep(800);
+    const fy = x.frames().find((f) => f !== x.mainFrame());
+    const post = (m) => x.evaluate((m) => document.getElementById('f').contentWindow.postMessage(m, location.origin), m);
+    const at = () => fy.evaluate(() => [].findIndex.call(document.querySelectorAll('#sk-stage > [data-slide]'), (e) => e.hasAttribute('data-active')) + 1);
+    await post({ source: 'other', v: 1, type: 'goto', slide: 3 }); await post({ source: 'slidekit', v: 2, type: 'goto', slide: 3 }); await post(null); await post('goto'); await sleep(200);
+    const before = await at();
+    await post({ source: 'slidekit', v: 1, type: 'goto', slide: 3 }); await sleep(200);
+    check('embed: wrong source, version or shape ignored; valid message accepted', before === 1 && (await at()) === 3, [before, await at()]); await x.close(); }
+
   await browser.close();
   const failed = results.filter((r) => !r[0]).length;
   console.log(`\n${results.length - failed}/${results.length} passed`);

@@ -34,6 +34,7 @@
 - 슬라이드는 `<body>`의 직계 자식 `<section data-slide>`이다. 문서 순서가 슬라이드 순서다. 엔진이 `#sk-stage`를 만들어 슬라이드를 옮겨 담으므로 덱은 `viewport`나 `stage` 래퍼를 쓰지 않는다.
 - 엔진 스크립트는 덱 스크립트보다 앞에 둔다. 엔진은 `DOMContentLoaded`에서 시작한다.
 - 글꼴은 `<head>`의 `<link>`로 불러도 된다(번들러가 나중에 내장한다).
+- 명령: `slidekit new <이름>`은 `engine/template/index.html`로 새 덱을 만들고, `slidekit lint <덱>`은 이 문서의 형식 위반을 규칙별로 출력하며(오류가 있으면 종료 코드 1), `slidekit bundle <덱>`은 단독 파일 하나로 묶고, `slidekit deploy <덱>`은 배포한다.
 
 ## 2. 슬라이드
 
@@ -64,6 +65,7 @@
 - 덱 CSS는 활성 여부를 `[data-slide][data-active]`로 선택한다.
 - 슬라이드 기본 배치(엔진 CSS): 무대 전체를 덮고, `flex` 세로 배치, 세로 가운데 정렬, 안쪽 여백과 간격은 토큰을 따른다. 종류별 모양(`cover`, `chapter`)은 덱 CSS가 정한다.
 - 무대 밖으로 넘친 내용은 잘린다(`overflow:hidden`).
+- 인쇄(`@media print`): 브라우저 인쇄와 PDF 저장은 슬라이드 한 장을 한 페이지(1920x1080px, 16:9)로 모든 슬라이드를 출력한다. 배경색을 유지하고 노트와 엔진 UI(페이지 번호, 진행률, 전체 보기, 숫자 입력)는 숨긴다. stepper 슬라이드는 1단계 모습이고, 인쇄 직전 `beforeprint`에서 활성 슬라이드의 stepper를 `goto(1)`로 맞췄다가 `afterprint`에서 되돌린다.
 
 ## 4. 디자인 토큰
 
@@ -126,13 +128,14 @@
 - 이동은 방향키로만 한다. 클릭, 스페이스, `Enter`(숫자 입력이 없을 때), `PageUp`, `PageDown`, 터치 스와이프, 휠로는 이동하지 않는다. 엔진은 이 입력에 핸들러를 달지 않는다.
 - 수정 키(`Meta`, `Ctrl`, `Alt`)가 눌려 있으면 모든 키를 무시한다.
 - 입력 대상이 `input`, `textarea`, `select`, `contenteditable`이면 키를 무시한다. `Esc`는 그 요소의 포커스를 해제한다.
-- 숫자 + `Enter`: 숫자는 장 번호(2절)다. 입력 중인 숫자는 무대 왼쪽 아래에 작게 표시하고 3초 동안 입력이 없으면 지운다. 해당 장이 없으면 무시한다.
+- 숫자 + `Enter`: 숫자는 장 번호(2절)다. 입력 중인 숫자는 최대 3자리까지 받아 무대 왼쪽 아래에 작게 표시하고 3초 동안 입력이 없으면 지운다. 해당 장이 없으면 무시한다.
 - 전체 보기: 모든 슬라이드를 장별로 묶은 격자 축소판이다. 방향키로 선택을 옮기고 `Enter` 또는 축소판 클릭으로 이동하며 닫는다. 축소판은 `inert`로 복제한 사본이고 stepper는 동작하지 않는다(1단계 모습). 사본은 `id`를 유지한다. 사본 컨테이너는 무대 뒤에 붙이므로 `getElementById`는 원본을 찾는다.
 
 ### 6.2 위치와 URL 해시
 
 - 위치는 `(slide, step)`이다. 둘 다 1부터 센다. stepper가 없는 슬라이드의 step은 1이다.
-- URL 해시 `#N`은 슬라이드 번호다. 이동할 때마다 `history.replaceState`로 갱신한다(기록을 쌓지 않는다). 시작할 때 해시를 읽고 범위를 벗어나면 가장 가까운 슬라이드로 맞춘다. `hashchange`가 오면 그 슬라이드로 이동한다. 해시에 step은 넣지 않고, 해시로 들어가면 step은 1이다.
+- URL 해시 `#N`은 슬라이드 번호다. 이동할 때마다 `history.replaceState`로 갱신한다(기록을 쌓지 않는다). 시작할 때 해시를 읽고 범위를 벗어나면 가장 가까운 슬라이드로 맞춘다. `hashchange`가 오면 그 슬라이드로 이동한다. 해시에 step은 넣지 않고, 해시로 들어가면 step은 1이다(`enter(true)` 뒤에 `goto(1)`). 숫자가 아니면 1번 슬라이드다.
+- 슬라이드가 0장이면 엔진은 경고만 하고 아무것도 만들지 않는다. 같은 `id`가 겹쳐도 엔진은 `id`를 쓰지 않으므로 동작하지만, `getElementById`와 SVG `url(#id)`는 첫 요소를 가리킨다.
 
 ### 6.3 슬라이드별 stepper
 
@@ -190,7 +193,7 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
 
 ### 6.6 부모 앱과 iframe 사이 postMessage
 
-`?embed=1`로 열린 덱이 부모 창(앱)과 주고받는다. 임베드 모드의 엔진은 키 입력, 전체 보기, 해시 갱신, 숫자 입력을 처리하지 않는다(앱이 `pointer-events:none`으로 iframe을 띄우고 키는 앱이 받는다). 페이지 번호와 진행률도 그리지 않는다.
+`?embed=1`로 열린 덱이 부모 창(앱)과 주고받는다. 임베드 모드의 엔진은 키 입력, 전체 보기, 해시 갱신, 숫자 입력을 처리하지 않는다(앱이 `pointer-events:none`으로 iframe을 띄우고 키는 앱이 받는다). 시작할 때 해시를 한 번 읽어 초기 위치로만 쓴다. 페이지 번호와 진행률도 그리지 않는다.
 
 - 같은 출처만 허용한다. 엔진은 `event.source === window.parent`이고 `event.origin === location.origin`인 메시지만 받고, 보낼 때 `targetOrigin`은 `location.origin`이다. 덱은 `file:`이 아니라 http로 연다.
 - 모든 메시지는 `{ source: "slidekit", v: 1, type, ... }`이다.

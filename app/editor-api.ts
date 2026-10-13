@@ -4,8 +4,6 @@ import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "n
 
 const decksDir = join(import.meta.dir, "..", "decks");
 const folderOk = (f: string) => /^[\w.-]+$/.test(f) && f !== "." && f !== ".." && existsSync(join(decksDir, f, "index.html"));
-// 테스트 서버가 실제 덱에 쓰지 못하게 한다. 예: SLIDEKIT_READONLY_DECKS=vibe-coding-workshop,slidekit-guide
-const readonly = new Set((process.env.SLIDEKIT_READONLY_DECKS ?? "").split(",").filter(Boolean));
 const bad = (error: string, status = 400) => Response.json({ error }, { status });
 
 // 덱 원문을 그대로 읽고 쓴다. 쪼개고 합치는 일은 편집기가 한다(SPEC 9절).
@@ -23,7 +21,6 @@ export const routes = {
     PUT: async (req: Request & { params: { folder: string } }) => {
       const { folder } = req.params;
       if (!folderOk(folder)) return bad("deck", 404);
-      if (readonly.has(folder)) return bad("read-only deck", 403);
       // 테스트 서버 전용 가드: SLIDEKIT_READONLY_DECKS=폴더,폴더를 주고 띄운 서버만 막는다. 사용자가 쓰는 서버에는 설정하지 않는다.
       if ((process.env.SLIDEKIT_READONLY_DECKS ?? "").split(",").some((f) => f.trim() === folder)) return bad("read-only deck", 403);
       const b = (await req.json().catch(() => null)) as { source?: unknown; base?: unknown; force?: unknown; slideMap?: unknown } | null;

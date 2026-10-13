@@ -5,10 +5,11 @@ import index from "./index.html";
 import { routes as commentRoutes } from "./comments";
 import { routes as editorRoutes } from "./editor-api";
 
-// 하위 명령: slidekit bundle <덱>. 해당 스크립트는 argv[2]를 덱 이름으로 읽는다.
-if (process.argv[2] === "bundle") {
+// 하위 명령: slidekit bundle|deploy <덱>. 해당 스크립트는 argv[2]를 덱 이름으로 읽는다.
+const sub = process.argv[2];
+if (sub === "bundle" || sub === "deploy") {
   process.argv.splice(2, 1);
-  await import("../bundler/bundle.ts");
+  await import(sub === "bundle" ? "../bundler/bundle.ts" : "../deploy/deploy.ts");
   process.exit(0);
 }
 

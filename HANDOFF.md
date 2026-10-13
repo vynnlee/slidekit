@@ -54,7 +54,8 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 
 ## 알려진 한계
 
-- 번들러: 글꼴 서브셋은 `uv`와 Google Fonts 원본 다운로드(또는 `~/.cache/slidekit/fonts`)가 필요. `<video>` 파일, 외부 CDN 자원은 인라인하지 않는다.
+- 번들러 글꼴: 원격 글꼴 CSS(Google Fonts, jsdelivr 등)와 로컬 `@font-face` 파일을 덱이 쓰는 글자만 남긴 woff2로 인라인한다(`uv`와 인터넷 필요, 받은 파일은 `~/.cache/slidekit/fonts`에만 캐시하고 저장소에 글꼴 파일을 커밋하지 않는다). 시스템 글꼴만 쓰는 덱은 아무것도 받지 않는다. `<video>` 파일과 글꼴이 아닌 외부 CDN 자원은 인라인하지 않는다. 종단 검증: `node bundler/test/fonts.cjs`.
+- Bun.serve HTML 번들은 코드 분할을 하지 않아 production JS가 단일 청크(약 1MB). 필요하면 서버 시작 때 Bun.build splitting 사용.
 - lint는 정규식 기반이라 아주 특이한 마크업에서 오탐이 있을 수 있다. error만 종료 코드에 반영한다.
 - 발표 동기화는 같은 출처의 BroadcastChannel 전용(기기 간 동기화 없음). 인쇄 PDF의 stepper 슬라이드는 1단계 모습.
 - 편집기는 슬라이드 단위 원문 보존(`app/src/lib/deck-source.ts`)을 전제로 한다. 인라인 편집은 글자만 담은 요소 중심.

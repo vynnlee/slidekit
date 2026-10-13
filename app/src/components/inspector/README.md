@@ -17,3 +17,6 @@ Inspector parts live in `components/ui/` (demo and checks: `/dev/inspector`, `ap
 `<ExportMenu folder={deck.folder} dirty={dirty} onSave={async () => save()} />` in the editor header (a ghost compact "Export" button).
 - `folder`: deck folder under `decks/` (must match `^[a-z0-9][a-z0-9-]*$`, same as the publish path). `dirty`/`onSave`: if dirty, `onSave()` runs first and must resolve `false` on failure or conflict (nothing is exported then).
 - Menu: Download HTML, Download PDF (POST bundle/pdf, then `GET /api/decks/:id/download?kind=`), Publish to static.vynnlee.com... (confirm dialog with address and visibility, password + confirm for Password decks, streamed progress, URL + Copy on success). API: `app/export-api.ts` (one export at a time, 409). Tests: `bun test app/test/export-api.test.ts`; browser: `SLIDEKIT_DEPLOY_DRY_RUN=1` server + `node app/test/export.cjs` (demo `/dev/export?deck=<folder>`). Dry run never uploads.
+
+## deckFonts (`app/src/lib/deck-fonts.ts`)
+`deckFonts(shell.prefix): string[]` returns the font families this deck declares (`@font-face`, Google Fonts `<link>`, `--sk-font` tokens; no generic or system names). Show them first in the Typography font family Select, above the generic list; `familyNames(css value)` splits a `font-family` value.

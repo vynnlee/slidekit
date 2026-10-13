@@ -14,3 +14,13 @@ test("읽기 전용 덱의 PUT은 403이고 파일은 그대로", async () => {
   expect(res.status).toBe(403);
   expect(readFileSync(file, "utf8")).toBe(before);
 });
+
+test("목록 밖 덱은 403이 아니라 입력 검사로 간다(쓰지 않는다)", async () => {
+  const req = Object.assign(new Request("http://x/api/decks/vibe-coding-workshop", { method: "PUT", body: JSON.stringify({}) }), { params: { folder: "vibe-coding-workshop" } });
+  process.env.SLIDEKIT_READONLY_DECKS = "other";
+  try {
+    expect((await routes["/api/decks/:folder"].PUT(req)).status).toBe(400);
+  } finally {
+    process.env.SLIDEKIT_READONLY_DECKS = "vibe-coding-workshop";
+  }
+});

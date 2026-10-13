@@ -12,6 +12,7 @@ import { Inspector } from "./Inspector";
 import { go } from "./App";
 import { byPath, compose, duplicateHtml, newKey, newSlideHtml, pathOf, splitDeck, type Unit } from "@/lib/deck-source";
 import { ExportMenu } from "./ExportMenu";
+import { firstChild, isLeaf, parentOf, siblings } from "@/lib/selection";
 import { startPresentation } from "@/lib/present";
 import type { Comment, DeckEntry } from "@/lib/deck";
 
@@ -256,17 +257,27 @@ export function Editor({ id }: { id: string }) {
     sel.after(c); pickSel(c); commit();
   };
 
-  // Tab: 선택 가능한 요소(글자 요소, 도식, 이미지)를 문서 순서로 돈다.
+  // 선택 이동(SPEC 9.4): Tab은 같은 범위의 형제를 돌고, Enter는 첫 자식(글자면 편집), Shift+Enter는 부모.
   const cycle = (dir: 1 | -1) => {
     const s = canvas.current?.slide(indexRef.current);
     if (!s) return;
-    const all = [...s.querySelectorAll("*")].filter((e) =>
-      !e.closest("aside[data-notes]") &&
-      (e.tagName === "svg" ? !e.parentElement?.closest("svg")
-        : !e.closest("svg") && (e.tagName === "IMG" || (textual(e) && !(e.parentElement && textual(e.parentElement))))));
-    if (!all.length) return;
-    const i = sel ? all.indexOf(sel) : -1;
-    pickSel(all[i < 0 ? (dir > 0 ? 0 : all.length - 1) : (i + dir + all.length) % all.length]);
+    const list = siblings<Element>(s, sel);
+    if (!list.length) return;
+    const i = sel ? list.indexOf(sel) : -1;
+    pickSel(list[i < 0 ? (dir > 0 ? 0 : list.length - 1) : (i + dir + list.length) % list.length]);
+  };
+  const enterSel = () => {
+    const s = canvas.current?.slide(indexRef.current);
+    if (!s) return;
+    if (!sel) { const c = firstChild<Element>(s); if (c) pickSel(c); return; }
+    if (isLeaf(sel)) { if (textual(sel)) canvas.current?.edit(sel); return; }
+    const c = firstChild<Element>(sel);
+    if (c) pickSel(c);
+  };
+  const upSel = () => {
+    const s = canvas.current?.slide(indexRef.current);
+    const p = s && sel ? parentOf<Element>(s, sel) : null;
+    if (p) pickSel(p);
   };
   const style = (prop: string, v: string) => { const el = sel as HTMLElement | null; if (!el) return; if (v) el.style.setProperty(prop, v); else el.style.removeProperty(prop); commit("style:" + prop); };
   const elAttr = (name: string, v: string | null) => { const el = sel as HTMLElement | null; if (!el) return; if (v === null) el.removeAttribute(name); else el.setAttribute(name, v); pickSel(el); commit("elattr:" + name); };
@@ -368,6 +379,7 @@ export function Editor({ id }: { id: string }) {
     else if (mod && k === "d") { e.preventDefault(); dupSelected(); }
     else if (!mod && (e.key === "Delete" || e.key === "Backspace")) { if (!sel) return; e.preventDefault(); delSelected(); }
     else if (!mod && e.key === "Escape") pickSel(null);
+    else if (!mod && e.key === "Enter" && (t === document.body || e.view !== window)) { e.preventDefault(); if (e.shiftKey) upSel(); else enterSel(); }
     else if (!mod && (e.key === "ArrowDown" || e.key === "ArrowRight")) { e.preventDefault(); setIndex(indexRef.current + 1); }
     else if (!mod && (e.key === "ArrowUp" || e.key === "ArrowLeft")) { e.preventDefault(); setIndex(indexRef.current - 1); }
   };

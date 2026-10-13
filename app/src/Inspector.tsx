@@ -48,6 +48,9 @@ const isAuto = (el: HTMLElement, axis: "width" | "height") => {
   return Math.abs(after - before) < 0.5;
 };
 
+// 슬라이드 루트 아래 몇 단계인지(최상위 요소는 1). 선택 규칙 검증에 쓴다.
+const depthOf = (el: Element, root: Element | null) => { let d = 0; for (let n: Element | null = el; n && n !== root; n = n.parentElement) d++; return d; };
+
 const px = (v: string) => parseFloat(v) || 0;
 const num = (n: number) => String(Math.round(n * 100) / 100);
 
@@ -257,7 +260,7 @@ export function Inspector(p: Props) {
           <div className="-mx-3 flex flex-col pt-1" key={p.selId}>
             <div className="px-3 pb-2">
               <Tooltip content="Show in Layers" side="top">
-                <Button aria-label="Show in layers" variant="ghost" size="compact" leadingIcon={SelIcon} className="w-full justify-start" onClick={p.onShowLayers}>
+                <Button aria-label="Show in layers" data-depth={depthOf(el, p.slide)} variant="ghost" size="compact" leadingIcon={SelIcon} className="w-full justify-start" onClick={p.onShowLayers}>
                   <span className="flex min-w-0 flex-1 items-center gap-2">
                     <span className="min-w-0 truncate text-left">{nameOf(el)}</span>
                     <span className="shrink-0 rounded bg-surface-2 px-1 text-micro text-muted-foreground">{el.tagName.toLowerCase()}</span>

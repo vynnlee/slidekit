@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { TextArea } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
 import { byPath, previewHtml, serializeSlide, type Unit } from "@/lib/deck-source";
+import { childToward, isLeaf, pick as pickEl } from "@/lib/selection";
 import type { Comment } from "@/lib/deck";
 
 export type CanvasApi = {
@@ -157,12 +158,12 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   useEffect(() => { goto(); hover.current = null; }, [p.index, goto]);
 
   // 요소 하나를 고른다. SVG 안쪽은 가장 바깥 svg로 올린다.
+  // 클릭으로 선택될 요소(SPEC 9.4). 호버 외곽선도 같은 규칙으로 "지금 누르면 선택될 요소"를 보인다.
+  const selRef = useRef<Element | null>(null);
+  useEffect(() => { selRef.current = p.sel; }, [p.sel]);
   const pick = (e: Event): Element | null => {
     const s = cur();
-    let t = e.target as Element | null;
-    if (!s || !t || !s.contains(t)) return null;
-    for (let o = t.closest("svg"); o; o = o.parentElement?.closest("svg") ?? null) t = o;
-    return t.closest("aside[data-notes]") ? null : t;
+    return s ? pickEl<Element>(s, e.target as Element, selRef.current, !!(e as MouseEvent).metaKey || !!(e as MouseEvent).ctrlKey) : null;
   };
 
   function endEdit() {
@@ -195,10 +196,18 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       if (inEdit(e)) return;
       e.preventDefault(); e.stopPropagation();
       const t = pick(e);
-      P.current.onSel(t === cur() ? null : t);
+      selRef.current = t;
+      P.current.onSel(t);
       setComposing(false);
     }, true);
-    d.addEventListener("dblclick", (e) => { const t = pick(e); if (t && !editing.current) startEdit(t as HTMLElement); }, true);
+    d.addEventListener("dblclick", (e) => {
+      // 선택된 요소를 더블클릭: 글자 블록이면 편집, 컨테이너이면 한 단계 안쪽 요소를 선택한다.
+      const sl = cur(), c = selRef.current;
+      if (editing.current || !sl || !c || !c.contains(e.target as Node)) return;
+      if (isLeaf(c)) { if (textual(c)) startEdit(c as HTMLElement); return; }
+      const child = childToward<Element>(sl, c, e.target as Element);
+      if (child) { selRef.current = child; P.current.onSel(child); }
+    }, true);
     d.addEventListener("keydown", (e) => {
       const ed = editing.current;
       if (ed && (e.key === "Escape" || (e.key === "Enter" && !e.shiftKey))) { e.preventDefault(); e.stopPropagation(); ed.blur(); return; }

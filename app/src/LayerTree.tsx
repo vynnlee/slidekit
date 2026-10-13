@@ -74,6 +74,7 @@ export function LayerTree(p: Props) {
       <div key={[...(el.parentElement?.children ?? [])].indexOf(el)} role="treeitem" aria-selected={on} aria-expanded={ch.length ? isOpen : undefined}>
         <div
           ref={on ? selRow : undefined}
+          data-testid="layer-row"
           draggable={rename !== el}
           onDragStart={(e) => { setDrag(el); e.dataTransfer.effectAllowed = "move"; e.stopPropagation(); }}
           onDragOver={(e) => {

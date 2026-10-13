@@ -65,7 +65,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('방향키로 3번 슬라이드', idx === 3, idx);
   const h = fr().locator('[data-active] h1, [data-active] h2').first();
   const oldText = (await h.textContent()).trim();
-  await h.click(); await sleep(150);
+  await h.click({ modifiers: ['Meta'] }); await sleep(150); // Cmd+클릭: 가장 안쪽 단위를 바로 고른다
   await h.dblclick(); await sleep(150);
   check('더블클릭하면 편집 상태', await h.evaluate((e) => e.isContentEditable));
   await page.keyboard.press('Meta+a'); await page.keyboard.type('편집 테스트 제목');
@@ -207,7 +207,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('드래그로 순서 변경', after2 !== first, [first, after2]);
   await page.keyboard.press('Meta+z'); await sleep(300);
   const h1 = fr().locator('[data-active] h1, [data-active] h2, [data-active] p').first();
-  await h1.dblclick(); await sleep(200); await page.keyboard.press('Meta+a'); await page.keyboard.press('Meta+b'); await sleep(200);
+  await h1.click({ modifiers: ['Meta'] }); await sleep(150); await h1.dblclick(); await sleep(200); await page.keyboard.press('Meta+a'); await page.keyboard.press('Meta+b'); await sleep(200);
   check('편집 중 Cmd+B가 strong으로 감쌈', await h1.evaluate((e) => !!e.querySelector('strong')));
   await page.keyboard.press('Enter'); await sleep(300);
 
@@ -276,7 +276,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   const imgAt = await page.evaluate(() => [...document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll('#sk-stage > [data-slide]')].findIndex((s) => s.querySelector('img')));
   console.log('INFO 이미지 슬라이드 위치 ' + (imgAt + 1));
   await layers.nth(Math.max(0, imgAt)).click(); await sleep(700);
-  await fr().locator('[data-active] img').first().click(); await sleep(500);
+  await fr().locator('[data-active] img').first().click({ modifiers: ['Meta'] }); await sleep(500);
   check('이미지 Fit과 Position 컨트롤', (await page.getByLabel('Image fit', { exact: true }).count()) === 1 && (await page.getByLabel('Image position', { exact: true }).count()) === 1);
   const pr = await page.getByRole('complementary', { name: 'Properties' }).boundingBox(), fitB = await page.getByLabel('Image fit', { exact: true }).boundingBox(), posB = await page.getByLabel('Image position', { exact: true }).boundingBox();
   check('Fit과 Position이 패널 안에서 겹치지 않음', pr && fitB && posB && fitB.x + fitB.width <= pr.x + pr.width && posB.x + posB.width <= pr.x + pr.width && (posB.y >= fitB.y + fitB.height - 1 || posB.x >= fitB.x + fitB.width), [pr, fitB, posB]);
@@ -285,6 +285,44 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('선택 헤더가 한 줄', hb && hb.height <= 30, hb && hb.height);
   check('이미지 이름은 Image', (await page.getByRole('button', { name: 'Show in layers' }).textContent()).includes('Image'));
   await focusBody(); await page.keyboard.press('Escape');
+  // 요소 선택 규칙(Figma식 계층 선택): 슬라이드 2의 카드에서 가장 깊은 글자 블록을 대상으로 한다
+  await layers.nth(1).click(); await sleep(700); await focusBody(); await page.keyboard.press('Escape'); await sleep(200);
+  const probe = await page.evaluate(() => {
+    const f = document.querySelector('iframe[title="Canvas"]'), s = f.contentDocument.querySelector('[data-active]'), fb = f.getBoundingClientRect();
+    const INL = /^(B|I|EM|STRONG|SPAN|CODE|A|BR|SMALL|MARK|U|S|SUB|SUP|KBD)$/;
+    const depth = (e) => { let d = 0; for (let n = e; n && n !== s; n = n.parentElement) d++; return d; };
+    const isTB = (e) => (e.textContent || '').trim() && [...e.children].every((c) => INL.test(c.tagName));
+    const inTB = (e) => { for (let n = e.parentElement; n && n !== s; n = n.parentElement) if (isTB(n)) return true; return false; }; // 글자 블록 안의 인라인은 단위가 아니다
+    const blocks = [...s.querySelectorAll('*')].filter((e) => !e.closest('aside,svg') && isTB(e) && !inTB(e) && depth(e) >= 2);
+    const e = blocks[0]; if (!e) return null;
+    let top = e; while (top.parentElement !== s) top = top.parentElement;
+    const r = e.getBoundingClientRect(), tr = top.getBoundingClientRect();
+    return { d: depth(e), x: fb.x + r.x + r.width / 2, y: fb.y + r.y + r.height / 2, top: [fb.x + tr.x, fb.y + tr.y, tr.width, tr.height] };
+  });
+  check('깊이 2 이상의 글자 블록이 있는 슬라이드', !!probe, probe);
+  if (probe) {
+    const depthNow = () => page.getByRole('button', { name: 'Show in layers' }).getAttribute('data-depth', { timeout: 1500 }).catch(() => null);
+    await page.mouse.move(probe.x, probe.y); await sleep(300);
+    const hb = await page.locator('div.border-focus-ring\\/60').first().boundingBox();
+    check('호버 외곽선이 클릭 대상(최상위 요소)과 일치', !!hb && Math.abs(hb.x - probe.top[0]) < 4 && Math.abs(hb.y - probe.top[1]) < 4 && Math.abs(hb.width - probe.top[2]) < 4, [hb, probe.top]);
+    await page.mouse.click(probe.x, probe.y); await sleep(400);
+    check('첫 클릭은 최상위 컨테이너', (await depthNow()) === '1', await depthNow());
+    await page.mouse.dblclick(probe.x, probe.y); await sleep(400);
+    check('더블클릭하면 한 단계 안쪽', (await depthNow()) === '2', await depthNow());
+    await page.keyboard.press('Escape'); await sleep(200);
+    await page.keyboard.down('Meta'); await page.mouse.click(probe.x, probe.y); await page.keyboard.up('Meta'); await sleep(400);
+    check('Cmd+클릭은 가장 안쪽 글자 블록', (await depthNow()) === String(probe.d), [await depthNow(), probe.d]);
+    await focusBody(); await page.keyboard.press('Shift+Enter'); await sleep(300);
+    check('Shift+Enter는 부모 선택', (await depthNow()) === String(probe.d - 1), await depthNow());
+    await page.keyboard.press('Enter'); await sleep(300);
+    check('Enter는 첫 자식 선택', (await depthNow()) !== null && +(await depthNow()) === probe.d, await depthNow());
+    await page.keyboard.press('Escape'); await sleep(200);
+    check('Esc는 선택 해제(범위는 슬라이드로)', (await page.getByRole('button', { name: 'Show in layers' }).count()) === 0);
+    await page.mouse.click(probe.x, probe.y); await sleep(300);
+    check('해제 뒤 첫 클릭은 다시 최상위', (await depthNow()) === '1', await depthNow());
+    await page.keyboard.press('Escape'); await sleep(200);
+  }
+
   // 필름스트립: 키보드 이동, 접기, 슬라이드 추가
   await layers.nth(0).click(); await sleep(400); await layers.nth(0).focus(); await page.keyboard.press('ArrowRight'); await sleep(500);
   check('필름스트립에서 오른쪽 방향키로 다음 슬라이드', (await layers.nth(1).getAttribute('aria-selected')) === 'true');

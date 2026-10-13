@@ -15,7 +15,7 @@ import type { Comment, DeckEntry } from "@/lib/deck";
 
 const KEYS: [string, string][] = [
   ["Cmd+S", "Save"], ["Cmd+Z", "Undo"], ["Shift+Cmd+Z", "Redo"], ["Delete", "Delete selection"], ["Cmd+D", "Duplicate"],
-  ["Up, Down", "Go to slide"], ["Double-click", "Edit text"], ["Enter", "Finish editing"], ["Esc", "Deselect"], ["Tab", "Select next element"], ["Cmd+Scroll, Cmd+0", "Zoom, fit"], ["Cmd+\\", "Toggle panels"], ["Cmd+E", "Toggle notes"], ["Cmd+/", "Shortcuts"],
+  ["Up, Down", "Go to slide"], ["Double-click", "Edit text"], ["Enter", "Finish editing"], ["Esc", "Deselect"], ["Tab", "Select next element"], ["Cmd+Scroll, Cmd+0", "Zoom, fit"], ["Cmd+Enter", "Present from this slide"], ["Shift+Cmd+Enter", "Present from the start"], ["Cmd+\\", "Toggle panels"], ["Cmd+E", "Toggle notes"], ["Cmd+/", "Shortcuts"],
 ];
 // 슬라이드 원문에서 노트(aside[data-notes])의 글자만 꺼낸다. 앞뒤 공백은 보기용으로만 뗀다.
 const noteOf = (html: string) => {
@@ -280,6 +280,7 @@ export function Editor({ id }: { id: string }) {
     } else if (mod && k === "s") { e.preventDefault(); save(); }
     else if (mod && k === "e") { e.preventDefault(); setNotesOpen((v) => !v); }
     else if (mod && k === "/") { e.preventDefault(); setHelp((v) => !v); }
+    else if (mod && e.key === "Enter") { e.preventDefault(); present(e.shiftKey); }
     else if (typing) return;
     else if (mod && k === "0") { e.preventDefault(); canvas.current?.zoom(0); }
     else if (mod && (k === "=" || k === "+")) { e.preventDefault(); canvas.current?.zoom(1); }
@@ -300,9 +301,9 @@ export function Editor({ id }: { id: string }) {
 
   if (!deck || !shell) return err ? <p className="p-4 text-caption text-muted-foreground">{err}</p> : null;
 
-  const present = async () => {
+  const present = async (fromStart = false) => {
     if (!(await save())) return;
-    setErr(await startPresentation(deck.folder));
+    setErr(await startPresentation(deck.folder, fromStart ? 1 : indexRef.current + 1));
     go(`/present/${encodeURIComponent(deck.id)}`);
   };
   const back = async () => { if (await save()) go("/"); };
@@ -326,7 +327,7 @@ export function Editor({ id }: { id: string }) {
             {err && <span className="text-caption text-muted-foreground">{err}</span>}
             <span className="ml-auto" />
             {dirty && !changed && <Button variant="ghost" size="compact" onClick={() => save()}>Save</Button>}
-            <Button variant="primary" size="compact" leadingIcon={MonitorPlay} onClick={present}>Present</Button>
+            <Button variant="primary" size="compact" leadingIcon={MonitorPlay} onClick={() => present()}>Present</Button>
           </>
         }
         left={

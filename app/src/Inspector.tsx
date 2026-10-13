@@ -3,7 +3,7 @@ import {
   AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical,
   ArrowDown, ArrowRight, Blend, CaseLower, CaseSensitive, CaseUpper, ALargeSmall, Droplets, Expand, EyeOff, Frame, Layers as LayersIcon,
   Minus, Plus, RotateCw, Shrink, Square, SquareRoundCorner, Strikethrough, TextAlignCenter, TextAlignEnd, TextAlignJustify, TextAlignStart,
-  Underline, WrapText, MoveHorizontal, ListCollapse, Space, BetweenHorizontalStart, BetweenVerticalStart, Type,
+  Underline, WrapText, Scan, Spline, MoveHorizontal, ListCollapse, Space, BetweenHorizontalStart, BetweenVerticalStart, Type,
 } from "lucide-react";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
@@ -75,13 +75,35 @@ type Props = {
   onScrub(on: boolean): void;
 };
 
-const SHADOW = /^(rgba?\([^)]*\)|#[0-9a-f]+)\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+([\d.]+)px(?:\s+(-?[\d.]+)px)?$/i;
-
+type Shadow = { color: string; x: number; y: number; b: number; s: number; inset: boolean };
+const SH = /^(?:(inset)\s+)?(rgba?\([^)]*\)|#[0-9a-f]+)\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+([\d.]+)px(?:\s+(-?[\d.]+)px)?(?:\s+(inset))?$/i;
+const splitTop = (v: string) => {
+  const out: string[] = []; let d = 0, cur = "";
+  for (const c of v) { if (c === "(") d++; if (c === ")") d--; if (c === "," && d === 0) { out.push(cur.trim()); cur = ""; } else cur += c; }
+  out.push(cur.trim());
+  return out;
+};
+// 모두 읽을 수 있을 때만 목록을 돌려준다(그렇지 않으면 null)
+const parseShadows = (raw: string): Shadow[] | null => {
+  if (!raw || raw === "none") return [];
+  const out: Shadow[] = [];
+  for (const part of splitTop(raw)) {
+    const m = SH.exec(part);
+    if (!m) return null;
+    out.push({ color: m[2], x: +m[3], y: +m[4], b: +m[5], s: +(m[6] ?? 0), inset: !!(m[1] || m[7]) });
+  }
+  return out;
+};
+const fmtShadow = (s: Shadow) => `${s.color} ${s.x}px ${s.y}px ${s.b}px ${s.s}px${s.inset ? " inset" : ""}`;
+const GRAD = /^linear-gradient\(\s*(?:(-?[\d.]+)deg,\s*)?(.+?)\s+([\d.]+)%,\s*(.+?)\s+([\d.]+)%\s*\)$/;
+const SIDES = ["top", "right", "bottom", "left"] as const;
 export function Inspector(p: Props) {
   const el = p.sel as HTMLElement | null;
   const [, bump] = useState(0);
   useEffect(() => bump((n) => n + 1), [el, p.selId]);
   const [fxMenu, setFxMenu] = useState(false);
+  const [radiusOpen, setRadiusOpen] = useState(false);
+  const [sidesOpen, setSidesOpen] = useState(false);
 
   const win = el?.ownerDocument.defaultView ?? null;
   const cs = el && win ? win.getComputedStyle(el) : null;
@@ -138,7 +160,7 @@ export function Inspector(p: Props) {
     else if (main) { set(axis, ""); set("flex", "1 1 0"); }
     else set(axis, "100%");
   };
-  const MODES = [opt("fixed", Square, "Fixed"), opt("hug", Shrink, "Hug"), opt("fill", Expand, "Fill")];
+  const modes = (axis: string) => [opt("fixed", Square, `Fixed ${axis}`), opt("hug", Shrink, "Hug contents"), opt("fill", Expand, "Fill container")];
 
   const side4 = (prop: string) => ({
     top: val(`${prop}-top`), right: val(`${prop}-right`), bottom: val(`${prop}-bottom`), left: val(`${prop}-left`),
@@ -159,20 +181,17 @@ export function Inspector(p: Props) {
 
   // Fill, Stroke, Effects
   const bg = val("background-color");
-  const hasFill = !!bg && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent";
-  const bw = px(val("border-top-width")), hasStroke = bw > 0 && val("border-top-style") !== "none";
-  const shadowRaw = val("box-shadow");
-  const shadow = SHADOW.exec(shadowRaw);
-  const hasShadow = shadowRaw !== "none" && !!shadowRaw;
+  const hasStroke = SIDES.some((x) => px(val(`border-${x}-width`)) > 0 && val(`border-${x}-style`) !== "none");
+  const bgImg = inl("background-image");
+  const gm = GRAD.exec(bgImg);
+  const grad = gm ? { angle: gm[1] ?? "180", a: gm[2], pa: gm[3], b: gm[4], pb: gm[5] } : null;
+  const setGrad = (g: NonNullable<typeof grad>) => set("background-image", `linear-gradient(${g.angle}deg, ${g.a} ${g.pa}%, ${g.b} ${g.pb}%)`);
+  const hasFill = !!grad || (!!bg && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent");
+  const shadows = parseShadows(val("box-shadow"));
+  const setShadows = (l: Shadow[]) => set("box-shadow", l.length ? l.map(fmtShadow).join(", ") : "none");
+  const patchShadow = (i: number, patch: Partial<Shadow>) => shadows && setShadows(shadows.map((x, k) => (k === i ? { ...x, ...patch } : x)));
   const layerBlur = /blur\(([\d.]+)px\)/.exec(val("filter"))?.[1];
   const bgBlur = /blur\(([\d.]+)px\)/.exec(val("backdrop-filter"))?.[1];
-  const setShadow = (i: number, v: string) => {
-    const s = shadow ?? SHADOW.exec("rgba(0, 0, 0, 0.25) 0px 4px 8px 0px")!;
-    const f = [s[2], s[3], s[4], s[5] ?? "0"].map(px);
-    let color = s[1];
-    if (i < 4) f[i] = px(v); else color = v;
-    set("box-shadow", `${color} ${f.map((x) => x + "px").join(" ")}`);
-  };
 
   const kind = p.slide?.getAttribute("data-slide") ?? "content";
   const steps = p.slide?.getAttribute("data-steps") ?? "";
@@ -220,8 +239,8 @@ export function Inspector(p: Props) {
               <Grid>
                 {n("width", "W", "Width", { min: 0 })}
                 {n("height", "H", "Height", { min: 0 })}
-                <SegmentedControl aria-label="Width mode" value={mode("width")} onChange={(m) => setMode("width", m)} options={MODES} />
-                <SegmentedControl aria-label="Height mode" value={mode("height")} onChange={(m) => setMode("height", m)} options={MODES} />
+                <SegmentedControl aria-label="Width mode" value={mode("width")} onChange={(m) => setMode("width", m)} options={modes("width")} />
+                <SegmentedControl aria-label="Height mode" value={mode("height")} onChange={(m) => setMode("height", m)} options={modes("height")} />
               </Grid>
               {(flex || grid) && (
                 <Grid>
@@ -257,12 +276,17 @@ export function Inspector(p: Props) {
               </Grid>
             </InspectorSection>
 
-            <InspectorSection id="appearance" title="Appearance">
+            <InspectorSection id="appearance" title="Appearance" action={(
+              <Toggle on={radiusOpen} label="Individual corners" I={Scan} onClick={() => setRadiusOpen((v) => !v)} />)}>
               <Grid>
                 <NumberField label={<Blend />} aria-label="Opacity" unit="" min={0} max={100} value={num(+val("opacity") * 100)} muted={!inl("opacity")}
                   onChange={(v) => set("opacity", num(+v / 100))} {...scrub} />
-                <NumberField label={<SquareRoundCorner />} aria-label="Corner radius" min={0} value={val("border-top-left-radius")} muted={!inl("border-radius") && !inl("border-top-left-radius")}
-                  onChange={(v) => set("border-radius", v)} {...scrub} />
+                {!radiusOpen && <NumberField label={<SquareRoundCorner />} aria-label="Corner radius" min={0} value={val("border-top-left-radius")} muted={!inl("border-radius") && !inl("border-top-left-radius")}
+                  onChange={(v) => set("border-radius", v)} {...scrub} />}
+                {radiusOpen && ([["TL", "top-left", "Top left"], ["TR", "top-right", "Top right"], ["BL", "bottom-left", "Bottom left"], ["BR", "bottom-right", "Bottom right"]] as const).map(([l, c, name]) => (
+                  <NumberField key={c} label={l} aria-label={`${name} radius`} min={0} value={val(`border-${c}-radius`)} muted={!inl(`border-${c}-radius`) && !inl("border-radius")}
+                    onChange={(v) => set(`border-${c}-radius`, v)} {...scrub} />
+                ))}
               </Grid>
               <Pick label="Blend mode" value={val("mix-blend-mode")} items={BLENDS} onChange={(v) => set("mix-blend-mode", v)} />
             </InspectorSection>
@@ -298,25 +322,53 @@ export function Inspector(p: Props) {
                 </div>
               )}
               {hasFill && (
-                <div className="flex items-center gap-1">
-                  <div className="min-w-0 flex-1"><ColorField aria-label="Fill" value={bg} onChange={(v) => set("background-color", v)} /></div>
-                  <Tooltip content="Remove fill" side="top"><Button aria-label="Remove fill" variant="ghost" size="icon-compact" onClick={() => set("background-color", "transparent")}><Minus /></Button></Tooltip>
-                </div>
+                <>
+                  <div className="flex items-center gap-1">
+                    <SegmentedControl aria-label="Fill type" className="flex-1" value={grad ? "linear" : "solid"}
+                      onChange={(v) => {
+                        if (v === "solid") set("background-image", "");
+                        else if (!grad) setGrad({ angle: "180", a: hasFill && bg !== "rgba(0, 0, 0, 0)" ? bg : "#ffffff", pa: "0", b: "#000000", pb: "100" });
+                      }}
+                      options={[opt("solid", Square, "Solid"), opt("linear", Spline, "Linear gradient")]} />
+                    <Tooltip content="Remove fill" side="top"><Button aria-label="Remove fill" variant="ghost" size="icon-compact" onClick={() => { set("background-image", ""); set("background-color", "transparent"); }}><Minus /></Button></Tooltip>
+                  </div>
+                  {!grad && <ColorField aria-label="Fill" value={bg} onChange={(v) => set("background-color", v)} />}
+                  {grad && (
+                    <>
+                      <Grid>
+                        <NumberField label={<RotateCw />} aria-label="Gradient angle" unit="" min={0} max={360} value={grad.angle} onChange={(v) => setGrad({ ...grad, angle: v })} {...scrub} />
+                        <span />
+                        <NumberField label="A" aria-label="First stop" unit="" min={0} max={100} value={grad.pa} onChange={(v) => setGrad({ ...grad, pa: v })} {...scrub} />
+                        <NumberField label="B" aria-label="Second stop" unit="" min={0} max={100} value={grad.pb} onChange={(v) => setGrad({ ...grad, pb: v })} {...scrub} />
+                      </Grid>
+                      <ColorField aria-label="Gradient first color" value={grad.a} onChange={(v) => setGrad({ ...grad, a: v })} />
+                      <ColorField aria-label="Gradient second color" value={grad.b} onChange={(v) => setGrad({ ...grad, b: v })} />
+                    </>
+                  )}
+                </>
               )}
             </InspectorSection>
 
             <InspectorSection id="stroke" title="Stroke" action={!hasStroke ? (
-              <Tooltip content="Add stroke" side="top"><Button aria-label="Add stroke" variant="ghost" size="icon-compact" onClick={() => set("border", "1px solid #000000")}><Plus /></Button></Tooltip>) : undefined}>
+              <Tooltip content="Add stroke" side="top"><Button aria-label="Add stroke" variant="ghost" size="icon-compact" onClick={() => set("border", "1px solid #000000")}><Plus /></Button></Tooltip>) : (
+              <Toggle on={sidesOpen} label="Individual sides" I={Scan} onClick={() => setSidesOpen((v) => !v)} />)}>
               {hasStroke && (
                 <>
                   <div className="flex items-center gap-1">
                     <div className="min-w-0 flex-1"><ColorField aria-label="Stroke color" value={val("border-top-color")} onChange={(v) => set("border-color", v)} /></div>
                     <Tooltip content="Remove stroke" side="top"><Button aria-label="Remove stroke" variant="ghost" size="icon-compact" onClick={() => set("border", "none")}><Minus /></Button></Tooltip>
                   </div>
-                  <Grid>
-                    {n("border-top-width", <MoveHorizontal />, "Stroke width", { min: 0 })}
-                    <Pick label="Stroke style" value={val("border-top-style")} items={BORDER_STYLES} onChange={(v) => set("border-style", v)} />
-                  </Grid>
+                  {!sidesOpen ? (
+                    <Grid>
+                      {n("border-top-width", <MoveHorizontal />, "Stroke width", { min: 0 })}
+                      <Pick label="Stroke style" value={val("border-top-style")} items={BORDER_STYLES} onChange={(v) => set("border-style", v)} />
+                    </Grid>
+                  ) : SIDES.map((x) => (
+                    <Grid key={x}>
+                      {n(`border-${x}-width`, x[0].toUpperCase(), `${x} stroke width`, { min: 0 })}
+                      <Pick label={`${x} stroke style`} value={val(`border-${x}-style`) === "none" ? "solid" : val(`border-${x}-style`)} items={BORDER_STYLES} onChange={(v) => set(`border-${x}-style`, v)} />
+                    </Grid>
+                  ))}
                 </>
               )}
             </InspectorSection>
@@ -325,31 +377,34 @@ export function Inspector(p: Props) {
               <DropdownMenu open={fxMenu} onOpenChange={setFxMenu} size="compact">
                 <DropdownTrigger render={<Button aria-label="Add effect" variant="ghost" size="icon-compact"><Plus /></Button>} />
                 <DropdownContent align="end" side="bottom">
-                  <MenuItem index={0} icon={LayersIcon} label="Drop shadow" onSelect={() => set("box-shadow", "0px 4px 8px 0px rgba(0, 0, 0, 0.25)")} />
-                  <MenuItem index={1} icon={Droplets} label="Layer blur" onSelect={() => set("filter", "blur(4px)")} />
-                  <MenuItem index={2} icon={Droplets} label="Background blur" onSelect={() => set("backdrop-filter", "blur(8px)")} />
+                  <MenuItem index={0} icon={LayersIcon} label="Drop shadow" onSelect={() => setShadows([...(shadows ?? []), { color: "rgba(0, 0, 0, 0.25)", x: 0, y: 4, b: 8, s: 0, inset: false }])} />
+                  <MenuItem index={1} icon={LayersIcon} label="Inner shadow" onSelect={() => setShadows([...(shadows ?? []), { color: "rgba(0, 0, 0, 0.25)", x: 0, y: 4, b: 8, s: 0, inset: true }])} />
+                  <MenuItem index={2} icon={Droplets} label="Layer blur" onSelect={() => set("filter", "blur(4px)")} />
+                  <MenuItem index={3} icon={Droplets} label="Background blur" onSelect={() => set("backdrop-filter", "blur(8px)")} />
                 </DropdownContent>
               </DropdownMenu>
             )}>
-              {hasShadow && (
-                <>
-                  <div className="flex items-center justify-between">
-                    <span className="text-caption text-muted-foreground">Drop shadow</span>
-                    <Tooltip content="Remove effect" side="top"><Button aria-label="Remove drop shadow" variant="ghost" size="icon-compact" onClick={() => set("box-shadow", "none")}><Minus /></Button></Tooltip>
-                  </div>
-                  {shadow ? (
-                    <>
-                      <Grid>
-                        <NumberField label="X" aria-label="Shadow X" value={shadow[2] + "px"} onChange={(v) => setShadow(0, v)} {...scrub} />
-                        <NumberField label="Y" aria-label="Shadow Y" value={shadow[3] + "px"} onChange={(v) => setShadow(1, v)} {...scrub} />
-                        <NumberField label="B" aria-label="Shadow blur" min={0} value={shadow[4] + "px"} onChange={(v) => setShadow(2, v)} {...scrub} />
-                        <NumberField label="S" aria-label="Shadow spread" value={(shadow[5] ?? "0") + "px"} onChange={(v) => setShadow(3, v)} {...scrub} />
-                      </Grid>
-                      <ColorField aria-label="Shadow color" value={shadow[1]} onChange={(v) => setShadow(4, v)} />
-                    </>
-                  ) : <span className="text-caption text-muted-foreground">Custom shadow</span>}
-                </>
+              {shadows === null && (
+                <div className="flex items-center justify-between">
+                  <span className="text-caption text-muted-foreground">Custom shadow</span>
+                  <Tooltip content="Remove effect" side="top"><Button aria-label="Remove shadow" variant="ghost" size="icon-compact" onClick={() => set("box-shadow", "none")}><Minus /></Button></Tooltip>
+                </div>
               )}
+              {shadows?.map((sh, i) => (
+                <div key={i} className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-caption text-muted-foreground">{sh.inset ? "Inner shadow" : "Drop shadow"}</span>
+                    <Tooltip content="Remove effect" side="top"><Button aria-label={`Remove shadow ${i + 1}`} variant="ghost" size="icon-compact" onClick={() => setShadows(shadows.filter((_, k) => k !== i))}><Minus /></Button></Tooltip>
+                  </div>
+                  <Grid>
+                    <NumberField label="X" aria-label={`Shadow ${i + 1} X`} value={sh.x + "px"} onChange={(v) => patchShadow(i, { x: px(v) })} {...scrub} />
+                    <NumberField label="Y" aria-label={`Shadow ${i + 1} Y`} value={sh.y + "px"} onChange={(v) => patchShadow(i, { y: px(v) })} {...scrub} />
+                    <NumberField label="B" aria-label={`Shadow ${i + 1} blur`} min={0} value={sh.b + "px"} onChange={(v) => patchShadow(i, { b: px(v) })} {...scrub} />
+                    <NumberField label="S" aria-label={`Shadow ${i + 1} spread`} value={sh.s + "px"} onChange={(v) => patchShadow(i, { s: px(v) })} {...scrub} />
+                  </Grid>
+                  <ColorField aria-label={`Shadow ${i + 1} color`} value={sh.color} onChange={(v) => patchShadow(i, { color: v })} />
+                </div>
+              ))}
               {layerBlur !== undefined && (
                 <div className="flex items-center gap-1">
                   <div className="min-w-0 flex-1"><NumberField label={<Droplets />} aria-label="Layer blur" min={0} value={layerBlur + "px"} onChange={(v) => set("filter", `blur(${px(v)}px)`)} {...scrub} /></div>

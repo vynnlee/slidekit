@@ -140,6 +140,28 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   const saved = fs.readFileSync(FILE, 'utf8');
   check('저장 파일에 opacity와 border 반영', /opacity:\s*0\.51/.test(saved) && /border:\s*1px solid/.test(saved), saved.match(/style="[^"]*opacity[^"]*"/));
   await page.keyboard.press('Meta+z'); await page.keyboard.press('Meta+z'); await sleep(300);
+  // 측정값 표시, 크기 모드, 코너별 radius, 그림자 여러 개, 그라디언트, 변별 stroke
+  await page.keyboard.press('Escape'); await page.keyboard.press('Tab'); await sleep(400);
+  check('W 표시는 소수 둘째 자리까지', /^\d+(\.\d{1,2})?$/.test(await page.getByLabel('Width', { exact: true }).inputValue()), await page.getByLabel('Width', { exact: true }).inputValue());
+  check('크기 모드 컨트롤에 W/H 이름', (await page.getByRole('radio', { name: 'Fixed width' }).count()) === 1 && (await page.getByRole('radio', { name: 'Fill container' }).count()) === 2);
+  const styleOf = () => page.evaluate(() => { const e = [...document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll('[style]')].find((x) => x.closest('[data-active]') && x.style.length); return e ? e.getAttribute('style') : ''; });
+  await page.getByRole('button', { name: 'Individual corners' }).click();
+  const tl = page.getByLabel('Top left radius'); await tl.fill('10'); await tl.press('Enter'); await sleep(300);
+  check('코너별 radius', /border-top-left-radius:\s*10px/.test(await styleOf()), await styleOf());
+  for (const name of ['Drop shadow', 'Inner shadow']) { await page.getByRole('button', { name: 'Add effect' }).click(); await page.getByRole('menuitem', { name }).click(); await sleep(250); }
+  const b2 = page.getByLabel('Shadow 2 blur'); await b2.fill('12'); await b2.press('Enter'); await sleep(300);
+  check('그림자 2개와 inset', /box-shadow:[^;]*,[^;]*inset/.test(await styleOf()) || /box-shadow:[^;]*inset[^;]*,/.test(await styleOf()), await styleOf());
+  await page.getByRole('button', { name: 'Remove shadow 1' }).click(); await sleep(250);
+  check('그림자 하나 삭제', (await page.getByLabel('Shadow 2 blur').count()) === 0 && (await page.getByLabel('Shadow 1 blur').count()) === 1);
+  if (await page.getByRole('button', { name: 'Add fill' }).count()) await page.getByRole('button', { name: 'Add fill' }).click();
+  await sleep(250); await page.getByRole('radio', { name: 'Linear gradient' }).click(); await sleep(300);
+  check('그라디언트 전환', /linear-gradient/.test(await styleOf()) && (await page.getByLabel('Gradient angle').count()) === 1, await styleOf());
+  const ang = page.getByLabel('Gradient angle'); await ang.fill('90'); await ang.press('Enter'); await sleep(300);
+  check('그라디언트 각도', /linear-gradient\(90deg/.test(await styleOf()), await styleOf());
+  if (await page.getByRole('button', { name: 'Add stroke' }).count()) await page.getByRole('button', { name: 'Add stroke' }).click();
+  await sleep(250); await page.getByRole('button', { name: 'Individual sides' }).click();
+  const tw = page.getByLabel('top stroke width'); await tw.fill('4'); await tw.press('Enter'); await sleep(300);
+  check('변별 stroke 두께', /border(-top)?-width:\s*4px/.test(await styleOf()), await styleOf());
 
   check('페이지 오류 없음', errors.length === 0, errors.slice(0, 3));
   await browser.close();

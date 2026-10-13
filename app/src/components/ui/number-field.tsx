@@ -36,7 +36,7 @@ function parse(v: string): { n: number; unit: string } | null {
 function display(v: string): string {
   const p = parse(v);
   if (!p) return v.trim();
-  return `${p.n}${p.unit === "px" ? "" : p.unit}`;
+  return `${Math.round(p.n * 100) / 100}${p.unit === "px" ? "" : p.unit}`;
 }
 
 const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
@@ -113,7 +113,7 @@ const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
       if (e.button !== 0) return;
       e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
-      scrub.current = { x: e.clientX, acc: 0, n: cur?.n ?? 0, unit: outUnit(cur?.unit), last: value };
+      scrub.current = { x: e.clientX, acc: 0, n: step >= 1 ? Math.round(cur?.n ?? 0) : cur?.n ?? 0, unit: outUnit(cur?.unit), last: value };
       onScrubStart?.();
     };
 

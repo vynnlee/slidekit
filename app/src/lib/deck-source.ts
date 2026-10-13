@@ -7,20 +7,43 @@ export type Doc = { prefix: string; suffix: string; units: Unit[] };
 let seq = 0;
 export const newKey = () => `u${++seq}`;
 
-// script, style, 주석 안의 글자는 같은 길이의 공백으로 가려서 section 경계를 찾는다.
-const mask = (s: string) =>
-  s.replace(/<!--[\s\S]*?-->|<(script|style)\b[\s\S]*?<\/\1\s*>/gi, (m) => " ".repeat(m.length));
+// 작은 토크나이저로 최상위 section의 범위를 찾는다. 주석, 따옴표 속성 값, script, style, textarea, title 안의
+// "<section"과 "</section>"은 경계로 보지 않는다. 최상위 section 중 data-slide 속성이 있는 것만 슬라이드다.
+const RAW = new Set(["script", "style", "textarea", "title"]);
+function sections(src: string) {
+  const out: { a: number; b: number; slide: boolean }[] = [];
+  const n = src.length;
+  let i = 0, depth = 0, start = 0, slide = false;
+  while ((i = src.indexOf("<", i)) >= 0) {
+    if (src.startsWith("<!--", i)) { const e = src.indexOf("-->", i + 4); i = e < 0 ? n : e + 3; continue; }
+    const close = src[i + 1] === "/";
+    const m = /^[A-Za-z][^\s/>]*/.exec(src.slice(i + (close ? 2 : 1), i + 64 + (close ? 2 : 1)));
+    if (!m) { i++; continue; }
+    const name = m[0].toLowerCase();
+    let j = i + (close ? 2 : 1) + m[0].length, has = false;
+    // 태그 끝까지: 따옴표 안의 ">"는 건너뛰고 속성 이름을 모은다
+    while (j < n && src[j] !== ">") {
+      const c = src[j];
+      if (c === '"' || c === "'") { const e = src.indexOf(c, j + 1); j = e < 0 ? n : e + 1; continue; }
+      const w = /^[^\s"'<>\/=]+/.exec(src.slice(j, j + 64));
+      if (w) { if (w[0].toLowerCase() === "data-slide") has = true; j += w[0].length; } else j++;
+    }
+    const end = Math.min(n, j + 1);
+    if (name === "section") {
+      if (!close) { if (depth++ === 0) { start = i; slide = has; } }
+      else if (depth > 0 && --depth === 0) out.push({ a: start, b: end, slide });
+    } else if (!close && RAW.has(name)) {
+      const e = new RegExp(`</${name}(?=[\\s/>])`, "i").exec(src.slice(end));
+      i = e ? end + e.index : n;
+      continue;
+    }
+    i = end;
+  }
+  return out;
+}
 
 export function splitDeck(src: string): Doc {
-  const m = mask(src);
-  const re = /<section\b|<\/section\s*>/gi;
-  const ranges: [number, number][] = [];
-  let depth = 0, start = 0, t: RegExpExecArray | null;
-  while ((t = re.exec(m))) {
-    if (t[0][1] !== "/") { if (depth++ === 0) start = t.index; }
-    else if (depth > 0 && --depth === 0) ranges.push([start, re.lastIndex]);
-  }
-  const slides = ranges.filter(([a]) => /^<section\b[^>]*\bdata-slide\b/i.test(src.slice(a, a + 400)));
+  const slides = sections(src).filter((r) => r.slide).map((r) => [r.a, r.b] as const);
   if (!slides.length) throw new Error("슬라이드가 없습니다");
   const units = slides.map(([a, b], i) => ({
     key: newKey(),

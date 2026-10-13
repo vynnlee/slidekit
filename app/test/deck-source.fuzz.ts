@@ -18,7 +18,7 @@ const inner = [
 ];
 const slideAttrs = ["data-slide=\"content\"", "data-slide=\"chapter\" data-title=\"장\"", "class=\"a\" data-slide=\"content\"",
   "data-title=\"a>b\" data-slide=\"chapter\"", "id=\"x\" data-steps=\"3\" data-slide='content'", "DATA-SLIDE=\"content\"",
-  "data-x='>' data-slide=\"content\""];
+  "data-x='>' data-slide=\"content\"", `data-pad="${"x".repeat(500)}" data-slide="content"`];
 const between = ["\n\n  ", "\n", "", "  <!-- 구분 -->\n  ", "\n  <section class=\"not-a-slide\"><p>x</p></section>\n  ", "\n<script>var q='<section data-slide=\"content\">';</script>\n"];
 
 // 정규식 파서가 아직 못 다루는 입력(위 SINGLE FAIL 목록). HARD=1이면 무작위 퍼징에도 섞는다.

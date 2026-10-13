@@ -17,6 +17,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
   const page = await ctx.newPage();
+  const focusBody = () => page.evaluate(() => document.activeElement && document.activeElement.blur && document.activeElement.blur()); // 패널에 포커스가 있으면 Tab이 브라우저 이동이라 본문으로 돌린다
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(BASE + '/edit/' + T.id);
@@ -49,7 +50,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   const selVisible = () => page.locator('.border-2.border-focus-ring').first().isVisible();
   await page.keyboard.press('Escape'); await sleep(200);
   check('Tab 전에는 선택 없음', !(await selVisible()));
-  await page.keyboard.press('Tab'); await sleep(300);
+  await focusBody(); await page.keyboard.press('Tab'); await sleep(300);
   check('Tab으로 요소 선택', await selVisible());
   await page.keyboard.press('Escape');
   const before = fs.readFileSync(FILE, 'utf8');
@@ -131,7 +132,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   fs.writeFileSync(CF, '[]');
 
   // 속성 패널: 값이 인라인 style로 들어가고 저장 파일에 남는다
-  await page.keyboard.press('Escape'); await page.keyboard.press('Tab'); await sleep(400);
+  await page.keyboard.press('Escape'); await focusBody(); await page.keyboard.press('Tab'); await sleep(400);
   const op = page.getByLabel('Opacity', { exact: true });
   await op.fill('50'); await op.press('Enter'); await sleep(400);
   const styled = await page.evaluate(() => [...document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll('[style*="opacity"]')].length);
@@ -145,7 +146,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('저장 파일에 opacity와 border 반영', /opacity:\s*0\.51/.test(saved) && /border:\s*1px solid/.test(saved), saved.match(/style="[^"]*opacity[^"]*"/));
   await page.keyboard.press('Meta+z'); await page.keyboard.press('Meta+z'); await sleep(300);
   // 측정값 표시, 크기 모드, 코너별 radius, 그림자 여러 개, 그라디언트, 변별 stroke
-  await page.keyboard.press('Escape'); await page.keyboard.press('Tab'); await sleep(400);
+  await page.keyboard.press('Escape'); await focusBody(); await page.keyboard.press('Tab'); await sleep(400);
   check('W 표시는 소수 둘째 자리까지', /^\d+(\.\d{1,2})?$/.test(await page.getByLabel('Width', { exact: true }).inputValue()), await page.getByLabel('Width', { exact: true }).inputValue());
   check('크기 모드 컨트롤에 W/H 이름', (await page.getByRole('radio', { name: 'Fixed width' }).count()) === 1 && (await page.getByRole('radio', { name: 'Fill container' }).count()) === 2);
   const styleOf = () => page.evaluate(() => { const e = [...document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll('[style]')].find((x) => x.closest('[data-active]') && x.style.length); return e ? e.getAttribute('style') : ''; });
@@ -229,7 +230,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   for (let i = 0; i < 3 && (await page.getByLabel('Accent hex').inputValue()).toLowerCase().includes('ff5500'); i++) { await page.keyboard.press('Meta+z'); await sleep(1200); } // 토큰 변경은 입력별로 1건씩 기록된다
   check('토큰 변경 실행 취소', !(await page.getByLabel('Accent hex').inputValue()).toLowerCase().includes('ff5500'), await page.getByLabel('Accent hex').inputValue());
   // 선언형 단계: Appears at step
-  await page.keyboard.press('Escape'); await page.keyboard.press('Tab'); await sleep(300);
+  await page.keyboard.press('Escape'); await focusBody(); await page.keyboard.press('Tab'); await sleep(300);
   const st = page.getByLabel('Appears at step'); await st.fill('3'); await st.press('Enter'); await sleep(400);
   check('data-step이 요소에 설정', await inDoc((s) => !!s.querySelector('[data-step="3"]')));
   check('Effect Select 표시', (await page.getByLabel('Step effect').count()) === 1);
@@ -242,7 +243,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('저장 파일에 data-step, show-steps는 새지 않음', /data-step="3"/.test(stepSaved) && !stepSaved.includes('data-sk-show-steps'));
   await page.keyboard.press('Escape'); await sleep(300);
   check('슬라이드 상태에 자동 단계 안내', (await page.getByText('Auto from element steps: 3').count()) === 1);
-  await page.keyboard.press('Tab'); await sleep(300);
+  await focusBody(); await page.keyboard.press('Tab'); await sleep(300);
   const st2 = page.getByLabel('Appears at step'); await st2.fill('1'); await st2.press('Enter'); await sleep(300);
   check('1로 되돌리면 속성 삭제', !(await inDoc((s) => !!s.querySelector('[data-step]'))));
   // 속성 패널 UX: 선택 헤더, 설정 표시와 Reset, 크기 모드, 정렬 사유, 슬라이드 힌트
@@ -260,8 +261,21 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   await page.keyboard.press('Escape'); await sleep(300);
   await page.screenshot({ path: '/tmp/sk-ux-slide.png' });
   check('요소 미선택 힌트', (await page.getByText('Select an element to edit its properties').count()) === 1);
+  // 키보드와 되돌리기: 패널의 Tab 이동, 되돌린 뒤 선택 유지, 스크럽 한 번이 별도 undo
+  await focusBody(); await page.keyboard.press('Escape'); await page.keyboard.press('Tab'); await sleep(300);
+  const o4 = page.getByLabel('Opacity', { exact: true }); await o4.fill('80'); await o4.press('Enter'); await sleep(1400);
+  const lab = await o4.locator('xpath=../span[1]').boundingBox();
+  await page.mouse.move(lab.x + lab.width / 2, lab.y + lab.height / 2); await page.mouse.down(); await page.mouse.move(lab.x + lab.width / 2 - 25, lab.y + lab.height / 2, { steps: 8 }); await page.mouse.up(); await sleep(300);
+  const scrubbed = await o4.inputValue();
+  await focusBody(); await page.keyboard.press('Meta+z'); await sleep(500);
+  check('스크럽 한 번이 별도 undo(직전 값 80으로)', scrubbed !== '80' && (await page.getByLabel('Opacity', { exact: true }).inputValue()) === '80', [scrubbed, await page.getByLabel('Opacity', { exact: true }).inputValue()]);
+  check('되돌린 뒤에도 요소 선택 유지', (await page.getByRole('button', { name: 'Show in layers' }).count()) === 1);
+  await page.getByRole('button', { name: 'Show in layers' }).focus(); await page.keyboard.press('Tab'); await sleep(200);
+  check('패널에서 Tab은 포커스를 옮기고 선택을 순환시키지 않음', (await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label'))) !== 'Show in layers' && (await page.getByRole('button', { name: 'Show in layers' }).count()) === 1);
+  await focusBody(); await page.keyboard.press('Meta+z'); await sleep(300);
+
   // 자동 저장: Cmd+S 없이 1.5초 뒤 저장된다
-  await page.keyboard.press('Escape'); await page.keyboard.press('Tab'); await sleep(300);
+  await page.keyboard.press('Escape'); await focusBody(); await page.keyboard.press('Tab'); await sleep(300);
   const op2 = page.getByLabel('Opacity', { exact: true }); await op2.fill('37'); await op2.press('Enter'); await sleep(400);
   check('편집 직후는 Unsaved', (await page.getByText('Unsaved', { exact: true }).count()) > 0);
   await sleep(2600);

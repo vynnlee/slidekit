@@ -173,7 +173,10 @@ export function Editor({ id }: { id: string }) {
     const pf = prefixOf.current.get(prev);
     if (pf !== undefined && shellRef.current && pf !== shellRef.current.prefix) setShell({ ...shellRef.current, prefix: pf });
     else canvas.current?.apply(prev);
-    indexRef.current = Math.min(indexRef.current, prev.length - 1); setIndexState(indexRef.current); pickSel(null);
+    const keep = sel && canvas.current?.slide(indexRef.current) ? pathOf(canvas.current.slide(indexRef.current)!, sel) : null;
+    indexRef.current = Math.min(indexRef.current, prev.length - 1); setIndexState(indexRef.current);
+    const s = canvas.current?.slide(indexRef.current);
+    pickSel(keep && s ? byPath(s, keep) : null); // 되돌린 뒤에도 같은 요소를 선택해 둔다
   };
 
   // 덱 토큰(:root 변수) 변경은 head를 바꾸므로 한 번의 실행 취소 단위로 기록한다.
@@ -359,7 +362,7 @@ export function Editor({ id }: { id: string }) {
     else if (mod && k === "0") { e.preventDefault(); canvas.current?.zoom(0); }
     else if (mod && (k === "=" || k === "+")) { e.preventDefault(); canvas.current?.zoom(1); }
     else if (mod && k === "-") { e.preventDefault(); canvas.current?.zoom(-1); }
-    else if (!mod && e.key === "Tab") { e.preventDefault(); cycle(e.shiftKey ? -1 : 1); }
+    else if (!mod && e.key === "Tab") { if (e.view === window && t !== document.body) return; e.preventDefault(); cycle(e.shiftKey ? -1 : 1); } // 패널 안에서는 브라우저의 Tab 이동을 지킨다
     else if (mod && k === "z") { e.preventDefault(); e.shiftKey ? restore(future.current, past.current) : restore(past.current, future.current); }
     else if (mod && k === "d") { e.preventDefault(); dupSelected(); }
     else if (!mod && (e.key === "Delete" || e.key === "Backspace")) { if (!sel) return; e.preventDefault(); delSelected(); }
@@ -430,7 +433,7 @@ export function Editor({ id }: { id: string }) {
         }
         right={
           <Inspector sel={sel} slide={canvas.current?.slide(index) ?? null} selId={selId} tab={tab} onTab={setTab}
-            comments={comments} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => setLeftTab(1)} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; }} />
+            comments={comments} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => setLeftTab(1)} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
         }
       >
         <div className="flex h-full flex-col">

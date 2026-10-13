@@ -72,7 +72,7 @@ function Toggle({ on, label, I, onClick }: { on: boolean; label: string; I: type
 }
 
 function Grid({ children }: { children: ReactNode }) {
-  return <div className="grid grid-cols-2 gap-2">{children}</div>;
+  return <div className="grid grid-cols-2 gap-2 [&>*]:min-w-0">{children}</div>;
 }
 
 type Props = {
@@ -360,7 +360,7 @@ export function Inspector(p: Props) {
                 </Grid>
                 <Grid>
                   <SegmentedControl aria-label="Text align" value={["start", "left"].includes(val("text-align")) ? "left" : val("text-align").replace("end", "right")} onChange={(v) => set("text-align", v)}
-                    options={[opt("left", TextAlignStart, "Align left"), opt("center", TextAlignCenter, "Align center"), opt("right", TextAlignEnd, "Align right"), opt("justify", TextAlignJustify, "Justify")]} />
+                    options={[opt("left", TextAlignStart, "Text align left"), opt("center", TextAlignCenter, "Text align center"), opt("right", TextAlignEnd, "Text align right"), opt("justify", TextAlignJustify, "Justify text")]} />
                   <SegmentedControl aria-label="Text case" value={val("text-transform")} onChange={(v) => set("text-transform", v)}
                     options={[opt("none", Ban, "No case change"), opt("uppercase", CaseUpper, "Uppercase"), opt("lowercase", CaseLower, "Lowercase"), opt("capitalize", CaseSensitive, "Capitalize")]} />
                 </Grid>

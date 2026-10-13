@@ -700,6 +700,7 @@ function HueSlider({ h, onChange }: { h: number; onChange: (h: number) => void }
         borderColor: "transparent",
       }}
       aria-label="Hue"
+      label="Hue"
     />
   );
 }
@@ -745,6 +746,7 @@ function AlphaSlider({
         borderWidth: 0,
       }}
       aria-label="Alpha"
+      label="Opacity"
     />
   );
 }
@@ -2395,6 +2397,7 @@ const ColorPickerPopover = forwardRef<HTMLDivElement, ColorPickerPopoverProps>(
                     container context re-renders once the node exists. */}
                 <Popover.Popup
                   render={<div ref={setPanelEl} />}
+                  aria-label="Color picker"
                   className="outline-none"
                 >
                   {/* The format menu portals into this panel, so it lives

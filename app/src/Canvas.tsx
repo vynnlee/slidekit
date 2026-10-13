@@ -14,6 +14,8 @@ export type CanvasApi = {
   edit(el: Element): void;
   select(el: Element | null): void;
   zoom(dir: 1 | -1 | 0): void; // 0은 맞춤
+  reload(): void; // 덱 head(prefix)가 바뀐 뒤 현재 모델로 캔버스를 다시 만든다
+  document(): Document | null;
   hover(el: Element | null): void; // 레이어 목록에서 가리킨 요소를 캔버스에 외곽선으로 보인다
   format(tag: "strong" | "em"): boolean; // 텍스트 편집 중 선택 영역을 굵게나 기울임으로 감싸거나 푼다
 };
@@ -99,6 +101,8 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     edit: (el) => startEdit(el as HTMLElement),
     select: (el) => P.current.onSel(el),
     zoom: (d) => zoomBy(d),
+    reload: () => build(P.current.units),
+    document: () => doc(),
     hover: (el) => { hover.current = el; },
     format(tag) {
       const ed = editing.current, d = doc(), sel = d?.getSelection();

@@ -12,6 +12,7 @@ import { TabsSubtle, TabsSubtleItem } from "@/components/ui/tabs-subtle";
 import { Inspector } from "./Inspector";
 import { go } from "./App";
 import { byPath, compose, duplicateHtml, newKey, newSlideHtml, pathOf, splitDeck, type Unit } from "@/lib/deck-source";
+import { ExportMenu } from "./ExportMenu";
 import { startPresentation } from "@/lib/present";
 import type { Comment, DeckEntry } from "@/lib/deck";
 
@@ -52,6 +53,7 @@ export function Editor({ id }: { id: string }) {
   const unitsRef = useRef<Unit[]>([]), indexRef = useRef(0), shellRef = useRef<Shell_ | null>(null);
   const savedRef = useRef(""), mtime = useRef(0);
   const origin = useRef(new Map<string, number>()); // 슬라이드 key -> 마지막 저장(불러오기) 때의 번호. 코멘트 번호가 이 기준이다
+  const prefixOf = useRef(new WeakMap<Unit[], string>()); // 실행 취소 기록이 가리키는 시점의 덱 head
   const past = useRef<Unit[][]>([]), future = useRef<Unit[][]>([]);
   const last = useRef<{ key: string; t: number } | null>(null);
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
@@ -62,6 +64,13 @@ export function Editor({ id }: { id: string }) {
   const dirty = !!shell && text !== saved;
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
+
+  // 자동 저장: 편집 뒤 1.5초 동안 입력이 없으면 저장한다. 충돌(409)이나 실패 뒤에는 멈추고 사용자가 고른다.
+  useEffect(() => {
+    if (!dirty || changed || status === "error") return;
+    const t = setTimeout(() => { save(); }, 1500);
+    return () => clearTimeout(t);
+  }, [text, dirty, changed, status]); // eslint-disable-line
 
   // 불러오기
   const load = useCallback(async (folder: string, keepIndex = 0) => {
@@ -126,6 +135,7 @@ export function Editor({ id }: { id: string }) {
     const now = Date.now();
     if (!(coalesce && last.current?.key === coalesce && (scrub.current || now - last.current.t < 800))) {
       past.current.push(unitsRef.current);
+      if (shellRef.current) prefixOf.current.set(unitsRef.current, shellRef.current.prefix);
       if (past.current.length > 200) past.current.shift();
       future.current = [];
     }
@@ -157,11 +167,28 @@ export function Editor({ id }: { id: string }) {
     const prev = from.pop();
     if (!prev) return;
     to.push(unitsRef.current);
+    if (shellRef.current) prefixOf.current.set(unitsRef.current, shellRef.current.prefix);
     last.current = null;
     setUnits(prev);
-    canvas.current?.apply(prev);
+    const pf = prefixOf.current.get(prev);
+    if (pf !== undefined && shellRef.current && pf !== shellRef.current.prefix) setShell({ ...shellRef.current, prefix: pf });
+    else canvas.current?.apply(prev);
     indexRef.current = Math.min(indexRef.current, prev.length - 1); setIndexState(indexRef.current); pickSel(null);
   };
+
+  // 덱 토큰(:root 변수) 변경은 head를 바꾸므로 한 번의 실행 취소 단위로 기록한다.
+  const changePrefix = (next: string) => {
+    const sh = shellRef.current;
+    if (!sh || next === sh.prefix) return;
+    record();
+    setUnits([...unitsRef.current]);
+    setShell({ ...sh, prefix: next });
+  };
+  const shownPrefix = useRef<string | null>(null);
+  useEffect(() => {
+    if (shownPrefix.current !== null && shell && shownPrefix.current !== shell.prefix) canvas.current?.reload();
+    shownPrefix.current = shell?.prefix ?? null;
+  }, [shell?.prefix]); // eslint-disable-line
 
   const moveSlide = (from: number, to: number) => {
     if (from === to) return;
@@ -259,10 +286,19 @@ export function Editor({ id }: { id: string }) {
   };
 
   // 저장: 임시 파일에 쓰고 rename은 서버가 한다. 읽은 뒤 파일이 바뀌었으면 409.
-  const save = async (force = false) => {
-    if (!deck || !shellRef.current || (!dirtyRef.current && !force)) return true;
+  // 저장 요청은 한 번에 하나만 보낸다(자동 저장과 Cmd+S가 겹치면 낡은 base로 409가 나기 때문).
+  const inflight = useRef<Promise<boolean> | null>(null);
+  const save = async (force = false): Promise<boolean> => {
+    while (inflight.current) await inflight.current;
+    const p = doSave(force);
+    inflight.current = p;
+    try { return await p; } finally { inflight.current = null; }
+  };
+  const doSave = async (force: boolean) => {
+    if (!deck || !shellRef.current) return true;
     const us = unitsRef.current;
     const body = compose({ ...shellRef.current, units: us });
+    if (!force && body === savedRef.current) return true;
     const slideMap: Record<number, number> = {};
     us.forEach((u, i) => { const o = origin.current.get(u.key); if (o && !(o in slideMap)) slideMap[o] = i + 1; });
     setStatus("saving");
@@ -344,7 +380,7 @@ export function Editor({ id }: { id: string }) {
     go(`/present/${encodeURIComponent(deck.id)}`);
   };
   const back = async () => { if (await save()) go("/"); };
-  const label = status === "saving" ? "Saving" : status === "error" ? "Save failed" : dirty ? "Unsaved" : "Saved";
+  const label = status === "saving" ? "Saving..." : dirty ? "Unsaved" : "Saved";
 
   return (
     <>
@@ -354,7 +390,9 @@ export function Editor({ id }: { id: string }) {
           <>
             <Tooltip content="Decks" side="bottom"><Button aria-label="Decks" variant="ghost" size="icon-compact" onClick={back}><ArrowLeft /></Button></Tooltip>
             <span className="truncate text-subtitle font-medium">{deck.title}</span>
-            <span className="text-caption text-muted-foreground">{label}</span>
+            {status === "error"
+              ? <Button variant="ghost" size="compact" onClick={() => save()}>Save failed. Retry</Button>
+              : <span className="text-caption text-muted-foreground">{label}</span>}
             {changed && (
               <>
                 <span className="text-caption text-muted-foreground">File changed outside the editor</span>
@@ -365,6 +403,7 @@ export function Editor({ id }: { id: string }) {
             {err && <span className="text-caption text-muted-foreground">{err}</span>}
             <span className="ml-auto" />
             {dirty && !changed && <Button variant="ghost" size="compact" onClick={() => save()}>Save</Button>}
+            <ExportMenu folder={deck.folder} dirty={dirty} onSave={() => save()} />
             <Button variant="primary" size="compact" leadingIcon={MonitorPlay} onClick={() => present()}>Present</Button>
           </>
         }
@@ -390,7 +429,7 @@ export function Editor({ id }: { id: string }) {
         }
         right={
           <Inspector sel={sel} slide={canvas.current?.slide(index) ?? null} selId={selId} tab={tab} onTab={setTab}
-            comments={comments} onJump={jump} onStyle={style} onAttr={attr} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; }} />
+            comments={comments} onJump={jump} onStyle={style} onAttr={attr} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; }} />
         }
       >
         <div className="flex h-full flex-col">

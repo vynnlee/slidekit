@@ -21,6 +21,7 @@ import { SidesField } from "@/components/ui/sides-field";
 import { AlignBox } from "@/components/ui/align-box";
 import { Card, CardGroup, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { textual } from "./Canvas";
+import { TokensPanel } from "./TokensPanel";
 import type { Comment } from "@/lib/deck";
 
 type Items = readonly (readonly [string, string])[];
@@ -72,6 +73,9 @@ type Props = {
   onJump(c: Comment): void;
   onStyle(prop: string, value: string): void;
   onAttr(name: string, value: string | null): void;
+  prefix: string;
+  onPrefixChange(next: string): void;
+  canvasDoc: Document | null;
   onSlideStyle(prop: string, value: string): void;
   onScrub(on: boolean): void;
 };
@@ -221,6 +225,7 @@ export function Inspector(p: Props) {
                 value={p.slide?.style.getPropertyValue("background-color") ?? ""}
                 onChange={(v) => p.onSlideStyle("background-color", v)} />
             </InspectorSection>
+            <TokensPanel prefix={p.prefix} onPrefixChange={p.onPrefixChange} canvas={p.canvasDoc} />
           </div>
         ) : (
           <div className="-mx-3 flex flex-col pt-1" key={p.selId}>

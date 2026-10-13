@@ -1,0 +1,304 @@
+# slidekit 규격 v1
+
+덱은 폴더 하나이고 원본은 `index.html`이다. 이 문서는 덱 HTML의 형식과 엔진(`engine/slidekit.js`, `engine/slidekit.css`)의 동작 약속을 정한다. 앱, 편집기, 번들러는 이 문서만 보고 구현한다.
+
+## 1. 덱 파일
+
+```html
+<!doctype html>
+<html lang="ko" data-slidekit="1">
+<head>
+  <meta charset="utf-8">
+  <title>디자이너를 위한 바이브 코딩 워크숍</title>
+  <script type="application/json" id="deck-meta">
+    { "title": "디자이너를 위한 바이브 코딩 워크숍", "author": "이성빈", "date": "2026-10-12", "visibility": "public" }
+  </script>
+  <link rel="stylesheet" href="../../engine/slidekit.css">
+  <style> :root { --sk-accent: #a78bfa; } /* 덱 토큰과 덱 전용 스타일 */ </style>
+</head>
+<body>
+  <section data-slide="cover"> ... </section>
+  <section data-slide="chapter" data-title="바이브 코딩"> <h1>바이브 코딩</h1> </section>
+  <section data-slide="content">
+    ...
+    <aside data-notes>발표자만 보는 노트</aside>
+  </section>
+  <section data-slide="end"> ... </section>
+  <script src="../../engine/slidekit.js"></script>
+  <script> /* 덱 전용 스크립트. 엔진 뒤에 둔다. */ </script>
+</body>
+</html>
+```
+
+- `<html data-slidekit="1">`은 규격 버전 표시다. 값이 다르면 엔진은 콘솔에 경고한다.
+- 슬라이드는 `<body>`의 직계 자식 `<section data-slide>`이다. 문서 순서가 슬라이드 순서다. 엔진이 `#sk-stage`를 만들어 슬라이드를 옮겨 담으므로 덱은 `viewport`나 `stage` 래퍼를 쓰지 않는다.
+- 엔진 스크립트는 덱 스크립트보다 앞에 둔다. 엔진은 `DOMContentLoaded`에서 시작한다.
+- 글꼴은 `<head>`의 `<link>`로 불러도 된다(번들러가 나중에 내장한다).
+
+## 2. 슬라이드
+
+| `data-slide` | 의미 | 규칙 |
+|---|---|---|
+| `cover` | 표지 | 있다면 첫 슬라이드, 최대 1개 |
+| `chapter` | 장 표지 | `data-title` 필수. 목차의 단위 |
+| `content` | 본문 | 개수 제한 없음 |
+| `end` | 마지막 | 있다면 마지막 슬라이드, 최대 1개 |
+
+- 위 네 값 외의 값은 `content`로 처리하고 콘솔에 경고한다.
+- `data-title`: 장 제목. `chapter`는 필수이고, 다른 종류에서는 선택이다(있으면 전체 보기에 표시). 화면에 글자를 그리는 일은 하지 않으므로 같은 글자를 `<h1>`에도 적는다.
+- `data-steps="N"`: 슬라이드 안에서 N단계로 나뉘는 장(6절). 없으면 1.
+- 장 번호: `chapter` 슬라이드를 위에서부터 1, 2, 3으로 센다. 각 슬라이드는 자신이 속한 장 번호를 가진다. 첫 `chapter` 앞의 슬라이드는 0이다.
+- 목차는 `chapter`의 `data-title`로 엔진이 만든다(전체 보기, 앱의 장 목록). 목차 슬라이드는 규격에 없다.
+- 슬라이드 번호는 1부터 센다. 외부로 나가는 모든 값(URL 해시, 메시지)도 1부터 센다.
+
+### 노트
+
+`<aside data-notes>`를 슬라이드의 자식으로 둔다. 슬라이드당 하나, 평문이다. 엔진은 항상 숨기고(`display:none`), 앱에는 `textContent`를 앞뒤 공백 제거 후 문자열로 넘긴다. 문단은 빈 줄로 나눈다.
+
+## 3. 화면
+
+- 무대는 1920x1080 고정이다. 덱 내용은 px로 설계하고 `vw`, `vh`, `100vh`를 쓰지 않는다.
+- 엔진은 `scale = min(창폭/1920, 창높이/1080)`로 무대를 줄이고 늘려 창 가운데에 둔다(`transform: translate() scale()`). 남는 영역은 `--sk-bg`로 채운다. `resize`와 `fullscreenchange`에서 다시 계산한다. 현재 배율은 `SlideKit.scale`로 읽는다.
+- 활성 슬라이드에 `data-active` 속성을 붙인다. 나머지는 `visibility:hidden`이고 `display:none`을 쓰지 않는다. `url(#id)` 참조와 크기 측정이 비활성 슬라이드에서도 동작해야 하기 때문이다.
+- 슬라이드가 켜질 때 0.35초 페이드를 쓴다. `prefers-reduced-motion: reduce`이면 끈다.
+- 덱 CSS는 활성 여부를 `[data-slide][data-active]`로 선택한다.
+- 슬라이드 기본 배치(엔진 CSS): 무대 전체를 덮고, `flex` 세로 배치, 세로 가운데 정렬, 안쪽 여백과 간격은 토큰을 따른다. 종류별 모양(`cover`, `chapter`)은 덱 CSS가 정한다.
+- 무대 밖으로 넘친 내용은 잘린다(`overflow:hidden`).
+
+## 4. 디자인 토큰
+
+`:root`의 `--sk-` CSS 변수다. 엔진 CSS가 기본값을 주고 덱이 덮어쓴다. 덱 전용 변수는 `--sk-` 접두사를 쓰지 않는다.
+
+| 변수 | 기본값 | 용도 |
+|---|---|---|
+| `--sk-bg` | `#000` | 배경 |
+| `--sk-fg` | `#fff` | 본문 글자 |
+| `--sk-muted` | `#9a9a9f` | 보조 글자 |
+| `--sk-faint` | `#5c5c62` | 약한 글자 |
+| `--sk-line` | `#2b2b30` | 구분선 |
+| `--sk-panel` | `#0f0f12` | 카드 배경 |
+| `--sk-accent` | `#a78bfa` | 강조색 |
+| `--sk-font` | `"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif` | 본문 글꼴 |
+| `--sk-font-mono` | `"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace` | 고정폭 글꼴 |
+| `--sk-pad-y` | `150px` | 슬라이드 위아래 여백 |
+| `--sk-pad-x` | `170px` | 슬라이드 좌우 여백 |
+| `--sk-gap` | `56px` | 슬라이드 안 요소 간격 |
+| `--sk-fs-h1` | `120px` | `h1` |
+| `--sk-fs-h2` | `68px` | `h2` |
+| `--sk-fs-body` | `36px` | 본문 `p` |
+| `--sk-fs-small` | `28px` | 작은 글자 |
+
+엔진 CSS는 `body` 배경과 글자색, 글꼴, `h1`, `h2`, `p`의 크기를 위 토큰으로 정한다. 색은 `color-scheme: dark`를 전제한다. 기본값은 워크숍 덱의 현재 값이다.
+
+엔진이 붙이는 요소(페이지 번호, 진행률, 전체 보기, 숫자 입력 표시)는 `--sk-fg`, `--sk-faint`, `--sk-bg`, `--sk-line`만 쓴다.
+
+## 5. `#deck-meta`
+
+`<script type="application/json" id="deck-meta">`에 JSON 한 개를 둔다. 없거나 깨져 있으면 엔진은 기본값으로 동작하고 경고한다.
+
+| 필드 | 형식 | 기본값 | 설명 |
+|---|---|---|---|
+| `title` | string | `<title>` | 덱 제목. 필수 |
+| `subtitle` | string | 없음 | 부제 |
+| `author` | string | 없음 | 발표자 |
+| `date` | string `YYYY-MM-DD` | 없음 | 강의일 |
+| `lang` | string | `ko` | 언어 코드 |
+| `visibility` | `"public"` 또는 `"password"` | `"public"` | 공개 범위. 비밀번호는 덱에 넣지 않는다 |
+| `pageNumber` | boolean | `false` | 페이지 번호 표시 |
+| `progress` | boolean | `false` | 진행률 막대 표시 |
+| `id` | string(영문 소문자, 숫자, `-`) | 폴더 이름 | 동기화 채널 구분용 덱 식별자 |
+
+`pageNumber`, `progress`는 `cover`와 `end`에서는 숨긴다. 번호는 `현재 / 전체` 형식으로 무대 오른쪽 아래에 `--sk-faint` 색으로 그린다.
+
+## 6. 엔진 동작
+
+### 6.1 키 입력
+
+| 키 | 동작 |
+|---|---|
+| `ArrowRight`, `ArrowDown` | 앞으로. stepper가 있으면 단계 먼저, 끝나면 다음 슬라이드 |
+| `ArrowLeft`, `ArrowUp` | 뒤로. 같은 규칙 |
+| `F` | 전체화면 토글. 화면에 버튼을 두지 않는다 |
+| `O` | 전체 보기 토글 |
+| 숫자 + `Enter` | 해당 번호의 장 슬라이드로 이동 |
+| `Esc` | 전체 보기 닫기, 숫자 입력 취소 |
+
+- 이동은 방향키로만 한다. 클릭, 스페이스, `Enter`(숫자 입력이 없을 때), `PageUp`, `PageDown`, 터치 스와이프, 휠로는 이동하지 않는다. 엔진은 이 입력에 핸들러를 달지 않는다.
+- 수정 키(`Meta`, `Ctrl`, `Alt`)가 눌려 있으면 모든 키를 무시한다.
+- 입력 대상이 `input`, `textarea`, `select`, `contenteditable`이면 키를 무시한다. `Esc`는 그 요소의 포커스를 해제한다.
+- 숫자 + `Enter`: 숫자는 장 번호(2절)다. 입력 중인 숫자는 무대 왼쪽 아래에 작게 표시하고 3초 동안 입력이 없으면 지운다. 해당 장이 없으면 무시한다.
+- 전체 보기: 모든 슬라이드를 장별로 묶은 격자 축소판이다. 방향키로 선택을 옮기고 `Enter` 또는 축소판 클릭으로 이동하며 닫는다. 축소판은 `inert`로 복제한 사본이고 stepper는 동작하지 않는다(1단계 모습). 사본은 `id`를 유지한다. 사본 컨테이너는 무대 뒤에 붙이므로 `getElementById`는 원본을 찾는다.
+
+### 6.2 위치와 URL 해시
+
+- 위치는 `(slide, step)`이다. 둘 다 1부터 센다. stepper가 없는 슬라이드의 step은 1이다.
+- URL 해시 `#N`은 슬라이드 번호다. 이동할 때마다 `history.replaceState`로 갱신한다(기록을 쌓지 않는다). 시작할 때 해시를 읽고 범위를 벗어나면 가장 가까운 슬라이드로 맞춘다. `hashchange`가 오면 그 슬라이드로 이동한다. 해시에 step은 넣지 않고, 해시로 들어가면 step은 1이다.
+
+### 6.3 슬라이드별 stepper
+
+슬라이드 안에서 단계를 넘기는 장은 두 가지를 모두 한다.
+
+1. 슬라이드에 `data-steps="N"`(N은 2 이상 정수)을 선언한다.
+2. 덱 스크립트가 구현을 등록한다.
+
+```js
+SlideKit.stepper(document.getElementById('tok-slide'), {
+  enter(forward) {},   // 슬라이드에 들어올 때. forward면 1단계, 뒤로 돌아오면 N단계로 맞춘다. 애니메이션 없이
+  next() {},           // 한 단계 앞으로. 이동했으면 true, 마지막 단계라 못 움직였으면 false
+  prev() {},           // 한 단계 뒤로. 같은 규칙
+  get() {},            // 현재 단계(1..N)
+  goto(n) {},          // n단계로 즉시 이동. 애니메이션 없이. 동기화와 앱 명령에 쓴다
+})
+```
+
+- 다섯 메서드가 모두 필요하다. 하나라도 없으면 엔진은 등록을 거부하고 경고하며, 그 슬라이드는 일반 슬라이드로 취급한다.
+- 엔진은 이동 입력마다 `next()` 또는 `prev()`를 먼저 부른다. `true`면 슬라이드는 그대로 두고 step만 갱신해 알린다. `false`면 다음 또는 이전 슬라이드로 넘어간다.
+- 다른 슬라이드에서 들어오면 엔진이 `enter(forward)`를 부른다. 앞으로 오면 `true`, 뒤로 오면 `false`다.
+- 동기화나 앱 명령으로 `(slide, step)`에 직접 이동하면 `enter(true)` 뒤에 `goto(step)`을 부른다.
+- `SlideKit.stepper`는 엔진 시작 전후 어느 때든 부를 수 있다.
+- 슬라이드 상태 변화(진입과 이탈)를 알아야 하는 덱 코드는 슬라이드 요소의 `sk:enter`, `sk:leave` 이벤트(버블링)를 듣거나 `data-active` 속성을 읽는다.
+
+### 6.4 URL 쿼리 모드
+
+| 쿼리 | 효과 |
+|---|---|
+| `?sync=1` | BroadcastChannel 동기화를 켠다(6.5) |
+| `?embed=1` | 부모 앱이 조종하는 임베드 모드(6.6) |
+
+둘 다 없으면 단독 덱이다. 동기화하지 않고 부모와 통신하지 않는다.
+
+### 6.5 BroadcastChannel 동기화
+
+`?sync=1`인 인스턴스(발표 화면 창)와 같은 출처의 앱 페이지(발표자 화면)가 같은 위치를 본다.
+
+- 채널 이름: `slidekit:<deckId>`. `deckId`는 `deck-meta.id`, 없으면 `location.pathname`의 폴더 이름(예: `/decks/vibe-coding-workshop/index.html`이면 `vibe-coding-workshop`)이다.
+- 메시지는 JSON 객체이고 `v: 1`을 포함한다. `from`은 인스턴스마다 무작위로 만든 문자열이다.
+
+| `type` | 필드 | 보내는 때 |
+|---|---|---|
+| `state` | `slide`, `step` | 사용자 입력으로 위치가 바뀐 직후 |
+| `hello` | 없음 | 인스턴스가 시작할 때 |
+
+- `state`를 받으면 `enter(true)`와 `goto(step)` 규칙(6.3)으로 이동한다. 받아서 이동한 경우에는 다시 보내지 않는다. 자기 `from`의 메시지는 무시한다.
+- `hello`를 받으면 현재 위치를 `state`로 답한다.
+- 동시에 입력이 오면 나중에 도착한 `state`가 이긴다.
+- 앱 페이지는 이 채널에 직접 참여하고, 자기 iframe은 postMessage로 조종한다(6.6).
+
+```json
+{ "v": 1, "type": "state", "from": "k3j9x", "slide": 12, "step": 3 }
+```
+
+### 6.6 부모 앱과 iframe 사이 postMessage
+
+`?embed=1`로 열린 덱이 부모 창(앱)과 주고받는다. 임베드 모드의 엔진은 키 입력, 전체 보기, 해시 갱신, 숫자 입력을 처리하지 않는다(앱이 `pointer-events:none`으로 iframe을 띄우고 키는 앱이 받는다). 페이지 번호와 진행률도 그리지 않는다.
+
+- 같은 출처만 허용한다. 엔진은 `event.source === window.parent`이고 `event.origin === location.origin`인 메시지만 받고, 보낼 때 `targetOrigin`은 `location.origin`이다. 덱은 `file:`이 아니라 http로 연다.
+- 모든 메시지는 `{ source: "slidekit", v: 1, type, ... }`이다.
+
+부모 -> 덱 (명령):
+
+| `type` | 필드 | 동작 |
+|---|---|---|
+| `goto` | `slide`, `step`(선택, 기본 1) | 해당 위치로 즉시 이동 |
+| `next` | 없음 | 방향키 오른쪽과 같은 동작 |
+| `prev` | 없음 | 방향키 왼쪽과 같은 동작 |
+| `get-info` | 없음 | `info`를 다시 보낸다 |
+
+덱 -> 부모 (알림):
+
+| `type` | 필드 | 보내는 때 |
+|---|---|---|
+| `ready` | `info` | 엔진 시작 직후 1회 |
+| `info` | `info` | `get-info`에 대한 답 |
+| `state` | `slide`, `step` | 위치가 바뀔 때마다(명령으로 바뀐 경우 포함) |
+
+`info` 객체:
+
+```json
+{
+  "meta": { "title": "...", "author": "...", "date": "2026-10-12", "visibility": "public", "pageNumber": false, "progress": false, "id": "vibe-coding-workshop" },
+  "slide": 1, "step": 1,
+  "slides": [
+    { "n": 1, "kind": "cover", "title": null, "chapter": 0, "steps": 1, "notes": "" },
+    { "n": 3, "kind": "chapter", "title": "바이브 코딩", "chapter": 1, "steps": 1, "notes": "" }
+  ],
+  "chapters": [ { "n": 3, "title": "바이브 코딩" } ]
+}
+```
+
+- `slides`는 문서 순서 전체이고 `n`은 슬라이드 번호다. `steps`는 `data-steps`(없으면 1)다. `title`은 `data-title`이 없으면 `null`이다. `notes`는 2절 규칙의 문자열이다.
+- `chapters`는 `chapter` 슬라이드만 문서 순서로 모은 목차다.
+- 발표자 화면의 구성: 현재 슬라이드 iframe과 다음 슬라이드 iframe(`goto`로 `slide+1`, step 1)에 `?embed=1`을 쓰고, 노트와 장 위치는 `info`에서 읽는다. 위치 변화는 BroadcastChannel `state`와 iframe `state`를 함께 듣는다.
+
+## 7. 문구와 디자인 규칙
+
+덱 본문과 노트, 이 규격 문서에 적용한다.
+
+- 금지: em-dash, en-dash, 가운뎃점, 이모지, 구어체. 비유와 은유도 금지한다. 사용자가 직접 요청한 경우는 예외다.
+- 배경은 검은색, 글자는 흰색이 기본이다. 페이지 번호와 꾸밈 요소 없이 미니멀하게 간다(`pageNumber`, `progress` 기본 꺼짐).
+- 로고는 브랜드 색을 쓴다. 사용자가 준 이미지는 원본 그대로 쓴다.
+
+## 8. 워크숍 덱 변환 매핑
+
+대상: `decks/vibe-coding-workshop/index.html`(1306줄, 슬라이드 53장). 현재 파일은 `<html>`, `<head>`, `<body>` 없이 `<title>`, `<link>`, `<style>`, `<div>`, `<script>`만 있는 조각이다.
+
+### 구조
+
+| 현재 | 규격 |
+|---|---|
+| `<title>바이브 코딩 기초</title>` | `<head>` 안 `<title>`을 `deck-meta.title`과 같은 "디자이너를 위한 바이브 코딩 워크숍"으로 바꾼다 |
+| 최상위 조각 (html, head, body 없음) | 1절의 완전한 문서로 감싼다. `lang="ko"`, `data-slidekit="1"` |
+| 없음 | `#deck-meta` 추가: title, subtitle "Google Antigravity로 시작하는 바이브 코딩", author "이성빈", date "2026-10-12", visibility "public", id "vibe-coding-workshop" |
+| Google Fonts `<link>` 3줄 (Noto Sans KR, JetBrains Mono) | 그대로 `<head>`에 둔다 |
+| `<div id="viewport"><div id="stage">` ... `</div></div>` | 삭제. 슬라이드를 `<body>` 직계로 둔다 |
+| `<section class="slide cover">` 첫 번째 (463줄) | `<section data-slide="cover">` |
+| `<section class="slide section">` 7개 | `<section data-slide="chapter" data-title="...">`. 제목은 안의 `<h1>` 글자와 같게 한다: 바이브 코딩, 코딩 에이전트 생태계, 프로젝트 폴더와 파일 구조, 마크다운, 스킬 MCP 플러그인(원문 "스킬, MCP, 플러그인"), Git과 GitHub, 배포 |
+| `<section class="slide">` 일반 | `<section data-slide="content">` |
+| `<section class="slide tok-slide" id="tok-slide">` | `<section data-slide="content" data-steps="4" id="tok-slide" class="tok-slide">` |
+| `<section class="slide cover">` 마지막 (1138줄, "감사합니다") | `<section data-slide="end">` |
+| 슬라이드 개수: cover 1, section 7, 일반 44(`tok-slide` 포함), 마지막 cover 1 = 53 | 변환 후 `data-slide` 개수가 같아야 한다 |
+| 노트 없음 | 변환 범위 밖. 이후 `<aside data-notes>`를 추가한다 |
+
+### CSS
+
+| 현재 | 규격 |
+|---|---|
+| `:root{--bg,--fg,--muted,--faint,--line,--panel,--sans,--mono}` | 각각 `--sk-bg`, `--sk-fg`, `--sk-muted`, `--sk-faint`, `--sk-line`, `--sk-panel`, `--sk-font`, `--sk-font-mono`. 값은 같다. 덱 CSS의 `var(--bg)` 등을 새 이름으로 바꾼다 |
+| `--r-model:#a78bfa` | `--sk-accent`로 올린다. 덱 안 `var(--r-model)`은 `--r-model: var(--sk-accent)`로 별칭을 두어 유지해도 된다 |
+| `--r-user`, `--r-tool`, `--r-pc`, `--t1`..`--t7` | 덱 전용이므로 이름 그대로 `<style>`에 남긴다 |
+| `color-scheme:dark` | 엔진 CSS가 준다. 삭제 |
+| `html,body{...}`, `body{font-family...}` | 엔진 CSS가 준다. 삭제 |
+| `#viewport{...}`, `#stage{...}` | 삭제 |
+| `.slide{position:absolute; padding:150px 170px; display:none; flex...; gap:56px}` | 삭제. 엔진 CSS가 `--sk-pad-y`, `--sk-pad-x`, `--sk-gap`으로 준다 |
+| `.slide.on{display:flex}` | 삭제 |
+| `.slide.on{animation:in .35s}` 및 `@keyframes in` | 삭제. 엔진이 준다 |
+| `.slide.on svg.wf-bot{animation:wf-bob ...}` (99줄) | `[data-slide][data-active] svg.wf-bot` |
+| `h1`(120px), `h2`(68px), `p`(36px), `.small`(28px) 크기 | `--sk-fs-*` 토큰이 같은 값을 준다. 덱 CSS의 중복 선언은 삭제 |
+| `.cover{gap:40px}`, `.cover h1`, `.cover-head`, `.cover .sub`, `.meta*` | 선택자 `.cover`를 `[data-slide="cover"]`로 바꾸고 `.cover-head`, `.sub`, `.meta`는 그대로 |
+| `.section h1{font-size:132px}`, `.section .icon-lg` | 선택자 `.section`을 `[data-slide="chapter"]`로 |
+| `.tok-slide{align-items:center; padding-block:90px}` | 그대로 둔다(`class="tok-slide"` 유지) |
+| `.td-c.on`, `.wf.on`, `.sk-case.on`, `.dp-c.on`, `.drop-s.on`, `.sk-list span.on` | 슬라이드 활성 표시가 아니라 덱 안 컴포넌트 상태다. 그대로 둔다 |
+
+### 스크립트 (1145-1305줄)
+
+| 현재 | 규격 |
+|---|---|
+| `fit()`, `resize`, `fullscreenchange`, `webkitfullscreenchange` 처리 | 삭제. 엔진이 한다 |
+| `show()`, `go()`, 해시 읽기와 `history.replaceState` | 삭제. 엔진이 한다 (`#N` 동작은 동일) |
+| `keydown`: 방향키 4개로 이동, `F` 전체화면, `INPUT` 대상 무시 | 삭제. 엔진이 같은 동작을 한다. `O`와 숫자 + `Enter`는 새로 생긴다 |
+| `toggleFull()` | 삭제 |
+| `slides[i].stepper` 계약 (`enter`, `next`, `prev`, 소비하면 `true`) | `SlideKit.stepper(el, {...})`로 등록. 같은 세 메서드에 `get`, `goto`를 추가한다 |
+| 토큰 데모의 `set(s, anim)` | `goto(n)`은 `set(n, false)`, `get()`은 `step`을 반환한다. `enter`는 현재와 같다(`set(fwd?1:4,false)`) |
+| 토큰 데모의 `stage.getBoundingClientRect().width/1920` (FLIP 배율) | `SlideKit.scale` |
+| 토큰 데모 `tokenize`, `tokId`, `window.tokenize` | 덱 스크립트로 그대로 남긴다 |
+| Claude Code 캐릭터 순찰: `setInterval`, `ft.closest('.slide').classList.contains('on')` | `ft.closest('[data-slide]').hasAttribute('data-active')`. 나머지는 그대로 |
+| `fit(); show(hash)` 마지막 두 줄 | 삭제 |
+| 덱 스크립트 위치 | `</body>` 앞, 엔진 `<script src>` 뒤 |
+
+### 변환 뒤 확인 항목
+
+- 슬라이드 수 53, `chapter` 7, `cover` 첫 장, `end` 마지막 장.
+- 토큰 데모: 4단계 앞뒤 이동, 뒤에서 돌아올 때 4단계, 입력창에서 방향키가 이동하지 않음.
+- Claude Code 캐릭터가 해당 슬라이드가 활성일 때만 움직임.
+- `F` 전체화면, 방향키 4개, `#N` 직접 진입, 클릭과 스페이스로 이동하지 않음.
+- 표지 Gemini 로고(SVG `mask`, `filter`의 `url(#ag9_*)`)가 전체 보기 축소판에서도 그려짐.

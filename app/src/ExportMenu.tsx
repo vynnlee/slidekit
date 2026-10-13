@@ -92,7 +92,7 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
   return (
     <>
       <DropdownMenu size="compact">
-        <DropdownTrigger render={<Button variant="ghost" size="compact" aria-label="Export"><Download />Export</Button>} />
+        <DropdownTrigger render={<Button variant="secondary" size="compact" aria-label="Export" leadingIcon={Download}>Export</Button>} />
         <DropdownContent align="end" side="bottom">
           <MenuItem index={0} icon={FileText} label="Download HTML" onSelect={() => download("html")} />
           <MenuItem index={1} icon={FileText} label="Download PDF" onSelect={() => download("pdf")} />

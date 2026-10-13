@@ -103,6 +103,7 @@ export function LayerTree(p: Props) {
               onBlur={() => setRename(null)}
             />
           ) : <span className="min-w-0 flex-1 truncate">{nameOf(el)}</span>}
+          {el.hasAttribute("data-step") && <span title={`Appears at step ${el.getAttribute("data-step")}`} className="shrink-0 rounded bg-surface-2 px-1 text-micro tabular-nums text-muted-foreground">{el.getAttribute("data-step")}</span>}
           <Tooltip content={hidden ? "Show (removes display: none)" : "Hide (sets display: none, saved with the deck)"} side="left">
             <Button aria-label={hidden ? "Show layer" : "Hide layer"} aria-pressed={hidden} variant="ghost" size="icon-compact"
               className={hidden ? "" : "opacity-0 focus-visible:opacity-100 group-hover:opacity-100"}

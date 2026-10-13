@@ -266,6 +266,7 @@ export function Editor({ id }: { id: string }) {
     pickSel(all[i < 0 ? (dir > 0 ? 0 : all.length - 1) : (i + dir + all.length) % all.length]);
   };
   const style = (prop: string, v: string) => { const el = sel as HTMLElement | null; if (!el) return; if (v) el.style.setProperty(prop, v); else el.style.removeProperty(prop); commit("style:" + prop); };
+  const elAttr = (name: string, v: string | null) => { const el = sel as HTMLElement | null; if (!el) return; if (v === null) el.removeAttribute(name); else el.setAttribute(name, v); pickSel(el); commit("elattr:" + name); };
   const slideStyle = (prop: string, v: string) => { const s = canvas.current?.slide(indexRef.current); if (!s) return; if (v) s.style.setProperty(prop, v); else s.style.removeProperty(prop); commit("slide:" + prop); };
   const attr = (name: string, v: string | null) => {
     const s = canvas.current?.slide(indexRef.current);
@@ -429,7 +430,7 @@ export function Editor({ id }: { id: string }) {
         }
         right={
           <Inspector sel={sel} slide={canvas.current?.slide(index) ?? null} selId={selId} tab={tab} onTab={setTab}
-            comments={comments} onJump={jump} onStyle={style} onAttr={attr} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; }} />
+            comments={comments} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; }} />
         }
       >
         <div className="flex h-full flex-col">

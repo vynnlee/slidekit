@@ -3,7 +3,7 @@ import {
   AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical,
   ArrowDown, ArrowRight, Blend, CaseLower, CaseSensitive, CaseUpper, ALargeSmall, Droplets, Expand, EyeOff, Frame, Layers as LayersIcon,
   Minus, Plus, RotateCw, Shrink, Square, SquareRoundCorner, Strikethrough, TextAlignCenter, TextAlignEnd, TextAlignJustify, TextAlignStart,
-  Underline, WrapText, Scan, Spline, MoveHorizontal, ListCollapse, Space, BetweenHorizontalStart, BetweenVerticalStart, Type,
+  Underline, WrapText, Scan, Spline, ListOrdered, MoveHorizontal, ListCollapse, Space, BetweenHorizontalStart, BetweenVerticalStart, Type,
 } from "lucide-react";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,7 @@ const WEIGHTS: Items = [["300", "Light"], ["400", "Regular"], ["500", "Medium"],
 const DISPLAYS: Items = [["block", "Block"], ["flex", "Flex"], ["grid", "Grid"], ["inline", "Inline"], ["inline-block", "Inline block"], ["inline-flex", "Inline flex"], ["none", "None"]];
 const POSITIONS: Items = [["static", "Static"], ["relative", "Relative"], ["absolute", "Absolute"]];
 const BLENDS: Items = [["normal", "Normal"], ["multiply", "Multiply"], ["screen", "Screen"], ["overlay", "Overlay"], ["darken", "Darken"], ["lighten", "Lighten"], ["difference", "Difference"]];
+const STEP_EFFECTS: Items = [["rise", "Rise"], ["fade", "Fade"], ["none", "None"]];
 const BORDER_STYLES: Items = [["solid", "Solid"], ["dashed", "Dashed"], ["dotted", "Dotted"]];
 
 const px = (v: string) => parseFloat(v) || 0;
@@ -73,6 +74,7 @@ type Props = {
   onJump(c: Comment): void;
   onStyle(prop: string, value: string): void;
   onAttr(name: string, value: string | null): void;
+  onElAttr(name: string, value: string | null): void;
   prefix: string;
   onPrefixChange(next: string): void;
   canvasDoc: Document | null;
@@ -200,6 +202,7 @@ export function Inspector(p: Props) {
 
   const kind = p.slide?.getAttribute("data-slide") ?? "content";
   const steps = p.slide?.getAttribute("data-steps") ?? "";
+  const autoSteps = Math.max(1, ...[...(p.slide?.querySelectorAll("[data-step]") ?? [])].map((e) => parseInt(e.getAttribute("data-step") ?? "1", 10) || 1));
 
   return (
     <Tabs value={p.tab} onValueChange={p.onTab}>
@@ -218,6 +221,7 @@ export function Inspector(p: Props) {
                   <NumberField label={<Frame />} aria-label="Steps" unit="" min={1} step={1} value={steps || "1"} muted={!steps}
                     onChange={(v) => p.onAttr("data-steps", +v > 1 ? String(Math.round(+v)) : null)} />
                 </div>
+                {autoSteps > 1 && <span className="col-span-2 text-caption text-muted-foreground">Auto from element steps: {autoSteps}</span>}
               </Grid>
             </InspectorSection>
             <InspectorSection id="slide-bg" title="Background">
@@ -295,6 +299,11 @@ export function Inspector(p: Props) {
                 ))}
               </Grid>
               <Pick label="Blend mode" value={val("mix-blend-mode")} items={BLENDS} onChange={(v) => set("mix-blend-mode", v)} />
+              <Grid>
+                <NumberField label={<ListOrdered />} aria-label="Appears at step" unit="" min={1} step={1} value={el.getAttribute("data-step") ?? "1"} muted={!el.hasAttribute("data-step")}
+                  onChange={(v) => p.onElAttr("data-step", +v >= 2 ? String(Math.round(+v)) : null)} />
+                {el.hasAttribute("data-step") && <Pick label="Step effect" value={el.getAttribute("data-step-effect") ?? "rise"} items={STEP_EFFECTS} onChange={(v) => p.onElAttr("data-step-effect", v === "rise" ? null : v)} />}
+              </Grid>
             </InspectorSection>
 
             {isText && (

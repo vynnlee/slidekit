@@ -130,7 +130,7 @@ export function ColorField({ value, onChange, "aria-label": ariaLabel, allowNone
         onChange={(e) => setAlphaDraft(e.target.value)}
         onBlur={commitAlpha}
         onKeyDown={enterToBlur}
-        className={cn("w-14 shrink-0 text-right")}
+        className={cn("w-12 shrink-0 px-1.5 text-right")}
       />
     </div>
   );

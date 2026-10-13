@@ -64,10 +64,10 @@ export function compose(doc: Doc, units = doc.units) {
 }
 
 // 캔버스와 썸네일용 문서. 상대 경로가 깨지지 않게 base를 넣고, 임베드 표시를 단다.
-export function previewHtml(doc: Doc, units: Unit[], folder: string, opts: { embed?: boolean; thumb?: boolean }) {
+export function previewHtml(doc: Doc, units: Unit[], folder: string, opts: { embed?: boolean; thumb?: boolean; showSteps?: boolean }) {
   let s = compose(doc, units);
   const base = `<base href="${location.origin}/decks/${folder}/">`;
-  s = s.replace(/<html\b/i, opts.embed ? "<html data-sk-embed" : "<html");
+  s = s.replace(/<html\b/i, opts.embed ? (opts.showSteps ? "<html data-sk-embed data-sk-show-steps" : "<html data-sk-embed") : "<html");
   s = s.replace(/<head[^>]*>/i, (h) => h + base);
   if (opts.thumb) {
     // 외부 글꼴 링크는 렌더를 막으므로 뺀다(썸네일은 대체 글꼴로 그린다).

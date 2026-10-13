@@ -69,7 +69,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   const build = useCallback((units: Unit[]) => {
     shown.current = { keys: units.map((u) => u.key), html: new Map(units.map((u) => [u.key, u.html])) };
     const go = () => {
-      const html = previewHtml({ ...P.current.shell, units }, units, P.current.folder, { embed: true });
+      const html = previewHtml({ ...P.current.shell, units }, units, P.current.folder, { embed: true, showSteps: true }); // 편집 중에는 모든 단계의 요소를 보인다(저장 글자에는 슬라이드만 쓰여 새지 않는다)
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
       urlRef.current = URL.createObjectURL(new Blob([html], { type: "text/html" }));
       setUrl(urlRef.current);

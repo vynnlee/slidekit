@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { InspectorSection } from "@/components/ui/inspector-section";
 import { ColorField } from "@/components/ui/color-field";
 import { NumberField } from "@/components/ui/number-field";
 import { Field } from "@/components/ui/field";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { readTokens, setToken } from "@/lib/deck-tokens";
+import { deckFonts, familyNames } from "@/lib/deck-fonts";
 
 // SPEC 4절의 기본값. 덱이 선언하지 않은 토큰은 이 값을 보여 준다(흐리게).
 const DEFAULTS: Record<string, string> = {
@@ -17,7 +19,7 @@ const DEFAULTS: Record<string, string> = {
   "--sk-pad-y": "150px", "--sk-pad-x": "170px", "--sk-gap": "56px",
   "--sk-fs-h1": "120px", "--sk-fs-h2": "68px", "--sk-fs-body": "36px", "--sk-fs-small": "28px",
 };
-const COLORS: [string, string][] = [["--sk-bg", "Background"], ["--sk-fg", "Text"], ["--sk-muted", "Muted text"], ["--sk-faint", "Faint text"], ["--sk-line", "Line"], ["--sk-panel", "Panel"], ["--sk-accent", "Accent"]];
+const COLORS: [string, string][] = [["--sk-bg", "Page background"], ["--sk-fg", "Text"], ["--sk-muted", "Muted text"], ["--sk-faint", "Faint text"], ["--sk-line", "Line"], ["--sk-panel", "Panel"], ["--sk-accent", "Accent"]];
 const SPACING: [string, string, string][] = [["--sk-pad-x", "Padding X", "X"], ["--sk-pad-y", "Padding Y", "Y"], ["--sk-gap", "Gap", "G"]];
 const SIZES: [string, string, string][] = [["--sk-fs-h1", "Heading 1 size", "H1"], ["--sk-fs-h2", "Heading 2 size", "H2"], ["--sk-fs-body", "Body size", "P"], ["--sk-fs-small", "Small size", "S"]];
 const FONT_PRESETS: [string, string][] = [
@@ -37,6 +39,28 @@ interface TokensPanelProps {
   onPrefixChange(next: string): void;
   /** 캔버스 iframe의 문서. 있으면 입력하는 동안 `:root`에 바로 반영해 미리 보여 준다. */
   canvas?: Document | null;
+}
+
+function FontRow({ label, value, cur, opts, onSet }: { label: string; value: string; cur: string; opts: [string, string][]; onSet(v: string): void }) {
+  const [adv, setAdv] = useState(false);
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-1">
+        <div className="min-w-0 flex-1">
+          <Select value={cur} onValueChange={(n) => onSet(opts.find(([k]) => k === n)![1])} size="compact">
+            <SelectTrigger aria-label={label} />
+            <SelectContent>{opts.map(([n], i) => <SelectItem key={n} index={i} value={n}>{n}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <Button variant="ghost" size="compact" aria-pressed={adv} aria-label={`Edit ${label} CSS`} onClick={() => setAdv((x) => !x)}>CSS</Button>
+      </div>
+      {adv && (
+        <Field aria-label={`${label} CSS`} defaultValue={value} key={value}
+          onBlur={(e) => e.target.value !== value && onSet(e.target.value.trim())}
+          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />
+      )}
+    </div>
+  );
 }
 
 export function TokensPanel({ prefix, onPrefixChange, canvas }: TokensPanelProps) {
@@ -66,18 +90,16 @@ export function TokensPanel({ prefix, onPrefixChange, canvas }: TokensPanelProps
   };
 
   const custom = Object.keys(declared).filter((n) => !(n in DEFAULTS));
-  const fontRow = (name: string, label: string, presets: [string, string][]) => {
-    const v = val(name), known = presets.find(([, f]) => f === v)?.[0];
-    return (
-      <div className="flex gap-2">
-        <Field aria-label={label} defaultValue={v} key={v} className="flex-1" onBlur={(e) => e.target.value !== v && set(name, e.target.value.trim(), true)}
-          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />
-        <Select value={known ?? ""} onValueChange={(k) => set(name, presets.find(([n]) => n === k)![1], true)} size="compact">
-          <SelectTrigger aria-label={`${label} presets`} className="w-28" />
-          <SelectContent>{presets.map(([n], i) => <SelectItem key={n} index={i} value={n}>{n}</SelectItem>)}</SelectContent>
-        </Select>
-      </div>
-    );
+  // 글꼴은 Select 하나로 고른다(덱이 선언한 글꼴이 위, 그다음 프리셋). CSS 문자열은 접힌 고급 입력에서 고친다.
+  const declaredFonts = useMemo(() => deckFonts(prefix), [prefix]);
+  const fontRow = (name: string, label: string, presets: [string, string][], generic: string) => {
+    const v = val(name), cur = familyNames(v)[0] ?? "";
+    const opts: [string, string][] = [
+      ...declaredFonts.map((n) => [n, presets.find(([p]) => p === n)?.[1] ?? `"${n}",${generic}`] as [string, string]),
+      ...presets.filter(([p]) => !declaredFonts.includes(p)),
+    ];
+    if (cur && !opts.some(([n]) => n === cur)) opts.unshift([cur, v]);
+    return <FontRow key={name} label={label} value={v} cur={cur} opts={opts} onSet={(x) => set(name, x, true)} />;
   };
   const num = (rows: [string, string, string][]) => (
     <div className="grid grid-cols-2 gap-2">
@@ -93,16 +115,16 @@ export function TokensPanel({ prefix, onPrefixChange, canvas }: TokensPanelProps
       <InspectorSection id="tokens-colors" title="Colors">
         <div className="flex flex-col gap-2">
           {COLORS.map(([n, label]) => (
-            <div key={n} className="flex items-center gap-2">
-              <span className="w-16 shrink-0 truncate text-caption text-muted-foreground">{label}</span>
-              <ColorField aria-label={label} value={val(n)} onChange={(v) => set(n, v)} className="flex-1" />
+            <div key={n} className="flex flex-col gap-1">
+              <span className="truncate text-caption text-muted-foreground">{label}</span>
+              <ColorField aria-label={label} value={val(n)} onChange={(v) => set(n, v)} />
             </div>
           ))}
         </div>
       </InspectorSection>
       <InspectorSection id="tokens-fonts" title="Fonts">
-        {fontRow("--sk-font", "Font", FONT_PRESETS)}
-        {fontRow("--sk-font-mono", "Mono font", MONO_PRESETS)}
+        {fontRow("--sk-font", "Font", FONT_PRESETS, "system-ui,sans-serif")}
+        {fontRow("--sk-font-mono", "Mono font", MONO_PRESETS, "ui-monospace,monospace")}
       </InspectorSection>
       <InspectorSection id="tokens-spacing" title="Spacing">{num(SPACING)}</InspectorSection>
       <InspectorSection id="tokens-sizes" title="Text sizes">{num(SIZES)}</InspectorSection>

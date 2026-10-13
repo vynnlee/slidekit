@@ -1,9 +1,12 @@
-/* 편집기 브라우저 검증. 실행 전에 bun run slidekit. 종료 뒤 git checkout decks/ 로 덱을 되돌린다.
+/* 편집기 브라우저 검증. 실행 전에 bun run slidekit.
+   사본(decks/_e2e-editor)에서만 고치므로 실제 덱을 되돌릴 필요가 없다.
    Usage: PW=<playwright-core> CHROME=<headless shell> BASE=http://127.0.0.1:3200 node editor.cjs */
 const { chromium } = require(process.env.PW || 'playwright-core');
 const fs = require('fs'), path = require('path');
 const BASE = process.env.BASE || 'http://127.0.0.1:3200';
-const FILE = path.join(__dirname, '..', '..', 'decks', 'vibe-coding-workshop', 'index.html');
+const { makeTestDeck } = require('../../scripts/lib/test-deck.cjs');
+const T = makeTestDeck('editor'); // 실제 덱 대신 사본에서만 고친다
+const FILE = T.file;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fail = 0;
 const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + name + (ok || extra === undefined ? '' : '  ' + JSON.stringify(extra))); };
@@ -16,7 +19,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
-  await page.goto(BASE + '/edit/vibe-coding-workshop');
+  await page.goto(BASE + '/edit/' + T.id);
   const frameEl = page.locator('iframe[title="Canvas"]');
   await frameEl.waitFor();
   const fr = () => page.frames().find((f) => f.url().startsWith('blob:'));
@@ -24,7 +27,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   await sleep(500);
   // 레이어 썸네일 첫 3개가 그려지기까지: 레이어 목록이 보인 때부터 잰다(목표 1초)
   const p2 = await ctx.newPage();
-  await p2.goto(BASE + '/edit/vibe-coding-workshop');
+  await p2.goto(BASE + '/edit/' + T.id);
   await p2.locator('[draggable="true"]').first().waitFor();
   const t0 = Date.now();
   await p2.waitForFunction(() => document.querySelectorAll('iframe[srcdoc]').length >= 3);
@@ -105,8 +108,8 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('최종 파일에 복제본 존재', (fin.match(/<section[^>]*>\s*<h1>편집 테스트 제목/g) || []).length === 2, (fin.match(/편집 테스트 제목/g) || []).length);
 
   // 코멘트 번호 추적: 순서 변경, 삭제
-  const CF = path.join(path.dirname(FILE), 'comments.json');
-  const post = (slide, text) => page.evaluate(([slide, text]) => fetch('/api/comments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deck: 'vibe-coding-workshop', slide, path: '', excerpt: text, text }) }).then((r) => r.json()), [slide, text]);
+  const CF = T.commentsFile;
+  const post = (slide, text) => page.evaluate(([slide, text, folder]) => fetch('/api/comments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deck: folder, slide, path: '', excerpt: text, text }) }).then((r) => r.json()), [slide, text, T.folder]);
   const rd = () => JSON.parse(fs.readFileSync(CF, 'utf8'));
   const tA = await titleOf(9), tB = await titleOf(11);
   const cA = (await post(10, 'T-A')).id, cB = (await post(12, 'T-B')).id;
@@ -123,7 +126,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   cs = rd();
   check('삭제한 슬라이드의 코멘트는 남고 slideDeleted', cs.find((c) => c.id === cA) && cs.find((c) => c.id === cA).slideDeleted === true);
   check('나머지 코멘트 번호 유지', cs.find((c) => c.id === cB).slide === (await posOf(tB)), [cs.find((c) => c.id === cB).slide, await posOf(tB)]);
-  const put = (b) => page.evaluate((b) => fetch('/api/decks/vibe-coding-workshop', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then((r) => r.status), b);
+  const put = (b) => page.evaluate(([b, f]) => fetch('/api/decks/' + f, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then((r) => r.status), [b, T.folder]);
   check('base 없이 저장하면 400', (await put({ source: fs.readFileSync(FILE, 'utf8') })) === 400);
   fs.writeFileSync(CF, '[]');
 
@@ -211,6 +214,11 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   // 덱 토큰: 요소 미선택 상태에서 accent와 pad-x를 바꿔 저장하면 head의 :root만 바뀐다
   await page.keyboard.press('Escape'); await sleep(300);
   await page.locator('body').click({ position: { x: 5, y: 5 } }); await page.keyboard.press('Meta+s'); await sleep(1200); // 앞 단계의 미저장 변경을 먼저 비운다
+  const eb = await page.getByRole('button', { name: 'Export' }).boundingBox(), pb = await page.getByRole('button', { name: 'Present' }).boundingBox();
+  check('Export와 Present 버튼 높이가 같음', eb && pb && Math.abs(eb.height - pb.height) < 1 && eb.height <= 30, [eb && eb.height, pb && pb.height]);
+  check('토큰 Page background 라벨', (await page.getByLabel('Page background hex').count()) === 1 && (await page.getByLabel('Background hex', { exact: true }).count()) === 1);
+  check('hex가 잘리지 않음', await page.getByLabel('Page background hex').evaluate((e) => e.scrollWidth <= e.clientWidth + 1));
+  check('글꼴은 Select 하나', (await page.getByLabel('Font', { exact: true }).count()) === 1 && (await page.getByLabel('Font CSS', { exact: true }).count() === 0));
   const tokPre = fs.readFileSync(FILE, 'utf8');
   const acc = page.getByLabel('Accent hex'); await acc.fill('#ff5500'); await acc.press('Enter'); await sleep(200);
   const px2 = page.getByLabel('Padding X', { exact: true }); await px2.fill('120'); await px2.press('Enter'); await sleep(900);
@@ -220,6 +228,23 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('토큰 저장: 슬라이드 본문 그대로', tokPost.slice(tokPost.indexOf('<body>')) === tokPre.slice(tokPre.indexOf('<body>')));
   for (let i = 0; i < 3 && (await page.getByLabel('Accent hex').inputValue()).toLowerCase().includes('ff5500'); i++) { await page.keyboard.press('Meta+z'); await sleep(1200); } // 토큰 변경은 입력별로 1건씩 기록된다
   check('토큰 변경 실행 취소', !(await page.getByLabel('Accent hex').inputValue()).toLowerCase().includes('ff5500'), await page.getByLabel('Accent hex').inputValue());
+  // 선언형 단계: Appears at step
+  await page.keyboard.press('Escape'); await page.keyboard.press('Tab'); await sleep(300);
+  const st = page.getByLabel('Appears at step'); await st.fill('3'); await st.press('Enter'); await sleep(400);
+  check('data-step이 요소에 설정', await inDoc((s) => !!s.querySelector('[data-step="3"]')));
+  check('Effect Select 표시', (await page.getByLabel('Step effect').count()) === 1);
+  check('캔버스에 모든 단계 표시(data-sk-show-steps)', await page.evaluate(() => document.querySelector('iframe[title="Canvas"]').contentDocument.documentElement.hasAttribute('data-sk-show-steps')));
+  await page.getByRole('tab', { name: 'Layers' }).click(); await sleep(300);
+  check('Layers 단계 배지', (await page.getByTitle('Appears at step 3').count()) >= 1);
+  await page.getByRole('tab', { name: 'Slides' }).click();
+  await page.locator('body').click({ position: { x: 5, y: 5 } }); await page.keyboard.press('Meta+s'); await sleep(1200);
+  const stepSaved = fs.readFileSync(FILE, 'utf8');
+  check('저장 파일에 data-step, show-steps는 새지 않음', /data-step="3"/.test(stepSaved) && !stepSaved.includes('data-sk-show-steps'));
+  await page.keyboard.press('Escape'); await sleep(300);
+  check('슬라이드 상태에 자동 단계 안내', (await page.getByText('Auto from element steps: 3').count()) === 1);
+  await page.keyboard.press('Tab'); await sleep(300);
+  const st2 = page.getByLabel('Appears at step'); await st2.fill('1'); await st2.press('Enter'); await sleep(300);
+  check('1로 되돌리면 속성 삭제', !(await inDoc((s) => !!s.querySelector('[data-step]'))));
   // 자동 저장: Cmd+S 없이 1.5초 뒤 저장된다
   await page.keyboard.press('Escape'); await page.keyboard.press('Tab'); await sleep(300);
   const op2 = page.getByLabel('Opacity', { exact: true }); await op2.fill('37'); await op2.press('Enter'); await sleep(400);

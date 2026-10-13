@@ -7,11 +7,14 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 - 덱 목록에서 덱을 고르면 발표자 화면(`/present/<덱>`)과 편집기(`/edit/<덱>`)로 간다.
 
 ## 편집과 발표
-- 편집기: 레이어, 캔버스 직접 편집, 속성 패널, 슬라이드 순서와 복제와 삭제, 저장. 저장하면 `decks/<덱>/index.html`이 바뀐다.
+- 편집기: 레이어, 캔버스 직접 편집, 속성 패널, 슬라이드 순서와 복제와 삭제, 덱 토큰 편집, 내보내기. 편집 뒤 1.5초 동안 입력이 없으면 자동 저장하고 Cmd+S로도 저장한다. 저장하면 `decks/<덱>/index.html`이 바뀐다.
 - 발표: 방향키로만 넘기고 F가 전체화면이다. 발표자 화면의 항목(노트, 타이머 등)은 각각 켜고 끈다. 외장 모니터로 시작할 수 있다.
 
 ## 명령
 - `bun run slidekit new <이름>`: `decks/<이름>/`을 템플릿에서 만든다.
+- `bun run slidekit lint <덱>`: 덱이 SPEC을 지키는지 규칙별로 점검한다(오류가 있으면 종료 코드 1).
+- `bun run slidekit pdf <덱>`: 번들한 덱을 `dist/<덱>.pdf`로 인쇄한다(슬라이드당 한 페이지, 16:9).
+- `bun run slidekit doctor`: bun, Chrome, 키체인 토큰, 포트, Host 가드, 덱 lint를 한 화면에 점검한다.
 - `bun run slidekit bundle <덱>`: 엔진, 이미지, 글꼴 서브셋을 담은 `dist/<덱>.html` 하나로 묶는다.
 - `bun run slidekit deploy <덱>`: Cloudflare로 올려 static.vynnlee.com/<덱>으로 연다. 준비는 `deploy/README.md`.
 - `bun run test`: 전체 검증(왕복, 워커, 채널, 엔진, 편집기). `/tmp/slidekit-heavy.lock`을 잡고 돈다.

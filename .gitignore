@@ -5,3 +5,7 @@ dist/
 decks/_*/
 decks/.trash/
 decks/zz-e2e*/
+.env
+.env.*
+decks/**/*.tmp-*
+decks/.vibe-test-backup.html

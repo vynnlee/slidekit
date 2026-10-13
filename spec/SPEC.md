@@ -33,8 +33,8 @@
 - `<html data-slidekit="1">`은 규격 버전 표시다. 값이 다르면 엔진은 콘솔에 경고한다.
 - 슬라이드는 `<body>`의 직계 자식 `<section data-slide>`이다. 문서 순서가 슬라이드 순서다. 엔진이 `#sk-stage`를 만들어 슬라이드를 옮겨 담으므로 덱은 `viewport`나 `stage` 래퍼를 쓰지 않는다.
 - 엔진 스크립트는 덱 스크립트보다 앞에 둔다. 엔진은 `DOMContentLoaded`에서 시작한다.
-- 글꼴은 `<head>`의 `<link>`로 불러도 된다(번들러가 나중에 내장한다).
-- 명령: `slidekit new <이름>`은 `engine/template/index.html`로 새 덱을 만들고, `slidekit lint <덱>`은 이 문서의 형식 위반을 규칙별로 출력하며(오류가 있으면 종료 코드 1), `slidekit bundle <덱>`은 단독 파일 하나로 묶고, `slidekit deploy <덱>`은 배포한다.
+- 글꼴은 `<head>`의 `<link>`로 불러도 된다(`slidekit bundle`이 덱이 쓰는 글자만 남긴 woff2로 내장한다).
+- 명령: `slidekit new <이름>`은 `engine/template/index.html`로 새 덱을 만들고, `slidekit lint <덱>`은 이 문서의 형식 위반을 규칙별로 출력하며(오류가 있으면 종료 코드 1), `slidekit bundle <덱>`은 단독 파일 하나로 묶고, `slidekit pdf <덱>`은 슬라이드당 한 페이지의 PDF로 내보내고, `slidekit deploy <덱>`은 배포하고, `slidekit doctor`는 환경을 점검한다.
 
 ## 2. 슬라이드
 
@@ -243,6 +243,8 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
 - 로고는 브랜드 색을 쓴다. 사용자가 준 이미지는 원본 그대로 쓴다.
 
 ## 8. 워크숍 덱 변환 매핑
+
+(변환은 끝났다. 이 절은 기록이고, 줄 번호와 `class="slide"` 형태는 변환 전 원본 기준이다. 현재 파일은 이미 1절 형식이다.)
 
 대상: `decks/vibe-coding-workshop/index.html`(1306줄, 슬라이드 53장). 현재 파일은 `<html>`, `<head>`, `<body>` 없이 `<title>`, `<link>`, `<style>`, `<div>`, `<script>`만 있는 조각이다.
 

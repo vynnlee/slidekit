@@ -1,6 +1,6 @@
 # 속성 패널(Inspector) 재설계 조사
 
-편집기 우측 속성 패널을 Figma Design 패널과 같은 구조로 다시 만들기 위한 조사 문서다. 구현은 하지 않는다. 본문은 한국어, UI 문구는 영어다(다국어 없음).
+편집기 우측 속성 패널을 Figma Design 패널과 같은 구조로 다시 만들기 위한 조사 문서다. 구현은 끝났고 이 문서는 설계 근거로 남긴다(현재 동작은 `app/src/components/inspector/README.md`와 코드를 따른다). 본문은 한국어, UI 문구는 영어다(다국어 없음).
 
 표기: "확인"은 공식 문서에서 읽은 것, "미확인"은 공식 문서로 못 찾은 것, "제안"은 이 문서의 설계 결정이다.
 
@@ -123,7 +123,7 @@ Figma 포럼에는 "Position, Auto layout, Appearance가 관련 없는 속성을
 | Spacing Auto (Between/Around/Evenly) | `justify-content: space-between / space-around / space-evenly` | gap 필드 대신 "Auto" 선택 시 |
 | Alignment 3x3 박스 | `justify-content` + `align-items` | 3x3 점 격자 하나로 두 속성 동시 설정. 방향에 따라 축이 바뀐다 |
 | Padding | `padding` (묶음 또는 4변 개별) | 기본은 가로, 세로 2필드. 확장 토글로 4변 |
-| Clip content | `overflow: hidden` | 체크박스(Switch 아님. 행 안 작은 토글이므로 Switch 컴팩트) |
+| Clip content | `overflow: hidden` | Switch(compact), 라벨 "Clip content" |
 | Resizing 모드 | 2.1 참고 | W/H 필드 오른쪽에 모드 드롭다운 |
 
 ### 2.3 Margin, overflow (Figma에 없음, CSS 편집기라 추가)
@@ -251,7 +251,7 @@ Figma 포럼에는 "Position, Auto layout, Appearance가 관련 없는 속성을
 | 호버 | 항목 행의 제거(-) 버튼과 섹션 보조 버튼은 호버 또는 포커스 때만 보인다. 터치 기기는 항상 보인다 |
 | 접기 상태 | 섹션별 접힘 상태를 `localStorage`에 저장(키 `slidekit.inspector.collapsed`) |
 | Mixed | 다중 선택은 현재 편집기에 없다(단일 선택). 도입 전에도 값이 요소 안에서 일관되지 않을 때(예: 모서리 4개가 다름) "Mixed" 플레이스홀더를 쓴다 |
-| 변경 기록 | 한 번의 스크럽 드래그는 편집 기록(undo) 1건. 현재 `onStyle(prop, value)` 인터페이스를 유지하되, 스크럽 중에는 미리보기만 적용하고 놓을 때 커밋하는 `onStyleLive`를 후속 검토 |
+| 변경 기록 | 한 번의 스크럽 드래그는 편집 기록(undo) 1건. `NumberField`의 `onScrubStart`/`onScrubEnd`로 스크럽 한 번을 undo 1건으로 묶는다(구현됨) |
 
 ### 4.2 섹션 순서 (요소 선택)
 
@@ -325,7 +325,7 @@ Figma는 Position이 맨 위지만, 우리는 흐름 레이아웃이 중심이�
 | 스와치 | 격자 배경(투명 표시) 위에 색 채움. 모서리 `rounded-md`(shape 토큰) |
 | hex | `#RRGGBB` 또는 `#RRGGBBAA`. 3자리는 확장. 잘못된 입력은 blur 때 원래 값 복원 |
 | 알파 | 0 ~ 100 %. 값이 바뀌면 `rgb(r g b / a)` 로 기록 |
-| 기본 선택기 | 처음엔 네이티브 `<input type="color">`를 스와치 안에 숨겨 쓴다(현재 구현 유지). 알파와 스포이드가 필요해지면 팝오버 자체 구현 |
+| 기본 선택기 | 스와치를 누르면 Fluid `ColorPickerPopover`(`ui/color-picker.tsx`, 처음 열 때 지연 로드)가 열린다. 알파는 hex 옆 % 필드로도 고친다 |
 | 토큰 | 덱에 쓰인 CSS 변수(`var(--...)`)는 값 대신 이름 칩으로 표시, 칩을 지우면 고정 값으로 풀림(후속) |
 
 ### 4.6 4변 padding, margin 확장 토글
@@ -355,10 +355,9 @@ Figma는 Position이 맨 위지만, 우리는 흐름 레이아웃이 중심이�
 | 종류 | Select (Cover, Chapter, Content, End) | `data-slide` | "Type" |
 | 장 제목 | Field | `data-title` | "Chapter title" |
 | 배경 | ColorField | 슬라이드 루트 `background-color` | "Background" |
-| 스텝 수 | 읽기 전용 텍스트 + 이동 버튼 | 슬라이드 루트 `data-steps` (없으면 1) | "Steps" 값 "3 steps" |
-| 노트 | TextArea | 발표자 노트(있으면) | "Notes", 미확인: 현재 데이터 구조에 노트 필드가 있는지 |
+| 스텝 수 | `NumberField`(Frame 아이콘, min 1) | 슬라이드 루트 `data-steps`(1이면 속성 삭제) | "Steps" |
 
-스텝 수는 SPEC.md 6절의 `data-steps="N"`을 따른다(확인: SPEC.md 49행).
+스텝 수는 SPEC.md 2절과 6.3절의 `data-steps="N"`을 따른다.
 
 ## 5. 구현 제약
 
@@ -382,7 +381,7 @@ UI는 Fluid Functionalism 컴포넌트와 `app/src/components/ui/field.tsx` 입�
 | `Card`, `Dialog`, `CommandMenu` | `ui/` | 인스펙터에서는 쓰지 않음 |
 | 토큰 | `index.css`, `lib/size-context.tsx`, `lib/shape-context.tsx`, `lib/springs.ts`, `lib/type-scale.ts` | 크기 사다리(default 36, compact 28), 표면(`bg-hover`, `surface-*`), 모서리(`shape.input`), 스프링(`fast` 0.08s, `moderate` 0.16s, `slow` 0.24s), 타입(`caption` 11px compact, `body` 12px compact) |
 
-### 5.3 새로 필요한 것
+### 5.3 구현 상태 (아래 컴포넌트는 모두 `app/src/components/ui/`에 구현됨, `IconToggle`은 만들지 않고 `Button` + `aria-pressed`로 처리)
 
 | 컴포넌트 | 역할 | 비고 |
 |---|---|---|

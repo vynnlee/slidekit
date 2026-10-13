@@ -107,7 +107,12 @@ description: slidekit 덱(HTML 슬라이드)을 새로 만들거나 고칠 때 �
 ```
 
 - 마지막 장이 표지와 같은 모양이면 `[data-slide="cover"], [data-slide="end"]`를 함께 선택한다.
-- 글꼴은 `<head>`의 Google Fonts `<link>`로 불러도 된다.
+- 글꼴은 세 방식 중 하나로 쓴다. 번들러가 어느 쪽이든 덱이 쓰는 글자만 남긴 woff2로 바꿔 인라인하므로 번들은 오프라인으로 열린다.
+  - `<head>`의 Google Fonts `<link>`.
+  - CDN 글꼴 CSS `<link>`(예: jsdelivr의 Pretendard).
+  - 덱 폴더 안 글꼴 파일의 `@font-face { src: url(./fonts/X.woff2) }`(woff2, ttf, otf 모두 가능).
+  - 시스템 글꼴만 쓰면 아무것도 내려받지 않는다. 글꼴 파일은 라이선스 때문에 저장소에 커밋하지 않는다.
+- 토큰과 덱 변수는 `<style>` 안 `:root { }` 블록 하나에 모아 선언한다. 편집기의 Tokens 패널이 이 블록의 변수만 원문 보존 방식으로 고친다(주석, 순서, 다른 규칙은 그대로). `@media` 안의 `:root`나 다른 선택자에 흩어 둔 변수는 패널이 읽지 못한다.
 - 엔진이 붙이는 요소(페이지 번호, 진행률, 전체 보기)는 `--sk-fg`, `--sk-faint`, `--sk-bg`, `--sk-line`만 쓴다. 이 네 토큰을 바꾸면 엔진 요소도 같이 바뀐다는 점을 안다.
 
 ## 4. stepper (슬라이드 안 단계)
@@ -209,10 +214,11 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
 - `viewport`, `stage` 같은 래퍼 `div`를 만들지 않는다. 엔진이 `#sk-stage`를 만들어 슬라이드를 옮겨 담는다.
 - 슬라이드를 `display:none`으로 숨기지 않는다. 비활성 슬라이드는 엔진이 `visibility:hidden`으로 두며, `url(#id)` 참조와 크기 측정이 이 상태에서도 동작해야 한다. SVG `mask`, `filter`의 `url(#...)`가 깨진다.
 - 슬라이드 크기에 `vw`, `vh`를 쓰지 않는다.
-- 외부 파일에 의존하지 않는다. 번들러가 인라인하는 것은 상대 경로 이미지와 Google Fonts `<link>`뿐이다. 외부 CDN 스크립트, 외부 CSS, 외부 이미지 URL, `fetch`로 불러오는 데이터는 쓰지 않는다. 엔진 `<link>`와 `<script src>`의 상대 경로(`../../engine/...`)는 예외이고 번들러가 처리한다.
+- 외부 파일에 의존하지 않는다. 번들러가 인라인하는 것은 상대 경로 이미지(`src`, `srcset`, `poster`, CSS `url()`), 글꼴(위 세 방식), 로컬 `<script src>`와 `<link>`다. 외부 CDN 스크립트, 글꼴이 아닌 외부 CSS, 외부 이미지 URL, `fetch`로 불러오는 데이터는 쓰지 않는다(lint가 경고한다). 엔진 `<link>`와 `<script src>`의 상대 경로(`../../engine/...`)는 예외이고 번들러가 처리한다.
 - 슬라이드를 다섯 번째 종류로 만들지 않는다. `data-slide` 값은 `cover`, `chapter`, `content`, `end`만 쓴다.
 - 엔진 파일(`engine/slidekit.js`, `engine/slidekit.css`)과 `spec/SPEC.md`를 덱 작업 중에 고치지 않는다.
 - 비밀 값(비밀번호, 토큰)을 덱에 넣지 않는다.
+- 사용자가 요청하지 않으면 배포(`deploy`, 편집기 Publish)를 하지 않는다. 배포는 공개 사이트에 올리는 일이다.
 
 ## 8-1. 본문 구성 요소
 
@@ -227,8 +233,8 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
    - `data-steps`가 있는 슬라이드마다 `SlideKit.stepper` 등록이 있고 다섯 메서드가 모두 있는지.
    - 엔진 `<script>`가 덱 스크립트보다 앞인지.
    - `rg` 등으로 금지 문자(em-dash, en-dash, 가운뎃점, 이모지)가 없는지 확인한다.
-2. 앱 미리보기: `bun app/server.ts`를 실행하면 127.0.0.1:3200에서 열린다. 덱 목록에서 덱을 열어 방향키, `F`, `O`, 숫자 + `Enter`, `#N`을 확인한다. 이 기계는 열에 약하니 서버는 확인이 끝나면 끈다. 브라우저 자동화 테스트는 여기서 돌리지 않는다.
-3. 번들: `bun app/server.ts bundle <이름>`을 실행하면 `dist/<이름>.html`이 생긴다. 엔진 CSS, JS, 상대 경로 이미지, Google Fonts가 인라인된 단독 파일이다.
+2. 앱 미리보기: `bun app/server.ts`를 실행하면 127.0.0.1:3200에서 열린다(환경 점검은 `bun app/server.ts doctor`). 덱 목록에서 덱을 열어 방향키, `F`, `O`, 숫자 + `Enter`, `#N`을 확인한다. 이 기계는 열에 약하니 서버는 확인이 끝나면 끈다. 브라우저 자동화 테스트는 여기서 돌리지 않는다.
+3. 번들: `bun app/server.ts bundle <이름>`을 실행하면 `dist/<이름>.html`이 생긴다. 엔진 CSS, JS, 상대 경로 이미지, 글꼴이 인라인된 단독 파일이다(글꼴 서브셋에 `uv`와 인터넷이 필요하다). PDF가 필요하면 `bun app/server.ts pdf <이름>`으로 `dist/<이름>.pdf`를 만든다. 슬라이드 한 장이 한 페이지(16:9)이고 stepper 슬라이드는 1단계 모습이다. 편집기의 Export 메뉴도 같은 일을 한다.
 4. 단독 파일 확인: `dist/<이름>.html`을 다른 곳에 복사해서 열어도 슬라이드, 이동, 글꼴, 이미지가 그대로여야 한다. 상대 경로 `../../engine`이 남아 있으면 번들 실패다.
 5. 사용자에게 보고할 때는 만든 슬라이드 수와 장 구성, 확인한 항목, 확인하지 못한 항목을 짧게 쓴다.
 

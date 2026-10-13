@@ -308,8 +308,8 @@ const findAxe = () => {
       const idx = await fr().evaluate((sel) => [...document.querySelectorAll('#sk-stage > [data-slide]')].findIndex((s) => s.querySelector(sel)), selector);
       if (idx < 0) return console.log(`SKIP ${state}: 사본 덱에 ${selector} 요소가 없음`);
       // 슬라이드 선택: 필름스트립 옵션이 있으면 그것을, 없으면(이전 레이아웃) 좌측 draggable 행을 쓴다.
-      const fs = page.locator('[data-testid="filmstrip"] [role="option"]');
-      await ((await fs.count()) ? fs : page.locator('[draggable="true"]')).nth(idx).click(); await sleep(700);
+      const strip = page.locator('[data-testid="filmstrip"] [role="option"]');
+      await ((await strip.count()) ? strip : page.locator('[draggable="true"]')).nth(idx).click(); await sleep(700);
       const el = fr().locator(`[data-active] ${selector}`).first();
       const box = await el.boundingBox().catch(() => null);
       if (!box) return console.log(`SKIP ${state}: 요소가 보이지 않음`);

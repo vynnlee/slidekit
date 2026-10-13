@@ -14,8 +14,8 @@ import { startPresentation } from "@/lib/present";
 import type { Comment, DeckEntry } from "@/lib/deck";
 
 const KEYS: [string, string][] = [
-  ["Cmd+S", "저장"], ["Cmd+Z", "실행 취소"], ["Shift+Cmd+Z", "다시 실행"], ["Delete", "선택 삭제"], ["Cmd+D", "복제"],
-  ["위 아래 방향키", "슬라이드 이동"], ["더블클릭", "텍스트 편집"], ["Enter", "편집 끝"], ["Esc", "선택 해제"], ["Tab", "다음 요소 선택"], ["Cmd+휠, Cmd+0", "확대 축소, 맞춤"], ["Cmd+\\", "패널 접기"], ["Cmd+E", "노트 접기"], ["Cmd+/", "단축키 안내"],
+  ["Cmd+S", "Save"], ["Cmd+Z", "Undo"], ["Shift+Cmd+Z", "Redo"], ["Delete", "Delete selection"], ["Cmd+D", "Duplicate"],
+  ["Up, Down", "Go to slide"], ["Double-click", "Edit text"], ["Enter", "Finish editing"], ["Esc", "Deselect"], ["Tab", "Select next element"], ["Cmd+Scroll, Cmd+0", "Zoom, fit"], ["Cmd+\\", "Toggle panels"], ["Cmd+E", "Toggle notes"], ["Cmd+/", "Shortcuts"],
 ];
 // 슬라이드 원문에서 노트(aside[data-notes])의 글자만 꺼낸다. 앞뒤 공백은 보기용으로만 뗀다.
 const noteOf = (html: string) => {
@@ -249,7 +249,7 @@ export function Editor({ id }: { id: string }) {
     if (!s) return;
     const body = { deck: deck.folder, slide: indexRef.current + 1, path: pathOf(s, sel), excerpt: (sel.textContent ?? "").trim().slice(0, 80), text: t };
     const r = await fetch("/api/comments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    if (!r.ok) return setErr("코멘트를 보내지 못했습니다");
+    if (!r.ok) return setErr("Could not send the comment");
     const { id } = await r.json();
     setComments((l) => (l.some((c) => c.id === id) ? l : [...l, { id, slide: body.slide, path: body.path, excerpt: body.excerpt, text: t, status: "open", createdAt: new Date().toISOString() }]));
     setTab("comments");
@@ -298,27 +298,27 @@ export function Editor({ id }: { id: string }) {
     go(`/present/${encodeURIComponent(deck.id)}`);
   };
   const back = async () => { if (await save()) go("/"); };
-  const label = status === "saving" ? "저장 중" : status === "error" ? "저장 실패" : dirty ? "저장 안 됨" : "저장됨";
+  const label = status === "saving" ? "Saving" : status === "error" ? "Save failed" : dirty ? "Unsaved" : "Saved";
 
   return (
     <>
       <Shell
         toolbar={
           <>
-            <Tooltip content="덱 목록" side="bottom"><Button variant="ghost" size="icon-compact" onClick={back}><ArrowLeft /></Button></Tooltip>
+            <Tooltip content="Decks" side="bottom"><Button variant="ghost" size="icon-compact" onClick={back}><ArrowLeft /></Button></Tooltip>
             <span className="truncate text-subtitle font-medium">{deck.title}</span>
             <span className="text-caption text-muted-foreground">{label}</span>
             {changed && (
               <>
-                <span className="text-caption text-muted-foreground">파일이 밖에서 바뀌었습니다</span>
-                <Button variant="ghost" size="compact" onClick={() => load(deck.folder, indexRef.current)}>불러오기</Button>
-                <Button variant="ghost" size="compact" onClick={() => save(true)}>덮어쓰기</Button>
+                <span className="text-caption text-muted-foreground">File changed outside the editor</span>
+                <Button variant="ghost" size="compact" onClick={() => load(deck.folder, indexRef.current)}>Reload</Button>
+                <Button variant="ghost" size="compact" onClick={() => save(true)}>Overwrite</Button>
               </>
             )}
             {err && <span className="text-caption text-muted-foreground">{err}</span>}
             <span className="ml-auto" />
-            {dirty && !changed && <Button variant="ghost" size="compact" onClick={() => save()}>저장</Button>}
-            <Button variant="primary" size="compact" leadingIcon={MonitorPlay} onClick={present}>발표 시작</Button>
+            {dirty && !changed && <Button variant="ghost" size="compact" onClick={() => save()}>Save</Button>}
+            <Button variant="primary" size="compact" leadingIcon={MonitorPlay} onClick={present}>Present</Button>
           </>
         }
         left={
@@ -351,17 +351,17 @@ export function Editor({ id }: { id: string }) {
             />
           )}
           <div className="flex h-7 items-center gap-1 px-3">
-            <span className="text-caption text-muted-foreground">노트</span>
+            <span className="text-caption text-muted-foreground">Notes</span>
             <span className="ml-auto" />
-            <Tooltip content="노트 접기 Cmd+E" side="top">
-              <Button aria-label="노트 접기" variant="ghost" size="icon-compact" onClick={() => setNotesOpen((v) => !v)}>{notesOpen ? <ChevronDown /> : <ChevronUp />}</Button>
+            <Tooltip content="Toggle notes Cmd+E" side="top">
+              <Button aria-label="Toggle notes" variant="ghost" size="icon-compact" onClick={() => setNotesOpen((v) => !v)}>{notesOpen ? <ChevronDown /> : <ChevronUp />}</Button>
             </Tooltip>
           </div>
           {notesOpen && (
             <div className="px-2 pb-2" style={{ height: notesH - 36 }}>
               <TextArea
                 className="h-full"
-                placeholder="마크다운으로 쓰는 발표자 노트"
+                placeholder="Speaker notes (Markdown)"
                 value={draft?.key === units[index]?.key ? draft.text : noteOf(units[index]?.html ?? "")}
                 onChange={(e) => { setDraft({ key: units[index].key, text: e.target.value }); notes(e.target.value); }}
               />
@@ -372,7 +372,7 @@ export function Editor({ id }: { id: string }) {
       </Shell>
       <Dialog open={help} onOpenChange={setHelp}>
         <DialogContent size="sm">
-          <DialogTitle>단축키</DialogTitle>
+          <DialogTitle>Shortcuts</DialogTitle>
           <div className="flex flex-col gap-1 pt-2">
             {KEYS.map(([k, v]) => (
               <div key={k} className="flex justify-between text-body"><span className="text-muted-foreground">{v}</span><span>{k}</span></div>

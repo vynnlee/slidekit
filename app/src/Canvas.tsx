@@ -221,7 +221,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   return (
     <div ref={box} className="flex h-full w-full overflow-auto">
       <div className="relative m-auto shrink-0 overflow-hidden rounded-lg bg-black shadow-surface-3" style={{ width: size.w * zoom, height: size.h * zoom }}>
-        {url && <iframe ref={frame} src={url} onLoad={attach} title="캔버스" className="absolute inset-0 h-full w-full border-0" />}
+        {url && <iframe ref={frame} src={url} onLoad={attach} title="Canvas" className="absolute inset-0 h-full w-full border-0" />}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div ref={hoverBox} className="absolute left-0 top-0 hidden border border-focus-ring/60" />
           <div ref={selBox} className="absolute left-0 top-0 hidden border-2 border-focus-ring" />
@@ -229,7 +229,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
             {here.map((c) => (
               <div key={c.id} data-path={c.path} className="pointer-events-auto absolute left-0 top-0 hidden">
                 <button
-                  aria-label="코멘트"
+                  aria-label="Comment"
                   onClick={() => p.onMarker(c.id)}
                   className={`block h-3 w-3 rounded-full ring-2 ring-black ${c.status === "done" ? "bg-muted-foreground" : "bg-focus-ring"}`}
                 />
@@ -238,20 +238,20 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
           </div>
           <div ref={bar} className="pointer-events-auto absolute left-0 top-0 hidden gap-0.5 rounded-lg bg-surface-3 p-0.5 shadow-surface-3">
             {p.sel && textual(p.sel) && (
-              <Tooltip content="편집" side="top"><Button aria-label="편집" variant="ghost" size="icon-compact" onClick={() => startEdit(p.sel as HTMLElement)}><Pencil /></Button></Tooltip>
+              <Tooltip content="Edit" side="top"><Button aria-label="Edit" variant="ghost" size="icon-compact" onClick={() => startEdit(p.sel as HTMLElement)}><Pencil /></Button></Tooltip>
             )}
-            <Tooltip content="코멘트" side="top"><Button aria-label="코멘트" variant="ghost" size="icon-compact" onClick={() => setComposing((v) => !v)}><MessageSquare /></Button></Tooltip>
-            <Tooltip content="삭제" side="top"><Button aria-label="삭제" variant="ghost" size="icon-compact" onClick={p.onDelete}><Trash2 /></Button></Tooltip>
+            <Tooltip content="Comment" side="top"><Button aria-label="Comment" variant="ghost" size="icon-compact" onClick={() => setComposing((v) => !v)}><MessageSquare /></Button></Tooltip>
+            <Tooltip content="Delete" side="top"><Button aria-label="Delete" variant="ghost" size="icon-compact" onClick={p.onDelete}><Trash2 /></Button></Tooltip>
           </div>
           {composing && p.sel && (
             <div ref={pop} className="pointer-events-auto absolute left-0 top-0 flex w-64 flex-col gap-1 rounded-lg bg-surface-3 p-1.5 shadow-surface-3">
-              <TextArea autoFocus rows={3} value={text} placeholder="코멘트" onChange={(e) => setText(e.target.value)}
+              <TextArea autoFocus rows={3} value={text} placeholder="Comment" onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => {
                   e.stopPropagation();
                   if (e.key === "Escape") setComposing(false);
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && text.trim()) send();
                 }} />
-              <Button variant="primary" size="compact" disabled={!text.trim()} onClick={send}>보내기</Button>
+              <Button variant="primary" size="compact" disabled={!text.trim()} onClick={send}>Send</Button>
             </div>
           )}
         </div>

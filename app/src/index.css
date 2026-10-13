@@ -117,6 +117,7 @@
     opacity: 0;}}}
 
 :root {
+    --canvas-bg: #0e0e0e; /* 편집기에서 슬라이드 뒤쪽 작업 영역 */
     --hover: rgb(0 0 0 / 0.04);
     --active: rgb(0 0 0 / 0.07);
     --selected: #D4D4D4;

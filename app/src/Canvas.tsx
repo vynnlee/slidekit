@@ -244,7 +244,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
 
   return (
     <div ref={box} className="flex h-full w-full overflow-auto">
-      <div className="relative m-auto shrink-0 overflow-hidden rounded-lg bg-black shadow-surface-3" style={{ width: size.w * zoom, height: size.h * zoom }}>
+      <div className="relative m-auto shrink-0 overflow-hidden rounded-lg bg-black shadow-surface-3 ring-1 ring-white/[0.06]" style={{ width: size.w * zoom, height: size.h * zoom }}>
         {url && <iframe ref={frame} src={url} onLoad={attach} title="Canvas" className="absolute inset-0 h-full w-full border-0" />}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div ref={hoverBox} className="absolute left-0 top-0 hidden border border-focus-ring/60" />

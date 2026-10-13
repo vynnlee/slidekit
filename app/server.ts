@@ -6,11 +6,11 @@ import { routes as commentRoutes } from "./comments";
 import { routes as editorRoutes } from "./editor-api";
 import { guardReq, guardRoutes } from "./guard";
 
-// 하위 명령: slidekit new|bundle|deploy <덱>. 해당 스크립트는 argv[2]를 덱 이름으로 읽는다.
+// 하위 명령: slidekit new|lint|bundle|deploy <덱>. 해당 스크립트는 argv[2]를 덱 이름으로 읽는다.
 const sub = process.argv[2];
-if (sub === "bundle" || sub === "deploy" || sub === "new") {
+if (sub === "bundle" || sub === "deploy" || sub === "new" || sub === "lint") {
   process.argv.splice(2, 1);
-  await import(sub === "bundle" ? "../bundler/bundle.ts" : sub === "deploy" ? "../deploy/deploy.ts" : "../engine/new.ts");
+  await import(sub === "bundle" ? "../bundler/bundle.ts" : sub === "deploy" ? "../deploy/deploy.ts" : sub === "new" ? "../engine/new.ts" : "../engine/lint.ts");
   process.exit(0);
 }
 

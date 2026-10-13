@@ -214,9 +214,14 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
 - 엔진 파일(`engine/slidekit.js`, `engine/slidekit.css`)과 `spec/SPEC.md`를 덱 작업 중에 고치지 않는다.
 - 비밀 값(비밀번호, 토큰)을 덱에 넣지 않는다.
 
+## 8-1. 본문 구성 요소
+
+엔진 CSS는 `h1`, `h2`, `p`, `.small`만 크기를 정한다. `h3`, 카드, 격자, 큰 숫자는 덱 `<style>`에서 만들고 크기는 px로, 색은 토큰으로 정한다. 카드는 `--sk-panel` 배경과 `--sk-line` 테두리만 쓴다. 수치와 예시 문구는 사용자가 준 값만 쓰고, 지어낸 값이면 슬라이드 안에 예시라고 밝힌다.
+
 ## 9. 만든 뒤 확인
 
-1. 구조 점검은 파일을 읽어서 한다.
+0. 먼저 `bun app/server.ts lint <이름>`을 실행한다. SPEC 위반(메타, 슬라이드 종류, 장 제목, stepper, 금지 문자, vw/vh, 래퍼, 이동 핸들러, 외부 리소스)을 한 줄씩 알려 준다. error가 0이어야 한다. warn은 이유를 확인한다.
+1. 구조 점검은 파일을 읽어서 한다(lint가 잡지 못하는 항목 위주).
    - `data-slide` 값이 네 종류뿐인지, `cover`와 `end`가 각각 최대 1개이고 첫 장과 마지막 장인지.
    - 모든 `chapter`에 `data-title`이 있고 `<h1>` 글자와 같은지.
    - `data-steps`가 있는 슬라이드마다 `SlideKit.stepper` 등록이 있고 다섯 메서드가 모두 있는지.

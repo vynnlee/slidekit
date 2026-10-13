@@ -4,6 +4,10 @@ type Screen = { availLeft: number; availTop: number; availWidth: number; availHe
 type Details = { screens: Screen[]; currentScreen: Screen };
 
 let cached: Details | null = null;
+let win: Window | null = null;
+
+// 이 페이지 세션에서 연 발표 창이 아직 열려 있는지. 연 적이 없으면 null.
+export const presentationOpen = () => (win ? !win.closed : null);
 
 // 권한이 이미 허용된 경우에만 미리 읽어 둔다. 클릭 뒤에 await를 거치면 창 열기가 차단될 수 있다.
 export async function warmScreens() {
@@ -24,7 +28,8 @@ export async function startPresentation(folder: string): Promise<string | null> 
     ? `left=${ext.availLeft},top=${ext.availTop},width=${ext.availWidth},height=${ext.availHeight}`
     : "popup,width=1280,height=720";
   const w = window.open(url, "slidekit-present", features);
-  if (!w) return "팝업이 차단되었습니다";
+  if (!w) return "Popup blocked";
+  win = w;
   if (ext) {
     // 전체화면은 사용자 입력이 필요해 실패할 수 있다. 실패하면 발표 창에서 F를 누른다.
     const t = setInterval(async () => {

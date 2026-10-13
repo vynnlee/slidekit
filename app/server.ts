@@ -5,6 +5,8 @@ import index from "./index.html";
 import { routes as commentRoutes } from "./comments";
 import { routes as editorRoutes } from "./editor-api";
 import { guardReq, guardRoutes } from "./guard";
+import { alreadyUp, openApp } from "./launch";
+import { createDeck } from "./decks-api";
 
 // 하위 명령: slidekit new|lint|bundle|deploy <덱>. 해당 스크립트는 argv[2]를 덱 이름으로 읽는다.
 const sub = process.argv[2];
@@ -16,6 +18,8 @@ if (sub === "bundle" || sub === "deploy" || sub === "new" || sub === "lint") {
 
 const root = join(import.meta.dir, "..");
 const port = Number(process.env.PORT ?? 3200);
+const url = `http://127.0.0.1:${port}`;
+if (await alreadyUp(port)) { console.log(`slidekit ${url} (already running)`); openApp(url); process.exit(0); }
 
 async function listDecks() {
   const dirs = await readdir(join(root, "decks"), { withFileTypes: true }).catch(() => []);
@@ -52,7 +56,7 @@ Bun.serve({
     "/": index,
     "/present/:id": index,
     "/edit/:id": index,
-    "/api/decks": async () => Response.json(await listDecks()),
+    "/api/decks": { GET: async () => Response.json(await listDecks()), POST: createDeck },
     ...commentRoutes,
     ...editorRoutes,
   }),
@@ -62,4 +66,5 @@ Bun.serve({
     return (await serveStatic(new URL(req.url).pathname)) ?? new Response("Not found", { status: 404 });
   },
 });
-console.log(`slidekit http://127.0.0.1:${port}`);
+console.log(`slidekit ${url}`);
+openApp(url);

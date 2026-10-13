@@ -1,47 +1,126 @@
-import { useEffect, useState } from "react";
-import { Presentation } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowDownUp, LayoutGrid, List, MonitorPlay, Pencil, Plus, Presentation, Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardGroup, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Field } from "@/components/ui/field";
+import { Tooltip } from "@/components/ui/tooltip";
+import { CommandMenu, CommandMenuDialog, CommandMenuEmpty, CommandMenuFooter, CommandMenuInput, CommandMenuList, type CommandMenuItemData } from "@/components/ui/command-menu";
 import { Shell } from "./Shell";
 import { go } from "./App";
 import type { DeckEntry } from "@/lib/deck";
 
+const SORTS = { date: "Date", title: "Name" } as const;
+type Sort = keyof typeof SORTS;
+const pref = <T extends string>(k: string, ok: readonly T[], d: T) => { const v = localStorage.getItem(k) as T; return ok.includes(v) ? v : d; };
+
 export function DeckList() {
   const [decks, setDecks] = useState<DeckEntry[] | null>(null);
-  useEffect(() => { fetch("/api/decks").then((r) => r.json()).then(setDecks); }, []);
+  const [view, setView] = useState(() => pref("slidekit:list-view", ["grid", "list"], "grid"));
+  const [sort, setSort] = useState<Sort>(() => pref("slidekit:list-sort", ["date", "title"], "date"));
+  const [palette, setPalette] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+  const [err, setErr] = useState("");
+
+  const load = () => fetch("/api/decks").then((r) => r.json()).then(setDecks);
+  useEffect(() => { load(); }, []);
+  useEffect(() => { localStorage.setItem("slidekit:list-view", view); localStorage.setItem("slidekit:list-sort", sort); }, [view, sort]);
+
+  const sorted = useMemo(() => {
+    const l = [...(decks ?? [])];
+    return sort === "title" ? l.sort((a, b) => a.title.localeCompare(b.title, "ko")) : l.sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+  }, [decks, sort]);
 
   const open = (d: DeckEntry) => go(`/edit/${encodeURIComponent(d.id)}`);
-  const sub = (d: DeckEntry) => [d.date, d.author].filter(Boolean).join("  ");
+  const sub = (d: DeckEntry) => [d.date, d.author].filter(Boolean).join("  ") || d.folder;
+  const cycleSort = () => setSort((s) => (s === "date" ? "title" : "date"));
+
+  const create = async () => {
+    const r = await fetch("/api/decks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: name.trim() }) });
+    const j = await r.json();
+    if (!r.ok) return setErr(j.error ?? "Could not create deck");
+    setCreating(false); setName(""); setErr("");
+    go(`/edit/${encodeURIComponent(j.id)}`);
+  };
+  const startCreate = () => { setPalette(false); setErr(""); setCreating(true); };
+
+  const items: CommandMenuItemData[] = useMemo(() => [
+    { value: "new", label: "New deck", icon: Plus, group: "Actions", onSelect: startCreate },
+    { value: "view", label: view === "grid" ? "View as list" : "View as grid", icon: view === "grid" ? List : LayoutGrid, group: "Actions", onSelect: () => setView(view === "grid" ? "list" : "grid") },
+    { value: "sort", label: `Sort by ${SORTS[sort === "date" ? "title" : "date"]}`, icon: ArrowDownUp, group: "Actions", onSelect: cycleSort },
+    ...sorted.flatMap((d): CommandMenuItemData[] => [
+      { value: `edit:${d.id}`, label: d.title, description: "Edit", icon: Pencil, group: "Decks", keywords: [d.folder, d.author ?? ""], onSelect: () => open(d) },
+      { value: `present:${d.id}`, label: d.title, description: "Presenter view", icon: MonitorPlay, group: "Decks", keywords: [d.folder, "present"], onSelect: () => go(`/present/${encodeURIComponent(d.id)}`) },
+    ]),
+  ], [sorted, view, sort]);
 
   return (
-    <Shell
-      toolbar={<span className="px-2 text-subtitle font-medium">slidekit</span>}
-      left={
-        <SidebarGroup>
-          <SidebarGroupLabel>덱</SidebarGroupLabel>
-          <SidebarMenu>
-            {decks?.map((d) => (
-              <SidebarMenuItem key={d.id}>
-                <SidebarMenuButton icon={Presentation} onClick={() => open(d)}>{d.title}</SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarGroup>
-      }
-    >
-      <div className="p-4">
-        {decks?.length === 0 && <p className="text-caption text-muted-foreground">decks 폴더에 덱이 없습니다</p>}
-        <CardGroup columns={3} separated>
-          {decks?.map((d) => (
-            <Card key={d.id} onClick={() => open(d)} label={d.title}>
-              <CardHeader>
-                <CardTitle>{d.title}</CardTitle>
-                <CardDescription>{sub(d) || d.folder}</CardDescription>
-              </CardHeader>
-            </Card>
-          ))}
-        </CardGroup>
-      </div>
-    </Shell>
+    <>
+      <Shell
+        toolbar={
+          <>
+            <span className="px-2 text-subtitle font-medium">slidekit</span>
+            <Button variant="ghost" size="compact" leadingIcon={Search} className="ml-auto text-muted-foreground" onClick={() => setPalette(true)}>Search ⌘K</Button>
+            <Button variant="ghost" size="compact" leadingIcon={ArrowDownUp} onClick={cycleSort}>{SORTS[sort]}</Button>
+            <Tooltip content={view === "grid" ? "View as list" : "View as grid"} side="bottom">
+              <Button variant="ghost" size="icon-compact" aria-label="Toggle view" onClick={() => setView(view === "grid" ? "list" : "grid")}>{view === "grid" ? <List /> : <LayoutGrid />}</Button>
+            </Tooltip>
+            <Button variant="primary" size="compact" leadingIcon={Plus} onClick={startCreate}>New deck</Button>
+          </>
+        }
+      >
+        <div className="p-4">
+          {decks?.length === 0 && <p className="text-caption text-muted-foreground">No decks yet</p>}
+          {view === "grid" ? (
+            <CardGroup columns={3} separated>
+              {sorted.map((d) => (
+                <Card key={d.id} onClick={() => open(d)} label={d.title}>
+                  <CardHeader>
+                    <CardTitle>{d.title}</CardTitle>
+                    <CardDescription>{sub(d)}</CardDescription>
+                  </CardHeader>
+                </Card>
+              ))}
+            </CardGroup>
+          ) : (
+            <ul className="flex flex-col">
+              {sorted.map((d) => (
+                <li key={d.id}>
+                  <button
+                    onClick={() => open(d)}
+                    className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-body outline-none hover:bg-hover focus-visible:ring-2 focus-visible:ring-focus-ring"
+                  >
+                    <Presentation className="size-3.5 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate">{d.title}</span>
+                    <span className="shrink-0 text-caption text-muted-foreground tabular-nums">{sub(d)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </Shell>
+
+      <CommandMenuDialog open={palette} onOpenChange={setPalette} title="Search" description="Open a deck or run an action">
+        <CommandMenu items={items}>
+          <CommandMenuInput placeholder="Deck name or action" />
+          <CommandMenuList />
+          <CommandMenuEmpty>No results</CommandMenuEmpty>
+          <CommandMenuFooter />
+        </CommandMenu>
+      </CommandMenuDialog>
+
+      <Dialog open={creating} onOpenChange={setCreating}>
+        <DialogContent size="sm">
+          <DialogTitle>New deck</DialogTitle>
+          <form className="flex flex-col gap-2 pt-2" onSubmit={(e) => { e.preventDefault(); if (name.trim()) create(); }}>
+            <Field autoFocus aria-label="Deck name" placeholder="deck-name" value={name} onChange={(e) => { setName(e.target.value); setErr(""); }} />
+            <p className={err ? "text-caption text-destructive" : "text-caption text-muted-foreground"}>{err || "Lowercase letters, digits and - only"}</p>
+            <Button type="submit" variant="primary" size="compact" disabled={!name.trim()} className="self-end">Create</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

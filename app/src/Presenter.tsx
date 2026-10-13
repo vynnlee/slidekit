@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, MonitorPlay, Pause, Play, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -8,14 +8,18 @@ import { SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuItem, SidebarM
 import { Shell } from "./Shell";
 import { go } from "./App";
 import { deckUrl, type DeckEntry, type Info, type Pos } from "@/lib/deck";
-import { startPresentation, warmScreens } from "@/lib/present";
+import { presentationOpen, startPresentation, warmScreens } from "@/lib/present";
 import { markdown } from "@/lib/markdown";
+import { cn } from "@/lib/utils";
 
 const VIEW_KEY = "slidekit:view";
-const VIEW_ITEMS = { current: "현재 슬라이드", next: "다음 슬라이드", notes: "노트", timer: "타이머", clock: "현재 시각", chapters: "장 위치" } as const;
+const NOTES_KEY = "slidekit:notes-size";
+const NOTES_MIN = 14, NOTES_MAX = 56;
+const VIEW_ITEMS = { current: "Current slide", next: "Next slide", notes: "Notes", timer: "Timer", clock: "Clock", chapters: "Chapters" } as const;
 type View = Record<keyof typeof VIEW_ITEMS, boolean>;
 const defaultView = Object.fromEntries(Object.keys(VIEW_ITEMS).map((k) => [k, true])) as View;
 
+const SHORTCUTS = [["← →", "Move"], ["F", "Full screen"], ["+ -", "Notes size"], ["PgUp PgDn", "Scroll notes"], ["T", "Start or pause timer"], ["R", "Reset timer"]];
 const pad = (n: number) => String(n).padStart(2, "0");
 const hms = (s: number) => `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
 const rid = () => Math.random().toString(36).slice(2, 8);
@@ -29,6 +33,10 @@ export function Presenter({ id }: { id: string }) {
   const [now, setNow] = useState(() => new Date());
   const [elapsed, setElapsed] = useState(0);
   const [running, setRunning] = useState(false);
+  const [full, setFull] = useState(() => !!document.fullscreenElement);
+  const [win, setWin] = useState<boolean | null>(presentationOpen);
+  const [notesSize, setNotesSize] = useState(() => Number(localStorage.getItem(NOTES_KEY)) || 20);
+  const notesRef = useRef<HTMLDivElement>(null);
 
   const curRef = useRef<HTMLIFrameElement>(null);
   const nextRef = useRef<HTMLIFrameElement>(null);
@@ -41,8 +49,15 @@ export function Presenter({ id }: { id: string }) {
   useEffect(() => { fetch("/api/decks").then((r) => r.json()).then((l: DeckEntry[]) => setDeck(l.find((d) => d.id === id) ?? null)); }, [id]);
   useEffect(() => { warmScreens(); }, []);
   useEffect(() => { localStorage.setItem(VIEW_KEY, JSON.stringify(view)); }, [view]);
+  useEffect(() => { localStorage.setItem(NOTES_KEY, String(notesSize)); }, [notesSize]);
   useEffect(() => {
-    const t = setInterval(() => { setNow(new Date()); if (running) setElapsed((e) => e + 1); }, 1000);
+    const on = () => setFull(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", on);
+    return () => document.removeEventListener("fullscreenchange", on);
+  }, []);
+  useEffect(() => { notesRef.current?.scrollTo({ top: 0 }); }, [pos.slide]);
+  useEffect(() => {
+    const t = setInterval(() => { setNow(new Date()); setWin(presentationOpen()); if (running) setElapsed((e) => e + 1); }, 1000);
     return () => clearInterval(t);
   }, [running]);
 
@@ -101,6 +116,15 @@ export function Presenter({ id }: { id: string }) {
       else if (e.key === "f" || e.key === "F") {
         document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
       }
+      else if (e.key === "+" || e.key === "=") setNotesSize((n) => Math.min(NOTES_MAX, n + 2));
+      else if (e.key === "-" || e.key === "_") setNotesSize((n) => Math.max(NOTES_MIN, n - 2));
+      else if (e.key === "t" || e.key === "T") setRunning((r) => !r);
+      else if (e.key === "r" || e.key === "R") { setRunning(false); setElapsed(0); }
+      else if (e.key === "PageDown" || e.key === "PageUp") {
+        e.preventDefault();
+        const el = notesRef.current;
+        el?.scrollBy({ top: (e.key === "PageDown" ? 1 : -1) * el.clientHeight * 0.8, behavior: "smooth" });
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -113,25 +137,29 @@ export function Presenter({ id }: { id: string }) {
   const chapterNo = slide?.chapter ?? 0;
   const chapter = info?.chapters[chapterNo - 1];
   const src = deckUrl(deck.folder, "?embed=1");
-  const frame = "aspect-video w-full overflow-hidden rounded-lg bg-black shadow-surface-3";
+  // 부모 칸(container-type:size)에 맞춰 16:9 상자를 가능한 크게 잡는다.
+const frame = "aspect-video w-[min(100cqw,calc(100cqh*16/9))] overflow-hidden rounded-lg bg-black shadow-surface-3";
+const cell = "flex min-h-0 min-w-0 items-center justify-center [container-type:size]";
 
   return (
     <Shell
+      bare={full}
       toolbar={
         <>
-          <Tooltip content="덱 목록" side="bottom"><Button variant="ghost" size="icon-compact" onClick={() => go("/")}><ArrowLeft /></Button></Tooltip>
+          <Tooltip content="All decks" side="bottom"><Button variant="ghost" size="icon-compact" aria-label="All decks" onClick={() => go("/")}><ArrowLeft /></Button></Tooltip>
           <span className="truncate text-subtitle font-medium">{deck.title}</span>
           <span className="ml-auto text-caption text-muted-foreground tabular-nums">{info ? `${pos.slide} / ${total}` : ""}</span>
           {err && <span className="text-caption text-muted-foreground">{err}</span>}
-          <Button variant="primary" size="compact" leadingIcon={MonitorPlay} onClick={present}>발표 시작</Button>
+          {win !== null && <span className="flex items-center gap-1.5 text-caption text-muted-foreground"><span className={`size-1.5 rounded-full ${win ? "bg-green-500" : "bg-red-500"}`} />{win ? "Presentation window open" : "Presentation window closed"}</span>}
+          <Button variant="primary" size="compact" leadingIcon={MonitorPlay} onClick={present}>Present</Button>
         </>
       }
       left={
         info && (
           <Tabs defaultValue="chapters">
             <TabsList className="mx-2 mt-2">
-              <TabItem value="chapters" label="장" />
-              <TabItem value="slides" label="슬라이드" />
+              <TabItem value="chapters" label="Chapters" />
+              <TabItem value="slides" label="Slides" />
             </TabsList>
             <TabPanel value="chapters">
               <SidebarMenu>
@@ -156,32 +184,38 @@ export function Presenter({ id }: { id: string }) {
       }
       right={
         <SidebarGroup className="p-0">
-          <SidebarGroupLabel>보기</SidebarGroupLabel>
+          <SidebarGroupLabel>View</SidebarGroupLabel>
           <div className="flex flex-col gap-1 px-2">
             {(Object.keys(VIEW_ITEMS) as (keyof View)[]).map((k) => (
               <Switch key={k} label={VIEW_ITEMS[k]} checked={view[k]} onToggle={() => setView((v) => ({ ...v, [k]: !v[k] }))} />
             ))}
           </div>
+          <SidebarGroupLabel className="mt-3">Shortcuts</SidebarGroupLabel>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 px-2 text-caption text-muted-foreground">
+            {SHORTCUTS.map(([k, d]) => (<Fragment key={k}><dt className="text-foreground">{k}</dt><dd>{d}</dd></Fragment>))}
+          </dl>
         </SidebarGroup>
       }
     >
-      <div className="flex h-full flex-col gap-4 p-4">
-        <div className="flex min-h-0 gap-4">
-          <div className={view.current ? "flex-[3]" : "hidden"}>
-            <div className={frame}><iframe ref={curRef} src={src} title="현재 슬라이드" className="pointer-events-none h-full w-full border-0" /></div>
+      <div className="flex h-full min-h-0 flex-col gap-3 p-4">
+        {(view.current || view.next) && (
+          <div className="flex min-h-0 flex-[3] gap-4">
+            <div className={cn(cell, view.current ? "flex-[5]" : "hidden")}>
+              <div className={frame}><iframe ref={curRef} src={src} title="Current slide" className="pointer-events-none h-full w-full border-0" /></div>
+            </div>
+            <div className={cn(cell, view.next ? "flex-[2]" : "hidden")}>
+              <div className={frame}><iframe ref={nextRef} src={src} title="Next slide" className="pointer-events-none h-full w-full border-0" /></div>
+            </div>
           </div>
-          <div className={view.next ? "flex-[2]" : "hidden"}>
-            <div className={frame}><iframe ref={nextRef} src={src} title="다음 슬라이드" className="pointer-events-none h-full w-full border-0" /></div>
-          </div>
-        </div>
+        )}
         {(view.timer || view.clock || (view.chapters && chapter)) && (
-          <div className="flex items-center gap-6 text-body tabular-nums">
-            {view.chapters && <span>{chapterNo > 0 && info ? `${chapterNo} / ${info.chapters.length}  ${chapter?.title}` : ""}</span>}
+          <div className="flex shrink-0 items-center gap-6 text-body tabular-nums">
+            {view.chapters && <span>{chapterNo > 0 && info ? `Chapter ${chapterNo} / ${info.chapters.length}  ${chapter?.title}` : ""}</span>}
             {view.timer && (
               <span className="ml-auto flex items-center gap-1">
                 {hms(elapsed)}
-                <Button variant="ghost" size="icon-compact" onClick={() => setRunning((r) => !r)}>{running ? <Pause /> : <Play />}</Button>
-                <Button variant="ghost" size="icon-compact" onClick={() => { setRunning(false); setElapsed(0); }}><RotateCcw /></Button>
+                <Tooltip content="Start or pause (T)" side="top"><Button variant="ghost" size="icon-compact" aria-label="Start or pause timer" onClick={() => setRunning((r) => !r)}>{running ? <Pause /> : <Play />}</Button></Tooltip>
+                <Tooltip content="Reset (R)" side="top"><Button variant="ghost" size="icon-compact" aria-label="Reset timer" onClick={() => { setRunning(false); setElapsed(0); }}><RotateCcw /></Button></Tooltip>
               </span>
             )}
             {view.clock && <span className={view.timer ? "" : "ml-auto"}>{`${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`}</span>}
@@ -189,8 +223,12 @@ export function Presenter({ id }: { id: string }) {
         )}
         {view.notes && (
           <div
-            className="min-h-0 flex-1 overflow-auto text-title text-muted-foreground [&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_h1]:font-semibold [&_h2]:font-semibold [&_h3]:font-semibold [&_li]:ml-5 [&_ol]:list-decimal [&_p+*]:mt-2 [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-hover [&_pre]:p-2 [&_strong]:text-foreground [&_ul]:list-disc"
-            dangerouslySetInnerHTML={{ __html: markdown(slide?.notes ?? "") }}
+            ref={notesRef}
+            tabIndex={0}
+            aria-label="Speaker notes"
+            style={{ fontSize: notesSize, lineHeight: 1.5 }}
+            className="min-h-0 flex-[2] overflow-auto rounded-lg text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-focus-ring [&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_h1]:font-semibold [&_h2]:font-semibold [&_h3]:font-semibold [&_li]:ml-5 [&_ol]:list-decimal [&_p+*]:mt-2 [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-hover [&_pre]:p-2 [&_strong]:text-foreground [&_ul]:list-disc"
+            dangerouslySetInnerHTML={{ __html: slide?.notes ? markdown(slide.notes) : "<p>No notes</p>" }}
           />
         )}
       </div>

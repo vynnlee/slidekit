@@ -1,0 +1,8 @@
+name = "slidekit-static"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+routes = [{ pattern = "static.vynnlee.com", custom_domain = true }]
+
+[[kv_namespaces]]
+binding = "DECKS"
+id = "REPLACE_WITH_KV_NAMESPACE_ID" # bunx wrangler kv namespace create DECKS 의 결과

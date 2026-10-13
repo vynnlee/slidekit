@@ -1,0 +1,7 @@
+# slidekit 배포
+
+1. Cloudflare 대시보드에서 토큰을 만든다(권한: Workers Scripts 편집, Workers KV Storage 편집, 계정 설정 읽기). 키체인 저장: `security add-generic-password -a $USER -s slidekit-cloudflare-token -w` (토큰은 프롬프트에 붙여넣기).
+2. `cd deploy/worker && bunx wrangler kv namespace create DECKS` 결과의 id를 `wrangler.toml`의 `REPLACE_WITH_KV_NAMESPACE_ID`에 넣는다. 토큰은 `export CLOUDFLARE_API_TOKEN=$(security find-generic-password -s slidekit-cloudflare-token -w)`로 셸에 올린다.
+3. 쿠키 서명 키 등록: `openssl rand -base64 32 | bunx wrangler secret put COOKIE_SECRET` (deploy/worker에서).
+4. vynnlee.com이 Cloudflare DNS에 있으면 Worker 배포 때 `static.vynnlee.com`이 자동 연결된다. 첫 배포: `bun run deploy --worker`
+5. 덱 올리기: 번들 후 `bun run deploy <덱>` (비밀번호 덱이면 비밀번호를 물어본다). 주소는 static.vynnlee.com/<덱>.

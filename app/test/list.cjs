@@ -4,7 +4,8 @@ const { chromium } = require(process.env.PW || 'playwright-core');
 const BASE = process.env.BASE || 'http://127.0.0.1:3200';
 const fs = require('fs'), path = require('path');
 const DECKS = path.join(__dirname, '..', '..', 'decks');
-const cleanup = () => { for (const d of fs.readdirSync(DECKS)) if (d.startsWith('zz-e2e')) fs.rmSync(path.join(DECKS, d), { recursive: true, force: true }); const tr = path.join(DECKS, '.trash'); if (fs.existsSync(tr)) for (const d of fs.readdirSync(tr)) if (d.startsWith('zz-e2e')) fs.rmSync(path.join(tr, d), { recursive: true, force: true }); };
+const cleanup = () => { for (const d of fs.readdirSync(DECKS)) if (d.startsWith('zz-e2e')) fs.rmSync(path.join(DECKS, d), { recursive: true, force: true }); const tr = path.join(DECKS, '.trash'); if (fs.existsSync(tr)) { for (const d of fs.readdirSync(tr)) if (d.startsWith('zz-e2e')) fs.rmSync(path.join(tr, d), { recursive: true, force: true }); try { fs.rmdirSync(tr); } catch {} } }; // 비면 .trash도 지운다
+process.on('exit', cleanup);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fail = 0;
 const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + name + (ok || extra === undefined ? '' : '  ' + JSON.stringify(extra))); };

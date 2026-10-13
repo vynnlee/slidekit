@@ -3,12 +3,12 @@
 const { chromium } = require(process.env.PW || 'playwright-core');
 const BASE = process.env.BASE || 'http://127.0.0.1:3200';
 // 편집 테스트가 건드리지 않도록 전용 덱(30장)을 만들어 쓰고 끝에 지운다.
-const DECK = 'zz-e2e-p', TOTAL = 30;
+const DECK = '_e2e-present', ID = 'e2e-present', TOTAL = 30;
 const fs = require('fs'), path = require('path');
 const DIR = path.join(__dirname, '..', '..', 'decks', DECK);
 fs.mkdirSync(DIR, { recursive: true });
-fs.writeFileSync(path.join(DIR, 'index.html'), `<!doctype html><html lang="en" data-slidekit="1"><head><meta charset="utf-8"><title>${DECK}</title>
-<script type="application/json" id="deck-meta">{ "title": "${DECK}", "id": "${DECK}" }</script>
+fs.writeFileSync(path.join(DIR, 'index.html'), `<!doctype html><html lang="en" data-slidekit="1"><head><meta charset="utf-8"><title>${ID}</title>
+<script type="application/json" id="deck-meta">{ "title": "${ID}", "id": "${ID}" }</script>
 <link rel="stylesheet" href="../../engine/slidekit.css"></head><body>
 <section data-slide="cover"><h1>Cover</h1><aside data-notes>Notes for cover</aside></section>
 ${Array.from({ length: TOTAL - 1 }, (_, i) => `<section data-slide="content"><h2>Slide ${i + 2}</h2></section>`).join('\n')}
@@ -36,7 +36,7 @@ const MOCKS = {
     await ctx.addInitScript(mock);
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errors.push(String(e)));
-    await page.goto(`${BASE}/present/${DECK}`);
+    await page.goto(`${BASE}/present/${ID}`);
     const counter = () => page.getByText(/^\d+ \/ \d+$/).first().innerText();
     check(`[${name}] 발표자 화면이 슬라이드 수를 읽는다`, await until(async () => (await counter()) === `1 / ${TOTAL}`), await counter().catch(() => null));
 
@@ -95,7 +95,7 @@ const MOCKS = {
     await pop.waitForFunction(() => location.hash === '#12'); await sleep(500);
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errors.push(String(e)));
-    await page.goto(`${BASE}/present/${DECK}`);
+    await page.goto(`${BASE}/present/${ID}`);
     const counter = () => page.getByText(/^\d+ \/ \d+$/).first().innerText();
     check('열려 있는 발표 창 위치(12)로 시작', await until(async () => (await counter()) === `12 / ${TOTAL}`), await counter().catch(() => null));
     await page.getByRole('switch', { name: 'Current slide' }).click();
@@ -115,7 +115,7 @@ const MOCKS = {
   {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
-    const open = async (q) => { const pg = await ctx.newPage(); await pg.goto(`${BASE}/present/${DECK}${q}`); return pg; };
+    const open = async (q) => { const pg = await ctx.newPage(); await pg.goto(`${BASE}/present/${ID}${q}`); return pg; };
     const cnt = (pg) => pg.getByText(/^\d+ \/ \d+$/).first().innerText();
     const p20 = await open('?from=20');
     check('?from=20이면 20번에서 시작', await until(async () => (await cnt(p20)) === `20 / ${TOTAL}`), await cnt(p20).catch(() => null));
@@ -137,7 +137,7 @@ const MOCKS = {
     await ctx.addInitScript(`localStorage.setItem('slidekit:view', '{bad'); localStorage.setItem('slidekit:notes-size', 'abc');`);
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errors.push(String(e)));
-    await page.goto(`${BASE}/present/${DECK}`);
+    await page.goto(`${BASE}/present/${ID}`);
     check('깨진 localStorage에도 화면이 뜬다', await until(async () => (await page.getByText(/^\d+ \/ \d+$/).count()) === 1));
     await ctx.close();
   }
@@ -146,7 +146,7 @@ const MOCKS = {
     const ctx = await browser.newContext();
     await ctx.route('**/api/decks', (r) => r.abort());
     const page = await ctx.newPage();
-    await page.goto(`${BASE}/present/${DECK}`);
+    await page.goto(`${BASE}/present/${ID}`);
     check('목록 요청 실패 표시', await until(async () => (await page.getByRole('alert').innerText()).includes('Could not load decks')));
     await ctx.close();
   }

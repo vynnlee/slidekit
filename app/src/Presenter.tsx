@@ -19,7 +19,7 @@ const VIEW_ITEMS = { current: "Current slide", next: "Next slide", notes: "Notes
 type View = Record<keyof typeof VIEW_ITEMS, boolean>;
 const defaultView = Object.fromEntries(Object.keys(VIEW_ITEMS).map((k) => [k, true])) as View;
 
-const SHORTCUTS = [["← →", "Move"], ["F", "Full screen"], ["+ -", "Notes size"], ["PgUp PgDn", "Scroll notes"], ["T", "Start or pause timer"], ["R", "Reset timer"]];
+const SHORTCUTS = [["← →", "Move"], ["F", "Full screen"], ["+ -", "Notes size"], ["PgUp PgDn", "Scroll notes"], ["T", "Start or pause timer"], ["R", "Reset timer"], ["B W", "Blank presentation (in its window)"]];
 const pad = (n: number) => String(n).padStart(2, "0");
 const hms = (s: number) => `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
 // 깨진 localStorage 값은 기본값으로 대체한다(흰 화면 방지).
@@ -167,7 +167,7 @@ export function Presenter({ id }: { id: string }) {
   const chapter = info?.chapters[chapterNo - 1];
   const src = deckUrl(deck.folder, "?embed=1");
     // 부모 칸의 폭과 화면 높이 58vh 안에서 16:9 상자를 가능한 크게 잡는다. 남는 높이는 노트가 쓴다.
-  const frame = "aspect-video w-[min(100cqw,calc(58vh*16/9))] overflow-hidden rounded-lg bg-black shadow-surface-3";
+  const frame = "aspect-video w-[min(100cqw,calc(var(--sh)*16/9))] overflow-hidden rounded-lg bg-black shadow-surface-3";
   const cell = "flex min-h-0 min-w-0 items-start justify-center [container-type:inline-size]";
 
   return (
@@ -231,16 +231,16 @@ export function Presenter({ id }: { id: string }) {
     >
       <div className="flex h-full min-h-0 flex-col gap-3 p-4">
         {/* 보기를 꺼도 iframe은 숨기기만 한다. 언마운트하면 방향키와 동기화가 끊긴다. */}
-        <div className={cn("flex shrink-0 gap-4", !view.current && !view.next && "hidden")}>
-          <div className={cn(cell, view.current ? "flex-[5]" : "hidden")}>
+        {/* 넓으면 [현재 | 다음] 아래에 상태 줄, 900px 이하에서는 현재 위, 다음과 상태 줄이 그 아래 나란히 */}
+        <div className="grid shrink-0 grid-cols-[5fr_2fr] gap-x-4 gap-y-3 [--sh:58vh] max-[900px]:grid-cols-2 max-[900px]:[--sh:34vh]">
+          <div className={cn(cell, view.current ? "max-[900px]:col-span-2" : "hidden")}>
             <div className={frame}><iframe ref={curRef} src={src} title="Current slide" className="pointer-events-none h-full w-full border-0" /></div>
           </div>
-          <div className={cn(cell, view.next ? "flex-[2]" : "hidden")}>
+          <div className={cn(cell, view.next ? "" : "hidden")}>
             <div className={frame}><iframe ref={nextRef} src={src} title="Next slide" className="pointer-events-none h-full w-full border-0" /></div>
           </div>
-        </div>
         {(view.timer || view.clock || (view.chapters && chapter)) && (
-          <div className="flex shrink-0 items-center gap-6 text-body tabular-nums">
+          <div className="col-span-2 flex items-center gap-6 text-body tabular-nums max-[900px]:col-span-1 max-[900px]:flex-col max-[900px]:items-end max-[900px]:justify-center max-[900px]:gap-1">
             {view.chapters && <span>{chapterNo > 0 && info ? `Chapter ${chapterNo} / ${info.chapters.length}  ${chapter?.title}` : ""}</span>}
             {view.timer && (
               <span className="ml-auto flex items-center gap-1">
@@ -252,6 +252,7 @@ export function Presenter({ id }: { id: string }) {
             {view.clock && <span className={view.timer ? "" : "ml-auto"}>{`${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`}</span>}
           </div>
         )}
+        </div>
         {view.notes && (
           <div
             ref={notesRef}

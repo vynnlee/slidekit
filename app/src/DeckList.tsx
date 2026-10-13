@@ -100,6 +100,16 @@ export function DeckList() {
   const [sort, setSort] = useState<Sort>(() => pref("slidekit:list-sort", ["date", "title"], "date"));
   const [palette, setPalette] = useState(false);
   const [trashView, setTrashView] = useState(false);
+  // 카드 열 수는 폭에서 정한다(카드 최소 폭 220px).
+  const body = useRef<HTMLDivElement>(null);
+  const [cols, setCols] = useState(3);
+  useEffect(() => {
+    const el = body.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setCols(Math.max(1, Math.min(6, Math.floor(e.contentRect.width / 240)))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [err, setErr] = useState("");
@@ -191,17 +201,17 @@ export function DeckList() {
         toolbar={
           <>
             <span className="px-2 text-subtitle font-medium">slidekit</span>
-            <Button variant="ghost" size="compact" leadingIcon={Search} className="ml-auto text-muted-foreground" onClick={() => setPalette(true)}>Search ⌘K</Button>
-            <Button variant="ghost" size="compact" leadingIcon={ArrowDownUp} onClick={cycleSort}>{SORTS[sort]}</Button>
-            <Button variant="ghost" size="compact" leadingIcon={Trash2} active={trashView} aria-pressed={trashView} onClick={() => setTrashView((t) => !t)}>Trash</Button>
+            <Button variant="ghost" size="compact" leadingIcon={Search} className="ml-auto text-muted-foreground" onClick={() => setPalette(true)}><span className="max-[640px]:sr-only">Search <span className="max-[900px]:hidden">⌘K</span></span></Button>
+            <Button variant="ghost" size="compact" leadingIcon={ArrowDownUp} onClick={cycleSort}><span className="max-[640px]:sr-only">{SORTS[sort]}</span></Button>
+            <Button variant="ghost" size="compact" leadingIcon={Trash2} active={trashView} aria-pressed={trashView} onClick={() => setTrashView((t) => !t)}><span className="max-[640px]:sr-only">Trash</span></Button>
             <Tooltip content={view === "grid" ? "View as list" : "View as grid"} side="bottom">
               <Button variant="ghost" size="icon-compact" aria-label="Toggle view" onClick={() => setView(view === "grid" ? "list" : "grid")}>{view === "grid" ? <List /> : <LayoutGrid />}</Button>
             </Tooltip>
-            <Button variant="primary" size="compact" leadingIcon={Plus} onClick={startCreate}>New deck</Button>
+            <Button variant="primary" size="compact" leadingIcon={Plus} onClick={startCreate}><span className="max-[640px]:sr-only">New deck</span></Button>
           </>
         }
       >
-        <div className="p-4">
+        <div ref={body} className="p-4">
           {trashView ? <TrashList onRestored={load} /> : <>
           {loadErr && (
             <p role="alert" className="flex items-center gap-2 text-caption text-muted-foreground">
@@ -211,7 +221,7 @@ export function DeckList() {
           {actionErr && <p role="alert" className="mb-2 text-caption text-destructive">{actionErr}</p>}
           {decks?.length === 0 && <p className="text-caption text-muted-foreground">No decks yet</p>}
           {view === "grid" ? (
-            <CardGroup columns={3} separated>
+            <CardGroup columns={cols} separated>
               {sorted.map((d) => (
                 <Card key={d.id} onClick={() => open(d)} label={d.title} className="group/deck" {...ctx(d)}>
                   {menu(d)}

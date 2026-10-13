@@ -161,10 +161,26 @@ const findAxe = () => {
         return r.width > 0 && e.scrollWidth > e.clientWidth + 1 && s.overflowX === 'visible' && s.textOverflow !== 'ellipsis' && e.children.length === 0 && (e.textContent || '').trim();
       }).map((e) => (e.getAttribute('aria-label') || e.textContent).trim().slice(0, 20));
       const hscroll = root.scrollWidth > root.clientWidth + 1;
+      // 컨트롤이 패널 경계를 넘거나 같은 행의 이웃과 겹치는지(256px 폭). 위치는 한 번에 읽는다.
+      const ab = root.getBoundingClientRect();
+      const cs = [...root.querySelectorAll('input,button,select,textarea,[role=radio],[role=combobox],[role=switch]')]
+        .map((e) => ({ e, r: e.getBoundingClientRect(), n: e.getAttribute('aria-label') || (e.textContent || '').trim().slice(0, 18) || e.tagName }))
+        .filter((c) => c.r.width > 0 && c.r.height > 0 && getComputedStyle(c.e).visibility !== 'hidden');
+      const over = cs.filter((c) => c.r.right > ab.right + 0.5 || c.r.left < ab.left - 0.5).map((c) => `${c.n}(${Math.round(c.r.left)}~${Math.round(c.r.right)})`);
+      const overlap = [];
+      for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) {
+        const a = cs[i], b = cs[j];
+        if (a.e.contains(b.e) || b.e.contains(a.e)) continue;
+        const sameRow = Math.abs((a.r.top + a.r.height / 2) - (b.r.top + b.r.height / 2)) < Math.min(a.r.height, b.r.height) / 2;
+        const gap = Math.max(a.r.left, b.r.left) - Math.min(a.r.right, b.r.right);
+        if (sameRow && gap < -0.5) overlap.push(`${a.n} x ${b.n}`);
+      }
       [root.style.width, root.style.minWidth, root.style.maxWidth] = old;
-      return { clipped: [...new Set(clipped)], hscroll };
+      return { clipped: [...new Set(clipped)], hscroll, over: [...new Set(over)], overlap: [...new Set(overlap)] };
     });
     check('중간', 'width', state, '256px 폭에서 가로 스크롤이 없다', !w.hscroll);
+    check('중간', 'width', state, '256px 폭에서 컨트롤이 패널 경계 밖으로 나가지 않는다', w.over.length === 0, w.over.slice(0, 6));
+    check('중간', 'width', state, '256px 폭에서 같은 행의 컨트롤끼리 겹치지 않는다', w.overlap.length === 0, w.overlap.slice(0, 6));
     check('중간', 'width', state, '256px 폭에서 텍스트가 말줄임 없이 잘리지 않는다', w.clipped.length === 0, w.clipped);
     // 대비 4.5:1
     const axePath = findAxe();

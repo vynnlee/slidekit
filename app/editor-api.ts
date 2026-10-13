@@ -24,7 +24,7 @@ export const routes = {
       const { folder } = req.params;
       if (!folderOk(folder)) return bad("deck", 404);
       if (readonly.has(folder)) return bad("read-only deck", 403);
-      // 테스트 서버가 실제 덱을 고치지 못하게 한다: SLIDEKIT_READONLY_DECKS=폴더,폴더
+      // 테스트 서버 전용 가드: SLIDEKIT_READONLY_DECKS=폴더,폴더를 주고 띄운 서버만 막는다. 사용자가 쓰는 서버에는 설정하지 않는다.
       if ((process.env.SLIDEKIT_READONLY_DECKS ?? "").split(",").some((f) => f.trim() === folder)) return bad("read-only deck", 403);
       const b = (await req.json().catch(() => null)) as { source?: unknown; base?: unknown; force?: unknown; slideMap?: unknown } | null;
       if (!b || typeof b.source !== "string") return bad("source");

@@ -71,8 +71,13 @@ const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' 
     const src = fs.readFileSync(file, 'utf8');
     const title = (await fr().locator('[data-active] h1, [data-active] h2').first().textContent()).trim();
     fs.writeFileSync(file, src.replace(new RegExp(`(<h[12][^>]*>)${title}<`), '$1E2E 외부 수정<')); // <title>이 아니라 제목 요소를 고친다
-    await page.waitForFunction(() => { const f = document.querySelector('iframe[title="Canvas"]'); return f && f.contentDocument && /E2E 외부 수정/.test(f.contentDocument.body.textContent); }, null, { timeout: 25000 })
-      .then(() => check('deck-changed로 캔버스가 새로고침', true), async () => check('deck-changed로 캔버스가 새로고침', false, { fileHas: fs.readFileSync(file, 'utf8').includes('E2E 외부 수정'), canvas: await page.evaluate(() => { const f = document.querySelector('iframe[title="Canvas"]'); return f && f.contentDocument ? f.contentDocument.body.textContent.replace(/\s+/g, ' ').slice(0, 120) : null; }), title, unsaved: await page.getByText('Unsaved').count(), body: (await page.locator('body').innerText()).slice(0, 300) }));
+    // 캔버스가 갈아끼워지는 동안 평가가 실패할 수 있어 예외를 무시하고 25초까지 다시 본다.
+    let refreshed = false;
+    for (let i = 0; i < 80 && !refreshed; i++) {
+      refreshed = await page.evaluate(() => { const f = document.querySelector('iframe[title="Canvas"]'); return !!(f && f.contentDocument && /E2E 외부 수정/.test(f.contentDocument.body.textContent)); }).catch(() => false);
+      if (!refreshed) await sleep(300);
+    }
+    check('deck-changed로 캔버스가 새로고침', refreshed, { title, fileHas: fs.readFileSync(file, 'utf8').includes('E2E 외부 수정') });
     check('페이지 오류 없음', errors.length === 0, errors);
   } catch (e) {
     fail++; console.log('FAIL 예외 ' + e);

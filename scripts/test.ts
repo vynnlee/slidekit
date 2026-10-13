@@ -3,7 +3,7 @@
 // 무거운 작업이라 /tmp/slidekit-heavy.lock을 한 번 잡고 모든 단계를 순서대로 돈다.
 // 실제 덱은 읽기 전용이다. 덱을 고치는 테스트는 scripts/lib/test-deck.cjs의 사본(decks/_e2e-*/)만 쓴다.
 // 단계 전후로 실제 덱(decks/_* 제외)의 내용 해시를 비교해 달라졌으면 그 단계를 실패로 보고만 한다(복원하지 않는다).
-import { globSync, mkdirSync, readFileSync, readdirSync, rmdirSync } from "node:fs";
+import { globSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
@@ -90,6 +90,9 @@ async function ensure(kind: "app" | "dry" | "static") {
   servers.set(kind, () => p.kill());
   await waitUp(dry ? DRY : APP);
 }
+
+// 이전 실행이 중단되어 남은 export 테스트 덱(qa-exp-*)만 지운다. 이름을 _로 못 바꾸는 테스트 전용 덱이다.
+for (const d of globSync(join(root, "decks/qa-exp-*"))) rmSync(d, { recursive: true, force: true });
 
 // 실제 덱 지문: decks/ 아래에서 이름이 _로 시작하는 최상위 항목(테스트 사본)과 .trash, 임시 파일을 뺀 모든 파일의 경로와 내용.
 const decksDir = join(root, "decks");

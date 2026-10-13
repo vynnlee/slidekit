@@ -34,6 +34,8 @@ const load = (deck: string): Comment[] => {
 // ponytail: 동기 쓰기. 단일 스레드라 경합이 없고, 코멘트 규모에서 충분하다.
 const save = (deck: string, list: Comment[]) => writeFileSync(file(deck), JSON.stringify(list, null, 2) + "\n");
 
+// 제어문자(줄바꿈 포함)를 공백으로 바꾸고 길이를 자른다. 채널로 가는 값이라 틀을 위조하지 못하게 한다.
+const clip = (v: unknown, n: number) => String(v ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, n);
 const bad = (msg: string, status = 400) => Response.json({ error: msg }, { status });
 const body = async (req: Request) => (await req.json().catch(() => null)) as Record<string, unknown> | null;
 
@@ -60,12 +62,12 @@ export const routes = {
       if (!b || !validDeck(b.deck)) return bad("deck");
       const slide = Number(b.slide);
       if (!Number.isInteger(slide) || slide < 1) return bad("slide");
-      if (typeof b.text !== "string" || !b.text.trim()) return bad("text");
+      if (typeof b.text !== "string" || !b.text.trim() || b.text.length > 2000) return bad("text");
       const comment: Comment = {
         id: crypto.randomUUID().slice(0, 8),
         slide,
-        path: String(b.path ?? ""),
-        excerpt: String(b.excerpt ?? "").slice(0, 80),
+        path: clip(b.path, 200),
+        excerpt: clip(b.excerpt, 80),
         text: b.text,
         status: "open",
         createdAt: new Date().toISOString(),
@@ -79,7 +81,7 @@ export const routes = {
     POST: async (req: Request & { params: { id: string } }) => {
       const b = await body(req);
       if (!b || !validDeck(b.deck)) return bad("deck");
-      if (typeof b.reply !== "string") return bad("reply");
+      if (typeof b.reply !== "string" || b.reply.length > 2000) return bad("reply");
       const list = load(b.deck);
       const comment = list.find((c) => c.id === req.params.id);
       if (!comment) return bad("not found", 404);

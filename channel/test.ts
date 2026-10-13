@@ -26,7 +26,7 @@ try {
   assert(names === "get_pending,reply", names);
   await Bun.sleep(500); // SSE 구독 대기
 
-  const { id } = await (await fetch(`${url}/api/comments`, { method: "POST", body: JSON.stringify({ deck, slide: 1, path: "h1", excerpt: "x", text: "제목 키워줘" }) })).json() as any;
+  const { id } = await (await fetch(`${url}/api/comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deck, slide: 1, path: "h1", excerpt: "x", text: "제목 키워줘" }) })).json() as any;
   await Bun.sleep(500);
   const n = got.find((g) => g.method === "notifications/claude/channel");
   assert(n?.params.meta.comment_id === id && n.params.content.includes("제목 키워줘"), JSON.stringify(got));

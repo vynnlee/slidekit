@@ -3,6 +3,7 @@
 // 사용: UP=3220 PORT=3221 bun app/preview-proxy.ts (127.0.0.1에만 바인딩)
 const up = Number(process.env.UP ?? 3220);
 const port = Number(process.env.PORT ?? 3221);
+const allowedHosts = new Set(["127.0.0.1", "localhost", "mac-cloud.tail5a652b.ts.net"]);
 const local = `127.0.0.1:${up}`;
 
 type Data = { url: string; upstream?: WebSocket; queue: (string | Buffer)[] };
@@ -12,6 +13,9 @@ Bun.serve<Data>({
   port,
   async fetch(req, server) {
     const u = new URL(req.url);
+    // Origin을 지우기 전에 확인한다. 다른 사이트가 이 프록시를 통해 앱 API를 부르지 못하게 한다.
+    const host = req.headers.get("host") ?? "", origin = req.headers.get("origin");
+    if (!allowedHosts.has(host.replace(/:\d+$/, "")) || (origin && new URL(origin).host !== host)) return new Response("forbidden", { status: 403 });
     if (req.headers.get("upgrade") === "websocket") {
       return server.upgrade(req, { data: { url: `ws://${local}${u.pathname}${u.search}`, queue: [] } })
         ? undefined

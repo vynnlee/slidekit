@@ -4,6 +4,7 @@ import { readdir } from "node:fs/promises";
 import index from "./index.html";
 import { routes as commentRoutes } from "./comments";
 import { routes as editorRoutes } from "./editor-api";
+import { guardReq, guardRoutes } from "./guard";
 
 // 하위 명령: slidekit bundle|deploy <덱>. 해당 스크립트는 argv[2]를 덱 이름으로 읽는다.
 const sub = process.argv[2];
@@ -34,7 +35,9 @@ async function listDecks() {
 
 // 덱과 엔진만 정적으로 서빙한다. 덱 iframe이 ../../engine/ 상대 경로를 쓰므로 저장소 구조를 유지한다.
 async function serveStatic(pathname: string) {
-  const rel = normalize(decodeURIComponent(pathname));
+  let rel: string;
+  try { rel = normalize(decodeURIComponent(pathname)); } catch { return null; }
+  if (rel.includes("\0") || rel.split(sep).some((s) => s.startsWith("."))) return null; // 점 파일과 임시 파일 제외
   const top = rel.split(sep).filter(Boolean)[0];
   if (top !== "decks" && top !== "engine") return null;
   const file = Bun.file(join(root, rel));
@@ -44,15 +47,18 @@ async function serveStatic(pathname: string) {
 Bun.serve({
   hostname: "127.0.0.1", // 0.0.0.0은 LAN 전체에 열린다
   port,
-  routes: {
+  maxRequestBodySize: 8 << 20, // 덱 원문(이미지 포함 가능)보다 넉넉하게
+  routes: guardRoutes({
     "/": index,
     "/present/:id": index,
     "/edit/:id": index,
     "/api/decks": async () => Response.json(await listDecks()),
     ...commentRoutes,
     ...editorRoutes,
-  },
+  }),
   async fetch(req) {
+    const denied = guardReq(req);
+    if (denied && req.method === "GET") return denied;
     return (await serveStatic(new URL(req.url).pathname)) ?? new Response("Not found", { status: 404 });
   },
 });

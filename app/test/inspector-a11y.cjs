@@ -140,6 +140,38 @@ const findAxe = () => {
     check('높음', 'nofocus', state, '키보드로 탭에 도달하면 포커스 링 요소가 탭 바깥에 보인다', !!g && g.left >= 0.5 && g.top >= 0.5 && g.right >= 0.5 && g.bottom >= 0.5, g);
   };
 
+  // 필름스트립(section[data-testid=filmstrip]): listbox 이름과 방향, 옵션 이름과 선택, roving tabindex, 화살표와 Home/End, 포커스 링.
+  const filmstrip = async () => {
+    const root = page.locator('[data-testid="filmstrip"]');
+    if (!(await root.count())) return console.log('SKIP 필름스트립: 이 레이아웃에는 없음');
+    const lb = root.locator('[role="listbox"]');
+    check('높음', 'name', 'filmstrip', '필름스트립에 이름 있는 listbox가 있다(스크롤 영역 이름)', (await lb.count()) === 1 && !!(await lb.getAttribute('aria-label')), await lb.getAttribute('aria-label'));
+    check('낮음', 'name', 'filmstrip', 'listbox 방향이 horizontal이다', (await lb.getAttribute('aria-orientation')) === 'horizontal');
+    const opts = lb.locator('[role="option"]');
+    const n = await opts.count();
+    const info = await opts.evaluateAll((l) => l.map((e) => ({ name: e.getAttribute('aria-label'), sel: e.getAttribute('aria-selected'), tab: e.tabIndex })));
+    check('높음', 'name', 'filmstrip', '모든 옵션에 이름(aria-label)이 있다', info.every((i) => !!i.name), info.filter((i) => !i.name).length);
+    check('중간', 'name', 'filmstrip', '선택된 옵션이 정확히 하나다(aria-selected)', info.filter((i) => i.sel === 'true').length === 1, info.filter((i) => i.sel === 'true').length);
+    check('중간', 'order', 'filmstrip', 'roving tabindex: tabindex 0인 옵션은 선택된 하나뿐이다', info.filter((i) => i.tab === 0).length === 1 && info.find((i) => i.tab === 0)?.sel === 'true', info.filter((i) => i.tab === 0).length);
+    if (n < 3) return;
+    const selIdx = () => opts.evaluateAll((l) => l.findIndex((e) => e.getAttribute('aria-selected') === 'true'));
+    const focusSel = async () => { await opts.nth(await selIdx()).focus(); await sleep(150); };
+    await page.keyboard.press('Shift'); // 키보드 모달리티
+    await opts.nth(0).click(); await sleep(400); await focusSel();
+    await page.keyboard.press('ArrowRight'); await sleep(400);
+    check('높음', 'value', 'filmstrip', '→는 다음 슬라이드를 선택하고 포커스가 함께 이동한다', (await selIdx()) === 1 && (await opts.nth(1).evaluate((e) => e === document.activeElement)), await selIdx());
+    await page.keyboard.press('ArrowLeft'); await sleep(400);
+    check('높음', 'value', 'filmstrip', '←는 이전 슬라이드를 선택한다', (await selIdx()) === 0, await selIdx());
+    await page.keyboard.press('End'); await sleep(500);
+    check('중간', 'value', 'filmstrip', 'End는 마지막 슬라이드를 선택한다', (await selIdx()) === n - 1, [await selIdx(), n]);
+    await page.keyboard.press('Home'); await sleep(500);
+    check('중간', 'value', 'filmstrip', 'Home은 첫 슬라이드를 선택한다', (await selIdx()) === 0, await selIdx());
+    const ring = await opts.nth(0).evaluate((e) => { let n = e, ok = false; for (let k = 0; k < 3 && n && !ok; k++, n = n.parentElement) { const s = getComputedStyle(n); ok = (s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) > 0) || (!!s.boxShadow && s.boxShadow !== 'none') || /ring|focus/.test(String(n.className)); } return ok; });
+    check('높음', 'nofocus', 'filmstrip', '포커스된 옵션에 포커스 링이 있다', ring);
+    const scroll = await root.evaluate((e) => { const vp = e.querySelector('[data-radix-scroll-area-viewport]') || e; return { hOverflow: vp.scrollWidth > vp.clientWidth, pageH: document.documentElement.scrollWidth > document.documentElement.clientWidth }; });
+    check('중간', 'width', 'filmstrip', '필름스트립이 페이지 가로 스크롤을 만들지 않는다', !scroll.pageH, scroll);
+  };
+
   const audit = async (state) => {
     const cs = await controls();
     const unnamed = cs.filter((c) => !c.name).map((c) => c.tag + (c.role ? `[${c.role}]` : ''));
@@ -275,7 +307,9 @@ const findAxe = () => {
     const pickBy = async (state, selector) => {
       const idx = await fr().evaluate((sel) => [...document.querySelectorAll('#sk-stage > [data-slide]')].findIndex((s) => s.querySelector(sel)), selector);
       if (idx < 0) return console.log(`SKIP ${state}: 사본 덱에 ${selector} 요소가 없음`);
-      await page.locator('[draggable="true"]').nth(idx).click(); await sleep(700);
+      // 슬라이드 선택: 필름스트립 옵션이 있으면 그것을, 없으면(이전 레이아웃) 좌측 draggable 행을 쓴다.
+      const fs = page.locator('[data-testid="filmstrip"] [role="option"]');
+      await ((await fs.count()) ? fs : page.locator('[draggable="true"]')).nth(idx).click(); await sleep(700);
       const el = fr().locator(`[data-active] ${selector}`).first();
       const box = await el.boundingBox().catch(() => null);
       if (!box) return console.log(`SKIP ${state}: 요소가 보이지 않음`);
@@ -285,6 +319,14 @@ const findAxe = () => {
     };
     await pickBy('image', 'img');
     await pickBy('container', 'div > div');
+
+    // 필름스트립과 1024px 폭
+    await filmstrip();
+    await page.setViewportSize({ width: 1024, height: 768 }); await sleep(600);
+    const narrow = await page.evaluate(() => ({ page: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1, strip: (() => { const e = document.querySelector('[data-testid="filmstrip"]'); if (!e) return null; const r = e.getBoundingClientRect(); return r.right <= window.innerWidth + 1 && r.left >= -1; })() }));
+    check('중간', 'width', '1024px', '1024px 폭에서 페이지에 가로 스크롤이 없다', !narrow.page, narrow);
+    check('중간', 'width', '1024px', '1024px 폭에서 필름스트립이 화면 안에 있다', narrow.strip !== false, narrow);
+    await page.setViewportSize({ width: 1440, height: 900 }); await sleep(500);
 
     // 4) 코멘트 탭
     await page.getByRole('tab', { name: /^Comments/ }).click(); await sleep(300);

@@ -41,11 +41,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       await sleep(300);
       return true;
     };
+    // 다음 슬라이드로: 필름스트립(role=option)이 있으면 다음 항목을 누르고, 없으면 편집기 전역 아래 화살표를 쓴다.
+    const nextSlide = async () => {
+      const opts = page.locator('[data-testid="filmstrip"] [role="option"]');
+      const n = await opts.count();
+      if (!n) return page.keyboard.press('ArrowDown');
+      const sel = await opts.evaluateAll((l) => l.findIndex((e) => e.getAttribute('aria-selected') === 'true'));
+      await opts.nth(Math.min(sel + 1, n - 1)).click();
+    };
     // 슬라이드를 넘기며 selector가 있는 슬라이드를 찾아 클릭(최대 30장).
     const find = async (name, sel) => {
       for (let i = 0; i < 30; i++) {
         if (await pick(sel)) return true;
-        await page.keyboard.press('ArrowRight');
+        await nextSlide();
         await sleep(300);
       }
       console.warn(`WARN ${name}: 선택할 요소(${sel})가 없어 건너뜀`);

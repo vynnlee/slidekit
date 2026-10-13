@@ -1,0 +1,107 @@
+import { join } from "node:path";
+import { existsSync, readFileSync, watch, writeFileSync } from "node:fs";
+
+const decksDir = join(import.meta.dir, "..", "decks");
+
+export type Comment = {
+  id: string;
+  slide: number;
+  path: string;
+  excerpt: string;
+  text: string;
+  status: "open" | "done";
+  reply?: string;
+  createdAt: string;
+  repliedAt?: string;
+};
+
+// SSE 구독자. 이벤트는 comment, reply, deck-changed.
+const clients = new Set<ReadableStreamDefaultController<string>>();
+function emit(event: string, data: unknown) {
+  const chunk = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const c of clients) {
+    try { c.enqueue(chunk); } catch { clients.delete(c); }
+  }
+}
+
+// 덱 폴더 이름만 허용한다(경로 이탈 방지).
+const validDeck = (d: unknown): d is string =>
+  typeof d === "string" && /^[\w.-]+$/.test(d) && d !== "." && d !== ".." && existsSync(join(decksDir, d));
+const file = (deck: string) => join(decksDir, deck, "comments.json");
+const load = (deck: string): Comment[] => {
+  try { return JSON.parse(readFileSync(file(deck), "utf8")); } catch { return []; }
+};
+// ponytail: 동기 쓰기. 단일 스레드라 경합이 없고, 코멘트 규모에서 충분하다.
+const save = (deck: string, list: Comment[]) => writeFileSync(file(deck), JSON.stringify(list, null, 2) + "\n");
+
+const bad = (msg: string, status = 400) => Response.json({ error: msg }, { status });
+const body = async (req: Request) => (await req.json().catch(() => null)) as Record<string, unknown> | null;
+
+// decks/ 변경 감지. comments.json 변경은 무시하고 덱별로 디바운스한다.
+const timers = new Map<string, Timer>();
+try {
+  watch(decksDir, { recursive: true }, (_e, name) => {
+    if (!name) return;
+    const [deck, ...rest] = name.split(/[\\/]/);
+    if (!rest.length || rest.at(-1) === "comments.json") return;
+    clearTimeout(timers.get(deck));
+    timers.set(deck, setTimeout(() => { timers.delete(deck); emit("deck-changed", { deck }); }, 250));
+  });
+} catch {}
+
+export const routes = {
+  "/api/comments": {
+    GET: (req: Request) => {
+      const deck = new URL(req.url).searchParams.get("deck");
+      return validDeck(deck) ? Response.json(load(deck)) : bad("deck");
+    },
+    POST: async (req: Request) => {
+      const b = await body(req);
+      if (!b || !validDeck(b.deck)) return bad("deck");
+      const slide = Number(b.slide);
+      if (!Number.isInteger(slide) || slide < 1) return bad("slide");
+      if (typeof b.text !== "string" || !b.text.trim()) return bad("text");
+      const comment: Comment = {
+        id: crypto.randomUUID().slice(0, 8),
+        slide,
+        path: String(b.path ?? ""),
+        excerpt: String(b.excerpt ?? "").slice(0, 80),
+        text: b.text,
+        status: "open",
+        createdAt: new Date().toISOString(),
+      };
+      save(b.deck, [...load(b.deck), comment]);
+      emit("comment", { deck: b.deck, comment });
+      return Response.json({ id: comment.id });
+    },
+  },
+  "/api/comments/:id/reply": {
+    POST: async (req: Request & { params: { id: string } }) => {
+      const b = await body(req);
+      if (!b || !validDeck(b.deck)) return bad("deck");
+      if (typeof b.reply !== "string") return bad("reply");
+      const list = load(b.deck);
+      const comment = list.find((c) => c.id === req.params.id);
+      if (!comment) return bad("not found", 404);
+      Object.assign(comment, { status: "done", reply: b.reply, repliedAt: new Date().toISOString() });
+      save(b.deck, list);
+      emit("reply", { deck: b.deck, comment });
+      return Response.json({ ok: true });
+    },
+  },
+  "/api/events": (req: Request, server: { timeout(r: Request, s: number): void }) => {
+    server.timeout(req, 0); // SSE 연결이 유휴로 끊기지 않게 한다
+    let ctrl!: ReadableStreamDefaultController<string>;
+    let ping: Timer;
+    const stream = new ReadableStream<string>({
+      start(c) {
+        ctrl = c;
+        clients.add(c);
+        c.enqueue(": connected\n\n");
+        ping = setInterval(() => { try { c.enqueue(": ping\n\n"); } catch {} }, 15000);
+      },
+      cancel() { clients.delete(ctrl); clearInterval(ping); },
+    });
+    return new Response(stream, { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } });
+  },
+};

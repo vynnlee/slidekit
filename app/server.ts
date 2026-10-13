@@ -2,6 +2,7 @@
 import { join, normalize, sep } from "node:path";
 import { readdir } from "node:fs/promises";
 import index from "./index.html";
+import { routes as commentRoutes } from "./comments";
 
 const root = join(import.meta.dir, "..");
 const port = Number(process.env.PORT ?? 3200);
@@ -38,6 +39,7 @@ Bun.serve({
     "/": index,
     "/present/:id": index,
     "/api/decks": async () => Response.json(await listDecks()),
+    ...commentRoutes,
   },
   async fetch(req) {
     return (await serveStatic(new URL(req.url).pathname)) ?? new Response("Not found", { status: 404 });

@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "slidekit": { "command": "bun", "args": ["./channel/index.ts"] }
+  }
+}

@@ -8,11 +8,13 @@ import { guardHost, guardRoutes } from "./guard";
 import { alreadyUp, openApp } from "./launch";
 import { createDeck } from "./decks-api";
 
-// 하위 명령: slidekit new|lint|pdf|bundle|deploy <덱>. 해당 스크립트는 argv[2]를 덱 이름으로 읽는다.
+// 하위 명령: slidekit new|lint|pdf|doctor|bundle|deploy <덱>. 해당 스크립트는 argv[2]를 덱 이름으로 읽는다.
 const sub = process.argv[2];
-if (sub === "bundle" || sub === "deploy" || sub === "new" || sub === "lint" || sub === "pdf") {
+const SUBS: Record<string, string> = { new: "../engine/new.ts", lint: "../engine/lint.ts", pdf: "../engine/pdf.ts", doctor: "../engine/doctor.ts", bundle: "../bundler/bundle.ts", deploy: "../deploy/deploy.ts" };
+if (sub && sub in SUBS) {
   process.argv.splice(2, 1);
-  await import(sub === "bundle" ? "../bundler/bundle.ts" : sub === "deploy" ? "../deploy/deploy.ts" : sub === "new" ? "../engine/new.ts" : sub === "pdf" ? "../engine/pdf.ts" : "../engine/lint.ts");
+  process.env.SLIDEKIT_SUB = sub; // 하위 명령 스크립트가 직접 실행인지 알아보는 표시
+  await import(SUBS[sub]);
   process.exit(0);
 }
 

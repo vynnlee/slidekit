@@ -106,7 +106,7 @@ export function lint(html: string): Issue[] {
   return out;
 }
 
-if (import.meta.main || process.argv[1]?.endsWith("server.ts")) {
+if (import.meta.main || process.env.SLIDEKIT_SUB === "lint") {
   const name = process.argv[2];
   if (!name) { console.error("usage: slidekit lint <덱>"); process.exit(1); }
   const file = join(import.meta.dir, "..", "decks", name, "index.html");

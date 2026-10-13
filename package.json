@@ -9,6 +9,7 @@
     "slidekit": "bun run app/server.ts",
     "bundle": "bun run bundler/bundle.ts",
     "deploy": "bun deploy/deploy.ts",
+    "test": "bun scripts/test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -6,12 +6,13 @@ import { join } from "node:path";
 
 const assert = (c: unknown, m = "assert") => { if (!c) throw new Error(m); };
 const root = join(import.meta.dir, "..");
-const url = "http://127.0.0.1:3210";
+const port = process.env.TEST_PORT ?? "3210";
+const url = `http://127.0.0.1:${port}`;
 const deck = readdirSync(join(root, "decks")).find((d) => existsSync(join(root, "decks", d, "index.html")))!;
 const commentsFile = join(root, "decks", deck, "comments.json");
 const had = existsSync(commentsFile);
 
-const app = Bun.spawn(["bun", "run", join(root, "app/server.ts")], { env: { ...process.env, PORT: "3210" }, stdout: "ignore", stderr: "inherit" });
+const app = Bun.spawn(["bun", "run", join(root, "app/server.ts")], { env: { ...process.env, PORT: port }, stdout: "ignore", stderr: "inherit" });
 try {
   for (let i = 0; i < 50 && !(await fetch(`${url}/api/decks`).then((r) => r.ok).catch(() => false)); i++) await Bun.sleep(200);
 

@@ -10,7 +10,7 @@ export function DeckList() {
   const [decks, setDecks] = useState<DeckEntry[] | null>(null);
   useEffect(() => { fetch("/api/decks").then((r) => r.json()).then(setDecks); }, []);
 
-  const open = (d: DeckEntry) => go(`/present/${encodeURIComponent(d.id)}`);
+  const open = (d: DeckEntry) => go(`/edit/${encodeURIComponent(d.id)}`);
   const sub = (d: DeckEntry) => [d.date, d.author].filter(Boolean).join("  ");
 
   return (

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { DeckList } from "./DeckList";
 import { Presenter } from "./Presenter";
+import { Editor } from "./Editor";
 
 export function go(path: string) {
   history.pushState(null, "", path);
@@ -14,6 +15,8 @@ export function App() {
     window.addEventListener("popstate", on);
     return () => window.removeEventListener("popstate", on);
   }, []);
-  const m = path.match(/^\/present\/([^/]+)/);
-  return m ? <Presenter id={decodeURIComponent(m[1])} /> : <DeckList />;
+  const p = path.match(/^\/present\/([^/]+)/);
+  if (p) return <Presenter id={decodeURIComponent(p[1])} />;
+  const e = path.match(/^\/edit\/([^/]+)/);
+  return e ? <Editor id={decodeURIComponent(e[1])} /> : <DeckList />;
 }

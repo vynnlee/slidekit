@@ -8,3 +8,9 @@ export type DeckEntry = { id: string; folder: string; title: string; subtitle?: 
 export type Pos = { slide: number; step: number };
 
 export const deckUrl = (folder: string, query: string) => `/decks/${folder}/index.html${query}`;
+
+// app/comments.ts의 Comment와 같은 모양
+export type Comment = {
+  id: string; slide: number; path: string; excerpt: string; text: string;
+  status: "open" | "done"; reply?: string; createdAt: string; repliedAt?: string;
+};

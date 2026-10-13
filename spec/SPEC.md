@@ -163,7 +163,7 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
 | 쿼리 | 효과 |
 |---|---|
 | `?sync=1` | BroadcastChannel 동기화를 켠다(6.5) |
-| `?embed=1` | 부모 앱이 조종하는 임베드 모드(6.6) |
+| `?embed=1` | 부모 앱이 조종하는 임베드 모드(6.6). `<html data-sk-embed>` 속성도 같은 효과를 낸다(쿼리를 붙일 수 없는 `blob:` 문서용) |
 
 둘 다 없으면 단독 덱이다. 동기화하지 않고 부모와 통신하지 않는다. 둘을 함께 쓰면 `embed`가 우선하고 `sync`는 무시한다.
 
@@ -303,3 +303,30 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
 - Claude Code 캐릭터가 해당 슬라이드가 활성일 때만 움직임.
 - `F` 전체화면, 방향키 4개, `#N` 직접 진입, 클릭과 스페이스로 이동하지 않음.
 - 표지 Gemini 로고(SVG `mask`, `filter`의 `url(#ag9_*)`)가 전체 보기 축소판에서도 그려짐.
+
+## 9. 편집
+
+편집기(`/edit/<덱>`)가 지키는 약속이다. 엔진은 편집을 모른다. 편집기는 임베드 모드(6.6)로 덱을 같은 출처 iframe에 띄우고 그 DOM을 직접 만진다.
+
+### 9.1 저장 형식
+
+- 저장 결과는 1절 형식이다. 슬라이드는 `<body>` 직계 `<section data-slide>`이고, 엔진이 붙인 `#sk-stage`, `data-active`, 전체 보기 사본이 없다.
+- 살아 있는 DOM 전체를 직렬화하지 않는다. 원문을 `prefix`(첫 슬라이드 앞까지), 슬라이드 단위(앞 간격 + `<section>...</section>`), `suffix`(마지막 슬라이드 뒤부터)로 쪼개 두고, 저장할 때 다시 이어 붙인다.
+  - 쪼갤 때 `<script>`, `<style>`, 주석 안의 글자는 무시하고 `section` 여닫이 깊이를 센다. 쪼갠 뒤 이어 붙인 결과는 원문과 글자 단위로 같아야 한다(`app/test/roundtrip.ts`).
+  - 편집하지 않은 슬라이드, `prefix`, `suffix`(덱 CSS, `deck-meta`, 스크립트)는 원문 그대로다. 들여쓰기와 줄바꿈이 보존된다.
+  - 편집한 슬라이드만 `outerHTML`로 다시 쓴다. 이때 `data-active`, `contenteditable`, `inert`를 뺀다. 따옴표 모양과 속성 공백은 브라우저 직렬화를 따른다.
+  - 순서를 바꿔도 각 슬라이드는 자기 앞 간격을 달고 이동한다. 맨 앞 슬라이드의 앞 간격은 `prefix`에 속하므로 쓰지 않고, 간격이 없는 슬라이드(복제, 추가)에는 덱에서 처음 보이는 공백 간격을 쓴다.
+- 덱 스크립트가 런타임에 바꾼 DOM(stepper가 붙인 클래스 등)은 편집한 슬라이드를 직렬화할 때 섞일 수 있다. 도식과 인터랙션이 든 슬라이드는 텍스트만 고치고, 구조는 파일에서 고친다.
+- 저장은 `PUT /api/decks/<폴더>`(본문 `{source, base, force}`)다. 서버는 임시 파일에 쓴 뒤 `rename`한다. `base`는 읽을 때 받은 파일 수정 시각이고, 그 뒤 파일이 바뀌었으면 `409`를 돌려준다. `force`가 참이면 덮어쓴다. 이력은 git이 맡으므로 백업 파일을 만들지 않는다. `GET /api/decks/<폴더>/source`는 `{source, mtime}`을 준다.
+
+### 9.2 편집 범위
+
+- 텍스트: 글자만 담은 요소(자식이 `b`, `i`, `span`, `code`, `br` 같은 인라인뿐)를 `contenteditable="plaintext-only"`로 고친다. `Enter`나 포커스 이동으로 끝낸다. `chapter` 슬라이드의 `h1`을 고치면 `data-title`도 같은 글자로 맞춘다(2절).
+- 스타일: 선택한 요소의 인라인 `style`(`font-size`, `font-weight`, `text-align`, `color`)만 바꾼다. 클래스와 덱 CSS는 건드리지 않는다.
+- 슬라이드: 순서 변경, 복제, 삭제, 추가(본문 슬라이드), 종류(`data-slide`), 장 제목(`data-title`), 노트(`<aside data-notes>`)를 바꾼다. 복제본은 루트 `id`와 `data-steps`를 잃는다(`id`가 겹치지 않게, stepper는 `id`로 붙으므로 복제본은 일반 슬라이드가 된다).
+- 도식(`svg`)과 인터랙션 내부는 편집하지 않는다. 선택과 코멘트, 삭제와 복제는 된다.
+- 편집기가 iframe 문서에 넣는 선택용 스타일은 `<head>`에만 들어가고 저장되지 않는다. 선택 표시와 호버 외곽선은 덱 DOM이 아니라 앱 쪽 레이어에 그린다.
+
+### 9.3 코멘트 위치
+
+- 요소는 `path`로 가리킨다. 슬라이드 `<section>` 아래 `tag:nth-of-type(n)`을 ` > `로 이은 값이고(`h1`, `div:nth-of-type(2) > p`), `slide`는 1부터 센 슬라이드 번호다. 슬라이드를 옮기거나 지우면 이미 남긴 코멘트의 `slide`는 따라가지 않는다.

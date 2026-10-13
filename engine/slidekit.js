@@ -34,7 +34,7 @@
       console.warn('[slidekit] data-slidekit is "' + root.getAttribute('data-slidekit') + '", engine implements "1"');
     }
     var qs = new URLSearchParams(location.search);
-    var embed = qs.get('embed') === '1', sync = qs.get('sync') === '1';
+    var embed = qs.get('embed') === '1' || root.hasAttribute('data-sk-embed'), sync = qs.get('sync') === '1';
 
     /* meta */
     var parsed = {}, metaEl = document.getElementById('deck-meta');

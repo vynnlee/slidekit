@@ -1,0 +1,96 @@
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { Copy, Plus, Trash2 } from "lucide-react";
+import { DropdownMenu, DropdownTrigger, DropdownContent } from "@/components/ui/dropdown";
+import { MenuItem } from "@/components/ui/menu-item";
+import { previewHtml, type Unit } from "@/lib/deck-source";
+
+const W = 196, S = W / 1920;
+
+// 스크립트 없는 정적 사본을 줄여 보여 준다. 화면에 보일 때만 만든다.
+const Thumb = memo(function Thumb({ shell, unit, folder }: { shell: { prefix: string; suffix: string }; unit: Unit; folder: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    const io = new IntersectionObserver(([e]) => setSeen(e.isIntersecting), { rootMargin: "300px" });
+    io.observe(ref.current!);
+    return () => io.disconnect();
+  }, []);
+  const doc = useMemo(
+    () => (seen ? previewHtml({ ...shell, units: [unit] }, [unit], folder, { thumb: true }) : ""),
+    [seen, shell, unit.html, folder], // eslint-disable-line
+  );
+  return (
+    <div ref={ref} className="relative overflow-hidden rounded-md bg-black" style={{ width: W, height: W * 0.5625 }}>
+      {doc && (
+        <iframe
+          sandbox="" srcDoc={doc} tabIndex={-1} title="" loading="lazy"
+          className="pointer-events-none absolute left-0 top-0 border-0"
+          style={{ width: 1920, height: 1080, transform: `scale(${S})`, transformOrigin: "0 0" }}
+        />
+      )}
+    </div>
+  );
+});
+
+type Props = {
+  shell: { prefix: string; suffix: string };
+  folder: string;
+  units: Unit[];
+  index: number;
+  onSelect(i: number): void;
+  onMove(from: number, to: number): void;
+  onDuplicate(i: number): void;
+  onDelete(i: number): void;
+  onAdd(after: number): void;
+};
+
+export function Layers(p: Props) {
+  const [menu, setMenu] = useState<{ x: number; y: number; i: number } | null>(null);
+  const [drag, setDrag] = useState<number | null>(null);
+  const [drop, setDrop] = useState<number | null>(null); // 삽입 위치(0..n)
+  const rows = useRef<(HTMLDivElement | null)[]>([]);
+  useEffect(() => { rows.current[p.index]?.scrollIntoView({ block: "nearest" }); }, [p.index]);
+
+  const pos = (e: React.DragEvent, i: number) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return e.clientY < r.top + r.height / 2 ? i : i + 1;
+  };
+  const end = () => { setDrag(null); setDrop(null); };
+
+  return (
+    <div className="flex flex-col gap-1 p-2" onDragEnd={end}>
+      {p.units.map((u, i) => (
+        <div
+          key={u.key}
+          ref={(el) => { rows.current[i] = el; }}
+          draggable
+          onDragStart={(e) => { setDrag(i); e.dataTransfer.effectAllowed = "move"; }}
+          onDragOver={(e) => { if (drag === null) return; e.preventDefault(); setDrop(pos(e, i)); }}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (drag !== null && drop !== null) p.onMove(drag, drop > drag ? drop - 1 : drop);
+            end();
+          }}
+          onClick={() => p.onSelect(i)}
+          onContextMenu={(e) => { e.preventDefault(); p.onSelect(i); setMenu({ x: e.clientX, y: e.clientY, i }); }}
+          className="relative flex items-start gap-2 rounded-lg p-1"
+        >
+          {drop === i && drag !== null && <div className="absolute inset-x-0 -top-1 h-0.5 rounded bg-focus-ring" />}
+          {drop === i + 1 && i === p.units.length - 1 && drag !== null && <div className="absolute inset-x-0 -bottom-1 h-0.5 rounded bg-focus-ring" />}
+          <span className={`w-5 shrink-0 pt-1 text-right text-caption tabular-nums ${i === p.index ? "text-foreground" : "text-muted-foreground"}`}>{i + 1}</span>
+          <div className={`rounded-md ring-2 ${i === p.index ? "ring-focus-ring" : "ring-transparent"}`}>
+            <Thumb shell={p.shell} unit={u} folder={p.folder} />
+          </div>
+        </div>
+      ))}
+      <DropdownMenu open={!!menu} onOpenChange={(o) => !o && setMenu(null)} size="compact">
+        <DropdownTrigger render={<span className="fixed h-0 w-0" style={{ left: menu?.x ?? 0, top: menu?.y ?? 0 }} />} />
+        <DropdownContent align="start" side="bottom" sideOffset={0}>
+          <MenuItem index={0} icon={Copy} label="복제" onSelect={() => menu && p.onDuplicate(menu.i)} />
+          <MenuItem index={1} icon={Plus} label="뒤에 추가" onSelect={() => menu && p.onAdd(menu.i)} />
+          <MenuItem index={2} icon={Trash2} label="삭제" disabled={p.units.length < 2} onSelect={() => menu && p.onDelete(menu.i)} />
+        </DropdownContent>
+      </DropdownMenu>
+    </div>
+  );
+}

@@ -274,6 +274,16 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('패널에서 Tab은 포커스를 옮기고 선택을 순환시키지 않음', (await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label'))) !== 'Show in layers' && (await page.getByRole('button', { name: 'Show in layers' }).count()) === 1);
   await focusBody(); await page.keyboard.press('Meta+z'); await sleep(300);
 
+  // 이미지 선택: Fit 컨트롤, Fill 섹션 없음, 선택 헤더 한 줄
+  await page.getByRole('tab', { name: 'Slides' }).click(); await focusBody(); await page.keyboard.press('Escape');
+  for (let i = 0; i < 12; i++) { await layers.nth(i).click(); await sleep(500); if (await fr().locator('[data-active] img').count()) break; }
+  await fr().locator('[data-active] img').first().click(); await sleep(500);
+  check('이미지 Fit과 Position 컨트롤', (await page.getByLabel('Image fit', { exact: true }).count()) === 1 && (await page.getByLabel('Image position', { exact: true }).count()) === 1);
+  check('이미지에는 Fill 섹션이 없음', (await page.getByRole('button', { name: 'Add fill' }).count()) === 0);
+  const hb = await page.getByRole('button', { name: 'Show in layers' }).boundingBox();
+  check('선택 헤더가 한 줄', hb && hb.height <= 30, hb && hb.height);
+  check('이미지 이름은 Image', (await page.getByRole('button', { name: 'Show in layers' }).textContent()).includes('Image'));
+  await focusBody(); await page.keyboard.press('Escape');
   // 자동 저장: Cmd+S 없이 1.5초 뒤 저장된다
   await page.keyboard.press('Escape'); await focusBody(); await page.keyboard.press('Tab'); await sleep(300);
   const op2 = page.getByLabel('Opacity', { exact: true }); await op2.fill('37'); await op2.press('Enter'); await sleep(400);

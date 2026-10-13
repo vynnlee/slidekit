@@ -32,6 +32,9 @@ const WEIGHTS: Items = [["300", "Light"], ["400", "Regular"], ["500", "Medium"],
 const DISPLAYS: Items = [["block", "Block"], ["flex", "Flex"], ["grid", "Grid"], ["inline", "Inline"], ["inline-block", "Inline block"], ["inline-flex", "Inline flex"], ["none", "None"]];
 const POSITIONS: Items = [["static", "Static"], ["relative", "Relative"], ["absolute", "Absolute"]];
 const BLENDS: Items = [["normal", "Normal"], ["multiply", "Multiply"], ["screen", "Screen"], ["overlay", "Overlay"], ["darken", "Darken"], ["lighten", "Lighten"], ["difference", "Difference"]];
+const FITS: Items = [["fill", "Fill"], ["contain", "Contain"], ["cover", "Cover"], ["none", "None"]];
+const OBJECT_POSITIONS: Items = [["center", "Center"], ["top", "Top"], ["bottom", "Bottom"], ["left", "Left"], ["right", "Right"]];
+const POSITION_OF: Record<string, string> = { "50% 50%": "center", "50% 0%": "top", "50% 100%": "bottom", "0% 50%": "left", "100% 50%": "right" };
 const STEP_EFFECTS: Items = [["rise", "Rise"], ["fade", "Fade"], ["none", "None"]];
 const BORDER_STYLES: Items = [["solid", "Solid"], ["dashed", "Dashed"], ["dotted", "Dotted"]];
 
@@ -254,10 +257,11 @@ export function Inspector(p: Props) {
           <div className="-mx-3 flex flex-col pt-1" key={p.selId}>
             <div className="px-3 pb-2">
               <Tooltip content="Show in Layers" side="top">
-                <Button aria-label="Show in layers" variant="ghost" size="compact" className="w-full justify-start gap-2" onClick={p.onShowLayers}>
-                  <SelIcon className="size-3.5 shrink-0" />
-                  <span className="min-w-0 flex-1 truncate text-left">{nameOf(el)}</span>
-                  <span className="shrink-0 rounded bg-surface-2 px-1 text-micro text-muted-foreground">{el.tagName.toLowerCase()}</span>
+                <Button aria-label="Show in layers" variant="ghost" size="compact" leadingIcon={SelIcon} className="w-full justify-start" onClick={p.onShowLayers}>
+                  <span className="flex min-w-0 flex-1 items-center gap-2">
+                    <span className="min-w-0 truncate text-left">{nameOf(el)}</span>
+                    <span className="shrink-0 rounded bg-surface-2 px-1 text-micro text-muted-foreground">{el.tagName.toLowerCase()}</span>
+                  </span>
                 </Button>
               </Tooltip>
             </div>
@@ -291,7 +295,7 @@ export function Inspector(p: Props) {
                   )}
                   {flex && <AlignBox direction={val("flex-direction").startsWith("column") ? "column" : "row"} justify={val("justify-content")} align={val("align-items")}
                     onChange={(j, a) => { set("justify-content", j); set("align-items", a); }} />}
-                  {n("gap", flex && val("flex-direction").startsWith("column") ? <BetweenVerticalStart /> : <BetweenHorizontalStart />, "Gap", { min: 0 })}
+                  {n("gap", <span title="Gap" className="flex">{flex && val("flex-direction").startsWith("column") ? <BetweenVerticalStart /> : <BetweenHorizontalStart />}</span>, "Gap", { min: 0 })}
                 </Grid>
               )}
               <div className="flex flex-col gap-1">
@@ -345,6 +349,21 @@ export function Inspector(p: Props) {
               </div>
             </InspectorSection>
 
+            {el.tagName === "IMG" && (
+              <InspectorSection id="image" title="Image">
+                <Grid>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-micro text-muted-foreground">Fit</span>
+                    <Pick label="Image fit" value={val("object-fit")} items={FITS} onChange={(v) => set("object-fit", v)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-micro text-muted-foreground">Position</span>
+                    <Pick label="Image position" value={POSITION_OF[val("object-position")] ?? "center"} items={OBJECT_POSITIONS} onChange={(v) => set("object-position", v)} />
+                  </div>
+                </Grid>
+              </InspectorSection>
+            )}
+
             {isText && (
               <InspectorSection id="typography" title="Typography">
                 <Pick label="Font" value={cs?.fontFamily ?? ""} items={families} onChange={(v) => set("font-family", v)} />
@@ -367,6 +386,7 @@ export function Inspector(p: Props) {
               </InspectorSection>
             )}
 
+            {!isMedia && (
             <InspectorSection id="fill" title="Fill" action={!hasFill ? (
               <Tooltip content="Add fill" side="top"><Button aria-label="Add fill" variant="ghost" size="icon-compact" onClick={() => set("background-color", "#ffffff")}><Plus /></Button></Tooltip>) : undefined}>
               {(isText || container) && (
@@ -402,6 +422,7 @@ export function Inspector(p: Props) {
                 </>
               )}
             </InspectorSection>
+            )}
 
             <InspectorSection id="stroke" title="Stroke" action={!hasStroke ? (
               <Tooltip content="Add stroke" side="top"><Button aria-label="Add stroke" variant="ghost" size="icon-compact" onClick={() => set("border", "1px solid #000000")}><Plus /></Button></Tooltip>) : (

@@ -21,7 +21,10 @@ type Props = {
 const SKIP = /^(SCRIPT|STYLE|TEMPLATE)$/;
 const kids = (el: Element) => (el instanceof SVGElement ? [] : [...el.children].filter((c) => !SKIP.test(c.tagName) && !c.matches("aside[data-notes]")));
 
-// 이름 규칙: data-name, 글자 첫 줄, 태그별 기본 이름(Figma에 가까운 말)
+// 이름 규칙: data-name, 글자 첫 줄, 태그별 기본 이름(Figma에 가까운 말).
+// 글자 이름은 자식 요소가 없는 요소나 글 태그(h1, p, span 등)에만 쓴다. 자식이 있는 블록은 Frame이다.
+const TEXT_TAGS = /^(h[1-6]|p|span|li|label|small|b|i|em|strong|code|dt|dd|figcaption|blockquote|td|th|mark|u|s|sub|sup|kbd)$/;
+const textName = (el: Element) => !(el instanceof SVGElement) && textual(el) && (el.children.length === 0 || TEXT_TAGS.test(el.tagName.toLowerCase()));
 const clip = (t: string) => (t.length > 24 ? t.slice(0, 24) + "…" : t);
 export const nameOf = (el: Element): string => {
   const n = el.getAttribute("data-name");
@@ -32,14 +35,14 @@ export const nameOf = (el: Element): string => {
   if (tag === "button") return "Button";
   if (tag === "a") return "Link";
   if (tag === "ul" || tag === "ol") return "List";
-  if (textual(el)) return clip((el.textContent ?? "").trim().split("\n")[0].trim());
+  if (textName(el)) return clip((el.textContent ?? "").trim().split("\n")[0].trim().replace(/\s+/g, " "));
   if (el.children.length) {
     const d = el.ownerDocument.defaultView?.getComputedStyle(el).display ?? "";
     return d.includes("flex") || d.includes("grid") ? "Auto layout" : "Frame";
   }
   return tag.charAt(0).toUpperCase() + tag.slice(1);
 };
-export const iconOf = (el: Element) => (el instanceof SVGElement ? Shapes : el.tagName === "IMG" ? ImageIcon : textual(el) ? Type : Square);
+export const iconOf = (el: Element) => (el instanceof SVGElement ? Shapes : el.tagName === "IMG" ? ImageIcon : textName(el) ? Type : Square);
 
 export function LayerTree(p: Props) {
   const [open, setOpen] = useState<Set<Element>>(new Set());

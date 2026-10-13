@@ -80,7 +80,7 @@ const findAxe = () => {
       const vis = (e) => { const r = e.getBoundingClientRect(); const s = getComputedStyle(e); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && !e.disabled; };
       // 탭은 포커스만으로 활성화되어 패널 내용이 바뀌므로 맨 뒤에서 검사한다.
       const sel = 'input,button,select,textarea,[role=radio],[role=tab],[role=combobox],[role=switch],[tabindex="0"]';
-      const els = [...root.querySelectorAll(sel)].filter(vis).filter((e) => !e.querySelector(sel)).sort((a, b) => (a.getAttribute('role') === 'tab') - (b.getAttribute('role') === 'tab'));
+      const els = [...root.querySelectorAll(sel)].filter(vis).filter((e) => !e.querySelector(sel) && e.getAttribute('role') !== 'tabpanel').sort((a, b) => (a.getAttribute('role') === 'tab') - (b.getAttribute('role') === 'tab'));
       return els.map((e) => {
         e.focus();
         const r = e.getBoundingClientRect();

@@ -2,7 +2,18 @@
    Usage: PW=<playwright-core> CHROME=<headless shell> BASE=http://127.0.0.1:3200 node present.cjs */
 const { chromium } = require(process.env.PW || 'playwright-core');
 const BASE = process.env.BASE || 'http://127.0.0.1:3200';
-const DECK = 'vibe-coding-workshop';
+// 편집 테스트가 건드리지 않도록 전용 덱(30장)을 만들어 쓰고 끝에 지운다.
+const DECK = 'zz-e2e-p', TOTAL = 30;
+const fs = require('fs'), path = require('path');
+const DIR = path.join(__dirname, '..', '..', 'decks', DECK);
+fs.mkdirSync(DIR, { recursive: true });
+fs.writeFileSync(path.join(DIR, 'index.html'), `<!doctype html><html lang="en" data-slidekit="1"><head><meta charset="utf-8"><title>${DECK}</title>
+<script type="application/json" id="deck-meta">{ "title": "${DECK}", "id": "${DECK}" }</script>
+<link rel="stylesheet" href="../../engine/slidekit.css"></head><body>
+<section data-slide="cover"><h1>Cover</h1><aside data-notes>Notes for cover</aside></section>
+${Array.from({ length: TOTAL - 1 }, (_, i) => `<section data-slide="content"><h2>Slide ${i + 2}</h2></section>`).join('\n')}
+<script src="../../engine/slidekit.js"></script></body></html>`);
+process.on('exit', () => fs.rmSync(DIR, { recursive: true, force: true }));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fail = 0;
 const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + name + (ok || extra === undefined ? '' : '  ' + JSON.stringify(extra))); };
@@ -27,14 +38,14 @@ const MOCKS = {
     page.on('pageerror', (e) => errors.push(String(e)));
     await page.goto(`${BASE}/present/${DECK}`);
     const counter = () => page.getByText(/^\d+ \/ \d+$/).first().innerText();
-    check(`[${name}] 발표자 화면이 슬라이드 수를 읽는다`, await until(async () => (await counter()) === '1 / 53'), await counter().catch(() => null));
+    check(`[${name}] 발표자 화면이 슬라이드 수를 읽는다`, await until(async () => (await counter()) === `1 / ${TOTAL}`), await counter().catch(() => null));
 
     if (first) {
       // 키 이동, 타이머, 장 위치
       await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight');
-      check('방향키로 이동', await until(async () => (await counter()) === '3 / 53'), await counter());
+      check('방향키로 이동', await until(async () => (await counter()) === `3 / ${TOTAL}`), await counter());
       await page.keyboard.press('ArrowLeft');
-      check('왼쪽 키로 되돌아감', await until(async () => (await counter()) === '2 / 53'));
+      check('왼쪽 키로 되돌아감', await until(async () => (await counter()) === `2 / ${TOTAL}`));
       const timer = () => page.locator('span.ml-auto.flex').first().innerText();
       await page.keyboard.press('t'); await sleep(2300); await page.keyboard.press('t');
       const t1 = await timer();
@@ -70,7 +81,7 @@ const MOCKS = {
     check(`[${name}] 발표자 -> 발표 창 동기화`, await until(async () => hash() === `#${base + 1}`), hash());
     await pop.bringToFront(); await pop.keyboard.press('ArrowRight');
     await page.bringToFront();
-    check(`[${name}] 발표 창 -> 발표자 동기화`, await until(async () => (await counter()) === `${base + 2} / 53`), await counter());
+    check(`[${name}] 발표 창 -> 발표자 동기화`, await until(async () => (await counter()) === `${base + 2} / ${TOTAL}`), await counter());
     await pop.close();
     check(`[${name}] 발표 창 닫힘 표시`, await until(async () => (await page.getByText('Presentation window closed').count()) === 1, 3000));
     await ctx.close();
@@ -86,18 +97,38 @@ const MOCKS = {
     page.on('pageerror', (e) => errors.push(String(e)));
     await page.goto(`${BASE}/present/${DECK}`);
     const counter = () => page.getByText(/^\d+ \/ \d+$/).first().innerText();
-    check('열려 있는 발표 창 위치(12)로 시작', await until(async () => (await counter()) === '12 / 53'), await counter().catch(() => null));
+    check('열려 있는 발표 창 위치(12)로 시작', await until(async () => (await counter()) === `12 / ${TOTAL}`), await counter().catch(() => null));
     await page.getByRole('switch', { name: 'Current slide' }).click();
     await page.getByRole('switch', { name: 'Next slide' }).click();
     await page.keyboard.press('ArrowRight');
-    check('보기를 꺼도 방향키 이동이 유지된다', await until(async () => (await counter()) === '13 / 53'), await counter());
+    check('보기를 꺼도 방향키 이동이 유지된다', await until(async () => (await counter()) === `13 / ${TOTAL}`), await counter());
     check('보기를 꺼도 발표 창과 동기화된다', await until(async () => new URL(pop.url()).hash === '#13'), pop.url());
     await page.keyboard.down('ArrowRight'); await page.keyboard.down('ArrowRight'); await page.keyboard.down('ArrowRight'); await page.keyboard.up('ArrowRight');
     await sleep(600);
-    check('방향키 반복 입력은 한 장만 넘긴다', (await counter()) === '14 / 53', await counter());
+    check('방향키 반복 입력은 한 장만 넘긴다', (await counter()) === `14 / ${TOTAL}`, await counter());
     await page.keyboard.down('t'); await page.keyboard.down('t'); await page.keyboard.up('t');
     await sleep(1600);
     check('T 반복 입력은 한 번만 토글한다', (await page.locator('span.ml-auto.flex').first().innerText()) !== '00:00:00');
+    await ctx.close();
+  }
+  // ?from=N: 그 장에서 시작, 범위 밖은 가장 가까운 장. 발표 시작은 현재 장부터.
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+    const open = async (q) => { const pg = await ctx.newPage(); await pg.goto(`${BASE}/present/${DECK}${q}`); return pg; };
+    const cnt = (pg) => pg.getByText(/^\d+ \/ \d+$/).first().innerText();
+    const p20 = await open('?from=20');
+    check('?from=20이면 20번에서 시작', await until(async () => (await cnt(p20)) === `20 / ${TOTAL}`), await cnt(p20).catch(() => null));
+    const popP = ctx.waitForEvent('page');
+    await p20.getByRole('button', { name: 'Present' }).click();
+    const pop = await popP;
+    check('발표 시작은 현재 장(20)부터', await until(async () => new URL(pop.url()).hash === '#20'), pop.url());
+    await pop.close();
+    const big = await open('?from=999');
+    check('범위 밖(큰 값)은 마지막 장', await until(async () => (await cnt(big)) === `${TOTAL} / ${TOTAL}`), await cnt(big).catch(() => null));
+    await big.close(); await p20.close(); // 열린 발표자 화면끼리도 동기화되므로 닫고 확인한다
+    const zero = await open('?from=0');
+    check('범위 밖(0)은 첫 장', await until(async () => (await cnt(zero)) === `1 / ${TOTAL}`), await cnt(zero).catch(() => null));
     await ctx.close();
   }
   // 깨진 localStorage
@@ -107,7 +138,7 @@ const MOCKS = {
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errors.push(String(e)));
     await page.goto(`${BASE}/present/${DECK}`);
-    check('깨진 localStorage에도 화면이 뜬다', await until(async () => (await page.getByText(/^\d+ \/ 53$/).count()) === 1));
+    check('깨진 localStorage에도 화면이 뜬다', await until(async () => (await page.getByText(/^\d+ \/ \d+$/).count()) === 1));
     await ctx.close();
   }
   // 덱 목록 요청 실패는 화면에 보인다

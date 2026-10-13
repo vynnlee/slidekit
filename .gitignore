@@ -4,3 +4,4 @@ dist/
 *.log
 decks/_*/
 decks/.trash/
+decks/zz-e2e*/

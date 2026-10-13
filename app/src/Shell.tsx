@@ -7,6 +7,10 @@ type Props = {
   children: ReactNode;
   /** 전체화면 발표자 화면처럼 툴바와 패널을 숨긴다(언마운트하지 않아 iframe 위치가 유지된다). */
   bare?: boolean;
+  /** 스크린리더용 h1(화면에는 보이지 않는다)과 양쪽 패널의 landmark 이름 */
+  heading?: string;
+  leftLabel?: string;
+  rightLabel?: string;
 };
 
 // 패널 폭은 끌어서 조절하고 localStorage에 기억한다.
@@ -35,7 +39,7 @@ function Handle({ side, width, onChange }: { side: "left" | "right"; width: numb
 }
 
 // 얇은 상단 툴바, 좌측 패널, 중앙 캔버스, 우측 속성 패널. Cmd+\로 패널을 함께 접고 편다.
-export function Shell({ toolbar, left, right, children, bare }: Props) {
+export function Shell({ toolbar, left, right, children, bare, heading = "slidekit", leftLabel = "Sidebar", rightLabel = "Details" }: Props) {
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const [lw, setLw] = useWidth("sk-left-w", 216, 200, 400);
@@ -58,14 +62,17 @@ export function Shell({ toolbar, left, right, children, bare }: Props) {
       <header hidden={bare} className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-2">{toolbar}</header>
       <div className="flex min-h-0 flex-1">
         {left && leftOpen && !bare && (
-          <aside style={{ width: lw }} className="relative h-full shrink-0 overflow-auto border-r border-border">
+          <aside aria-label={leftLabel} style={{ width: lw }} className="relative h-full shrink-0 overflow-auto border-r border-border">
             {left}
             <Handle side="left" width={lw} onChange={(w) => setLw(w < 0 ? 216 : w)} />
           </aside>
         )}
-        <div className="min-h-0 min-w-0 flex-1 overflow-auto">{children}</div>
+        <main className="min-h-0 min-w-0 flex-1 overflow-auto">
+          <h1 className="sr-only">{heading}</h1>
+          {children}
+        </main>
         {right && rightOpen && !bare && (
-          <aside style={{ width: rw }} className="relative h-full shrink-0 overflow-auto border-l border-border p-3">
+          <aside aria-label={rightLabel} style={{ width: rw }} className="relative h-full shrink-0 overflow-auto border-l border-border p-3">
             {right}
             <Handle side="right" width={rw} onChange={(w) => setRw(w < 0 ? 256 : w)} />
           </aside>

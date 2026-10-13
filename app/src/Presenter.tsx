@@ -50,7 +50,9 @@ export function Presenter({ id }: { id: string }) {
   const posRef = useRef(pos);
   const lastKey = useRef("");
   const ready = useRef(false); // 현재 슬라이드 iframe이 준비되기 전의 goto는 대기시켰다가 ready 뒤에 적용한다
-  const pending = useRef<Pos | null>(null);
+  // /present/<id>?from=N: 이 장에서 시작한다. 시작 위치가 정해지면 발표 창이 알려 주는 위치보다 우선한다.
+  const startFrom = useRef<number | null>((() => { const n = Number(new URLSearchParams(location.search).get("from")); return Number.isInteger(n) && n >= 1 ? n : null; })());
+  const pending = useRef<Pos | null>(startFrom.current ? { slide: startFrom.current, step: 1 } : null);
   posRef.current = pos;
 
   useEffect(() => {
@@ -90,6 +92,7 @@ export function Presenter({ id }: { id: string }) {
     ch.onmessage = (e) => {
       const m = e.data;
       if (!m || m.v !== 1 || m.from === me.current) return;
+      if (startFrom.current && !ready.current) return;
       if (m.type === "state") { lastKey.current = `${m.slide}:${m.step}`; goto(m.slide, m.step); }
       else if (m.type === "hello") send({ type: "state", ...posRef.current });
     };
@@ -110,7 +113,9 @@ export function Presenter({ id }: { id: string }) {
       if (m.type === "ready") {
         ready.current = true;
         setInfo(m.info);
-        const q = pending.current; pending.current = null;
+        startFrom.current = null;
+        const q = pending.current && { ...pending.current, slide: Math.min(Math.max(1, pending.current.slide), m.info.slides.length) };
+        pending.current = null;
         if (q) { setPos(q); post(curRef.current, { type: "goto", slide: q.slide, step: q.step }); }
         else setPos({ slide: m.info.slide, step: m.info.step });
       } else if (m.type === "info") { setInfo(m.info); setPos({ slide: m.info.slide, step: m.info.step }); }
@@ -154,7 +159,7 @@ export function Presenter({ id }: { id: string }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const present = async () => { setErr(null); if (deck) setErr(await startPresentation(deck.folder, setErr)); };
+  const present = async () => { setErr(null); if (deck) setErr(await startPresentation(deck.folder, pos.slide, setErr)); };
 
   if (!deck) return load === "loading" ? null : <p role="alert" className="p-4 text-body text-muted-foreground">{load === "error" ? "Could not load decks. Is the server running?" : "Deck not found."}</p>;
   const slide = info?.slides[pos.slide - 1];
@@ -168,6 +173,9 @@ export function Presenter({ id }: { id: string }) {
   return (
     <Shell
       bare={full}
+      heading={deck.title}
+      leftLabel="Chapters and slides"
+      rightLabel="View settings"
       toolbar={
         <>
           <Tooltip content="All decks" side="bottom"><Button variant="ghost" size="icon-compact" aria-label="All decks" onClick={() => go("/")}><ArrowLeft /></Button></Tooltip>
@@ -251,7 +259,7 @@ export function Presenter({ id }: { id: string }) {
             aria-label="Speaker notes"
             style={{ fontSize: notesSize, lineHeight: 1.5 }}
             className="min-h-0 flex-1 overflow-auto rounded-lg text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-focus-ring [&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_h1]:text-[1.4em] [&_h1]:font-semibold [&_h2]:text-[1.2em] [&_h2]:font-semibold [&_h3]:font-semibold [&_a]:text-foreground [&_li]:ml-5 [&_ol]:list-decimal [&_p+*]:mt-2 [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-hover [&_pre]:p-2 [&_strong]:text-foreground [&_ul]:list-disc"
-            dangerouslySetInnerHTML={{ __html: slide?.notes ? markdown(slide.notes) : '<p class="text-caption opacity-50">No notes</p>' }}
+            dangerouslySetInnerHTML={{ __html: slide?.notes ? markdown(slide.notes) : '<p class="text-caption">No notes</p>' }}
           />
         )}
       </div>

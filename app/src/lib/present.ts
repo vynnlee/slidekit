@@ -18,9 +18,12 @@ export async function warmScreens() {
 }
 
 // 외장 모니터가 있으면 그 화면 가득, 없거나 권한이 없으면 일반 새 창.
+// fromSlide(1부터)를 주면 그 장에서 시작한다. 범위 밖이면 엔진이 가장 가까운 장으로 맞춘다.
+// 사용: startPresentation(deck.folder, currentSlide) 또는 처음부터는 startPresentation(deck.folder).
 // 실패 사유는 반환값(창 열기 전 상황)과 onNote(전체화면 실패)로 발표자 화면에 알린다.
-export async function startPresentation(folder: string, onNote: (msg: string) => void = () => {}): Promise<string | null> {
-  const url = new URL(deckUrl(folder, "?sync=1"), location.href).href;
+export async function startPresentation(folder: string, fromSlide?: number, onNote: (msg: string) => void = () => {}): Promise<string | null> {
+  const hash = Number.isInteger(fromSlide) && fromSlide! >= 1 ? `#${fromSlide}` : "";
+  const url = new URL(deckUrl(folder, "?sync=1") + hash, location.href).href;
   let unavailable = false;
   if (!cached) {
     try { cached = await (window as any).getScreenDetails(); } catch { unavailable = true; }

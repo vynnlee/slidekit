@@ -48,7 +48,7 @@ const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' 
     const fr = () => page.frames().find((f) => f.url().startsWith('blob:'));
 
     // 요소 선택 -> 코멘트 작성
-    await fr().locator('[data-active] h1, [data-active] h2').first().click();
+    await fr().locator('[data-active] h1, [data-active] h2').first().click({ modifiers: ['Meta'] }); // 계층 선택: Cmd+클릭은 가장 안쪽 단위
     await sleep(300);
     await page.getByRole('button', { name: 'Comment' }).first().click();
     await page.getByPlaceholder('Comment').fill('E2E 코멘트입니다');

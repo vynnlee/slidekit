@@ -37,7 +37,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const pick = async (sel) => {
       const el = fr().locator(sel).first();
       if (!(await el.count())) return false;
-      await el.click({ force: true }).catch(() => {});
+      await el.click({ force: true, modifiers: ['Meta'] }).catch(() => {}); // Cmd+클릭은 가장 안쪽 단위를 바로 고른다
       await sleep(300);
       return true;
     };

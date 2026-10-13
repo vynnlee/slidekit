@@ -235,9 +235,9 @@ const findAxe = () => {
 
     // 2) 텍스트 요소
     const h = fr().locator('[data-active] h1, [data-active] h2').first();
-    await h.click(); await sleep(400);
+    await h.click({ modifiers: ['Meta'] }); await sleep(400); // 계층 선택: Cmd+클릭은 가장 안쪽 단위를 바로 고른다
     await audit('text');
-    await h.click(); await sleep(400); // Tab 순환으로 선택이 바뀌었을 수 있어 다시 고른다
+    await h.click({ modifiers: ['Meta'] }); await sleep(400); // 계층 선택: Cmd+클릭은 가장 안쪽 단위를 바로 고른다 // Tab 순환으로 선택이 바뀌었을 수 있어 다시 고른다
 
     // 숫자 필드 동작: Rotation(-360..360, step 1)과 Opacity(0..100)
     const field = (n) => panel().getByRole('textbox', { name: n, exact: true });
@@ -291,7 +291,7 @@ const findAxe = () => {
         const reselect = async (label) => {
           const kept = (await field('Opacity').count()) > 0;
           check('중간', 'undo', 'text', `${label} 뒤에도 요소 선택과 패널이 유지된다`, kept);
-          if (!kept) { await h.click(); await sleep(500); }
+          if (!kept) { await h.click({ modifiers: ['Meta'] }); await sleep(500); }
         };
         await page.keyboard.press('Meta+z'); await sleep(500);
         await reselect('Cmd+Z');
@@ -314,7 +314,10 @@ const findAxe = () => {
       const box = await el.boundingBox().catch(() => null);
       if (!box) return console.log(`SKIP ${state}: 요소가 보이지 않음`);
       // 컨테이너는 가장자리 안쪽 모서리를 눌러 자식이 아닌 자신을 고른다
-      await page.mouse.click(box.x + (state === 'container' ? 3 : box.width / 2), box.y + (state === 'container' ? 3 : box.height / 2)); await sleep(500);
+      // 이미지는 Cmd+클릭으로 가장 안쪽 단위를, 컨테이너는 일반 클릭으로 슬라이드의 직계 자식을 고른다.
+      if (state !== 'container') await page.keyboard.down('Meta');
+      await page.mouse.click(box.x + (state === 'container' ? 3 : box.width / 2), box.y + (state === 'container' ? 3 : box.height / 2));
+      if (state !== 'container') await page.keyboard.up('Meta'); await sleep(500);
       await audit(state);
     };
     await pickBy('image', 'img');
@@ -335,7 +338,7 @@ const findAxe = () => {
 
     // 5) 섹션 접기 상태가 새로고침 후에도 유지된다
     // 새로고침 뒤와 같은 상태(텍스트 요소 선택)에서 비교하도록 먼저 제목을 다시 고른다.
-    await fr().locator('[data-active] h1, [data-active] h2').first().click(); await sleep(500);
+    await fr().locator('[data-active] h1, [data-active] h2').first().click({ modifiers: ['Meta'] }); await sleep(500);
     const heads = () => panel().locator('button[aria-expanded]');
     const n = await heads().count();
     if (n > 0) {
@@ -346,7 +349,7 @@ const findAxe = () => {
       const flipped = await target.getAttribute('aria-expanded');
       check('중간', 'persist', 'persist', `섹션 "${label}" 헤더를 누르면 접힘 상태가 바뀐다`, flipped !== was, [was, flipped]);
       await page.reload(); await page.waitForFunction(() => document.querySelector('iframe[title="Canvas"]')?.contentDocument?.querySelector('[data-active]')); await sleep(800);
-      await fr().locator('[data-active] h1, [data-active] h2').first().click(); await sleep(500);
+      await fr().locator('[data-active] h1, [data-active] h2').first().click({ modifiers: ['Meta'] }); await sleep(500);
       const again = panel().locator('button[aria-expanded]').filter({ hasText: label }).first();
       check('중간', 'persist', 'persist', `새로고침 뒤에도 섹션 "${label}" 접힘 상태가 유지된다`, (await again.getAttribute('aria-expanded')) === flipped, await again.getAttribute('aria-expanded'));
     } else check('중간', 'persist', 'persist', '접을 수 있는 섹션 헤더(button[aria-expanded])가 있다', false);

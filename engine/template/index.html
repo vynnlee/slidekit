@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko" data-slidekit="1">
+<head>
+  <meta charset="utf-8">
+  <title>__TITLE__</title>
+  <script type="application/json" id="deck-meta">
+    { "title": "__TITLE__", "author": "", "date": "__DATE__", "visibility": "public", "id": "__ID__" }
+  </script>
+  <link rel="stylesheet" href="../../engine/slidekit.css">
+  <style>
+    /* Deck tokens and deck-only styles. Tokens: --sk-accent, --sk-font, ... (spec section 4) */
+    [data-slide="cover"] h1 { font-size: 96px; }
+    [data-slide="chapter"] h1 { font-size: 132px; }
+  </style>
+</head>
+<body>
+
+<section data-slide="cover">
+  <h1>__TITLE__</h1>
+  <p>부제를 여기에 적는다</p>
+  <aside data-notes>발표자만 보는 노트. 문단은 빈 줄로 나눈다.
+
+두 번째 문단.</aside>
+</section>
+
+<section data-slide="chapter" data-title="첫 번째 장">
+  <h1>첫 번째 장</h1>
+</section>
+
+<section data-slide="content">
+  <h2>핵심 문장 하나</h2>
+  <p>뒷받침하는 설명을 짧게 쓴다.</p>
+</section>
+
+<section data-slide="content">
+  <h2>두 번째 본문</h2>
+  <p class="small">작은 글자는 보조 정보에만 쓴다.</p>
+</section>
+
+<section data-slide="end">
+  <h1>감사합니다</h1>
+</section>
+
+<script src="../../engine/slidekit.js"></script>
+</body>
+</html>

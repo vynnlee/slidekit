@@ -64,7 +64,7 @@ aside[data-notes] { display: none; }
 .sk-ov-grid { display: grid; grid-template-columns: repeat(auto-fill, 288px); gap: 20px; }
 .sk-thumb { cursor: pointer; }
 .sk-thumb-box { position: relative; width: 288px; height: 162px; overflow: hidden; border: 1px solid var(--sk-line); box-sizing: border-box; background: var(--sk-bg); }
-.sk-thumb[data-sel] .sk-thumb-box { border-color: var(--sk-fg); outline: 1px solid var(--sk-fg); }
+.sk-thumb[data-sel] .sk-thumb-box { border-color: var(--sk-fg); }
 .sk-thumb-in { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform: scale(.15); transform-origin: 0 0; pointer-events: none; }
 .sk-thumb-in [data-slide] { visibility: visible; animation: none; }
 .sk-thumb-n { margin-top: 6px; font-size: 14px; color: var(--sk-faint); font-variant-numeric: tabular-nums; }

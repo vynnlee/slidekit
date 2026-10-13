@@ -18,6 +18,8 @@ const last = (pattern: string) => globSync(pattern).sort().at(-1);
 const PW = last(join(homedir(), ".bun/install/cache/playwright-core@*")) ?? last(join(homedir(), ".npm/_npx/*/node_modules/playwright-core"));
 const CHROME = last(join(homedir(), "Library/Caches/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-mac-*/chrome-headless-shell"));
 
+// 테스트 서버는 이 덱들에 PUT하지 못한다(실제 덱 보호). 고치는 테스트는 makeTestDeck 사본을 쓴다.
+const READONLY = "vibe-coding-workshop,slidekit-guide";
 // 포트: 3240 정적(엔진), 3241 앱, 3242 채널, 3245 앱(배포 dry-run)
 const APP = "http://127.0.0.1:3241", DRY = "http://127.0.0.1:3245", STATIC = "http://127.0.0.1:3240";
 type Step = { name: string; cmd: string[]; env?: Record<string, string>; server?: "app" | "dry" | "static"; slow?: boolean };
@@ -30,6 +32,7 @@ const steps: Step[] = [
   bun("deck-source.fuzz", "app/test/deck-source.fuzz.ts"),
   bun("deck-tokens", "test", "app/test/deck-tokens.test.ts"),
   bun("deck-fonts", "test", "app/test/deck-fonts.test.ts"),
+  bun("editor-readonly", "test", "app/test/editor-readonly.test.ts"),
   bun("export-api", "test", "app/test/export-api.test.ts"),
   bun("comments", "test", "app/test/comments.test.ts"),
   bun("lint", "test", "engine/test/lint.test.ts"),
@@ -85,7 +88,7 @@ async function ensure(kind: "app" | "dry" | "static") {
   const log = dry ? Bun.file("/tmp/sk-eng-srv.log") : "ignore";
   const p = Bun.spawn(["taskpolicy", "-b", "bun", "run", "app/server.ts"], {
     cwd: root, stdout: log, stderr: log,
-    env: { ...process.env, PORT: dry ? "3245" : "3241", ...(dry ? { SLIDEKIT_DEPLOY_DRY_RUN: "1" } : {}) },
+    env: { ...process.env, PORT: dry ? "3245" : "3241", SLIDEKIT_READONLY_DECKS: READONLY, ...(dry ? { SLIDEKIT_DEPLOY_DRY_RUN: "1" } : {}) },
   });
   servers.set(kind, () => p.kill());
   await waitUp(dry ? DRY : APP);

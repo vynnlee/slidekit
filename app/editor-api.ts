@@ -21,6 +21,8 @@ export const routes = {
     PUT: async (req: Request & { params: { folder: string } }) => {
       const { folder } = req.params;
       if (!folderOk(folder)) return bad("deck", 404);
+      // 테스트 서버가 실제 덱을 고치지 못하게 한다: SLIDEKIT_READONLY_DECKS=폴더,폴더
+      if ((process.env.SLIDEKIT_READONLY_DECKS ?? "").split(",").some((f) => f.trim() === folder)) return bad("read-only deck", 403);
       const b = (await req.json().catch(() => null)) as { source?: unknown; base?: unknown; force?: unknown; slideMap?: unknown } | null;
       if (!b || typeof b.source !== "string") return bad("source");
       if (!/data-slidekit=/.test(b.source) || !/<section\b[^>]*\bdata-slide\b/.test(b.source)) return bad("not a slidekit deck");

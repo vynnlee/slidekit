@@ -281,11 +281,30 @@
       } catch (err) { /* ignore */ }
     }
 
+    /* blank screen: B black, W white. Local to this window; position, steps and sync are untouched. */
+    var blank = make('div', 'sk-blank');
+    blank.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(blank);
+    function setBlank(m) {
+      if (m) { blank.setAttribute('data-blank', m); stage.setAttribute('aria-hidden', 'true'); }
+      else { blank.removeAttribute('data-blank'); stage.removeAttribute('aria-hidden'); }
+    }
+
     document.addEventListener('keydown', function (e) {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       var t = e.target, k = e.key, open = isOpen();
       if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) {
         if (k === 'Escape') t.blur();
+        return;
+      }
+      var bm = blank.getAttribute('data-blank');
+      if (e.code === 'KeyB' || e.code === 'KeyW') {
+        e.preventDefault();
+        if (!e.repeat) { var want = e.code === 'KeyB' ? 'black' : 'white'; setBlank(bm === want ? null : want); }
+        return;
+      }
+      if (bm) { /* while blank, an arrow or Esc only brings the slide back, nothing else moves */
+        if (k === 'Escape' || /^Arrow/.test(k)) { e.preventDefault(); setBlank(null); }
         return;
       }
       if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'ArrowLeft' || k === 'ArrowUp') {

@@ -82,12 +82,18 @@ html[data-sk-show-steps] [data-step] { visibility: visible !important; opacity: 
 .sk-thumb[data-sel] .sk-thumb-n { color: var(--sk-fg); }
 
 /* print: one 1920x1080 page per slide, all slides, no engine UI or notes */
+/* blank screen (B black, W white): a full overlay above everything, no transition */
+#sk-blank { display: none; position: fixed; inset: 0; z-index: 100; cursor: none; }
+#sk-blank[data-blank] { display: block; }
+#sk-blank[data-blank="black"] { background: #000; }
+#sk-blank[data-blank="white"] { background: #fff; }
+
 @page { size: 1920px 1080px; margin: 0; }
 @media print {
   html, body { height: auto; overflow: visible; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   #sk-stage { position: static; width: 1920px; height: auto; transform: none !important; overflow: visible; }
   [data-slide] { position: relative; inset: auto; width: 1920px; height: 1080px; visibility: visible; animation: none; break-after: page; break-inside: avoid; }
   section[data-slide]:last-of-type { break-after: auto; }
-  #sk-overview, #sk-num, #sk-page, #sk-progress { display: none !important; }
+  #sk-overview, #sk-num, #sk-page, #sk-progress, #sk-blank { display: none !important; }
   [data-step] { visibility: visible !important; opacity: 1 !important; transform: none !important; transition: none !important; }
 }

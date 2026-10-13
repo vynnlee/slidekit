@@ -319,6 +319,44 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const fr2 = h2.frames().find((f) => f !== h2.mainFrame());
     check('data-step: embed goto(slide, step) shows that step', st && st.slide === 2 && st.step === 3 && (await fr2.evaluate(() => getComputedStyle(document.getElementById('b')).visibility)) === 'visible', st); await h2.close(); }
 
+  /* blank screen (B, W) */
+  page('blank', sec(3) + '<input id="inp">');
+  { const k = await ctx.newPage(); const ke = []; k.on('pageerror', (e) => ke.push(String(e)));
+    await k.goto(BASE + '/__t/blank#2'); await k.waitForSelector('#sk-stage'); await sleep(200);
+    const ov = () => k.evaluate(() => { const o = document.getElementById('sk-blank'); const c = getComputedStyle(o); return { on: o.hasAttribute('data-blank'), mode: o.getAttribute('data-blank'), display: c.display, bg: c.backgroundColor, z: c.zIndex, stageHidden: document.getElementById('sk-stage').getAttribute('aria-hidden') }; });
+    check('blank: overlay exists, off by default', (await ov()).on === false && (await ov()).display === 'none');
+    await k.keyboard.press('b');
+    let o1 = await ov();
+    check('blank: B shows a black full overlay (stage aria-hidden)', o1.mode === 'black' && o1.display === 'block' && o1.bg === 'rgb(0, 0, 0)' && o1.stageHidden === 'true', o1);
+    await k.keyboard.press('w'); o1 = await ov();
+    check('blank: W switches to white', o1.mode === 'white' && o1.bg === 'rgb(255, 255, 255)', o1);
+    await k.keyboard.press('w'); o1 = await ov();
+    check('blank: the same key again restores', !o1.on && o1.stageHidden === null, o1);
+    await k.keyboard.press('b'); await k.keyboard.press('ArrowRight');
+    check('blank: an arrow restores without moving', !(await ov()).on && (await hash(k)) === '#2', await hash(k));
+    await k.keyboard.press('ArrowRight'); check('blank: the next arrow moves normally', (await hash(k)) === '#3');
+    await k.keyboard.press('w'); await k.keyboard.press('Escape');
+    check('blank: Esc restores', !(await ov()).on && (await hash(k)) === '#3');
+    await k.keyboard.press('b'); await k.keyboard.press('KeyO').catch(() => {}); await k.keyboard.press('o');
+    check('blank: other keys do nothing while blank (overview stays closed)', !(await k.evaluate(() => document.getElementById('sk-overview').hasAttribute('data-open'))));
+    await k.keyboard.press('b');
+    await k.keyboard.press('Meta+b'); check('blank: Meta+B ignored', !(await ov()).on);
+    await k.focus('#inp'); await k.keyboard.press('b'); await k.keyboard.press('w');
+    check('blank: ignored while typing in an input', !(await ov()).on && (await k.inputValue('#inp')) === 'bw');
+    await k.evaluate(() => document.getElementById('inp').blur()); await k.keyboard.press('b');
+    await k.emulateMedia({ media: 'print' }); await sleep(80);
+    check('blank: hidden in print', (await ov()).display === 'none'); await k.emulateMedia({ media: 'screen' });
+    check('blank: no errors', ke.length === 0, ke); await k.close(); }
+  { const A = await ctx.newPage(), B = await ctx.newPage();
+    await A.goto(BASE + '/__t/blank?sync=1#1'); await B.goto(BASE + '/__t/blank?sync=1#1'); await A.waitForSelector('#sk-stage'); await B.waitForSelector('#sk-stage'); await sleep(300);
+    await A.keyboard.press('b'); await B.keyboard.press('ArrowRight'); await sleep(400);
+    check('blank: each window is independent (A blank, B not, A follows position)', (await A.evaluate(() => document.getElementById('sk-blank').hasAttribute('data-blank'))) && !(await B.evaluate(() => document.getElementById('sk-blank').hasAttribute('data-blank'))) && (await hash(A)) === '#2', await hash(A));
+    await A.close(); await B.close(); }
+  await ctx.route(BASE + '/__eb', (r) => r.fulfill({ contentType: 'text/html', body: '<iframe id="f" src="/__t/blank?embed=1" style="width:800px;height:450px"></iframe>' }));
+  { const e = await ctx.newPage(); await e.goto(BASE + '/__eb'); await sleep(800);
+    const fr3 = e.frames().find((f) => f !== e.mainFrame()); await fr3.focus('body').catch(() => {}); await e.keyboard.press('b'); await sleep(100);
+    check('blank: embed mode ignores B', (await fr3.evaluate(() => !document.getElementById('sk-blank'))), null); await e.close(); }
+
   { const pr = await open(DECK + '#' + tokIdx); const buf = await pr.pdf({ preferCSSPageSize: true, printBackground: true });
     const pages = (buf.toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length;
     check('print: one page per slide (53), 16:9', pages === 53 && /MediaBox \[0 0 1440 810\]/.test(buf.toString('latin1')), pages); await pr.close(); }

@@ -342,5 +342,5 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
 - 원문 보존: 바뀌는 값 글자 외에 주석, 다른 규칙, 순서, 공백을 그대로 둔다. 같은 변수가 여러 번 선언되면 마지막 선언이 대상이다(CSS에서 이기는 쪽).
 - 없는 변수는 마지막 `:root` 블록의 끝에 같은 들여쓰기로 한 줄 추가한다. `:root` 블록이 없으면 첫 `<style>` 끝에 `:root { }`를 새로 만들고, `<style>`이 없으면 `</head>` 앞에 만든다.
 - 값에는 문자열과 괄호 밖의 `;`, `{`, `}`, `<`, `/*`를 쓸 수 없다(선언을 깨뜨리므로 거부한다).
-- 저장은 슬라이드 편집과 같은 흐름이다. 편집기는 쪼갠 덱의 prefix(첫 슬라이드 앞까지)에 변경을 적용하고 전체를 PUT한다(`base` 충돌 검사 유지). 서버 API는 늘리지 않는다. 구현은 `app/src/lib/deck-tokens.ts`(`readTokens`, `setToken`, `removeToken`).
+- 저장은 슬라이드 편집과 같은 흐름이다. 편집기는 쪼갠 덱의 prefix(첫 슬라이드 앞까지)에 변경을 적용하고 전체를 PUT한다(`base` 충돌 검사 유지). 서버 API는 늘리지 않는다. 구현은 `app/src/lib/deck-tokens.ts`(`readTokens`, `setToken`).
 - 편집 중 미리보기는 캔버스 문서의 `:root`에 인라인으로 바로 반영하고, 확정은 입력이 멈춘 뒤 한 번(undo 1건)이다.

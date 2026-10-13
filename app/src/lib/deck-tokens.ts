@@ -116,19 +116,3 @@ export function setToken(prefix: string, name: string, value: string): string {
   const block = `  <style>\n    ${rule}\n  </style>\n`;
   return head ? prefix.slice(0, head.index) + block + prefix.slice(head.index) : block + prefix;
 }
-
-/** 변수 선언을 지운다(선언 한 줄 전체). 없으면 그대로. */
-export function removeToken(prefix: string, name: string): string {
-  let out = prefix;
-  for (;;) {
-    let hit: Decl | null = null;
-    for (const b of parseStyles(out)) for (const r of b.roots) for (const d of r.decls) if (d.name === name) hit = d;
-    if (!hit) return out;
-    let a = hit.valueStart;
-    while (a > 0 && out[a] !== "-" || !out.startsWith(name, a)) a--; // 이름 시작으로 후퇴
-    let b = hit.valueEnd;
-    if (out[b] === ";") b++;
-    const ls = out.lastIndexOf("\n", a - 1) + 1, onlyLine = /^[ \t]*$/.test(out.slice(ls, a)) && /^[ \t]*(\r?\n|$)/.test(out.slice(b));
-    out = onlyLine ? out.slice(0, ls) + out.slice(b).replace(/^[ \t]*\r?\n/, "") : out.slice(0, a) + out.slice(b).replace(/^[ \t]+/, "");
-  }
-}

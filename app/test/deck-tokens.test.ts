@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readTokens, removeToken, setToken } from "../src/lib/deck-tokens";
+import { readTokens, setToken } from "../src/lib/deck-tokens";
 
 const head = (css: string) => `<!doctype html><html><head><title>t</title>\n  <style>\n${css}\n  </style>\n</head><body>\n`;
 const A = head(`    /* 토큰 */\n    :root {\n      --sk-accent: #a78bfa; /* 강조 */\n      --my-w: calc(1px + 2px);\n      --u: url("data:image/png;base64,AA;BB");\n    }\n    h1 { color: red; }\n    @media (min-width: 1px) { :root { --sk-accent: #000; } }`);
@@ -31,9 +31,7 @@ test("주석 안의 :root와 style은 무시", () => {
   const c = head("    /* :root { --x: 1; } */\n    p {}") + "<!-- <style>:root{--y:2}</style> -->";
   expect(readTokens(c)).toEqual({});
 });
-test("지우기와 잘못된 입력 거부", () => {
-  expect(readTokens(removeToken(A, "--my-w"))).not.toHaveProperty("--my-w");
-  expect(removeToken(A, "--my-w")).not.toContain("--my-w");
+test("잘못된 입력 거부", () => {
   expect(() => setToken(A, "bad", "1")).toThrow();
   expect(() => setToken(A, "--a", "1; x{")).toThrow();
 });

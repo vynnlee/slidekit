@@ -22,20 +22,25 @@ const defaultView = Object.fromEntries(Object.keys(VIEW_ITEMS).map((k) => [k, tr
 const SHORTCUTS = [["← →", "Move"], ["F", "Full screen"], ["+ -", "Notes size"], ["PgUp PgDn", "Scroll notes"], ["T", "Start or pause timer"], ["R", "Reset timer"]];
 const pad = (n: number) => String(n).padStart(2, "0");
 const hms = (s: number) => `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
+// 깨진 localStorage 값은 기본값으로 대체한다(흰 화면 방지).
+const readJson = (k: string): Record<string, unknown> => {
+  try { const v = JSON.parse(localStorage.getItem(k) ?? "{}"); return v && typeof v === "object" ? v : {}; } catch { return {}; }
+};
 const rid = () => Math.random().toString(36).slice(2, 8);
 
 export function Presenter({ id }: { id: string }) {
   const [deck, setDeck] = useState<DeckEntry | null>(null);
   const [info, setInfo] = useState<Info | null>(null);
   const [pos, setPos] = useState<Pos>({ slide: 1, step: 1 });
-  const [view, setView] = useState<View>(() => ({ ...defaultView, ...JSON.parse(localStorage.getItem(VIEW_KEY) ?? "{}") }));
+  const [view, setView] = useState<View>(() => ({ ...defaultView, ...readJson(VIEW_KEY) }));
   const [err, setErr] = useState<string | null>(null);
+  const [load, setLoad] = useState<"loading" | "missing" | "error">("loading");
   const [now, setNow] = useState(() => new Date());
   const [elapsed, setElapsed] = useState(0);
   const [running, setRunning] = useState(false);
   const [full, setFull] = useState(() => !!document.fullscreenElement);
   const [win, setWin] = useState<boolean | null>(presentationOpen);
-  const [notesSize, setNotesSize] = useState(() => Number(localStorage.getItem(NOTES_KEY)) || 20);
+  const [notesSize, setNotesSize] = useState(() => Math.min(NOTES_MAX, Math.max(NOTES_MIN, Number(localStorage.getItem(NOTES_KEY)) || 20)));
   const notesRef = useRef<HTMLDivElement>(null);
 
   const curRef = useRef<HTMLIFrameElement>(null);
@@ -44,9 +49,16 @@ export function Presenter({ id }: { id: string }) {
   const me = useRef(rid());
   const posRef = useRef(pos);
   const lastKey = useRef("");
+  const ready = useRef(false); // 현재 슬라이드 iframe이 준비되기 전의 goto는 대기시켰다가 ready 뒤에 적용한다
+  const pending = useRef<Pos | null>(null);
   posRef.current = pos;
 
-  useEffect(() => { fetch("/api/decks").then((r) => r.json()).then((l: DeckEntry[]) => setDeck(l.find((d) => d.id === id) ?? null)); }, [id]);
+  useEffect(() => {
+    fetch("/api/decks")
+      .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then((l: DeckEntry[]) => { const d = l.find((x) => x.id === id) ?? null; setDeck(d); setLoad(d ? "loading" : "missing"); })
+      .catch(() => setLoad("error"));
+  }, [id]);
   useEffect(() => { warmScreens(); }, []);
   useEffect(() => { localStorage.setItem(VIEW_KEY, JSON.stringify(view)); }, [view]);
   useEffect(() => { localStorage.setItem(NOTES_KEY, String(notesSize)); }, [notesSize]);
@@ -65,7 +77,10 @@ export function Presenter({ id }: { id: string }) {
     f?.contentWindow?.postMessage({ source: "slidekit", v: 1, ...msg }, location.origin);
   const send = (msg: object) => chan.current?.postMessage({ v: 1, from: me.current, ...msg });
   const total = info?.slides.length ?? 0;
-  const goto = useCallback((slide: number, step = 1) => post(curRef.current, { type: "goto", slide, step }), []);
+  const goto = useCallback((slide: number, step = 1) => {
+    if (ready.current) post(curRef.current, { type: "goto", slide, step });
+    else pending.current = { slide, step };
+  }, []);
 
   // BroadcastChannel: 발표 화면 창과 위치를 맞춘다.
   useEffect(() => {
@@ -92,7 +107,13 @@ export function Presenter({ id }: { id: string }) {
         return;
       }
       if (e.source !== curRef.current?.contentWindow) return;
-      if (m.type === "ready" || m.type === "info") { setInfo(m.info); setPos({ slide: m.info.slide, step: m.info.step }); }
+      if (m.type === "ready") {
+        ready.current = true;
+        setInfo(m.info);
+        const q = pending.current; pending.current = null;
+        if (q) { setPos(q); post(curRef.current, { type: "goto", slide: q.slide, step: q.step }); }
+        else setPos({ slide: m.info.slide, step: m.info.step });
+      } else if (m.type === "info") { setInfo(m.info); setPos({ slide: m.info.slide, step: m.info.step }); }
       else if (m.type === "state") {
         setPos({ slide: m.slide, step: m.step });
         const key = `${m.slide}:${m.step}`;
@@ -110,9 +131,12 @@ export function Presenter({ id }: { id: string }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // 길게 눌러 반복되는 입력은 이동, 전체화면, 타이머에서 무시한다(노트 크기와 스크롤은 반복 허용).
+      const once = e.repeat;
       if ((e.target as HTMLElement).closest("input,textarea,select,[contenteditable]")) return;
-      if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); post(curRef.current, { type: "next" }); }
-      else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); post(curRef.current, { type: "prev" }); }
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); if (!once) post(curRef.current, { type: "next" }); }
+      else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); if (!once) post(curRef.current, { type: "prev" }); }
+      else if (once && /^[ftr]$/i.test(e.key)) return;
       else if (e.key === "f" || e.key === "F") {
         document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
       }
@@ -130,16 +154,16 @@ export function Presenter({ id }: { id: string }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const present = async () => setErr(deck ? await startPresentation(deck.folder) : null);
+  const present = async () => { setErr(null); if (deck) setErr(await startPresentation(deck.folder, setErr)); };
 
-  if (!deck) return null;
+  if (!deck) return load === "loading" ? null : <p role="alert" className="p-4 text-body text-muted-foreground">{load === "error" ? "Could not load decks. Is the server running?" : "Deck not found."}</p>;
   const slide = info?.slides[pos.slide - 1];
   const chapterNo = slide?.chapter ?? 0;
   const chapter = info?.chapters[chapterNo - 1];
   const src = deckUrl(deck.folder, "?embed=1");
-  // 부모 칸의 폭과 화면 높이 58vh 안에서 16:9 상자를 가능한 크게 잡는다. 남는 높이는 노트가 쓴다.
-const frame = "aspect-video w-[min(100cqw,calc(58vh*16/9))] overflow-hidden rounded-lg bg-black shadow-surface-3";
-const cell = "flex min-h-0 min-w-0 items-start justify-center [container-type:inline-size]";
+    // 부모 칸의 폭과 화면 높이 58vh 안에서 16:9 상자를 가능한 크게 잡는다. 남는 높이는 노트가 쓴다.
+  const frame = "aspect-video w-[min(100cqw,calc(58vh*16/9))] overflow-hidden rounded-lg bg-black shadow-surface-3";
+  const cell = "flex min-h-0 min-w-0 items-start justify-center [container-type:inline-size]";
 
   return (
     <Shell
@@ -149,7 +173,7 @@ const cell = "flex min-h-0 min-w-0 items-start justify-center [container-type:in
           <Tooltip content="All decks" side="bottom"><Button variant="ghost" size="icon-compact" aria-label="All decks" onClick={() => go("/")}><ArrowLeft /></Button></Tooltip>
           <span className="truncate text-subtitle font-medium">{deck.title}</span>
           <span className="ml-auto text-caption text-muted-foreground tabular-nums">{info ? `${pos.slide} / ${total}` : ""}</span>
-          {err && <span className="text-caption text-muted-foreground">{err}</span>}
+          {err && <span role="status" className="truncate text-caption text-muted-foreground">{err}</span>}
           {win !== null && <span className="flex items-center gap-1.5 text-caption text-muted-foreground"><span className={`size-1.5 rounded-full ${win ? "bg-green-500" : "bg-red-500"}`} />{win ? "Presentation window open" : "Presentation window closed"}</span>}
           <Button variant="primary" size="compact" leadingIcon={MonitorPlay} onClick={present}>Present</Button>
         </>
@@ -198,16 +222,15 @@ const cell = "flex min-h-0 min-w-0 items-start justify-center [container-type:in
       }
     >
       <div className="flex h-full min-h-0 flex-col gap-3 p-4">
-        {(view.current || view.next) && (
-          <div className="flex shrink-0 gap-4">
-            <div className={cn(cell, view.current ? "flex-[5]" : "hidden")}>
-              <div className={frame}><iframe ref={curRef} src={src} title="Current slide" className="pointer-events-none h-full w-full border-0" /></div>
-            </div>
-            <div className={cn(cell, view.next ? "flex-[2]" : "hidden")}>
-              <div className={frame}><iframe ref={nextRef} src={src} title="Next slide" className="pointer-events-none h-full w-full border-0" /></div>
-            </div>
+        {/* 보기를 꺼도 iframe은 숨기기만 한다. 언마운트하면 방향키와 동기화가 끊긴다. */}
+        <div className={cn("flex shrink-0 gap-4", !view.current && !view.next && "hidden")}>
+          <div className={cn(cell, view.current ? "flex-[5]" : "hidden")}>
+            <div className={frame}><iframe ref={curRef} src={src} title="Current slide" className="pointer-events-none h-full w-full border-0" /></div>
           </div>
-        )}
+          <div className={cn(cell, view.next ? "flex-[2]" : "hidden")}>
+            <div className={frame}><iframe ref={nextRef} src={src} title="Next slide" className="pointer-events-none h-full w-full border-0" /></div>
+          </div>
+        </div>
         {(view.timer || view.clock || (view.chapters && chapter)) && (
           <div className="flex shrink-0 items-center gap-6 text-body tabular-nums">
             {view.chapters && <span>{chapterNo > 0 && info ? `Chapter ${chapterNo} / ${info.chapters.length}  ${chapter?.title}` : ""}</span>}

@@ -60,6 +60,8 @@ const MOCKS = {
     pop.on('pageerror', (e) => errors.push(String(e)));
     check(`[${name}] 발표 창은 ?sync=1 덱 페이지`, pop.url().includes(`/decks/${DECK}/`) && pop.url().includes('sync=1'), pop.url());
     await pop.waitForLoadState('load');
+    const note = { unsupported: 'Display access unavailable', denied: 'Display access unavailable', 'single screen': 'No external display found' }[name];
+    check(`[${name}] 폴백 사유 표시`, await until(async () => ((await page.getByRole('status').innerText()) || '').includes(note)), await page.getByRole('status').innerText().catch(() => null));
     check(`[${name}] 발표 창 열림 표시`, await until(async () => (await page.getByText('Presentation window open').count()) === 1));
     // 발표 창이 시작할 때 hello로 위치를 받는다
     const hash = () => new URL(pop.url()).hash;
@@ -71,6 +73,50 @@ const MOCKS = {
     check(`[${name}] 발표 창 -> 발표자 동기화`, await until(async () => (await counter()) === `${base + 2} / 53`), await counter());
     await pop.close();
     check(`[${name}] 발표 창 닫힘 표시`, await until(async () => (await page.getByText('Presentation window closed').count()) === 1, 3000));
+    await ctx.close();
+  }
+  // 이미 12번에 있는 발표 창에 발표자 화면이 붙으면 12번으로 시작한다. 보기를 꺼도 이동과 동기화가 유지된다. 반복 입력 무시.
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+    const pop = await ctx.newPage();
+    await pop.goto(`${BASE}/decks/${DECK}/index.html?sync=1#12`);
+    await pop.waitForFunction(() => location.hash === '#12'); await sleep(500);
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => errors.push(String(e)));
+    await page.goto(`${BASE}/present/${DECK}`);
+    const counter = () => page.getByText(/^\d+ \/ \d+$/).first().innerText();
+    check('열려 있는 발표 창 위치(12)로 시작', await until(async () => (await counter()) === '12 / 53'), await counter().catch(() => null));
+    await page.getByRole('switch', { name: 'Current slide' }).click();
+    await page.getByRole('switch', { name: 'Next slide' }).click();
+    await page.keyboard.press('ArrowRight');
+    check('보기를 꺼도 방향키 이동이 유지된다', await until(async () => (await counter()) === '13 / 53'), await counter());
+    check('보기를 꺼도 발표 창과 동기화된다', await until(async () => new URL(pop.url()).hash === '#13'), pop.url());
+    await page.keyboard.down('ArrowRight'); await page.keyboard.down('ArrowRight'); await page.keyboard.down('ArrowRight'); await page.keyboard.up('ArrowRight');
+    await sleep(600);
+    check('방향키 반복 입력은 한 장만 넘긴다', (await counter()) === '14 / 53', await counter());
+    await page.keyboard.down('t'); await page.keyboard.down('t'); await page.keyboard.up('t');
+    await sleep(1600);
+    check('T 반복 입력은 한 번만 토글한다', (await page.locator('span.ml-auto.flex').first().innerText()) !== '00:00:00');
+    await ctx.close();
+  }
+  // 깨진 localStorage
+  {
+    const ctx = await browser.newContext();
+    await ctx.addInitScript(`localStorage.setItem('slidekit:view', '{bad'); localStorage.setItem('slidekit:notes-size', 'abc');`);
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => errors.push(String(e)));
+    await page.goto(`${BASE}/present/${DECK}`);
+    check('깨진 localStorage에도 화면이 뜬다', await until(async () => (await page.getByText(/^\d+ \/ 53$/).count()) === 1));
+    await ctx.close();
+  }
+  // 덱 목록 요청 실패는 화면에 보인다
+  {
+    const ctx = await browser.newContext();
+    await ctx.route('**/api/decks', (r) => r.abort());
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/present/${DECK}`);
+    check('목록 요청 실패 표시', await until(async () => (await page.getByRole('alert').innerText()).includes('Could not load decks')));
     await ctx.close();
   }
   check('페이지 오류 없음', errors.length === 0, errors);

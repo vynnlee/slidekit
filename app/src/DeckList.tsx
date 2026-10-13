@@ -69,7 +69,12 @@ export function DeckList() {
   const [name, setName] = useState("");
   const [err, setErr] = useState("");
 
-  const load = () => fetch("/api/decks").then((r) => r.json()).then(setDecks);
+  const [loadErr, setLoadErr] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const load = () => {
+    setLoadErr(false);
+    fetch("/api/decks").then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); }).then(setDecks).catch(() => setLoadErr(true));
+  };
   useEffect(() => { load(); }, []);
   useEffect(() => { localStorage.setItem("slidekit:list-view", view); localStorage.setItem("slidekit:list-sort", sort); }, [view, sort]);
 
@@ -83,11 +88,16 @@ export function DeckList() {
   const cycleSort = () => setSort((s) => (s === "date" ? "title" : "date"));
 
   const create = async () => {
-    const r = await fetch("/api/decks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: name.trim() }) });
-    const j = await r.json();
-    if (!r.ok) return setErr(j.error ?? "Could not create deck");
-    setCreating(false); setName(""); setErr("");
-    go(`/edit/${encodeURIComponent(j.id)}`);
+    if (busy) return;
+    setBusy(true);
+    try {
+      const r = await fetch("/api/decks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: name.trim() }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) return setErr(j.error ?? "Could not create deck");
+      setCreating(false); setName(""); setErr("");
+      go(`/edit/${encodeURIComponent(j.id)}`);
+    } catch { setErr("Could not reach the server"); }
+    finally { setBusy(false); }
   };
   const startCreate = () => { setPalette(false); setErr(""); setCreating(true); };
 
@@ -117,6 +127,11 @@ export function DeckList() {
         }
       >
         <div className="p-4">
+          {loadErr && (
+            <p role="alert" className="flex items-center gap-2 text-caption text-muted-foreground">
+              Could not load decks.<Button variant="ghost" size="compact" onClick={load}>Retry</Button>
+            </p>
+          )}
           {decks?.length === 0 && <p className="text-caption text-muted-foreground">No decks yet</p>}
           {view === "grid" ? (
             <CardGroup columns={3} separated>
@@ -163,7 +178,7 @@ export function DeckList() {
           <form className="flex flex-col gap-2 pt-2" onSubmit={(e) => { e.preventDefault(); if (name.trim()) create(); }}>
             <Field autoFocus aria-label="Deck name" placeholder="deck-name" value={name} onChange={(e) => { setName(e.target.value); setErr(""); }} />
             <p className={err ? "text-caption text-destructive" : "text-caption text-muted-foreground"}>{err || "Lowercase letters, digits and - only"}</p>
-            <Button type="submit" variant="primary" size="compact" disabled={!name.trim()} className="self-end">Create</Button>
+            <Button type="submit" variant="primary" size="compact" disabled={!name.trim() || busy} className="self-end">Create</Button>
           </form>
         </DialogContent>
       </Dialog>

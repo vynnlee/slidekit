@@ -18,10 +18,12 @@ export async function warmScreens() {
 }
 
 // 외장 모니터가 있으면 그 화면 가득, 없거나 권한이 없으면 일반 새 창.
-export async function startPresentation(folder: string): Promise<string | null> {
+// 실패 사유는 반환값(창 열기 전 상황)과 onNote(전체화면 실패)로 발표자 화면에 알린다.
+export async function startPresentation(folder: string, onNote: (msg: string) => void = () => {}): Promise<string | null> {
   const url = new URL(deckUrl(folder, "?sync=1"), location.href).href;
+  let unavailable = false;
   if (!cached) {
-    try { cached = await (window as any).getScreenDetails(); } catch {}
+    try { cached = await (window as any).getScreenDetails(); } catch { unavailable = true; }
   }
   const ext = cached?.screens.find((s) => s !== cached!.currentScreen);
   const features = ext
@@ -30,15 +32,16 @@ export async function startPresentation(folder: string): Promise<string | null> 
   const w = window.open(url, "slidekit-present", features);
   if (!w) return "Popup blocked";
   win = w;
+  const note = ext ? null : unavailable ? "Display access unavailable. Opened in a window." : "No external display found. Opened in a window.";
   if (ext) {
     // 전체화면은 사용자 입력이 필요해 실패할 수 있다. 실패하면 발표 창에서 F를 누른다.
     const t = setInterval(async () => {
       if (w.closed) return clearInterval(t);
       if (w.location.href === "about:blank" || w.document.readyState !== "complete") return;
       clearInterval(t);
-      try { await w.document.documentElement.requestFullscreen({ screen: ext } as FullscreenOptions); } catch {}
+      try { await w.document.documentElement.requestFullscreen({ screen: ext } as FullscreenOptions); } catch { onNote("Fullscreen blocked. Press F in the presentation window."); }
     }, 100);
     setTimeout(() => clearInterval(t), 5000);
   }
-  return null;
+  return note;
 }

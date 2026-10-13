@@ -23,7 +23,7 @@ const kids = (el: Element) => (el instanceof SVGElement ? [] : [...el.children].
 
 // 이름 규칙: data-name, 글자 첫 줄, 태그별 기본 이름(Figma에 가까운 말)
 const clip = (t: string) => (t.length > 24 ? t.slice(0, 24) + "…" : t);
-const nameOf = (el: Element): string => {
+export const nameOf = (el: Element): string => {
   const n = el.getAttribute("data-name");
   if (n) return n;
   const tag = el.tagName.toLowerCase();
@@ -39,7 +39,7 @@ const nameOf = (el: Element): string => {
   }
   return tag.charAt(0).toUpperCase() + tag.slice(1);
 };
-const iconOf = (el: Element) => (el instanceof SVGElement ? Shapes : el.tagName === "IMG" ? ImageIcon : textual(el) ? Type : Square);
+export const iconOf = (el: Element) => (el instanceof SVGElement ? Shapes : el.tagName === "IMG" ? ImageIcon : textual(el) ? Type : Square);
 
 export function LayerTree(p: Props) {
   const [open, setOpen] = useState<Set<Element>>(new Set());

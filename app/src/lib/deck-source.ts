@@ -88,6 +88,8 @@ export function serializeSlide(el: Element) {
     e.removeAttribute("contenteditable");
     if (e === c) e.removeAttribute("inert");
   }
+  // 속성 값을 모두 지운 인라인 style은 빈 style=""로 남으므로(되돌리기 뒤 등) 저장 글자에서 뺀다.
+  for (const e of [c, ...c.querySelectorAll('[style=""]')]) if (e.getAttribute("style") === "") e.removeAttribute("style");
   // outerHTML은 boolean 속성을 =""로 쓴다. SPEC 형태(`data-notes`)로 되돌린다.
   return c.outerHTML.replace(/(<aside\b[^>]*\sdata-notes)=""/g, "$1");
 }

@@ -102,10 +102,10 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('실행 취소로 순서 복귀', (await titleOf(3)) === t4);
   await page.keyboard.press('Meta+Shift+z'); await sleep(1500);
   check('다시 실행', (await titleOf(4)) === t4);
-  await page.keyboard.press('Meta+s'); await sleep(800);
+  await page.keyboard.press('Meta+s'); await sleep(1800); // 자동 저장과 겹쳐도 마지막 저장이 끝나도록 넉넉히
   const fin = fs.readFileSync(FILE, 'utf8');
   check('최종 파일 슬라이드 53', slides(fin) === 53, slides(fin));
-  check('최종 파일에 복제본 존재', (fin.match(/<section[^>]*>\s*<h1>편집 테스트 제목/g) || []).length === 2, (fin.match(/편집 테스트 제목/g) || []).length);
+  check('최종 파일에 복제본 존재', (fin.match(/<section[^>]*>\s*<h1>편집 테스트 제목/g) || []).length === 2, fin.match(/.{0,90}편집 테스트 제목.{0,20}/g));
 
   // 코멘트 번호 추적: 순서 변경, 삭제
   const CF = T.commentsFile;
@@ -164,7 +164,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('그라디언트 각도', /linear-gradient\(90deg/.test(await styleOf()), await styleOf());
   if (await page.getByRole('button', { name: 'Add stroke' }).count()) await page.getByRole('button', { name: 'Add stroke' }).click();
   await sleep(250); await page.getByRole('button', { name: 'Individual sides' }).click();
-  const tw = page.getByLabel('top stroke width'); await tw.fill('4'); await tw.press('Enter'); await sleep(300);
+  const tw = page.getByLabel('top stroke width', { exact: true }); await tw.fill('4'); await tw.press('Enter'); await sleep(300);
   check('변별 stroke 두께', /border(-top)?-width:\s*4px/.test(await styleOf()), await styleOf());
 
   // 색 팝오버: 스와치를 누르면 Fluid ColorPicker가 열린다
@@ -245,6 +245,21 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   await page.keyboard.press('Tab'); await sleep(300);
   const st2 = page.getByLabel('Appears at step'); await st2.fill('1'); await st2.press('Enter'); await sleep(300);
   check('1로 되돌리면 속성 삭제', !(await inDoc((s) => !!s.querySelector('[data-step]'))));
+  // 속성 패널 UX: 선택 헤더, 설정 표시와 Reset, 크기 모드, 정렬 사유, 슬라이드 힌트
+  await page.screenshot({ path: '/tmp/sk-ux-elem.png' });
+  check('선택 헤더(이름과 태그)', (await page.getByRole('button', { name: 'Show in layers' }).count()) === 1);
+  const o3 = page.getByLabel('Opacity', { exact: true }); await o3.fill('60'); await o3.press('Enter'); await sleep(300);
+  check('설정한 속성에 점 표시', (await page.locator('[data-dirty]').count()) >= 1);
+  await o3.hover(); await page.getByRole('button', { name: 'Reset Opacity' }).click(); await sleep(300);
+  check('Reset이 인라인 값을 지움', !(await inDoc((s) => [...s.querySelectorAll('[style]')].some((e) => /opacity/.test(e.getAttribute('style') || '')))));
+  check('크기 모드가 하나만 선택', (await page.getByRole('radiogroup', { name: 'Width mode' }).locator('[aria-checked=true]').count()) === 1);
+  check('정렬 버튼에 규칙 툴팁이나 비활성', (await page.getByRole('button', { name: 'Align top' }).count()) === 1);
+  await page.getByRole('button', { name: 'Show in layers' }).click(); await sleep(300);
+  check('선택 헤더를 누르면 Layers 탭', (await page.getByRole('tree', { name: 'Layers' }).count()) === 1);
+  await page.getByRole('tab', { name: 'Slides' }).click();
+  await page.keyboard.press('Escape'); await sleep(300);
+  await page.screenshot({ path: '/tmp/sk-ux-slide.png' });
+  check('요소 미선택 힌트', (await page.getByText('Select an element to edit its properties').count()) === 1);
   // 자동 저장: Cmd+S 없이 1.5초 뒤 저장된다
   await page.keyboard.press('Escape'); await page.keyboard.press('Tab'); await sleep(300);
   const op2 = page.getByLabel('Opacity', { exact: true }); await op2.fill('37'); await op2.press('Enter'); await sleep(400);

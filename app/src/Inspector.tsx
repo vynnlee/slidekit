@@ -3,7 +3,7 @@ import {
   AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical,
   ArrowDown, ArrowRight, Blend, CaseLower, CaseSensitive, CaseUpper, ALargeSmall, Droplets, Expand, EyeOff, Frame, Layers as LayersIcon,
   Minus, Plus, RotateCw, Shrink, Square, SquareRoundCorner, Strikethrough, TextAlignCenter, TextAlignEnd, TextAlignJustify, TextAlignStart,
-  Underline, WrapText, Scan, Spline, ListOrdered, MoveHorizontal, ListCollapse, Space, BetweenHorizontalStart, BetweenVerticalStart, Type,
+  Underline, WrapText, Scan, Spline, Footprints, Ban, MoveHorizontal, ListCollapse, Space, BetweenHorizontalStart, BetweenVerticalStart, Type,
 } from "lucide-react";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import { SidesField } from "@/components/ui/sides-field";
 import { AlignBox } from "@/components/ui/align-box";
 import { Card, CardGroup, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { textual } from "./Canvas";
+import { iconOf, nameOf } from "./LayerTree";
 import { TokensPanel } from "./TokensPanel";
 import type { Comment } from "@/lib/deck";
 
@@ -33,6 +34,16 @@ const POSITIONS: Items = [["static", "Static"], ["relative", "Relative"], ["abso
 const BLENDS: Items = [["normal", "Normal"], ["multiply", "Multiply"], ["screen", "Screen"], ["overlay", "Overlay"], ["darken", "Darken"], ["lighten", "Lighten"], ["difference", "Difference"]];
 const STEP_EFFECTS: Items = [["rise", "Rise"], ["fade", "Fade"], ["none", "None"]];
 const BORDER_STYLES: Items = [["solid", "Solid"], ["dashed", "Dashed"], ["dotted", "Dotted"]];
+
+// 클래스나 인라인이 이 축의 크기를 정했는지 알아보려고 auto로 바꿔 재 본다(재고 나서 style 속성은 원래대로 돌린다).
+const isAuto = (el: HTMLElement, axis: "width" | "height") => {
+  if (el.style.getPropertyValue(axis)) return false;
+  const orig = el.getAttribute("style"), before = el.getBoundingClientRect()[axis];
+  el.style.setProperty(axis, "auto", "important");
+  const after = el.getBoundingClientRect()[axis];
+  if (orig === null) el.removeAttribute("style"); else el.setAttribute("style", orig);
+  return Math.abs(after - before) < 0.5;
+};
 
 const px = (v: string) => parseFloat(v) || 0;
 const num = (n: number) => String(Math.round(n * 100) / 100);
@@ -75,6 +86,7 @@ type Props = {
   onStyle(prop: string, value: string): void;
   onAttr(name: string, value: string | null): void;
   onElAttr(name: string, value: string | null): void;
+  onShowLayers(): void;
   prefix: string;
   onPrefixChange(next: string): void;
   canvasDoc: Document | null;
@@ -122,10 +134,11 @@ export function Inspector(p: Props) {
 
   // 계산값 그대로 쓰는 일반 숫자 필드
   const n = (prop: string, label: ReactNode, aria: string, o: { unit?: string; step?: number; min?: number; max?: number } = {}) => (
-    <NumberField label={label} aria-label={aria} value={val(prop)} muted={!inl(prop)} onChange={(v) => set(prop, v)} {...scrub} {...o} />
+    <NumberField label={label} aria-label={aria} value={val(prop)} muted={!inl(prop)} dirty={!!inl(prop)} onReset={() => set(prop, "")} onChange={(v) => set(prop, v)} {...scrub} {...o} />
   );
 
   const isText = !!el && textual(el);
+  const SelIcon = el ? iconOf(el) : Square;
   const isMedia = !!el && (el.tagName === "IMG" || el instanceof SVGElement);
   const container = !!el && !isText && !isMedia;
   const display = val("display");
@@ -135,29 +148,34 @@ export function Inspector(p: Props) {
   const parentFlexCol = !!parent && parent.display.includes("flex") && parent.flexDirection.startsWith("column");
   const parentGrid = parent?.display === "grid";
 
-  // 정렬 바: 부모 display에 따라 쓰는 속성이 다르다
+  // 정렬 바: 부모 display에 따라 쓰는 속성이 다르다. 효과가 없는 조합은 막고 이유를 툴팁에 쓴다.
+  const parentFlex = parentFlexRow || parentFlexCol;
+  const blockParent = !parentFlex && !parentGrid;
+  const hHow = parentFlexRow ? "auto margins" : parentGrid ? "justify-self" : parentFlexCol ? "align-self" : isText ? "text-align" : "auto margins";
+  const vHow = parentFlexCol ? "auto margins" : "align-self";
+  const hOff = blockParent && !isText && !!el && isAuto(el, "width") ? "Set a width first, a full-width block has no room to move" : "";
+  const vOff = blockParent ? "Needs a flex or grid parent" : "";
+  const autoMargins = (side: "h" | "v", where: "start" | "center" | "end") => {
+    const [a, b] = side === "h" ? ["margin-left", "margin-right"] : ["margin-top", "margin-bottom"];
+    set(a, where === "start" ? "0" : "auto"); set(b, where === "end" ? "0" : "auto");
+  };
   const alignH = (where: "start" | "center" | "end") => {
-    if (parentFlexRow) {
-      set("margin-left", where === "start" ? "0" : "auto"); set("margin-right", where === "end" ? "0" : "auto");
-      if (where === "center") { set("margin-left", "auto"); set("margin-right", "auto"); }
-    } else if (parentFlexCol || parentGrid) set(parentGrid ? "justify-self" : "align-self", where === "start" ? "flex-start" : where === "end" ? "flex-end" : "center");
-    else {
-      set("margin-left", where === "start" ? "0" : "auto"); set("margin-right", where === "end" ? "0" : "auto");
-      if (where === "center") { set("margin-left", "auto"); set("margin-right", "auto"); }
-      if (isText) set("text-align", where === "start" ? "left" : where === "end" ? "right" : "center");
-    }
+    if (parentFlexRow) autoMargins("h", where);
+    else if (parentFlexCol || parentGrid) set(parentGrid ? "justify-self" : "align-self", where === "start" ? "flex-start" : where === "end" ? "flex-end" : "center");
+    else if (isText) set("text-align", where === "start" ? "left" : where === "end" ? "right" : "center");
+    else autoMargins("h", where);
   };
   const alignV = (where: "start" | "center" | "end") => {
-    if (parentFlexRow || parentGrid) set("align-self", where === "start" ? "flex-start" : where === "end" ? "flex-end" : "center");
-    else if (parentFlexCol) { set("margin-top", where === "start" ? "0" : "auto"); set("margin-bottom", where === "end" ? "0" : "auto"); if (where === "center") { set("margin-top", "auto"); set("margin-bottom", "auto"); } }
+    if (parentFlexCol) autoMargins("v", where);
+    else if (parentFlexRow || parentGrid) set("align-self", where === "start" ? "flex-start" : where === "end" ? "flex-end" : "center");
   };
-  const canV = parentFlexRow || parentFlexCol || parentGrid;
 
   // 크기 모드: Fixed, Hug, Fill
   const mode = (axis: "width" | "height") => {
     const v = inl(axis);
-    if (v === "fit-content" || v === "max-content") return "hug";
+    if (v === "auto" || v === "fit-content" || v === "max-content") return "hug";
     if (v === "100%" || (axis === "width" ? parentFlexRow : parentFlexCol) && inl("flex").startsWith("1 1")) return "fill";
+    if (!v) return el && isAuto(el, axis) ? "hug" : "fixed"; // 설정이 없으면 auto(내용 크기)이거나 클래스가 정한 크기다
     return "fixed";
   };
   const setMode = (axis: "width" | "height", m: string) => {
@@ -229,16 +247,26 @@ export function Inspector(p: Props) {
                 value={p.slide?.style.getPropertyValue("background-color") ?? ""}
                 onChange={(v) => p.onSlideStyle("background-color", v)} />
             </InspectorSection>
+            <p className="px-3 pb-3 text-micro text-muted-foreground">Select an element to edit its properties</p>
             <TokensPanel prefix={p.prefix} onPrefixChange={p.onPrefixChange} canvas={p.canvasDoc} />
           </div>
         ) : (
           <div className="-mx-3 flex flex-col pt-1" key={p.selId}>
+            <div className="px-3 pb-2">
+              <Tooltip content="Show in Layers" side="top">
+                <Button aria-label="Show in layers" variant="ghost" size="compact" className="w-full justify-start gap-2" onClick={p.onShowLayers}>
+                  <SelIcon className="size-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate text-left">{nameOf(el)}</span>
+                  <span className="shrink-0 rounded bg-surface-2 px-1 text-micro text-muted-foreground">{el.tagName.toLowerCase()}</span>
+                </Button>
+              </Tooltip>
+            </div>
             <InspectorSection id="align" title="Align">
               <div className="flex gap-0.5">
                 {([["Align left", AlignStartVertical, () => alignH("start")], ["Align horizontal center", AlignCenterVertical, () => alignH("center")], ["Align right", AlignEndVertical, () => alignH("end")],
                   ["Align top", AlignStartHorizontal, () => alignV("start")], ["Align vertical center", AlignCenterHorizontal, () => alignV("center")], ["Align bottom", AlignEndHorizontal, () => alignV("end")]] as const).map(([l, I, f], i) => (
-                  <Tooltip key={l} content={l} side="top">
-                    <Button aria-label={l} variant="ghost" size="icon-compact" className="flex-1" disabled={i > 2 && !canV} onClick={f}><I /></Button>
+                  <Tooltip key={l} content={(i < 3 ? hOff : vOff) || `${l} (sets ${i < 3 ? hHow : vHow})`} side="top">
+                    <span className="flex flex-1"><Button aria-label={l} variant="ghost" size="icon-compact" className="flex-1" disabled={!!(i < 3 ? hOff : vOff)} onClick={f}><I /></Button></span>
                   </Tooltip>
                 ))}
               </div>
@@ -266,10 +294,14 @@ export function Inspector(p: Props) {
                   {n("gap", flex && val("flex-direction").startsWith("column") ? <BetweenVerticalStart /> : <BetweenHorizontalStart />, "Gap", { min: 0 })}
                 </Grid>
               )}
-              <span className="text-caption text-muted-foreground">Padding</span>
-              <SidesField label="Padding" values={side4("padding")} onChange={setSides("padding")} />
-              <span className="text-caption text-muted-foreground">Margin</span>
-              <SidesField label="Margin" values={side4("margin")} onChange={setSides("margin")} />
+              <div className="flex flex-col gap-1">
+                <span className="text-micro text-muted-foreground">Padding</span>
+                <SidesField label="Padding" values={side4("padding")} onChange={setSides("padding")} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-micro text-muted-foreground">Margin</span>
+                <SidesField label="Margin" values={side4("margin")} onChange={setSides("margin")} />
+              </div>
               <div className="flex items-center">
                 <Switch label="Clip content" checked={val("overflow") === "hidden"} onToggle={() => set("overflow", val("overflow") === "hidden" ? "visible" : "hidden")} />
               </div>
@@ -289,51 +321,58 @@ export function Inspector(p: Props) {
             <InspectorSection id="appearance" title="Appearance" action={(
               <Toggle on={radiusOpen} label="Individual corners" I={Scan} onClick={() => setRadiusOpen((v) => !v)} />)}>
               <Grid>
-                <NumberField label={<Blend />} aria-label="Opacity" unit="" min={0} max={100} value={num(+val("opacity") * 100)} muted={!inl("opacity")}
-                  onChange={(v) => set("opacity", num(+v / 100))} {...scrub} />
-                {!radiusOpen && <NumberField label={<SquareRoundCorner />} aria-label="Corner radius" min={0} value={val("border-top-left-radius")} muted={!inl("border-radius") && !inl("border-top-left-radius")}
-                  onChange={(v) => set("border-radius", v)} {...scrub} />}
+                <NumberField label={<Blend />} aria-label="Opacity" unit="" suffix="%" min={0} max={100} value={num(+val("opacity") * 100)} muted={!inl("opacity")}
+                  dirty={!!inl("opacity")} onReset={() => set("opacity", "")} onChange={(v) => set("opacity", num(+v / 100))} {...scrub} />
+                {!radiusOpen && (
+                  <NumberField label={<SquareRoundCorner />} aria-label="Corner radius" min={0} value={val("border-top-left-radius")} muted={!inl("border-radius") && !inl("border-top-left-radius")}
+                    dirty={!!inl("border-radius") || !!inl("border-top-left-radius")}
+                    onReset={() => { set("border-radius", ""); ["top-left", "top-right", "bottom-left", "bottom-right"].forEach((c) => set(`border-${c}-radius`, "")); }}
+                    onChange={(v) => set("border-radius", v)} {...scrub} />
+                )}
                 {radiusOpen && ([["TL", "top-left", "Top left"], ["TR", "top-right", "Top right"], ["BL", "bottom-left", "Bottom left"], ["BR", "bottom-right", "Bottom right"]] as const).map(([l, c, name]) => (
                   <NumberField key={c} label={l} aria-label={`${name} radius`} min={0} value={val(`border-${c}-radius`)} muted={!inl(`border-${c}-radius`) && !inl("border-radius")}
                     onChange={(v) => set(`border-${c}-radius`, v)} {...scrub} />
                 ))}
               </Grid>
               <Pick label="Blend mode" value={val("mix-blend-mode")} items={BLENDS} onChange={(v) => set("mix-blend-mode", v)} />
+              <div className="flex flex-col gap-1">
+              <span className="text-micro text-muted-foreground">Appears at step</span>
               <Grid>
-                <NumberField label={<ListOrdered />} aria-label="Appears at step" unit="" min={1} step={1} value={el.getAttribute("data-step") ?? "1"} muted={!el.hasAttribute("data-step")}
+                <NumberField label={<Footprints />} aria-label="Appears at step" unit="" min={1} step={1} value={el.getAttribute("data-step") ?? "1"} muted={!el.hasAttribute("data-step")}
                   onChange={(v) => p.onElAttr("data-step", +v >= 2 ? String(Math.round(+v)) : null)} />
                 {el.hasAttribute("data-step") && <Pick label="Step effect" value={el.getAttribute("data-step-effect") ?? "rise"} items={STEP_EFFECTS} onChange={(v) => p.onElAttr("data-step-effect", v === "rise" ? null : v)} />}
               </Grid>
+              </div>
             </InspectorSection>
 
             {isText && (
               <InspectorSection id="typography" title="Typography">
                 <Pick label="Font" value={cs?.fontFamily ?? ""} items={families} onChange={(v) => set("font-family", v)} />
+                <Pick label="Weight" value={WEIGHTS.some(([w]) => w === val("font-weight")) ? val("font-weight") : String(Math.round(+val("font-weight") / 100) * 100)} items={WEIGHTS} onChange={(v) => set("font-weight", v)} />
                 <Grid>
-                  <Pick label="Weight" value={WEIGHTS.some(([w]) => w === val("font-weight")) ? val("font-weight") : String(Math.round(+val("font-weight") / 100) * 100)} items={WEIGHTS} onChange={(v) => set("font-weight", v)} />
-                  {n("font-size", <CaseSensitive />, "Font size", { min: 1, max: 400 })}
-                  <NumberField label={<ListCollapse />} aria-label="Line height" unit="" step={0.05} min={0} value={lh} muted={!inl("line-height")} onChange={(v) => set("line-height", v)} {...scrub} />
-                  <NumberField label={<Space />} aria-label="Letter spacing" unit="" step={0.5} value={ls} muted={!inl("letter-spacing")} onChange={(v) => set("letter-spacing", `${num(+v / 100)}em`)} {...scrub} />
-                </Grid>
-                <Grid>
-                  <SegmentedControl aria-label="Text align" value={["start", "left"].includes(val("text-align")) ? "left" : val("text-align").replace("end", "right")} onChange={(v) => set("text-align", v)}
-                    options={[opt("left", TextAlignStart, "Align left"), opt("center", TextAlignCenter, "Align center"), opt("right", TextAlignEnd, "Align right"), opt("justify", TextAlignJustify, "Justify")]} />
-                  <div className="flex gap-0.5">
+                  {n("font-size", <ALargeSmall />, "Font size", { min: 1, max: 400 })}
+                  <NumberField label={<ListCollapse />} aria-label="Line height" unit="" step={0.05} min={0} value={lh} muted={!inl("line-height")} dirty={!!inl("line-height")} onReset={() => set("line-height", "")} onChange={(v) => set("line-height", v)} {...scrub} />
+                  <NumberField label={<Space />} aria-label="Letter spacing" unit="" suffix="%" step={0.5} value={ls} muted={!inl("letter-spacing")} dirty={!!inl("letter-spacing")} onReset={() => set("letter-spacing", "")} onChange={(v) => set("letter-spacing", `${num(+v / 100)}em`)} {...scrub} />
+                  <div className="flex items-center gap-0.5">
                     <Toggle on={textLine.includes("underline")} label="Underline" I={Underline} onClick={() => set("text-decoration-line", textLine.includes("underline") ? "none" : "underline")} />
                     <Toggle on={textLine.includes("line-through")} label="Strikethrough" I={Strikethrough} onClick={() => set("text-decoration-line", textLine.includes("line-through") ? "none" : "line-through")} />
                   </div>
                 </Grid>
-                <SegmentedControl aria-label="Text case" value={val("text-transform")} onChange={(v) => set("text-transform", v)}
-                  options={[opt("none", CaseSensitive, "None"), opt("uppercase", CaseUpper, "Uppercase"), opt("lowercase", CaseLower, "Lowercase"), opt("capitalize", ALargeSmall, "Capitalize")]} />
+                <Grid>
+                  <SegmentedControl aria-label="Text align" value={["start", "left"].includes(val("text-align")) ? "left" : val("text-align").replace("end", "right")} onChange={(v) => set("text-align", v)}
+                    options={[opt("left", TextAlignStart, "Align left"), opt("center", TextAlignCenter, "Align center"), opt("right", TextAlignEnd, "Align right"), opt("justify", TextAlignJustify, "Justify")]} />
+                  <SegmentedControl aria-label="Text case" value={val("text-transform")} onChange={(v) => set("text-transform", v)}
+                    options={[opt("none", Ban, "No case change"), opt("uppercase", CaseUpper, "Uppercase"), opt("lowercase", CaseLower, "Lowercase"), opt("capitalize", CaseSensitive, "Capitalize")]} />
+                </Grid>
               </InspectorSection>
             )}
 
-            <InspectorSection id="fill" title="Fill" action={!hasFill && !isMedia ? (
+            <InspectorSection id="fill" title="Fill" action={!hasFill ? (
               <Tooltip content="Add fill" side="top"><Button aria-label="Add fill" variant="ghost" size="icon-compact" onClick={() => set("background-color", "#ffffff")}><Plus /></Button></Tooltip>) : undefined}>
               {(isText || container) && (
-                <div className="flex items-center gap-1">
-                  <span className="w-4 shrink-0 text-muted-foreground [&_svg]:size-3.5"><Type /></span>
-                  <div className="min-w-0 flex-1"><ColorField aria-label="Text color" value={val("color")} onChange={(v) => set("color", v)} /></div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-micro text-muted-foreground">Text color</span>
+                  <ColorField aria-label="Text color" value={val("color")} onChange={(v) => set("color", v)} />
                 </div>
               )}
               {hasFill && (

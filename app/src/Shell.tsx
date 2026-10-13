@@ -86,7 +86,7 @@ export function Shell({ toolbar, left, right, children, bare, heading = "slideki
     const esc = (e: KeyboardEvent) => {
       const { narrow, leftOpen, rightOpen } = st.current;
       if (e.key !== "Escape" || !narrow || !(leftOpen || rightOpen)) return;
-      if (document.querySelector("[role=menu],[role=listbox],[role=alertdialog]")) return;
+      if (document.querySelector("[role=menu],[role=listbox]:not([aria-orientation=horizontal]),[role=alertdialog]")) return; // 가로 listbox는 편집기의 슬라이드 필름스트립이라 팝업이 아니다
       setLeftOpen(false); setRightOpen(false);
     };
     window.addEventListener("keydown", esc, true);

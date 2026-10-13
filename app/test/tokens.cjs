@@ -5,7 +5,7 @@ const fs = require('fs'), path = require('path'), cp = require('child_process');
 const BASE = process.env.BASE || 'http://127.0.0.1:3250', ROOT = path.join(__dirname, '..', '..');
 const DIR = path.join(ROOT, 'decks', '_qa-tok'), FILE = path.join(DIR, 'index.html');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-let fail = 0; const check = (n, ok, x) => { if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + n + (ok ? '' : '  ' + JSON.stringify(x).slice(0, 300))); };
+let fail = 0; const check = (n, ok, x) => { if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + n + (ok ? '' : '  ' + String(JSON.stringify(x)).slice(0, 300))); };
 const sh = (c) => cp.spawnSync('sh', ['-c', c], { cwd: ROOT, encoding: 'utf8' });
 
 async function run(label, prep, expectDiff) {
@@ -21,6 +21,12 @@ async function run(label, prep, expectDiff) {
   const fr = () => p.frames().find((f) => f.url().includes('/decks/_qa-tok/'));
   const accent = p.getByLabel('Accent hex'); await accent.fill('#ff5500'); await accent.press('Enter'); await sleep(200);
   check(label + ': 입력 즉시 캔버스에 반영(미리보기)', (await fr().evaluate(() => document.documentElement.style.getPropertyValue('--sk-accent'))) === '#ff5500' || /ff5500/i.test(await fr().evaluate(() => document.documentElement.style.getPropertyValue('--sk-accent'))));
+  await sleep(600);
+  check(label + ': 바뀐 토큰에만 Reset 점', (await p.getByRole('button', { name: 'Reset Accent to default' }).count()) === 1 && (await p.getByRole('button', { name: /^Reset Text to default/ }).count()) === 0);
+  const hexOf = async () => (await accent.inputValue()).toLowerCase();
+  await p.getByRole('button', { name: 'Reset Accent to default' }).click(); await sleep(300);
+  check(label + ': Reset이 기본값으로 되돌림', (await hexOf()) === '#a78bfa' && (await p.getByRole('button', { name: 'Reset Accent to default' }).count()) === 0, await hexOf());
+  await accent.fill('#ff5500'); await accent.press('Enter'); await sleep(200);
   const padx = p.getByLabel('Padding X', { exact: true }); await padx.fill('120'); await padx.press('Enter'); await sleep(700);
   check(label + ': 입력 뒤 Unsaved', (await p.getByTestId('status').textContent()) === 'Unsaved');
   await p.getByRole('button', { name: 'Save' }).click(); await sleep(800);
@@ -31,6 +37,11 @@ async function run(label, prep, expectDiff) {
   check(label + ': 바뀐 줄이 :root 변수뿐', diff.every((l) => /--sk-(accent|pad-x)|:root|^> *\}$/.test(l)) && expectDiff(diff, after), diff);
   check(label + ': 슬라이드 본문 그대로', after.slice(after.indexOf('<body>')) === before.slice(before.indexOf('<body>')));
   check(label + ': lint 통과', sh('bun app/server.ts lint _qa-tok').status === 0, sh('bun app/server.ts lint _qa-tok').stdout);
+  if (label === '기존 :root') {
+    const dv = p.getByRole('button', { name: /Deck variables/ });
+    check(label + ': Deck variables는 기본 접힘과 개수 배지', (await dv.count()) === 1 && (await dv.getAttribute('aria-expanded')) === 'false' && /1/.test(await dv.textContent()), await dv.textContent());
+    check(label + ': Deck styles 그룹 헤더', (await p.getByText('Deck styles', { exact: true }).count()) === 1);
+  }
   const e = await ctx.newPage(); await e.goto(BASE + '/decks/_qa-tok/index.html#2'); await e.waitForSelector('#sk-stage');
   const cs = await e.evaluate(() => ({ a: getComputedStyle(document.documentElement).getPropertyValue('--sk-accent').trim(), pad: getComputedStyle(document.querySelector('[data-active]')).paddingLeft }));
   check(label + ': 엔진으로 열면 반영', /^#ff5500$/i.test(cs.a) && cs.pad === '120px', cs);

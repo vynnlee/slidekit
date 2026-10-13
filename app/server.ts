@@ -4,6 +4,7 @@ import { readdir, stat } from "node:fs/promises";
 import index from "./index.html";
 import { routes as commentRoutes } from "./comments";
 import { routes as editorRoutes } from "./editor-api";
+import { routes as exportRoutes } from "./export-api";
 import { guardHost, guardRoutes } from "./guard";
 import { alreadyUp, openApp } from "./launch";
 import { createDeck } from "./decks-api";
@@ -62,9 +63,11 @@ Bun.serve({
     "/edit/:id": index,
     "/dev/inspector": index,
     "/dev/tokens": index,
+    "/dev/export": index,
     "/api/decks": { GET: async () => Response.json(await listDecks()), POST: createDeck },
     ...commentRoutes,
     ...editorRoutes,
+    ...exportRoutes,
   }),
   async fetch(req) {
     const denied = guardHost(req); // 모든 메서드에 적용한다

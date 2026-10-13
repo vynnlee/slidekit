@@ -12,3 +12,8 @@ Inspector parts live in `components/ui/` (demo and checks: `/dev/inspector`, `ap
 - `prefix`: deck text before the first slide (holds `<head><style>`). `onPrefixChange(next)`: fires once per change (debounced 400ms, scrub fires at end), so make it ONE undo entry. `canvas`: canvas iframe `Document`, enables live preview via inline `:root` properties (the canvas should reload from the new prefix after commit).
 - Sections: Colors, Fonts, Spacing, Text sizes, Deck variables. Only `:root` variables are edited (`lib/deck-tokens.ts`, SPEC 9.4). Put it in the Inspector when no element is selected.
 - Demo and check: `/dev/tokens?deck=<folder>`, `node app/test/tokens.cjs`, `bun test app/test/deck-tokens.test.ts`.
+
+## ExportMenu (`app/src/ExportMenu.tsx`)
+`<ExportMenu folder={deck.folder} dirty={dirty} onSave={async () => save()} />` in the editor header (a ghost compact "Export" button).
+- `folder`: deck folder under `decks/` (must match `^[a-z0-9][a-z0-9-]*$`, same as the publish path). `dirty`/`onSave`: if dirty, `onSave()` runs first and must resolve `false` on failure or conflict (nothing is exported then).
+- Menu: Download HTML, Download PDF (POST bundle/pdf, then `GET /api/decks/:id/download?kind=`), Publish to static.vynnlee.com... (confirm dialog with address and visibility, password + confirm for Password decks, streamed progress, URL + Copy on success). API: `app/export-api.ts` (one export at a time, 409). Tests: `bun test app/test/export-api.test.ts`; browser: `SLIDEKIT_DEPLOY_DRY_RUN=1` server + `node app/test/export.cjs` (demo `/dev/export?deck=<folder>`). Dry run never uploads.

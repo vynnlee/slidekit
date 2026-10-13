@@ -61,7 +61,7 @@ export function Shell({ toolbar, left, right, children, bare, heading = "slideki
   const narrow = useNarrow();
   const [leftOpen, setLeftOpen] = useState(!narrow);
   const [rightOpen, setRightOpen] = useState(!narrow);
-  const [lw, setLw] = useWidth("sk-left-w", 216, 200, 400);
+  const [lw, setLw] = useWidth("sk-left-w", 240, 200, 400);
   const [rw, setRw] = useWidth("sk-right-w", 256, 220, 420);
 
   // 폭 구간을 넘나들면 그 구간의 기본값(넓으면 펼침, 좁으면 접힘)으로 돌린다.
@@ -123,7 +123,7 @@ export function Shell({ toolbar, left, right, children, bare, heading = "slideki
         {!narrow && left && leftOpen && !bare && (
           <aside aria-label={leftLabel} style={{ width: lw }} className="relative h-full shrink-0 overflow-auto border-r border-border">
             {left}
-            <Handle side="left" width={lw} onChange={(w) => setLw(w < 0 ? 216 : w)} />
+            <Handle side="left" width={lw} onChange={(w) => setLw(w < 0 ? 240 : w)} />
           </aside>
         )}
         <main className="min-h-0 min-w-0 flex-1 overflow-auto">

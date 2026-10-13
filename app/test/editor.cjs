@@ -86,7 +86,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('바뀐 줄이 작음(서식 보존)', diffLines <= 6, diffLines);
 
   // 슬라이드 복제, 삭제, 순서 변경
-  const layers = page.locator('[draggable="true"]');
+  const layers = page.locator('[data-testid=filmstrip] [role=option]'); // 슬라이드 필름스트립
   await layers.nth(2).click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Duplicate' }).click(); await sleep(1200);
   check('복제 후 54장', (await n('#sk-stage > [data-slide]')) === 54);
@@ -96,7 +96,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('삭제 후 53장', (await n('#sk-stage > [data-slide]')) === 53);
   const titleOf = (i) => page.evaluate((i) => (document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll('#sk-stage > [data-slide]')[i].textContent || '').trim().slice(0, 20), i);
   const t4 = await titleOf(3), t8 = await titleOf(7);
-  await layers.nth(3).dragTo(layers.nth(5), { targetPosition: { x: 40, y: 20 } }); await sleep(1500);
+  await layers.nth(3).dragTo(layers.nth(5), { targetPosition: { x: 20, y: 30 } }); await sleep(1500);
   const moved = await titleOf(4);
   check('드래그로 순서 변경', moved === t4 && (await titleOf(3)) !== t4, [t4, t8, moved]);
   await page.keyboard.press('Meta+z'); await sleep(1500);
@@ -112,21 +112,23 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   const CF = T.commentsFile;
   const post = (slide, text) => page.evaluate(([slide, text, folder]) => fetch('/api/comments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deck: folder, slide, path: '', excerpt: text, text }) }).then((r) => r.json()), [slide, text, T.folder]);
   const rd = () => JSON.parse(fs.readFileSync(CF, 'utf8'));
-  const tA = await titleOf(9), tB = await titleOf(11);
-  const cA = (await post(10, 'T-A')).id, cB = (await post(12, 'T-B')).id;
+  const titlesNow = await page.evaluate(() => [...document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll('#sk-stage > [data-slide]')].map((s) => (s.textContent || '').trim().slice(0, 20)));
+  const occOf = (i) => titlesNow.slice(0, i).filter((t) => t === titlesNow[i]).length; // 같은 제목이 앞에 몇 번 있었는지
+  const tA = titlesNow[4], tB = titlesNow[5], oA = occOf(4), oB = occOf(5); // 스크롤 없이 모두 보이는 칸(앞 6개) 중 사진이 든 4번째 뒤의 두 장 // 필름스트립에서 화면에 보이는 앞쪽 슬라이드로 잡는다
+  const cA = (await post(5, 'T-A')).id, cB = (await post(6, 'T-B')).id;
   await page.reload(); await frameEl.waitFor();
   await page.waitForFunction(() => { const f = document.querySelector('iframe[title="Canvas"]'); return f && f.contentDocument && f.contentDocument.querySelector('[data-active]'); }); await sleep(800);
-  await layers.nth(9).dragTo(layers.nth(11), { targetPosition: { x: 40, y: 20 } }); await sleep(1500);
+  await layers.nth(4).dragTo(layers.nth(5), { targetPosition: { x: 100, y: 30 } }); await sleep(1500); // 오른쪽 절반에 놓으면 한 칸 뒤로 간다
   await page.keyboard.press('Meta+s'); await sleep(1000);
-  const posOf = (t) => page.evaluate((t) => [].findIndex.call(document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll('#sk-stage > [data-slide]'), (s) => (s.textContent || '').trim().slice(0, 20) === t) + 1, t);
+  const posOf = (t, occ = 0) => page.evaluate(([t, occ]) => { const m = []; [...document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll('#sk-stage > [data-slide]')].forEach((s, i) => { if ((s.textContent || '').trim().slice(0, 20) === t) m.push(i + 1); }); return m[occ] || 0; }, [t, occ]);
   let cs = rd();
-  check('순서 변경 뒤 코멘트 번호가 따라감', cs.find((c) => c.id === cA).slide === (await posOf(tA)) && cs.find((c) => c.id === cB).slide === (await posOf(tB)) && (await posOf(tA)) !== 10, [cs.map((c) => c.slide), await posOf(tA), await posOf(tB)]);
-  await layers.nth((await posOf(tA)) - 1).click({ button: 'right' });
+  check('순서 변경 뒤 코멘트 번호가 따라감', cs.find((c) => c.id === cA).slide === (await posOf(tA, oA)) && cs.find((c) => c.id === cB).slide === (await posOf(tB, oB)) && (await posOf(tA, oA)) !== 5, [cs.map((c) => c.slide), await posOf(tA, oA), await posOf(tB, oB)]);
+  await layers.nth((await posOf(tA, oA)) - 1).click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Delete' }).click(); await sleep(1000);
   await page.keyboard.press('Meta+s'); await sleep(1000);
   cs = rd();
   check('삭제한 슬라이드의 코멘트는 남고 slideDeleted', cs.find((c) => c.id === cA) && cs.find((c) => c.id === cA).slideDeleted === true);
-  check('나머지 코멘트 번호 유지', cs.find((c) => c.id === cB).slide === (await posOf(tB)), [cs.find((c) => c.id === cB).slide, await posOf(tB)]);
+  check('나머지 코멘트 번호 유지', cs.find((c) => c.id === cB).slide === (await posOf(tB, oB)), [cs.find((c) => c.id === cB).slide, await posOf(tB)]);
   const put = (b) => page.evaluate(([b, f]) => fetch('/api/decks/' + f, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then((r) => r.status), [b, T.folder]);
   check('base 없이 저장하면 400', (await put({ source: fs.readFileSync(FILE, 'utf8') })) === 400);
   fs.writeFileSync(CF, '[]');
@@ -177,9 +179,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   await page.keyboard.press('Escape'); await sleep(300);
 
   // Layers 탭, 복사 붙여넣기, 굵게
-  await page.getByRole('tab', { name: 'Slides' }).click(); await sleep(200);
   await layers.nth(1).click(); await sleep(500);
-  await page.getByRole('tab', { name: 'Layers' }).click(); await sleep(500);
   const rows = page.locator('[role=tree] [draggable=true]');
   check('Layers 트리에 요소 표시', (await rows.count()) > 1, await rows.count());
   const inDoc = (fn, arg) => page.evaluate(([f, a]) => { const d = document.querySelector('iframe[title="Canvas"]').contentDocument; return eval('(' + f + ')')(d.querySelector('[data-active]'), a); }, [fn.toString(), arg]);
@@ -235,9 +235,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('data-step이 요소에 설정', await inDoc((s) => !!s.querySelector('[data-step="3"]')));
   check('Effect Select 표시', (await page.getByLabel('Step effect').count()) === 1);
   check('캔버스에 모든 단계 표시(data-sk-show-steps)', await page.evaluate(() => document.querySelector('iframe[title="Canvas"]').contentDocument.documentElement.hasAttribute('data-sk-show-steps')));
-  await page.getByRole('tab', { name: 'Layers' }).click(); await sleep(300);
   check('Layers 단계 배지', (await page.getByTitle('Appears at step 3').count()) >= 1);
-  await page.getByRole('tab', { name: 'Slides' }).click();
   await page.locator('body').click({ position: { x: 5, y: 5 } }); await page.keyboard.press('Meta+s'); await sleep(1200);
   const stepSaved = fs.readFileSync(FILE, 'utf8');
   check('저장 파일에 data-step, show-steps는 새지 않음', /data-step="3"/.test(stepSaved) && !stepSaved.includes('data-sk-show-steps'));
@@ -257,7 +255,6 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('정렬 버튼에 규칙 툴팁이나 비활성', (await page.getByRole('button', { name: 'Align top' }).count()) === 1);
   await page.getByRole('button', { name: 'Show in layers' }).click(); await sleep(300);
   check('선택 헤더를 누르면 Layers 탭', (await page.getByRole('tree', { name: 'Layers' }).count()) === 1);
-  await page.getByRole('tab', { name: 'Slides' }).click();
   await page.keyboard.press('Escape'); await sleep(300);
   await page.screenshot({ path: '/tmp/sk-ux-slide.png' });
   check('요소 미선택 힌트', (await page.getByText('Select an element to edit its properties').count()) === 1);
@@ -275,8 +272,10 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   await focusBody(); await page.keyboard.press('Meta+z'); await sleep(300);
 
   // 이미지 선택: Fit 컨트롤, Fill 섹션 없음, 선택 헤더 한 줄
-  await page.getByRole('tab', { name: 'Slides' }).click(); await focusBody(); await page.keyboard.press('Escape');
-  for (let i = 0; i < 12; i++) { await layers.nth(i).click(); await sleep(500); if (await fr().locator('[data-active] img').count()) break; }
+  await focusBody(); await page.keyboard.press('Escape');
+  const imgAt = await page.evaluate(() => [...document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll('#sk-stage > [data-slide]')].findIndex((s) => s.querySelector('img')));
+  console.log('INFO 이미지 슬라이드 위치 ' + (imgAt + 1));
+  await layers.nth(Math.max(0, imgAt)).click(); await sleep(700);
   await fr().locator('[data-active] img').first().click(); await sleep(500);
   check('이미지 Fit과 Position 컨트롤', (await page.getByLabel('Image fit', { exact: true }).count()) === 1 && (await page.getByLabel('Image position', { exact: true }).count()) === 1);
   const pr = await page.getByRole('complementary', { name: 'Properties' }).boundingBox(), fitB = await page.getByLabel('Image fit', { exact: true }).boundingBox(), posB = await page.getByLabel('Image position', { exact: true }).boundingBox();
@@ -286,6 +285,33 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('선택 헤더가 한 줄', hb && hb.height <= 30, hb && hb.height);
   check('이미지 이름은 Image', (await page.getByRole('button', { name: 'Show in layers' }).textContent()).includes('Image'));
   await focusBody(); await page.keyboard.press('Escape');
+  // 필름스트립: 키보드 이동, 접기, 슬라이드 추가
+  await layers.nth(0).click(); await sleep(400); await layers.nth(0).focus(); await page.keyboard.press('ArrowRight'); await sleep(500);
+  check('필름스트립에서 오른쪽 방향키로 다음 슬라이드', (await layers.nth(1).getAttribute('aria-selected')) === 'true');
+  const total = await layers.count();
+  check('현재 위치 표시(Slide 2 / N)', (await page.getByText(`Slide 2 / ${total}`).count()) === 1);
+  // 포커스 링이 스크롤 영역 안에 완전히 들어오는지(상하좌우, 첫째와 마지막 포함)
+  const ringInside = () => page.evaluate(() => {
+    const o = document.activeElement, vp = o && o.closest && o.closest('[data-radix-scroll-area-viewport],[data-slot=scroll-area-viewport]');
+    if (!o || !vp || o.getAttribute('role') !== 'option') return 'no-option';
+    const sp = Math.max(0, ...[...getComputedStyle(o).boxShadow.matchAll(/0px 0px 0px (\d+(?:\.\d+)?)px/g)].map((m) => +m[1]));
+    const r = o.getBoundingClientRect(), v = vp.getBoundingClientRect();
+    return r.left - sp >= v.left - 0.5 && r.right + sp <= v.right + 0.5 && r.top - sp >= v.top - 0.5 && r.bottom + sp <= v.bottom + 0.5 ? 'ok' : JSON.stringify({ sp, r: [r.left, r.top, r.right, r.bottom], v: [v.left, v.top, v.right, v.bottom] });
+  });
+  await layers.nth(2).focus(); await page.keyboard.press('ArrowLeft'); await sleep(400); await page.keyboard.press('ArrowLeft'); await sleep(500);
+  check('포커스 링이 첫 썸네일에서도 잘리지 않음', (await ringInside()) === 'ok', await ringInside());
+  await page.keyboard.press('End'); await sleep(700);
+  check('포커스 링이 마지막 썸네일에서도 잘리지 않음', (await ringInside()) === 'ok', await ringInside());
+  await page.keyboard.press('Home'); await sleep(500);
+  await page.getByRole('button', { name: 'Hide filmstrip' }).click(); await sleep(300);
+  // 앞의 포커스 링 검사가 Home으로 첫 슬라이드에 돌려놓는다
+  { const nOpt = await layers.count(), nTxt = await page.getByText(`Slide 1 / ${total}`).count(); check('접으면 썸네일 목록이 사라지고 위치 표시만 남음', nOpt === 0 && nTxt === 1, [nOpt, nTxt, total, await page.locator('[data-testid=filmstrip]').innerText()]); }
+  await page.getByRole('button', { name: 'Show filmstrip' }).click(); await sleep(400);
+  await page.getByRole('button', { name: 'Add slide' }).click(); await sleep(600);
+  check('+ 타일로 슬라이드 추가', (await layers.count()) === total + 1, [total, await layers.count()]);
+  await focusBody(); await page.keyboard.press('Meta+z'); await sleep(600);
+  check('추가 실행 취소', (await layers.count()) === total);
+
   // 자동 저장: Cmd+S 없이 1.5초 뒤 저장된다
   await page.keyboard.press('Escape'); await focusBody(); await page.keyboard.press('Tab'); await sleep(300);
   const op2 = page.getByLabel('Opacity', { exact: true }); await op2.fill('37'); await op2.press('Enter'); await sleep(400);

@@ -6,9 +6,8 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Shell } from "./Shell";
 import { Canvas, textual, type CanvasApi } from "./Canvas";
-import { Layers } from "./Layers";
+import { Filmstrip } from "./Filmstrip";
 import { LayerTree } from "./LayerTree";
-import { TabsSubtle, TabsSubtleItem } from "@/components/ui/tabs-subtle";
 import { Inspector } from "./Inspector";
 import { go } from "./App";
 import { byPath, compose, duplicateHtml, newKey, newSlideHtml, pathOf, splitDeck, type Unit } from "@/lib/deck-source";
@@ -18,7 +17,7 @@ import type { Comment, DeckEntry } from "@/lib/deck";
 
 const KEYS: [string, string][] = [
   ["Cmd+S", "Save"], ["Cmd+Z", "Undo"], ["Shift+Cmd+Z", "Redo"], ["Delete", "Delete selection"], ["Cmd+D", "Duplicate"],
-  ["Up, Down", "Go to slide"], ["Double-click", "Edit text"], ["Enter", "Finish editing"], ["Esc", "Deselect"], ["Tab", "Select next element"], ["Cmd+Scroll, Cmd+0", "Zoom, fit"], ["Cmd+Enter", "Present from this slide"], ["Shift+Cmd+Enter", "Present from the start"], ["Cmd+\\", "Toggle panels"], ["Cmd+E", "Toggle notes"], ["Cmd+/", "Shortcuts"],
+  ["Up, Down", "Go to slide"], ["Double-click", "Edit text"], ["Enter", "Finish editing"], ["Esc", "Deselect"], ["Tab", "Select next element"], ["Cmd+Scroll, Cmd+0", "Zoom, fit"], ["Cmd+Enter", "Present from this slide"], ["Shift+Cmd+Enter", "Present from the start"], ["Cmd+\\", "Toggle panels"], ["Shift+Cmd+\\", "Toggle filmstrip"], ["Cmd+E", "Toggle notes"], ["Cmd+/", "Shortcuts"],
 ];
 // 슬라이드 원문에서 노트(aside[data-notes])의 글자만 꺼낸다. 앞뒤 공백은 보기용으로만 뗀다.
 const noteOf = (html: string) => {
@@ -217,7 +216,8 @@ export function Editor({ id }: { id: string }) {
     if (!sel) return delSlide(indexRef.current);
     sel.remove(); pickSel(null); commit();
   };
-  const [leftTab, setLeftTab] = useState(0);
+  const [filmCollapsed, setFilmCollapsed] = useState(() => localStorage.getItem("slidekit.filmstrip.collapsed") === "1");
+  const toggleFilm = () => setFilmCollapsed((v) => { localStorage.setItem("slidekit.filmstrip.collapsed", v ? "0" : "1"); return !v; });
   const clip = useRef("");
   const copySel = () => {
     if (!sel) return;
@@ -347,12 +347,13 @@ export function Editor({ id }: { id: string }) {
 
   keyRef.current = (e) => {
     const t = e.target as HTMLElement, mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
-    const typing = t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || !!t.closest?.('[role=dialog],[role=menu],[role=listbox],[role=radiogroup]');
+    const typing = t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || (!!t.closest?.('[role=dialog],[role=menu],[role=listbox],[role=radiogroup]') && !t.closest?.('[data-testid=filmstrip]')); // 슬라이드 필름스트립은 편집기 단축키(실행 취소 등)를 그대로 쓴다
     if (mod && k === "\\" && e.view !== window) {
       e.preventDefault();
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "\\", metaKey: e.metaKey, ctrlKey: e.ctrlKey, cancelable: true }));
     } else if (mod && k === "s") { e.preventDefault(); save(); }
     else if (mod && k === "e") { e.preventDefault(); setNotesOpen((v) => !v); }
+    else if (mod && e.shiftKey && (k === "|" || k === "\\")) { e.preventDefault(); toggleFilm(); }
     else if (mod && k === "/") { e.preventDefault(); setHelp((v) => !v); }
     else if (mod && e.key === "Enter") { e.preventDefault(); present(e.shiftKey); }
     else if (mod && (k === "b" || k === "i") && !/^(INPUT|TEXTAREA)$/.test(t.tagName) && (sel || t.isContentEditable || e.view !== window)) { e.preventDefault(); emphasis(k); }
@@ -389,7 +390,7 @@ export function Editor({ id }: { id: string }) {
   return (
     <>
       <Shell
-        heading={deck.title} leftLabel="Slides and layers" rightLabel="Properties"
+        heading={deck.title} leftLabel="Layers" rightLabel="Properties"
         toolbar={
           <>
             <Tooltip content="Decks" side="bottom"><Button aria-label="Decks" variant="ghost" size="icon-compact" onClick={back}><ArrowLeft /></Button></Tooltip>
@@ -413,30 +414,23 @@ export function Editor({ id }: { id: string }) {
         }
         left={
           <div className="flex h-full flex-col">
-            <div className="shrink-0 px-2 pt-2">
-              <TabsSubtle selectedIndex={leftTab} onSelect={setLeftTab} size="compact" aria-label="Left panel">
-                <TabsSubtleItem index={0} label="Slides" />
-                <TabsSubtleItem index={1} label="Layers" />
-              </TabsSubtle>
-            </div>
+            <div className="shrink-0 px-3 pt-2 text-caption font-semibold">Layers</div>
             <div className="min-h-0 flex-1 overflow-auto">
-              {leftTab === 0 ? (
-                <Layers shell={shell} folder={folder} units={units} index={index}
-                  marked={new Set(comments.filter((c) => !c.slideDeleted && c.status === "open").map((c) => c.slide))} origin={origin.current}
-                  onSelect={setIndex} onMove={moveSlide} onDuplicate={dupSlide} onDelete={delSlide} onAdd={addSlide} />
-              ) : (
-                <LayerTree slide={canvas.current?.slide(index) ?? null} sel={sel} rev={units} slideName={canvas.current?.slide(index)?.getAttribute("data-title") || `Slide ${index + 1}`} onSelectSlide={() => pickSel(null)} onSelect={pickSel} onHover={(el) => canvas.current?.hover(el)}
-                  onToggleHidden={toggleHidden} onRename={renameEl} onMove={moveEl} />
-              )}
+              <LayerTree slide={canvas.current?.slide(index) ?? null} sel={sel} rev={units} slideName={canvas.current?.slide(index)?.getAttribute("data-title") || `Slide ${index + 1}`} onSelectSlide={() => pickSel(null)} onSelect={pickSel} onHover={(el) => canvas.current?.hover(el)}
+                onToggleHidden={toggleHidden} onRename={renameEl} onMove={moveEl} />
             </div>
           </div>
         }
         right={
           <Inspector sel={sel} slide={canvas.current?.slide(index) ?? null} selId={selId} tab={tab} onTab={setTab}
-            comments={comments} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => setLeftTab(1)} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
+            comments={comments} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
         }
       >
         <div className="flex h-full flex-col">
+        <Filmstrip shell={shell} folder={folder} units={units} index={index}
+          marked={new Set(comments.filter((c) => !c.slideDeleted && c.status === "open").map((c) => c.slide))} origin={origin.current}
+          collapsed={filmCollapsed} onToggle={toggleFilm}
+          onSelect={setIndex} onMove={moveSlide} onDuplicate={dupSlide} onDelete={delSlide} onAdd={addSlide} />
         <div className="min-h-0 flex-1">
         <Canvas ref={canvas} shell={shell} folder={folder} units={units} index={index} sel={sel}
           comments={comments.filter((c) => !c.slideDeleted && c.slide === origin.current.get(units[index]?.key ?? ""))}

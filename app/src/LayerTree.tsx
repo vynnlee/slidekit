@@ -61,7 +61,11 @@ export function LayerTree(p: Props) {
   }, [p.sel]); // eslint-disable-line
   useEffect(() => { selRow.current?.scrollIntoView({ block: "nearest" }); }, [p.sel]);
 
-  if (!p.slide) return null;
+  if (!p.slide) return (
+    <div aria-hidden="true" className="flex flex-col gap-1 p-2">
+      {[0, 1, 2].map((i) => <div key={i} className="h-7 animate-pulse rounded-md bg-hover" style={{ marginLeft: i === 0 ? 0 : 12, width: i === 0 ? "70%" : "55%" }} />)}
+    </div>
+  );
   const row = (el: Element, depth: number): React.ReactNode => {
     const ch = kids(el), isOpen = open.has(el), I = iconOf(el);
     const hidden = (el as HTMLElement).style?.display === "none";

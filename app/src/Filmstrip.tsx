@@ -133,7 +133,7 @@ export function Filmstrip(p: Props) {
                 {drop === i && drag !== null && <div className="absolute -left-1.5 inset-y-0 w-0.5 rounded bg-focus-ring" />}
                 {drop === i + 1 && i === p.units.length - 1 && drag !== null && <div className="absolute -right-1.5 inset-y-0 w-0.5 rounded bg-focus-ring" />}
                 <Thumb shell={p.shell} unit={u} folder={p.folder} eager={i < 6} />
-                <span aria-hidden="true" className="pointer-events-none absolute left-1 top-1 rounded bg-black/60 px-1 text-micro tabular-nums text-white">{i + 1}</span>
+                <span aria-hidden="true" className={`pointer-events-none absolute left-1 top-1 rounded px-1 py-0.5 text-micro leading-none tabular-nums text-white ${i === p.index ? "bg-focus-ring" : "bg-black/75"}`}>{i + 1}</span>
                 {p.marked.has(p.origin.get(u.key) ?? -1) && <span aria-hidden="true" className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-focus-ring ring-2 ring-black" />}
               </div>
             ))}

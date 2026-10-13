@@ -5,6 +5,13 @@ import index from "./index.html";
 import { routes as commentRoutes } from "./comments";
 import { routes as editorRoutes } from "./editor-api";
 
+// 하위 명령: slidekit bundle <덱>. 해당 스크립트는 argv[2]를 덱 이름으로 읽는다.
+if (process.argv[2] === "bundle") {
+  process.argv.splice(2, 1);
+  await import("../bundler/bundle.ts");
+  process.exit(0);
+}
+
 const root = join(import.meta.dir, "..");
 const port = Number(process.env.PORT ?? 3200);
 

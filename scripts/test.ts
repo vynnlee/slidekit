@@ -47,6 +47,7 @@ const steps: Step[] = [
   browser("present", "app/test/present.cjs", "app", APP),
   browser("responsive", "app/test/responsive.cjs", "app", APP),
   browser("inspector", "app/test/inspector.cjs", "app", APP),
+  browser("inspector-a11y", "app/test/inspector-a11y.cjs", "app", APP),
   browser("editor", "app/test/editor.cjs", "app", APP),
   browser("comments-e2e", "app/test/comments-e2e.cjs", "app", APP),
   browser("tokens", "app/test/tokens.cjs", "dry", DRY),

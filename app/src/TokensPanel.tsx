@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 import { InspectorSection } from "@/components/ui/inspector-section";
 import { ColorField } from "@/components/ui/color-field";
 import { NumberField } from "@/components/ui/number-field";
@@ -38,6 +39,9 @@ const norm = (v: string) => {
   const t = v.toLowerCase().replace(/\s+/g, "");
   return /^#[0-9a-f]{3}$/.test(t) ? "#" + [...t.slice(1)].map((c) => c + c).join("") : t;
 };
+// 알파가 100%인 색은 투명도 칸을 숨겨 hex에 폭을 준다(ColorField 안은 건드리지 않고 바깥에서 가린다).
+const hasAlpha = (v: string) => /^transparent$/i.test(v.trim()) || !/^(#([0-9a-f]{3}|[0-9a-f]{6})|[a-z]+)$/i.test(v.trim());
+const HIDE_ALPHA = "[&_input[aria-label$='opacity_percent']]:hidden";
 const isColor = (v: string) => /^(#[0-9a-f]{3,8}|rgba?\(.*\)|hsla?\(.*\))$/i.test(v.trim());
 
 // "Deck variables"는 처음 한 번만 접어 둔다. InspectorSection은 저장된 접힘 목록이 있으면 defaultOpen을 무시하므로 목록에 직접 넣는다.
@@ -160,11 +164,11 @@ export function TokensPanel({ prefix, onPrefixChange, canvas }: TokensPanelProps
         <div className="flex flex-col gap-1">
           {COLORS.map(([n, label]) => (
             <div key={n} className="flex items-center gap-2">
-              <div className="relative w-16 shrink-0">
+              <div className="relative w-14 shrink-0">
                 <Tooltip content={n} side="top"><span className="block truncate pr-3 text-caption text-muted-foreground">{label}</span></Tooltip>
                 <ResetDot changed={changed(n)} label={label} onReset={() => set(n, DEFAULTS[n], true)} />
               </div>
-              <ColorField aria-label={label} value={val(n)} onChange={(v) => set(n, v)} className="min-w-0 flex-1" />
+              <ColorField aria-label={label} value={val(n)} onChange={(v) => set(n, v)} className={cn("min-w-0 flex-1", !hasAlpha(val(n)) && HIDE_ALPHA)} />
             </div>
           ))}
         </div>

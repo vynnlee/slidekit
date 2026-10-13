@@ -27,6 +27,10 @@ async function run(label, prep, expectDiff) {
   await p.getByRole('button', { name: 'Reset Accent to default' }).click(); await sleep(300);
   check(label + ': Reset이 기본값으로 되돌림', (await hexOf()) === '#a78bfa' && (await p.getByRole('button', { name: 'Reset Accent to default' }).count()) === 0, await hexOf());
   await accent.fill('#ff5500'); await accent.press('Enter'); await sleep(200);
+  await p.getByTestId('panel').evaluate((e) => { e.style.width = '240px'; }); await sleep(200);
+  const clipped = await p.evaluate(() => [...document.querySelectorAll('input[aria-label$=" hex"]')].filter((e) => e.scrollWidth > e.clientWidth + 1).map((e) => e.getAttribute('aria-label')));
+  check(label + ': 패널 240px에서도 hex가 잘리지 않음', clipped.length === 0, clipped);
+  check(label + ': 불투명한 색은 투명도 칸을 숨김', (await p.getByLabel('Accent opacity percent').isVisible()) === false);
   const padx = p.getByLabel('Padding X', { exact: true }); await padx.fill('120'); await padx.press('Enter'); await sleep(700);
   check(label + ': 입력 뒤 Unsaved', (await p.getByTestId('status').textContent()) === 'Unsaved');
   await p.getByRole('button', { name: 'Save' }).click(); await sleep(800);

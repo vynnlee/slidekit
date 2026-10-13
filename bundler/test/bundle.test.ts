@@ -12,14 +12,15 @@ test("쿼리 이미지, module 스크립트, style 속성 url, poster를 인라�
     writeFileSync(join(dir, "m.js"), "export const a = 1;");
     writeFileSync(join(dir, "index.html"), `<!doctype html><html data-slidekit="1"><head><title>t</title>
 <script type="application/json" id="deck-meta">{"title":"t"}</script></head><body>
-<section data-slide="cover"><img src="my%20img.png?v=2"><div style="background:url(my%20img.png)"></div><video poster="my img.png"></video></section>
+<section data-slide="cover"><img src="my%20img.png?v=2"><div style="background:url(my%20img.png)"></div><video poster="my img.png"></video><img src="my img.png" srcset="my%20img.png 1x, my%20img.png 2x"><picture><source srcset="my%20img.png 800w"></picture></section>
 <script type="module" src="m.js"></script></body></html>`);
     const r = Bun.spawnSync(["bun", join(root, "bundler", "bundle.ts"), "_bundletest"], { stderr: "pipe" });
     expect(r.stderr.toString()).toBe("");
     const out = await Bun.file(join(root, "dist", "_bundletest.html")).text();
     expect(out).not.toMatch(/my(%20| )img\.png/);
+    expect(out).not.toMatch(/srcset="[^"]*\.png/);
     expect(out).toContain('<script type="module">');
-    expect(out.match(/data:image\/png;base64/g)!.length).toBe(3);
+    expect(out.match(/data:image\/png;base64/g)!.length).toBe(7);
   } finally {
     rmSync(dir, { recursive: true, force: true });
     rmSync(join(root, "dist", "_bundletest.html"), { force: true });

@@ -72,6 +72,15 @@ html = await replaceAsync(html, /<script\b[^>]*\bsrc="([^"]+)"[^>]*><\/script>/g
 /* 3. images and CSS urls in style blocks */
 html = await replaceAsync(html, /(<(?:img|source|image|video|audio|track)\b[^>]*?\b(?:xlink:)?(?:src|href|poster)=")([^"]+)(")/g, async (m) =>
   isLocal(m[2]) ? m[1] + (await dataUri(localPath(deckDir, m[2]))) + m[3] : m[0]);
+/* srcset="a.png 1x, b.png 2x": inline each local URL (a value that already holds a data: URI is left alone) */
+html = await replaceAsync(html, /(\ssrcset=")([^"]+)(")/g, async (m) => {
+  if (/data:/i.test(m[2])) return m[0];
+  const items = await Promise.all(m[2].split(",").map(async (it) => {
+    const [u, ...rest] = it.trim().split(/\s+/);
+    return u && isLocal(u) ? [await dataUri(localPath(deckDir, u)), ...rest].join(" ") : it.trim();
+  }));
+  return m[1] + items.join(", ") + m[3];
+});
 html = await replaceAsync(html, /(\sstyle=")([^"]*url\([^"]*)(")/g, async (m) => m[1] + (await inlineCssUrls(m[2], deckDir)) + m[3]);
 html = await replaceAsync(html, /(<style\b[^>]*>)([\s\S]*?)(<\/style>)/g, async (m) => m[1] + (await inlineCssUrls(m[2], deckDir)) + m[3]);
 

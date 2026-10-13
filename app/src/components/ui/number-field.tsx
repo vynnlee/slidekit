@@ -1,9 +1,13 @@
 "use client";
 
 import { forwardRef, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSize } from "@/lib/size-context";
 import { useShape } from "@/lib/shape-context";
+import { controlDisabled, controlError, controlFocusWithin, controlSurface } from "@/lib/control-surface";
+import { Button } from "@/components/ui/button";
+import { Tooltip } from "@/components/ui/tooltip";
 
 interface NumberFieldProps {
   label: ReactNode;
@@ -18,6 +22,18 @@ interface NumberFieldProps {
   placeholder?: string;
   muted?: boolean;
   mixed?: boolean;
+  /** 단위 표시(예: %, px). 포커스나 호버 때만 보인다. */
+  suffix?: string;
+  /** 기본값과 다른 "설정됨" 상태. 라벨 모서리에 작은 점이 뜬다. */
+  dirty?: boolean;
+  /** 주면 dirty일 때 호버나 포커스에서 Reset 버튼이 나온다. */
+  onReset?: () => void;
+  /** Reset 버튼의 툴팁 문구. 요소 속성은 "Reset", 덱 토큰은 "Reset to default"처럼 쓴다. */
+  resetLabel?: string;
+  disabled?: boolean;
+  /** 비활성일 때 호버 툴팁으로 보여 줄 이유 */
+  disabledReason?: string;
+  error?: boolean;
   "aria-label": string;
   className?: string;
 }
@@ -43,7 +59,7 @@ const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
   (
     {
       label, value, onChange, onScrubStart, onScrubEnd, step = 1, min, max,
-      unit = "px", placeholder, muted, mixed, "aria-label": ariaLabel, className,
+      unit = "px", placeholder, muted, mixed, suffix, dirty, onReset, resetLabel = "Reset", disabled, disabledReason, error, "aria-label": ariaLabel, className,
     },
     ref
   ) => {
@@ -109,8 +125,15 @@ const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
       }
     };
 
+    // 스크럽 중에는 포인터가 라벨을 벗어나도 커서와 선택이 바뀌지 않게 문서에 잠근다.
+    const lock = (on: boolean) => {
+      document.documentElement.style.cursor = on ? "ew-resize" : "";
+      document.documentElement.style.userSelect = on ? "none" : "";
+    };
+
     const onPointerDown = (e: PointerEvent<HTMLSpanElement>) => {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || disabled) return;
+      lock(true);
       e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
       scrub.current = { x: e.clientX, acc: 0, n: step >= 1 ? Math.round(cur?.n ?? 0) : cur?.n ?? 0, unit: outUnit(cur?.unit), last: value };
@@ -134,23 +157,30 @@ const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
     const endScrub = () => {
       if (!scrub.current) return;
       scrub.current = null;
+      lock(false);
       onScrubEnd?.();
     };
 
-    return (
+    const field = (
       <div
         className={cn(
-          "flex items-center min-w-0 bg-hover text-foreground focus-within:ring-2 focus-within:ring-focus-ring",
+          "group/nf relative flex items-center min-w-0",
+          controlSurface,
+          controlFocusWithin,
           size.control,
           shape.input,
+          error && controlError,
+          disabled && cn(controlDisabled, "hover:bg-transparent"),
           className
         )}
       >
+        {dirty && <span aria-hidden="true" data-dirty="" className="pointer-events-none absolute left-0.5 top-0.5 size-1.5 rounded-full bg-focus-ring" />}
         <span
           ref={labelRef}
           aria-hidden="true"
           className={cn(
-            "flex h-full shrink-0 items-center justify-center select-none touch-none cursor-ew-resize text-muted-foreground [&_svg]:h-3.5 [&_svg]:w-3.5",
+            "flex h-full shrink-0 items-center justify-center select-none touch-none text-muted-foreground [&_svg]:h-3.5 [&_svg]:w-3.5",
+            disabled ? "cursor-not-allowed" : "cursor-ew-resize",
             size.text,
             size.itemPx
           )}
@@ -168,8 +198,10 @@ const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
           autoComplete="off"
           spellCheck={false}
           aria-label={ariaLabel}
+          aria-invalid={error || undefined}
+          disabled={disabled}
           className={cn(
-            "h-full w-full min-w-0 flex-1 bg-transparent outline-none tabular-nums placeholder:text-muted-foreground",
+            "h-full w-full min-w-0 flex-1 bg-transparent outline-none tabular-nums placeholder:text-muted-foreground disabled:cursor-not-allowed",
             size.field,
             size.itemPx,
             "pl-0",
@@ -185,8 +217,26 @@ const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
           onBlur={commit}
           onKeyDown={onKeyDown}
         />
+        {suffix && !(dirty && onReset) && (
+          <span aria-hidden="true" className={cn("shrink-0 select-none pr-2 text-muted-foreground opacity-0 transition-opacity group-focus-within/nf:opacity-100 group-hover/nf:opacity-100", size.type.caption)}>{suffix}</span>
+        )}
+        {dirty && onReset && !disabled && (
+          <Tooltip content={resetLabel}>
+            <Button
+              variant="ghost"
+              size="icon-compact"
+              aria-label={`${resetLabel} ${ariaLabel}`}
+              onClick={onReset}
+              className="mr-0.5 size-5 shrink-0 p-0 opacity-0 transition-opacity focus-visible:opacity-100 group-focus-within/nf:opacity-100 group-hover/nf:opacity-100 [&_svg]:size-3"
+            >
+              <RotateCcw />
+            </Button>
+          </Tooltip>
+        )}
       </div>
     );
+    // 비활성 이유는 호버 툴팁으로 알린다(래퍼는 포인터를 받아야 하므로 pointer-events를 끄지 않는다).
+    return disabled && disabledReason ? <Tooltip content={disabledReason}>{field}</Tooltip> : field;
   }
 );
 NumberField.displayName = "NumberField";

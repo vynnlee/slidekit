@@ -6,6 +6,7 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { spring } from "@/lib/springs";
 import { useSize } from "@/lib/size-context";
+import { controlFocus } from "@/lib/control-surface";
 
 const STORAGE_KEY = "slidekit.inspector.collapsed";
 
@@ -63,7 +64,7 @@ export function InspectorSection({ id, title, action, defaultOpen = true, childr
           onClick={toggle}
           className={cn(
             "flex h-full min-w-0 flex-1 cursor-pointer items-center px-3 text-left text-foreground outline-none",
-            "focus-visible:ring-2 focus-visible:ring-focus-ring",
+            controlFocus, "focus-visible:ring-inset",
             size.gap
           )}
         >

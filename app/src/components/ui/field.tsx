@@ -2,9 +2,14 @@ import { forwardRef, type InputHTMLAttributes, type TextareaHTMLAttributes } fro
 import { cn } from "@/lib/utils";
 import { useSize } from "@/lib/size-context";
 import { useShape } from "@/lib/shape-context";
+import { controlFocus, controlSurface } from "@/lib/control-surface";
 
-// Fluid에는 Radix용 단순 입력 컴포넌트가 없어, 같은 크기 사다리(기본 36px, 컴팩트 28px)와 표면 토큰으로 만든다.
-const base = "w-full min-w-0 bg-hover text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-focus-ring";
+// Fluid에는 Radix용 단순 입력 컴포넌트가 없어, 같은 크기 사다리(기본 36px, 컴팩트 28px)와 Fluid Select의 표면(control-surface)으로 만든다.
+const base = cn(
+  "w-full min-w-0 outline-none placeholder:text-muted-foreground disabled:opacity-50 aria-[invalid=true]:border-destructive/50",
+  controlSurface,
+  controlFocus,
+);
 
 export const Field = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(({ className, ...p }, ref) => {
   const size = useSize(), shape = useShape();

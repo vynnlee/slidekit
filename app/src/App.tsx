@@ -10,6 +10,7 @@ const dev: Record<string, ComponentType> = {};
 if (process.env.NODE_ENV !== "production") {
   dev["/dev/inspector"] = lazy(() => import("./InspectorDemo").then((m) => ({ default: m.InspectorDemo })));
   dev["/dev/tokens"] = lazy(() => import("./TokensDemo").then((m) => ({ default: m.TokensDemo })));
+  dev["/dev/controls"] = lazy(() => import("./ControlStates").then((m) => ({ default: m.ControlStates })));
   dev["/dev/export"] = lazy(() => import("./ExportDemo").then((m) => ({ default: m.ExportDemo })));
 }
 

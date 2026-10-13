@@ -3,6 +3,7 @@
 import { lazy, Suspense, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Field } from "@/components/ui/field";
+import { controlFocus } from "@/lib/control-surface";
 // 색 선택기(@base-ui 포함 약 140KB)는 처음 열 때만 불러온다.
 const ColorPickerPopover = lazy(() => import("@/components/ui/color-picker").then((m) => ({ default: m.ColorPickerPopover })));
 
@@ -94,7 +95,7 @@ export function ColorField({ value, onChange, "aria-label": ariaLabel, allowNone
   const [picker, setPicker] = useState(false);
   const swatch = (
     <button type="button" aria-label={`${ariaLabel} swatch`} onClick={() => setPicker(true)}
-      className="h-7 w-7 shrink-0 cursor-pointer rounded-md border border-border outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+      className={cn("h-7 w-7 shrink-0 cursor-pointer rounded-md border border-border outline-none", controlFocus)}
       style={{ background: color ? serialize(color) : "transparent" }} />
   );
 

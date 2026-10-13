@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { useShape } from "@/lib/shape-context";
+import { controlFocus, controlSurface } from "@/lib/control-surface";
 
 const VALUES = ["flex-start", "center", "flex-end"] as const;
 const ROW_NAMES = ["Top", "Center", "Bottom"] as const;
@@ -24,7 +25,7 @@ export function AlignBox({ direction, justify, align, onChange }: AlignBoxProps)
   const yi = VALUES.indexOf(yVal as (typeof VALUES)[number]);
 
   return (
-    <div role="group" aria-label="Alignment" className={cn("grid size-14 grid-cols-3 grid-rows-3 bg-hover p-0.5", shape.bg)}>
+    <div role="group" aria-label="Alignment" className={cn("grid size-14 grid-cols-3 grid-rows-3 p-0.5", controlSurface, "hover:bg-transparent", shape.input)}>
       {ROW_NAMES.flatMap((rowName, r) =>
         COL_NAMES.map((colName, c) => {
           const selected = r === yi && c === xi;
@@ -40,7 +41,8 @@ export function AlignBox({ direction, justify, align, onChange }: AlignBoxProps)
                 if (isRow) onChange(x, y); else onChange(y, x);
               }}
               className={cn(
-                "flex cursor-pointer items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-focus-ring",
+                "flex cursor-pointer items-center justify-center outline-none transition-colors duration-80 hover:bg-hover",
+                controlFocus,
                 shape.item
               )}
             >

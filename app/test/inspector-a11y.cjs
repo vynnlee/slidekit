@@ -81,9 +81,12 @@ const findAxe = () => {
       // 탭은 포커스만으로 활성화되어 패널 내용이 바뀌므로 맨 뒤에서 검사한다.
       const sel = 'input,button,select,textarea,[role=radio],[role=tab],[role=combobox],[role=switch],[tabindex="0"]';
       const els = [...root.querySelectorAll(sel)].filter(vis).filter((e) => !e.querySelector(sel) && e.getAttribute('role') !== 'tabpanel').sort((a, b) => (a.getAttribute('role') === 'tab') - (b.getAttribute('role') === 'tab'));
+      // 위치는 포커스(스크롤)가 일어나기 전에 한 번에 읽는다. 스크롤 영역은 맨 위로 되돌려 둔다.
+      root.querySelectorAll('*').forEach((n) => { if (n.scrollTop) n.scrollTop = 0; });
+      const pos = new Map(els.map((e) => [e, e.getBoundingClientRect()]));
       return els.map((e) => {
         e.focus();
-        const r = e.getBoundingClientRect();
+        const r = pos.get(e);
         let ring = false, n = e;
         for (let k = 0; k < 4 && n && !ring; k++, n = n.parentElement) {
           const s = getComputedStyle(n);

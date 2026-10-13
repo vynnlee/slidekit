@@ -14,6 +14,8 @@ export type CanvasApi = {
   edit(el: Element): void;
   select(el: Element | null): void;
   zoom(dir: 1 | -1 | 0): void; // 0은 맞춤
+  hover(el: Element | null): void; // 레이어 목록에서 가리킨 요소를 캔버스에 외곽선으로 보인다
+  format(tag: "strong" | "em"): boolean; // 텍스트 편집 중 선택 영역을 굵게나 기울임으로 감싸거나 푼다
 };
 
 type Props = {
@@ -97,6 +99,24 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     edit: (el) => startEdit(el as HTMLElement),
     select: (el) => P.current.onSel(el),
     zoom: (d) => zoomBy(d),
+    hover: (el) => { hover.current = el; },
+    format(tag) {
+      const ed = editing.current, d = doc(), sel = d?.getSelection();
+      if (!ed || !d || !sel) return false;
+      if (sel.rangeCount === 0 || sel.isCollapsed) return true;
+      const r = sel.getRangeAt(0);
+      const base = r.commonAncestorContainer;
+      const anc = (base.nodeType === 1 ? (base as Element) : base.parentElement)?.closest(tag);
+      if (anc && ed.contains(anc) && anc !== ed) {
+        while (anc.firstChild) anc.before(anc.firstChild);
+        anc.remove(); ed.normalize();
+      } else {
+        const w = d.createElement(tag);
+        w.appendChild(r.extractContents()); r.insertNode(w);
+        sel.removeAllRanges(); const nr = d.createRange(); nr.selectNodeContents(w); sel.addRange(nr);
+      }
+      return true;
+    },
   }));
 
   useEffect(() => { build(p.units); /* 처음 한 번 */ }, []); // eslint-disable-line

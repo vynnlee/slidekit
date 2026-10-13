@@ -328,6 +328,7 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
 - 텍스트: 글자만 담은 요소(자식이 `b`, `i`, `span`, `code`, `br` 같은 인라인뿐)를 `contenteditable="plaintext-only"`로 고친다. `Enter`나 포커스 이동으로 끝낸다. `chapter` 슬라이드의 `h1`을 고치면 `data-title`도 같은 글자로 맞춘다(2절).
 - 스타일: 선택한 요소의 인라인 `style`(`font-size`, `font-weight`, `text-align`, `color`)만 바꾼다. 클래스와 덱 CSS는 건드리지 않는다.
 - 슬라이드: 순서 변경, 복제, 삭제, 추가(본문 슬라이드), 종류(`data-slide`), 장 제목(`data-title`), 노트(`<aside data-notes>`)를 바꾼다. 노트는 캔버스 아래 pane에서 마크다운 원문으로 고치고 `textContent`로 써서 `<`, `&`가 이스케이프된다. 노트가 없던 슬라이드는 입력할 때 `aside`를 만들고, 비우면 `aside`를 지운다. 복제본은 루트 `id`와 `data-steps`를 잃는다(`id`가 겹치지 않게, stepper는 `id`로 붙으므로 복제본은 일반 슬라이드가 된다).
+- 레이어: 편집기 좌측 Layers 탭에서 요소 이름을 바꾸면 `data-name` 속성에 저장한다(없으면 태그나 첫 줄 글자로 보인다). 엔진은 이 속성을 쓰지 않는다. 눈 아이콘은 `style="display: none"`을 넣고 빼므로 저장하면 발표에서도 숨겨진다.
 - 도식(`svg`)과 인터랙션 내부는 편집하지 않는다. 선택과 코멘트, 삭제와 복제는 된다.
 - 편집기가 iframe 문서에 넣는 선택용 스타일은 `<head>`에만 들어가고 저장되지 않는다. 선택 표시와 호버 외곽선은 덱 DOM이 아니라 앱 쪽 레이어에 그린다.
 

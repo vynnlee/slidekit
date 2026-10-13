@@ -98,7 +98,7 @@ export function Layers(p: Props) {
         </div>
       ))}
       <DropdownMenu open={!!menu} onOpenChange={(o) => !o && setMenu(null)} size="compact">
-        <DropdownTrigger render={<span className="fixed h-0 w-0" style={{ left: menu?.x ?? 0, top: menu?.y ?? 0 }} />} />
+        <DropdownTrigger render={<button type="button" aria-label="Slide menu" tabIndex={-1} className="fixed h-0 w-0 border-0 p-0" style={{ left: menu?.x ?? 0, top: menu?.y ?? 0 }} />} />
         <DropdownContent align="start" side="bottom" sideOffset={0}>
           <MenuItem index={0} icon={Copy} label="Duplicate" onSelect={() => menu && p.onDuplicate(menu.i)} />
           <MenuItem index={1} icon={Plus} label="Add after" onSelect={() => menu && p.onAdd(menu.i)} />

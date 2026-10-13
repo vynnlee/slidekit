@@ -169,6 +169,38 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('스와치 클릭으로 색 선택기 열림', hx && (await page.getByLabel('Hue').count()) > 0);
   await page.keyboard.press('Escape'); await sleep(300);
 
+  // Layers 탭, 복사 붙여넣기, 굵게
+  await page.getByRole('tab', { name: 'Slides' }).click(); await sleep(200);
+  await layers.nth(1).click(); await sleep(500);
+  await page.getByRole('tab', { name: 'Layers' }).click(); await sleep(500);
+  const rows = page.locator('[role=tree] [draggable=true]');
+  check('Layers 트리에 요소 표시', (await rows.count()) > 1, await rows.count());
+  const inDoc = (fn, arg) => page.evaluate(([f, a]) => { const d = document.querySelector('iframe[title="Canvas"]').contentDocument; return eval('(' + f + ')')(d.querySelector('[data-active]'), a); }, [fn.toString(), arg]);
+  await rows.nth(1).click(); await sleep(300);
+  check('행 클릭이 캔버스 선택', await page.locator('.border-2.border-focus-ring').first().isVisible());
+  check('선택된 행 표시', (await page.locator('[role=treeitem][aria-selected=true]').count()) >= 1);
+  await rows.nth(1).dblclick(); await page.getByLabel('Layer name').fill('Hero'); await page.getByLabel('Layer name').press('Enter'); await sleep(300);
+  check('이름 바꾸기가 data-name에 저장', await inDoc((s) => !!s.querySelector('[data-name="Hero"]')));
+  await page.getByRole('button', { name: 'Hide layer' }).first().click({ force: true }); await sleep(300);
+  check('눈 아이콘이 display:none', await inDoc((s) => [...s.querySelectorAll('*')].some((e) => e.style && e.style.display === 'none')));
+  await page.getByRole('button', { name: 'Show layer' }).first().click(); await sleep(300);
+  check('다시 보이기', await inDoc((s) => ![...s.querySelectorAll('*')].some((e) => e.style && e.style.display === 'none')));
+  const kidsN = () => inDoc((s) => s.children.length);
+  const k0 = await kidsN();
+  await rows.nth(1).click(); await page.keyboard.press('Meta+c'); await page.keyboard.press('Meta+v'); await sleep(400);
+  check('Cmd+C, Cmd+V로 붙이기', (await kidsN()) === k0 + 1, [k0, await kidsN()]);
+  await page.keyboard.press('Meta+z'); await sleep(300);
+  check('붙이기 실행 취소', (await kidsN()) === k0);
+  const first = await inDoc((s) => s.children[0].tagName + s.children[1].tagName + (s.children[0].textContent || '').length);
+  await rows.nth(0).dragTo(rows.nth(1), { targetPosition: { x: 40, y: 22 } }); await sleep(400);
+  const after2 = await inDoc((s) => s.children[0].tagName + s.children[1].tagName + (s.children[0].textContent || '').length);
+  check('드래그로 순서 변경', after2 !== first, [first, after2]);
+  await page.keyboard.press('Meta+z'); await sleep(300);
+  const h1 = fr().locator('[data-active] h1, [data-active] h2, [data-active] p').first();
+  await h1.dblclick(); await sleep(200); await page.keyboard.press('Meta+a'); await page.keyboard.press('Meta+b'); await sleep(200);
+  check('편집 중 Cmd+B가 strong으로 감쌈', await h1.evaluate((e) => !!e.querySelector('strong')));
+  await page.keyboard.press('Enter'); await sleep(300);
+
   check('페이지 오류 없음', errors.length === 0, errors.slice(0, 3));
   await browser.close();
   process.exit(fail ? 1 : 0);

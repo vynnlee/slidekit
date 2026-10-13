@@ -7,6 +7,8 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Shell } from "./Shell";
 import { Canvas, textual, type CanvasApi } from "./Canvas";
 import { Layers } from "./Layers";
+import { LayerTree } from "./LayerTree";
+import { TabsSubtle, TabsSubtleItem } from "@/components/ui/tabs-subtle";
 import { Inspector } from "./Inspector";
 import { go } from "./App";
 import { byPath, compose, duplicateHtml, newKey, newSlideHtml, pathOf, splitDeck, type Unit } from "@/lib/deck-source";
@@ -185,6 +187,38 @@ export function Editor({ id }: { id: string }) {
     if (!sel) return delSlide(indexRef.current);
     sel.remove(); pickSel(null); commit();
   };
+  const [leftTab, setLeftTab] = useState(0);
+  const clip = useRef("");
+  const copySel = () => {
+    if (!sel) return;
+    clip.current = sel.outerHTML;
+    const b = (t: string) => new Blob([clip.current], { type: t });
+    navigator.clipboard?.write?.([new ClipboardItem({ "text/html": b("text/html"), "text/plain": b("text/plain") })]).catch(() => {});
+  };
+  const pasteSel = () => {
+    const s = canvas.current?.slide(indexRef.current);
+    if (!s || !clip.current) return;
+    const t = s.ownerDocument.createElement("template");
+    t.innerHTML = clip.current;
+    const n = t.content.firstElementChild;
+    if (!n) return;
+    n.removeAttribute("id");
+    if (sel && s.contains(sel)) sel.after(n);
+    else { const a = s.querySelector(":scope > aside[data-notes]"); if (a) a.before(n); else s.append(n); }
+    pickSel(n); commit();
+  };
+  const toggleHidden = (el: HTMLElement) => { if (el.style.display === "none") el.style.removeProperty("display"); else el.style.setProperty("display", "none"); pickSel(sel); commit(); };
+  const renameEl = (el: Element, name: string) => { if (name) el.setAttribute("data-name", name); else el.removeAttribute("data-name"); pickSel(sel); commit(); };
+  const moveEl = (el: Element, target: Element, after: boolean) => {
+    if (el.contains(target) || !target.parentElement) return;
+    if (after) target.after(el); else target.before(el);
+    pickSel(el); commit();
+  };
+  const emphasis = (k: string) => {
+    if (canvas.current?.format(k === "b" ? "strong" : "em") || !sel) return;
+    const c = sel.ownerDocument.defaultView!.getComputedStyle(sel);
+    if (k === "b") style("font-weight", +c.fontWeight >= 600 ? "400" : "700"); else style("font-style", c.fontStyle === "italic" ? "normal" : "italic");
+  };
   const dupSelected = () => {
     if (!sel) return dupSlide(indexRef.current);
     const c = sel.cloneNode(true) as Element;
@@ -281,7 +315,10 @@ export function Editor({ id }: { id: string }) {
     else if (mod && k === "e") { e.preventDefault(); setNotesOpen((v) => !v); }
     else if (mod && k === "/") { e.preventDefault(); setHelp((v) => !v); }
     else if (mod && e.key === "Enter") { e.preventDefault(); present(e.shiftKey); }
+    else if (mod && (k === "b" || k === "i") && !/^(INPUT|TEXTAREA)$/.test(t.tagName) && (sel || t.isContentEditable || e.view !== window)) { e.preventDefault(); emphasis(k); }
     else if (typing) return;
+    else if (mod && k === "c" && sel) { e.preventDefault(); copySel(); }
+    else if (mod && k === "v" && clip.current) { e.preventDefault(); pasteSel(); }
     else if (mod && k === "0") { e.preventDefault(); canvas.current?.zoom(0); }
     else if (mod && (k === "=" || k === "+")) { e.preventDefault(); canvas.current?.zoom(1); }
     else if (mod && k === "-") { e.preventDefault(); canvas.current?.zoom(-1); }
@@ -312,9 +349,10 @@ export function Editor({ id }: { id: string }) {
   return (
     <>
       <Shell
+        heading={deck.title} leftLabel="Slides and layers" rightLabel="Properties"
         toolbar={
           <>
-            <Tooltip content="Decks" side="bottom"><Button variant="ghost" size="icon-compact" onClick={back}><ArrowLeft /></Button></Tooltip>
+            <Tooltip content="Decks" side="bottom"><Button aria-label="Decks" variant="ghost" size="icon-compact" onClick={back}><ArrowLeft /></Button></Tooltip>
             <span className="truncate text-subtitle font-medium">{deck.title}</span>
             <span className="text-caption text-muted-foreground">{label}</span>
             {changed && (
@@ -331,9 +369,24 @@ export function Editor({ id }: { id: string }) {
           </>
         }
         left={
-          <Layers shell={shell} folder={folder} units={units} index={index}
-            marked={new Set(comments.filter((c) => !c.slideDeleted && c.status === "open").map((c) => c.slide))} origin={origin.current}
-            onSelect={setIndex} onMove={moveSlide} onDuplicate={dupSlide} onDelete={delSlide} onAdd={addSlide} />
+          <div className="flex h-full flex-col">
+            <div className="shrink-0 px-2 pt-2">
+              <TabsSubtle selectedIndex={leftTab} onSelect={setLeftTab} size="compact" aria-label="Left panel">
+                <TabsSubtleItem index={0} label="Slides" />
+                <TabsSubtleItem index={1} label="Layers" />
+              </TabsSubtle>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto">
+              {leftTab === 0 ? (
+                <Layers shell={shell} folder={folder} units={units} index={index}
+                  marked={new Set(comments.filter((c) => !c.slideDeleted && c.status === "open").map((c) => c.slide))} origin={origin.current}
+                  onSelect={setIndex} onMove={moveSlide} onDuplicate={dupSlide} onDelete={delSlide} onAdd={addSlide} />
+              ) : (
+                <LayerTree slide={canvas.current?.slide(index) ?? null} sel={sel} rev={units} onSelect={pickSel} onHover={(el) => canvas.current?.hover(el)}
+                  onToggleHidden={toggleHidden} onRename={renameEl} onMove={moveEl} />
+              )}
+            </div>
+          </div>
         }
         right={
           <Inspector sel={sel} slide={canvas.current?.slide(index) ?? null} selId={selId} tab={tab} onTab={setTab}

@@ -1,10 +1,11 @@
 #!/usr/bin/env bun
 // 전체 검증. 실행: bun run test [--only <이름 일부>...] [--list] [--bail] [--slow]
 // 무거운 작업이라 /tmp/slidekit-heavy.lock을 한 번 잡고 모든 단계를 순서대로 돈다.
-// decks/는 시작 때 복사해 두고 단계마다 되돌린다(테스트가 만든 덱, comments.json, 편집한 덱 정리).
-import { cpSync, globSync, mkdirSync, mkdtempSync, rmSync, rmdirSync } from "node:fs";
+// 실제 덱은 읽기 전용이다. 덱을 고치는 테스트는 scripts/lib/test-deck.cjs의 사본(decks/_e2e-*/)만 쓴다.
+// 단계 전후로 실제 덱(decks/_* 제외)의 내용 해시를 비교해 달라졌으면 그 단계를 실패로 보고만 한다(복원하지 않는다).
+import { globSync, mkdirSync, readFileSync, readdirSync, rmdirSync } from "node:fs";
 import { join } from "node:path";
-import { homedir, tmpdir } from "node:os";
+import { homedir } from "node:os";
 
 const root = join(import.meta.dir, "..");
 const lock = "/tmp/slidekit-heavy.lock";
@@ -80,27 +81,46 @@ async function ensure(kind: "app" | "dry" | "static") {
     return;
   }
   const dry = kind === "dry";
-  const p = spawn(["bun", "run", "app/server.ts"], { PORT: dry ? "3245" : "3241", ...(dry ? { SLIDEKIT_DEPLOY_DRY_RUN: "1" } : {}) });
+  // export.cjs가 서버 로그(/tmp/sk-eng-srv.log)에 비밀번호가 없는지 검사하므로 dry-run 서버의 출력을 거기에 남긴다.
+  const log = dry ? Bun.file("/tmp/sk-eng-srv.log") : "ignore";
+  const p = Bun.spawn(["taskpolicy", "-b", "bun", "run", "app/server.ts"], {
+    cwd: root, stdout: log, stderr: log,
+    env: { ...process.env, PORT: dry ? "3245" : "3241", ...(dry ? { SLIDEKIT_DEPLOY_DRY_RUN: "1" } : {}) },
+  });
   servers.set(kind, () => p.kill());
   await waitUp(dry ? DRY : APP);
 }
 
-// decks/ 스냅샷: 단계마다 시작 상태로 되돌린다.
-const snap = mkdtempSync(join(tmpdir(), "slidekit-decks-"));
-cpSync(join(root, "decks"), snap, { recursive: true });
-const restore = () => Bun.spawnSync(["rsync", "-a", "--delete", `${snap}/`, `${join(root, "decks")}/`]);
+// 실제 덱 지문: decks/ 아래에서 이름이 _로 시작하는 최상위 항목(테스트 사본)과 .trash, 임시 파일을 뺀 모든 파일의 경로와 내용.
+const decksDir = join(root, "decks");
+function fingerprint() {
+  const h = new Bun.CryptoHasher("sha1");
+  const walk = (dir: string, top: boolean) => {
+    for (const e of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      if (top && (e.name.startsWith("_") || e.name === ".trash")) continue;
+      if (e.name.includes(".tmp-")) continue;
+      const p = join(dir, e.name);
+      if (e.isDirectory()) { h.update(`d:${p}\n`); walk(p, false); }
+      else { h.update(`f:${p}\n`); try { h.update(readFileSync(p)); } catch {} }
+    }
+  };
+  walk(decksDir, true);
+  return h.digest("hex");
+}
 
 const results: [string, boolean, number][] = [];
 try {
   for (const s of picked) {
     console.log(`\n== ${s.name}`);
     const t0 = Date.now();
+    let before = fingerprint();
     let ok = false;
     try {
       if (s.server) await ensure(s.server);
       ok = (await spawn(s.cmd, s.env).exited) === 0;
     } catch (e) { console.log(String(e)); }
-    restore();
+    const after = fingerprint();
+    if (after !== before) { console.log(`!! ${s.name}: 실제 덱(decks/)이 단계 중에 바뀜. 복원하지 않음(git diff decks/ 확인)`); ok = false; before = after; }
     const sec = (Date.now() - t0) / 1000;
     results.push([s.name, ok, sec]);
     console.log(`-- ${s.name}: ${ok ? "통과" : "실패"} ${sec.toFixed(1)}초`);
@@ -108,8 +128,6 @@ try {
   }
 } finally {
   for (const stop of servers.values()) stop();
-  restore();
-  rmSync(snap, { recursive: true, force: true });
   rmdirSync(lock);
 }
 

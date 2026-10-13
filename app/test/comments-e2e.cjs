@@ -4,20 +4,14 @@
 const { chromium } = require(process.env.PW || 'playwright-core');
 const fs = require('fs'), path = require('path');
 const BASE = process.env.BASE || 'http://127.0.0.1:3244';
-const DECKS = path.join(__dirname, '..', '..', 'decks');
-const DECK = '_e2e-comments';
-const DIR = path.join(DECKS, DECK);
+const { makeTestDeck } = require('../../scripts/lib/test-deck.cjs');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fail = 0;
 const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + name + (ok || extra === undefined ? '' : '  ' + JSON.stringify(extra))); };
 
 (async () => {
-  fs.rmSync(DIR, { recursive: true, force: true });
-  fs.cpSync(path.join(DECKS, 'vibe-coding-workshop'), DIR, { recursive: true });
-  fs.rmSync(path.join(DIR, 'comments.json'), { force: true });
-  // 편집기 주소는 덱 id를 쓰므로 복사본의 id를 바꾼다
-  const f0 = path.join(DIR, 'index.html');
-  fs.writeFileSync(f0, fs.readFileSync(f0, 'utf8').replace('"id": "vibe-coding-workshop"', `"id": "${DECK}"`));
+  const t = makeTestDeck('comments'); // 실제 덱은 건드리지 않는다
+  const DECK = t.folder, DIR = t.dir;
   const abort = new AbortController();
   let browser;
   try {
@@ -48,7 +42,7 @@ const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' 
     const page = await ctx.newPage();
     const errors = [];
     page.on('pageerror', (e) => errors.push(String(e)));
-    await page.goto(`${BASE}/edit/${DECK}`);
+    await page.goto(`${BASE}/edit/${t.id}`);
     await page.waitForFunction(() => { const f = document.querySelector('iframe[title="Canvas"]'); return f && f.contentDocument && f.contentDocument.querySelector('[data-active]'); });
     await sleep(800);
     const fr = () => page.frames().find((f) => f.url().startsWith('blob:'));
@@ -85,7 +79,7 @@ const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' 
   } finally {
     abort.abort();
     if (browser) await browser.close();
-    fs.rmSync(DIR, { recursive: true, force: true });
+    t.cleanup();
   }
   console.log(fail ? `${fail} failed` : 'all passed');
   process.exit(fail ? 1 : 0);

@@ -24,9 +24,10 @@ export const routes = {
       const b = (await req.json().catch(() => null)) as { source?: unknown; base?: unknown; force?: unknown; slideMap?: unknown } | null;
       if (!b || typeof b.source !== "string") return bad("source");
       if (!/data-slidekit=/.test(b.source) || !/<section\b[^>]*\bdata-slide\b/.test(b.source)) return bad("not a slidekit deck");
+      if (typeof b.base !== "number") return bad("base");
       const file = join(decksDir, folder, "index.html");
-      if (!b.force && typeof b.base === "number" && statSync(file).mtimeMs !== b.base) return bad("changed", 409);
-      const tmp = `${file}.tmp-${process.pid}`;
+      if (!b.force && statSync(file).mtimeMs !== b.base) return bad("changed", 409);
+      const tmp = `${file}.tmp-${crypto.randomUUID()}`;
       writeFileSync(tmp, b.source);
       renameSync(tmp, file);
       // 순서 변경과 삭제를 코멘트의 슬라이드 번호에 반영한다(옛 번호 -> 새 번호)

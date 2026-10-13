@@ -1,7 +1,7 @@
 import { join } from "node:path";
-import { existsSync, readFileSync, watch, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, renameSync, statSync, watch, writeFileSync } from "node:fs";
 
-const decksDir = join(import.meta.dir, "..", "decks");
+const decksDir = process.env.SLIDEKIT_DECKS ?? join(import.meta.dir, "..", "decks");
 
 export type Comment = {
   id: string;
@@ -29,11 +29,29 @@ function emit(event: string, data: unknown) {
 const validDeck = (d: unknown): d is string =>
   typeof d === "string" && /^[\w.-]+$/.test(d) && d !== "." && d !== ".." && existsSync(join(decksDir, d));
 const file = (deck: string) => join(decksDir, deck, "comments.json");
-const load = (deck: string): Comment[] => {
-  try { return JSON.parse(readFileSync(file(deck), "utf8")); } catch { return []; }
+// 파일이 없으면 빈 목록이다. 깨진 파일은 복사해 보존하고 오류로 올린다(빈 목록으로 다음 저장이 덮어쓰면 코멘트가 사라진다).
+export const load = (deck: string): Comment[] => {
+  let text: string;
+  try { text = readFileSync(file(deck), "utf8"); } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw e;
+  }
+  try {
+    const list = JSON.parse(text);
+    if (!Array.isArray(list)) throw new Error("not an array");
+    return list;
+  } catch {
+    const keep = join(decksDir, deck, `.comments.json.corrupt-${Math.floor(statSync(file(deck)).mtimeMs)}`);
+    copyFileSync(file(deck), keep);
+    throw new Error(`comments.json이 손상됨. 사본: ${keep}`);
+  }
 };
-// ponytail: 동기 쓰기. 단일 스레드라 경합이 없고, 코멘트 규모에서 충분하다.
-const save = (deck: string, list: Comment[]) => writeFileSync(file(deck), JSON.stringify(list, null, 2) + "\n");
+// 임시 파일에 쓴 뒤 rename한다. 쓰다 끊겨도 기존 파일은 온전하다.
+export const save = (deck: string, list: Comment[]) => {
+  const tmp = join(decksDir, deck, `.comments.json.tmp-${process.pid}`);
+  writeFileSync(tmp, JSON.stringify(list, null, 2) + "\n");
+  renameSync(tmp, file(deck));
+};
 
 // 제어문자(줄바꿈 포함)를 공백으로 바꾸고 길이를 자른다. 채널로 가는 값이라 틀을 위조하지 못하게 한다.
 const clip = (v: unknown, n: number) => String(v ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, n);
@@ -46,7 +64,7 @@ try {
   watch(decksDir, { recursive: true }, (_e, name) => {
     if (!name) return;
     const [deck, ...rest] = name.split(/[\\/]/);
-    if (!rest.length || rest.at(-1) === "comments.json") return;
+    if (!rest.length || rest.at(-1) === "comments.json" || rest.at(-1)!.startsWith(".")) return;
     clearTimeout(timers.get(deck));
     timers.set(deck, setTimeout(() => { timers.delete(deck); emit("deck-changed", { deck }); }, 250));
   });

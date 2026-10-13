@@ -4,7 +4,7 @@ import { readdir, stat } from "node:fs/promises";
 import index from "./index.html";
 import { routes as commentRoutes } from "./comments";
 import { routes as editorRoutes } from "./editor-api";
-import { guardReq, guardRoutes } from "./guard";
+import { guardHost, guardRoutes } from "./guard";
 import { alreadyUp, openApp } from "./launch";
 import { createDeck } from "./decks-api";
 
@@ -58,13 +58,15 @@ Bun.serve({
     "/": index,
     "/present/:id": index,
     "/edit/:id": index,
+    "/dev/inspector": index,
     "/api/decks": { GET: async () => Response.json(await listDecks()), POST: createDeck },
     ...commentRoutes,
     ...editorRoutes,
   }),
   async fetch(req) {
-    const denied = guardReq(req);
-    if (denied && req.method === "GET") return denied;
+    const denied = guardHost(req); // 모든 메서드에 적용한다
+    if (denied) return denied;
+    if (req.method !== "GET" && req.method !== "HEAD") return new Response("Method not allowed", { status: 405 });
     return (await serveStatic(new URL(req.url).pathname)) ?? new Response("Not found", { status: 404 });
   },
 });

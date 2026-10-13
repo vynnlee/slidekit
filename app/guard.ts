@@ -2,9 +2,15 @@
 // Host는 로컬 이름만, Origin은 있으면 Host와 같아야 하고, 변경 요청은 JSON이어야 한다.
 const localHosts = new Set(["127.0.0.1", "localhost"]);
 
-export function guardReq(req: Request): Response | null {
+export function guardHost(req: Request): Response | null {
   const host = req.headers.get("host") ?? "";
-  if (!localHosts.has(host.replace(/:\d+$/, ""))) return new Response("host", { status: 403 });
+  return localHosts.has(host.replace(/:\d+$/, "")) ? null : new Response("host", { status: 403 });
+}
+
+export function guardReq(req: Request): Response | null {
+  const denied = guardHost(req);
+  if (denied) return denied;
+  const host = req.headers.get("host") ?? "";
   const origin = req.headers.get("origin");
   if (origin && new URL(origin).host !== host) return new Response("origin", { status: 403 });
   if (req.method !== "GET" && !req.headers.get("content-type")?.startsWith("application/json")) return new Response("type", { status: 415 });

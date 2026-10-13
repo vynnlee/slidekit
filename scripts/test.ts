@@ -29,6 +29,7 @@ let failed = "";
 try {
   const steps: [string, () => Promise<boolean> | boolean][] = [
     ["app/test/roundtrip.ts", () => run(["bun", "app/test/roundtrip.ts"])],
+    ["app/test/comments.test.ts", () => run(["bun", "test", "app/test/comments.test.ts"])],
     ["deploy/worker 단위 테스트", () => run(["bun", "test", "deploy/worker"])],
     ["channel/test.ts", () => run(["bun", "channel/test.ts"], { TEST_PORT: "3242" })],
     ["engine/test/verify.cjs", async () => {

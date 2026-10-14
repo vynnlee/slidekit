@@ -43,6 +43,7 @@ const steps: Step[] = [
   { name: "channel", cmd: ["bun", "channel/test.ts"], env: { TEST_PORT: "3242" } },
   { name: "channel-resilience", cmd: ["bun", "channel/resilience.ts"], env: { TEST_PORT: "3247" } },
   browser("engine-verify", "engine/test/verify.cjs", "static", STATIC),
+  { ...browser("engine-moved", "engine/test/moved.cjs", "static", STATIC), server: undefined }, // file:// 로 연다
   browser("routes", "app/test/routes.cjs", "app", APP),
   browser("list", "app/test/list.cjs", "app", APP),
   browser("present", "app/test/present.cjs", "app", APP),

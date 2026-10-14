@@ -38,7 +38,7 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 
 ## 테스트
 
-- `bun run test [--only <이름 일부>] [--changed] [--list] [--bail] [--slow] [--trace]`. 공정 큐(`/tmp/slidekit-heavy.queue`)로 잠금 `/tmp/slidekit-heavy.lock`을 순서대로 잡고, 단계 로그는 `/tmp/slidekit-test-logs/`, 단계당 상한 900초(`SLIDEKIT_STEP_TIMEOUT`). 실패한 브라우저 단계는 트레이스를 켜고 한 번 더 돈다. **단계 이름은 위치 인자가 아니라 `--only`로 준다**(위치 인자는 무시되고 전체가 돈다).
+- `bun run test [--only <이름|글로브|그룹>] [--changed] [--list] [--bail] [--slow] [--trace]`. 공정 큐(`/tmp/slidekit-heavy.queue`)로 잠금 `/tmp/slidekit-heavy.lock`을 순서대로 잡고, 단계 로그는 `/tmp/slidekit-test-logs/`, 단계당 상한 900초(`SLIDEKIT_STEP_TIMEOUT`). 실패한 브라우저 단계는 트레이스를 켜고 한 번 더 돈다. **단계 이름은 위치 인자가 아니라 `--only`로 준다**(위치 인자는 무시되고 전체가 돈다). `--only editor`는 editor 단계 하나만(정확 일치), 여럿은 글로브 `--only 'editor*'`, 그룹 별칭은 `unit`, `channel`, `ux-shots`, `bundler`(`scripts/lib/select-steps.ts`). 시작 줄의 `선택:`으로 고른 단계를 확인한다.
 - 집계 단계 33개(약 880초): roundtrip, deck-source.fuzz, deck-tokens, deck-fonts, editor-readonly, export-api, comments, lint, bundler-bundle, bundler-fonts, scan-secrets, deploy-worker, unit-other, unit-isolated, channel, channel-resilience, channel-trust, engine-verify(약 75초, 145검사), engine-moved, engine-gradient, routes, list, present, remote, responsive, inspector, inspector-a11y, editor, editor-assets, editor-multi, comments-e2e, versions-e2e, tokens, export. `--slow`나 `--only`로만 도는 단계: ux-shots-1440, ux-shots-390, bundler-fonts-e2e(인터넷과 uv 필요).
 - 수동 도구(집계 밖): `app/test/list-load.cjs`(덱 30개 합성 부하), `app/test/a11y-app.cjs`(axe와 스크린샷), `app/test/remote-qa.cjs`(폰 4종 크기).
 - 시간은 sleep이 아니라 낮은 우선순위(`taskpolicy -b`)에서의 페이지 로드와 렌더 CPU가 지배한다(sleep 정리와 가짜 시계의 효과는 약 4%). 남은 고정 sleep(editor.cjs 약 137곳, inspector-a11y.cjs 약 32곳)은 시간 단축보다 흔들림 감소 목적으로만 조건 대기로 바꾼다. `[느림 +N초]` 표시로 찾는다.

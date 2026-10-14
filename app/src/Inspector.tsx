@@ -104,6 +104,8 @@ type Props = {
   onRemove?(c: Comment): void;
   onImageFile(file: File): void; // 선택한 이미지의 src를 고른 파일로 바꾼다
   onRevert?(c: Comment, undo?: boolean): void;
+  onSendAll?(): void;
+  onResolveReplied?(): void;
   hoverId: string | null;
   onHover(id: string | null): void;
   onStyle(prop: string, value: string): void;
@@ -570,7 +572,7 @@ export function Inspector(p: Props) {
         )}
       </TabPanel>
       <TabPanel value="comments">
-        <CommentsPanel comments={p.comments} channel={p.channel} onJump={p.onJump} onResolve={p.onResolve} onTrust={p.onTrust} onRemove={p.onRemove} onRevert={p.onRevert} hoverId={p.hoverId} onHover={p.onHover} />
+        <CommentsPanel comments={p.comments} channel={p.channel} onJump={p.onJump} onResolve={p.onResolve} onTrust={p.onTrust} onRemove={p.onRemove} onRevert={p.onRevert} onSendAll={p.onSendAll} onResolveReplied={p.onResolveReplied} hoverId={p.hoverId} onHover={p.onHover} />
       </TabPanel>
     </Tabs>
   );

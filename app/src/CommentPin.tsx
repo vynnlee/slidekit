@@ -7,6 +7,7 @@ import { STATE_LABEL, stateOf, type CommentState } from "@/lib/comment-state";
 
 // 캔버스 위 코멘트 핀. 번호는 목록과 같고(lib/comment-state numbering), 상태는 색과 모양으로 함께 구분한다.
 const FILL: Record<CommentState, string> = {
+  held: "bg-black text-foreground",
   waiting: "bg-black text-foreground",
   sent: "bg-focus-ring text-white",
   working: "bg-focus-ring text-white",
@@ -15,6 +16,7 @@ const FILL: Record<CommentState, string> = {
   resolved: "bg-black/70 text-muted-foreground",
 };
 const OUTLINE: Record<CommentState, string> = {
+  held: "ring-muted-foreground/70",
   waiting: "ring-muted-foreground/70",
   sent: "ring-black",
   working: "ring-black",

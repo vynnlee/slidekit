@@ -19,6 +19,7 @@ export type Comment = {
   reply?: string;
   createdAt: string;
   repliedAt?: string;
+  held?: boolean; // 쓸 때 "Hold"를 켠 코멘트. Send all to Claude를 누를 때까지 채널로 보내지 않는다
   recheck?: boolean; // 버전 복원 뒤 그 슬라이드에서 발췌문을 찾지 못한 코멘트. 위치 확인이 필요하다고 표시만 한다
   slideDeleted?: boolean; // 저장 때 슬라이드가 지워진 코멘트. 지우지 않고 표시만 한다
   deliveredAt?: string; // 채널이 Claude 세션에 전달한 시각
@@ -106,6 +107,7 @@ export function sanitize(list: unknown[]): Comment[] {
     if (c.resolved === true) s.resolved = true;
     if (c.slideDeleted === true) s.slideDeleted = true;
     if (c.recheck === true) s.recheck = true;
+    if (c.held === true) s.held = true;
     out.push(s);
   }
   return out;
@@ -136,6 +138,7 @@ export const save = (deck: string, list: Comment[]) => {
 };
 
 // 제어문자(줄바꿈 포함)를 공백으로 바꾸고 길이를 자른다. 채널로 가는 값이라 틀을 위조하지 못하게 한다.
+const SEND_BATCH = 10; // 묶음 알림 하나에 담는 코멘트 수(channel/index.ts의 BATCH와 같다)
 const clip = (v: unknown, n: number) => String(v ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, n);
 const bad = (msg: string, status = 400) => Response.json({ error: msg }, { status });
 const body = async (req: Request) => (await req.json().catch(() => null)) as Record<string, unknown> | null;
@@ -172,10 +175,12 @@ export const routes = {
         text: b.text,
         status: "open",
         createdAt: new Date().toISOString(),
+        ...(b.hold === true ? { held: true } : {}),
       };
       try { comment.sig = sign(b.deck, comment); } catch (e) { if (e instanceof KeyError) return bad(e.message, 500); throw e; }
       save(b.deck, [...load(b.deck), comment]);
-      emit("comment", { deck: b.deck, comment: { ...comment, trusted: true } });
+      // 보류한 코멘트는 "comment"(채널이 세션에 밀어 넣는 이벤트)가 아니라 갱신 이벤트로 알려, 어떤 채널 소비자도 Send all 전에는 받지 못한다.
+      emit(comment.held ? "reply" : "comment", { deck: b.deck, comment: { ...comment, trusted: true } });
       return Response.json({ id: comment.id });
     },
   },
@@ -292,6 +297,22 @@ export const routes = {
       save(b.deck, list);
       emit("comments", { deck: b.deck, comments: list.map((c) => ({ ...c, trusted: verify(b.deck as string, c) })) });
       return Response.json({ ok: true });
+    },
+  },
+  // 보류한 코멘트와 아직 전달되지 않은 코멘트를 묶음 알림으로 보낸다(오래된 순, 알림 하나에 BATCH개까지).
+  // 서명이 검증된 열린 코멘트만 보내고, 보류는 이때 풀린다. 채널이 없으면 보류만 풀려 연결될 때 순서대로 전달된다.
+  "/api/comments/send-all": {
+    POST: async (req: Request) => {
+      const b = await body(req);
+      if (!b || !validDeck(b.deck)) return bad("deck");
+      const list = load(b.deck);
+      const todo = list.filter((c) => c.status === "open" && !c.resolved && !c.slideDeleted && !c.deliveredAt && c.trusted === true).sort((a, c) => a.createdAt.localeCompare(c.createdAt));
+      if (!todo.length) return Response.json({ count: 0 });
+      for (const c of todo) delete c.held;
+      save(b.deck, list);
+      emit("comments", { deck: b.deck, comments: load(b.deck) });
+      if (channelClients.size) for (let i = 0; i < todo.length; i += SEND_BATCH) emit("batch", { deck: b.deck, comments: todo.slice(i, i + SEND_BATCH).map((c) => ({ ...c, trusted: true })) });
+      return Response.json({ count: todo.length });
     },
   },
   "/api/channel": { GET: () => Response.json({ connected: channelClients.size > 0 }) },

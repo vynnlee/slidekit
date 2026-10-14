@@ -42,6 +42,23 @@ export function useCommentsLive(folder: string | null) {
     } catch { upsert(prev); setError("Could not update the comment"); }
   }, [folder, upsert]);
 
+  /** 보류했거나 전달되지 않은 코멘트를 묶음 알림으로 보낸다. 서버가 보류를 풀고 갱신 이벤트를 보낸다. */
+  const sendAll = useCallback(async () => {
+    try {
+      const r = await fetch("/api/comments/send-all", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deck: folder }) });
+      if (!r.ok) throw new Error(String(r.status));
+      const { count } = (await r.json()) as { count: number };
+      toast(count ? `Sent ${count} ${count === 1 ? "comment" : "comments"} to Claude` : "Nothing to send", { ms: TOAST.info });
+    } catch { setError("Could not send the comments"); }
+  }, [folder]);
+
+  /** 답이 달린 코멘트를 모두 해결 처리한다. */
+  const resolveReplied = useCallback(async () => {
+    const todo = comments.filter((c) => c.status === "done" && !c.resolved);
+    for (const c of todo) await resolve(c, true);
+    if (todo.length) toast(`Resolved ${todo.length} ${todo.length === 1 ? "comment" : "comments"}`, { ms: TOAST.info });
+  }, [comments, resolve]);
+
   /** 검증 안 된 코멘트를 믿기로 한다(서버가 이 기기의 키로 다시 서명하고 갱신 이벤트를 보낸다). */
   const trust = useCallback(async (c: Comment) => {
     try {
@@ -74,5 +91,5 @@ export function useCommentsLive(folder: string | null) {
     toast(undo ? "Revert undone" : "Reverted Claude's edit", undo ? { ms: TOAST.info } : { action: { label: "Undo", onClick: () => { void revert(c, true); } } });
   }, [folder]);
 
-  return { comments, setComments, channel, error, upsert, resolve, trust, remove, revert };
+  return { comments, setComments, channel, error, upsert, resolve, trust, remove, revert, sendAll, resolveReplied };
 }

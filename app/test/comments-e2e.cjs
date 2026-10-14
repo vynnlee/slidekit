@@ -164,6 +164,17 @@ const json = { 'Content-Type': 'application/json' };
     await page.getByRole('status').getByRole('button', { name: 'Undo', exact: true }).click();
     check('Undo 뒤 코멘트가 둘이다', await page.waitForFunction(() => document.querySelectorAll('[data-testid=comments-panel] li[data-comment-id]').length === 2, null, { timeout: 5000 }).then(() => true, () => false));
 
+    // 보류와 한꺼번에 보내기: hold로 쓴 코멘트는 Held로 보이고 Send all이 보류를 풀며 개수를 보인다
+    const nowCount = await items.count();
+    for (const text of ['보류 하나', '보류 둘']) await fetch(`${BASE}/api/comments`, { method: 'POST', headers: json, body: JSON.stringify({ deck: DECK, slide: 1, path: '', excerpt: '', text, hold: true }) });
+    check('보류한 코멘트가 Held로 보인다', await stateIs('held', 2).then(() => true, () => false));
+    const sendAll = page.getByRole('button', { name: /^Send all to Claude \(\d+\)$/ });
+    check('보류가 있으면 Send all 버튼이 보인다', await sendAll.waitFor({ timeout: 5000 }).then(() => true, () => false), (await panel.textContent()).slice(0, 400));
+    await sendAll.click();
+    check('Send all이 보류를 푼다(Held가 없어진다)', await stateIs('held', 0).then(() => true, () => false));
+    check('전부 그대로 남는다(지워지지 않는다)', (await items.count()) === nowCount + 2);
+    check('Send all 토스트', await page.getByText(/^Sent \d+ comments? to Claude$/).first().waitFor({ timeout: 5000 }).then(() => true, () => false));
+
     // 파일 변경 -> 캔버스 새로고침
     const src = fs.readFileSync(t.file, 'utf8');
     const title = (await fr().locator('[data-active] h1, [data-active] h2').first().textContent()).trim();

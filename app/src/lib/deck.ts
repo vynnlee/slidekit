@@ -13,7 +13,7 @@ export const deckUrl = (folder: string, query: string) => `/decks/${folder}/inde
 export type Comment = {
   id: string; slide: number; path: string; excerpt: string; text: string;
   status: "open" | "done"; reply?: string; createdAt: string; repliedAt?: string;
-  slideDeleted?: boolean; recheck?: boolean;
+  slideDeleted?: boolean; recheck?: boolean; held?: boolean;
   deliveredAt?: string; ackAt?: string; resolved?: boolean; resolvedAt?: string; trusted?: boolean;
   editBase?: string; editHash?: string; revertedAt?: string; revertUndo?: string; // Claude의 수정 되돌리기(서버가 답이 달릴 때 연결)
 };

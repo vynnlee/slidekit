@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Check, CheckCheck, Clock, Copy, Loader2, MessageSquare, RotateCcw, Send, ShieldAlert, Undo2 } from "lucide-react";
+import { Check, CheckCheck, Clock, Copy, Loader2, MessageSquare, Pause, RotateCcw, Send, ShieldAlert, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ContextMenu, useContextMenu } from "@/components/ui/context-menu";
 import { commentMenu } from "@/lib/comment-actions";
@@ -11,14 +11,15 @@ const CMD = "claude --dangerously-load-development-channels server:slidekit";
 type Filter = "all" | "open" | "replied" | "resolved";
 const FILTERS: { id: Filter; label: string; match: (s: CommentState) => boolean }[] = [
   { id: "all", label: "All", match: () => true },
-  { id: "open", label: "Open", match: (s) => s === "waiting" || s === "sent" || s === "working" || s === "unverified" },
+  { id: "open", label: "Open", match: (s) => s === "held" || s === "waiting" || s === "sent" || s === "working" || s === "unverified" },
   { id: "replied", label: "Replied", match: (s) => s === "replied" },
   { id: "resolved", label: "Resolved", match: (s) => s === "resolved" },
 ];
 
-const ICON = { waiting: Clock, sent: Send, working: Loader2, replied: MessageSquare, resolved: CheckCheck, unverified: ShieldAlert } as const;
+const ICON = { held: Pause, waiting: Clock, sent: Send, working: Loader2, replied: MessageSquare, resolved: CheckCheck, unverified: ShieldAlert } as const;
 // 색만으로 구분하지 않도록 아이콘과 글자를 함께 쓴다.
 const TONE: Record<CommentState, string> = {
+  held: "text-muted-foreground",
   waiting: "text-muted-foreground",
   sent: "text-focus-ring",
   working: "text-focus-ring",
@@ -82,9 +83,13 @@ interface CommentsPanelProps {
   /** 캔버스 핀과 목록이 서로를 강조하도록 마우스나 포커스가 올라간 코멘트 id를 맞춘다. */
   hoverId?: string | null;
   onHover?(id: string | null): void;
+  /** 보류했거나 아직 전달되지 않은 코멘트를 한 번에 Claude에 보낸다(묶음 알림 하나). 없으면 버튼을 보이지 않는다. */
+  onSendAll?(): void;
+  /** 답이 달린 코멘트를 한꺼번에 해결 처리한다. 없으면 버튼을 보이지 않는다. */
+  onResolveReplied?(): void;
 }
 
-export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, onRemove, onRevert, hoverId, onHover }: CommentsPanelProps) {
+export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, onRemove, onRevert, hoverId, onHover, onSendAll, onResolveReplied }: CommentsPanelProps) {
   const [filter, setFilter] = useState<Filter>("all");
   const [open, setOpen] = useState<Set<string>>(new Set()); // 길어서 펼친 코멘트
   const root = useRef<HTMLDivElement>(null);
@@ -93,6 +98,12 @@ export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, o
   const actions = onRemove ? { resolve: onResolve, trust: onTrust, remove: onRemove, revert: onRevert } : null;
   const nums = useMemo(() => numbering(comments), [comments]);
   const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, comments.filter((c) => f.match(stateOf(c))).length])) as Record<Filter, number>, [comments]);
+  // 한꺼번에 처리 줄: 보류가 하나라도 있거나 보낼 것이 3개 이상이면 Send all, 답이 달린 것이 2개 이상이면 Resolve all replied
+  const sendable = useMemo(() => comments.filter((c) => !c.slideDeleted && ["held", "waiting"].includes(stateOf(c)) && c.trusted !== false), [comments]);
+  const heldCount = sendable.filter((c) => stateOf(c) === "held").length;
+  const repliedCount = comments.filter((c) => stateOf(c) === "replied").length;
+  const showSend = !!onSendAll && (heldCount > 0 || sendable.length >= 3);
+  const showResolve = !!onResolveReplied && repliedCount >= 2;
   const shown = comments.filter((c) => FILTERS.find((f) => f.id === filter)!.match(stateOf(c)));
   const groups = useMemo(() => {
     const m = new Map<number, Comment[]>();
@@ -129,6 +140,12 @@ export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, o
   return (
     <div ref={root} onKeyDown={onKeys} className="flex flex-col gap-3 pt-3" data-testid="comments-panel">
       {channel === false ? <NotConnected open={comments.length === 0} /> : <ChannelBadge connected={channel} />}
+      {(showSend || showResolve) && (
+        <div role="group" aria-label="Batch actions" className="flex flex-wrap gap-1">
+          {showSend && <Button size="compact" variant="secondary" leadingIcon={Send} onClick={onSendAll}>{`Send all to Claude (${sendable.length > 10 ? "10+" : sendable.length})`}</Button>}
+          {showResolve && <Button size="compact" variant="ghost" leadingIcon={CheckCheck} onClick={onResolveReplied}>{`Resolve all replied (${repliedCount})`}</Button>}
+        </div>
+      )}
       {comments.length > 0 && (
         <div role="group" aria-label="Filter comments" className="flex flex-wrap gap-1">
           {FILTERS.filter((f) => f.id === "all" || f.id === "open" || f.id === filter || counts[f.id] > 0).map((f) => ( // Replied와 Resolved는 0건이면 숨겨 한 줄에 맞춘다

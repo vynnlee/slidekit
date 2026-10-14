@@ -3,6 +3,7 @@ import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TextArea } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
+import { holdPref, setHoldPref } from "@/lib/comment-state";
 
 const MAX = 2000; // app/comments.ts의 본문 상한과 같다
 // 글이 비어 있을 때만 보이는 자주 쓰는 요청 문구. 누르면 입력창에 채워 바로 고칠 수 있다.
@@ -23,6 +24,7 @@ export function CommentComposer({ onSend, onCancel, target, channel, className }
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
+  const [hold, setHold] = useState(holdPref); // 켜 두면 Send all to Claude를 누를 때까지 보내지 않는다(브라우저에 기억)
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { ref.current?.focus(); }, []);
 
@@ -57,6 +59,10 @@ export function CommentComposer({ onSend, onCancel, target, channel, className }
         </div>
       )}
       {channel === false && <p className="px-1 text-micro text-muted-foreground">Claude is not connected. The comment is saved and sent when a session connects.</p>}
+      <label className="flex cursor-default items-center gap-1.5 px-1 text-micro text-muted-foreground">
+        <input type="checkbox" checked={hold} onChange={(e) => { setHold(e.target.checked); setHoldPref(e.target.checked); }} />
+        Hold until I send all to Claude
+      </label>
       {err && <p role="alert" className="px-1 text-micro">{err}</p>}
       <div className="flex items-center gap-2">
         <span className={`px-1 text-micro tabular-nums ${over ? "text-foreground" : "text-muted-foreground"}`} aria-live="polite">

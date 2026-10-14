@@ -44,6 +44,22 @@ try {
   await client.callTool({ name: "reply", arguments: { id, text: "완료" } });
   const list = await (await fetch(`${url}/api/comments?deck=${deck}`)).json() as any[];
   assert(list.find((c) => c.id === id)?.status === "done", "done");
+  // 보류와 묶음: hold로 쓴 코멘트는 보내지 않고 get_pending에도 안 나오며, send-all이 알림 하나로 묶어 보낸다
+  const mk = async (text: string, hold: boolean) => ((await (await fetch(`${url}/api/comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deck, slide: 1, path: "", excerpt: "", text, hold }) })).json()) as any).id as string;
+  const h1 = await mk("묶음 첫째", true), h2 = await mk("묶음 둘째", true);
+  await Bun.sleep(600);
+  assert(!got.some((g) => JSON.stringify(g).includes("묶음 첫째")), "held comment is not pushed");
+  const pend2 = JSON.parse(((await client.callTool({ name: "get_pending", arguments: {} })) as any).content[0].text);
+  assert(!pend2.some((c: any) => c.id === h1 || c.id === h2), "held comments are not in get_pending");
+  const sent = (await (await fetch(`${url}/api/comments/send-all`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deck }) })).json()) as any;
+  assert(sent.count === 2, `send-all count ${JSON.stringify(sent)}`);
+  await Bun.sleep(800);
+  const batch = got.filter((g) => g.method === "notifications/claude/channel" && g.params.meta?.kind === "batch");
+  assert(batch.length === 1 && batch[0].params.meta.count === "2" && batch[0].params.meta.comment_ids === `${h1},${h2}`, JSON.stringify(batch));
+  assert(batch[0].params.content.includes("묶음 첫째") && batch[0].params.content.includes("묶음 둘째") && batch[0].params.content.indexOf("묶음 첫째") < batch[0].params.content.indexOf("묶음 둘째"), "batch lists comments in order");
+  const after = (await (await fetch(`${url}/api/comments?deck=${deck}`)).json()) as any[];
+  assert(after.filter((c) => c.id === h1 || c.id === h2).every((c) => !c.held && !!c.deliveredAt), "batch marks delivered and clears hold");
+  assert(((await (await fetch(`${url}/api/comments/send-all`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deck }) })).json()) as any).count === 0, "second send-all sends nothing");
   // 삭제와 되돌리기: restore는 서버가 보관한 코멘트만 되살린다(없는 id는 404)
   const delPost = (path: string, body: unknown) => fetch(`${url}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const before = ((await (await fetch(`${url}/api/comments?deck=${deck}`)).json()) as any[]).length;

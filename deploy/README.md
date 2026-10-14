@@ -1,5 +1,13 @@
 # slidekit 배포
 
+**승인 뒤 Worker 배포 체크리스트** (사용자 승인 전에는 실행하지 않는다. 자세한 설명은 아래 "Worker 배포 준비와 점검")
+1. 사전: `git status`가 깨끗하고 `bun deploy/rehearse.ts`가 전체 통과(단위 테스트, 드라이런, 로컬 Worker와 로그인 제한 리허설. 원격 호출과 토큰이 없다).
+2. 토큰: 키체인 `slidekit-cloudflare-token`이 있는지 `bun run slidekit doctor`로 본다(값은 출력하지 않는다).
+3. 배포: `bun run deploy --worker`(코드, Durable Object 바인딩, 마이그레이션 v1이 한 번에 올라간다. `COOKIE_SECRET`은 이미 설정되어 있다).
+4. 확인: `bun run deploy --smoke vibe-coding-workshop`이 모두 PASS(비밀번호 덱이 있으면 이름을 하나 더 준다). 실패하면 바로 5번.
+5. 롤백: `cd deploy/worker && bunx wrangler@4.150.0 rollback`(코드만 이전 버전으로 돌아가고 마이그레이션과 DO 클래스는 남지만 구코드가 쓰지 않아 해가 없다. 로그인 제한은 KV 카운터로 돌아간다).
+6. 사용자만 하는 것: Cloudflare 토큰 발급과 `wrangler login`, 3번 실행 승인, 게시 취소의 `--yes`. 에이전트는 이 셋을 직접 하지 않는다.
+
 1. Cloudflare 대시보드에서 토큰을 만든다(계정 권한: Workers Scripts 편집, Workers KV Storage 편집, Account Settings 읽기. vynnlee.com zone 권한: DNS 편집, Workers Routes 편집, Zone 읽기. 계정 하나와 zone 하나로 범위를 좁힌다). 키체인 저장: `security add-generic-password -a $USER -s slidekit-cloudflare-token -w` (토큰은 프롬프트에 붙여넣기). 토큰 이름은 slidekit-static-deploy이고 2026-10-13에 만들었다.
 2. `cd deploy/worker && bunx wrangler kv namespace create DECKS` 결과의 id를 `wrangler.toml`의 `REPLACE_WITH_KV_NAMESPACE_ID`에 넣는다. 토큰은 `export CLOUDFLARE_API_TOKEN=$(security find-generic-password -s slidekit-cloudflare-token -w)`로 셸에 올린다.
 3. 쿠키 서명 키 등록: `openssl rand -base64 32 | bunx wrangler secret put COOKIE_SECRET` (deploy/worker에서).

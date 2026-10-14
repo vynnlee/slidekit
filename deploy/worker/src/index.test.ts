@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { handle, hashPassword, Limiter, makeCookie, type Env, type LimiterNs } from "./index";
+import worker, { handle, hashPassword, Limiter, makeCookie, type Env, type LimiterNs } from "./index";
 
 const pw = await hashPassword("열쇠");
 const store: Record<string, string> = {
@@ -190,4 +190,14 @@ test("DO 제한: 15분이 지나면 다시 시도할 수 있고, 알람이 저�
   expect(o.alarm).toBeGreaterThan(t0);
   await o.obj.alarm();
   expect(o.data.size).toBe(0);
+});
+
+// 회귀: 런타임은 fetch(request, env, ctx)로 부른다. 셋째 인자(ctx)가 시각으로 새면 쿠키 만료 계산이 깨져 로그인 POST가 500이 된다.
+test("런타임 진입점(default.fetch)은 ctx를 시각으로 오해하지 않는다: 맞는 비밀번호는 303과 쿠키", async () => {
+  const ctx = { waitUntil() {}, passThroughOnException() {} };
+  const res = await (worker.fetch as unknown as (r: Request, e: Env, c: unknown) => Promise<Response>)(
+    new Request("https://x/sec", { method: "POST", headers: { "cf-connecting-ip": "203.0.113.77" }, body: new URLSearchParams({ password: "열쇠" }) }), env, ctx);
+  expect(res.status).toBe(303);
+  expect(res.headers.get("Set-Cookie")).toMatch(/HttpOnly; Secure; SameSite=Strict/);
+  expect(res.headers.get("Set-Cookie")).not.toContain("NaN"); // ctx가 시각으로 새면 만료 시각이 NaN이 된다(workerd에서는 Invalid Date로 500)
 });

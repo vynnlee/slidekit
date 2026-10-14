@@ -183,4 +183,6 @@ export async function handle(req: Request, env: Env, now = Date.now()): Promise<
   return (await validCookie(req, env.COOKIE_SECRET, deck, meta.salt)) ? page("private, no-store") : form(m, meta);
 }
 
-export default { fetch: handle };
+// Workers 런타임은 fetch(request, env, ctx)로 부른다. handle의 셋째 인자는 시각(테스트용)이라 ctx를 그대로 넘기면 now가 객체가 되어
+// 쿠키 만료 계산이 깨진다(비밀번호 POST가 500). 그래서 런타임 진입점은 request와 env만 넘긴다.
+export default { fetch: (req: Request, env: Env) => handle(req, env) };

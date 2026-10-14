@@ -284,12 +284,12 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
 - 엔진 파일(`engine/slidekit.js`, `engine/slidekit.css`)과 `spec/SPEC.md`를 덱 작업 중에 고치지 않는다.
 - 비밀 값(비밀번호, 토큰)을 덱에 넣지 않는다.
 - 덱 스크립트에서 `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `/api/` 호출을 하지 않는다. 덱은 외부 호출 없이 동작해야 한다(lint가 경고한다).
-- 사용자가 요청하지 않으면 배포(`deploy`, 편집기 Publish)를 하지 않는다. 배포는 공개 사이트에 올리는 일이다.
+- 사용자가 요청하지 않으면 배포(`deploy`, 편집기 Publish)와 게시 취소(`unpublish`)를 하지 않는다. 배포는 공개 사이트에 올리는 일이고 게시 취소는 올린 것을 지우는 일이다.
 - 덱 스크립트에서 `contextmenu`(우클릭)를 가로채거나 우클릭 동작을 만들지 않는다. 발표 중 청중 화면의 우클릭 차단은 엔진이 하고, 앱의 메뉴와 커서 규칙은 `spec/INTERACTION.md`가 기준이다.
 
 ## 9. 만든 뒤 확인
 
-0. 먼저 `bun app/server.ts lint <이름>`을 실행한다. SPEC 위반(메타, 슬라이드 종류, 장 제목, stepper, 금지 문자, vw/vh, 래퍼, 이동 핸들러, 외부 리소스)을 한 줄씩 알려 준다. error가 0이어야 한다. warn은 이유를 확인한다.
+0. 먼저 `bun app/server.ts lint <이름>`을 실행한다. SPEC 위반(메타, 슬라이드 종류, 레이아웃, 장 제목, stepper, 금지 문자, vw/vh, 래퍼, 이동 핸들러, 외부 리소스, 남은 예제 문구)을 한 줄씩 알려 준다. error가 0이어야 한다. warn은 이유를 확인한다. `placeholder` 경고가 나오면 템플릿이나 레이아웃의 예제 문구가 남아 있다는 뜻이므로 실제 내용으로 바꾼다.
 1. 구조 점검은 파일을 읽어서 한다(lint가 잡지 못하는 항목 위주).
    - `data-slide` 값이 네 종류뿐인지, `cover`와 `end`가 각각 최대 1개이고 첫 장과 마지막 장인지.
    - 모든 `chapter`에 `data-title`이 있고 `<h1>` 글자와 같은지.
@@ -297,7 +297,7 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
    - 엔진 `<script>`가 덱 스크립트보다 앞인지.
    - `rg` 등으로 금지 문자(em-dash, en-dash, 가운뎃점, 이모지)가 없는지 확인한다.
 2. 앱 미리보기: `bun app/server.ts`를 실행하면 127.0.0.1:3200에서 열린다(환경 점검은 `bun app/server.ts doctor`). 덱 목록에서 덱을 열어 방향키, `F`, `O`, `B`와 `W`(화면 가리기), 숫자 + `Enter`, `#N`을 확인한다. 이 기계는 열에 약하니 서버는 확인이 끝나면 끈다. 브라우저 자동화 테스트는 여기서 돌리지 않는다.
-3. 번들: `bun app/server.ts bundle <이름>`을 실행하면 `dist/<이름>.html`이 생긴다. 엔진 CSS, JS, 상대 경로 이미지, 글꼴이 인라인된 단독 파일이다(글꼴 서브셋에 `uv`와 인터넷이 필요하다). PDF가 필요하면 `bun app/server.ts pdf <이름>`으로 `dist/<이름>.pdf`를 만든다. 슬라이드 한 장이 한 페이지(16:9)이고 stepper 슬라이드는 1단계 모습이다. 편집기의 Export 메뉴도 같은 일을 한다.
+3. 번들: `bun app/server.ts bundle <이름>`을 실행하면 `dist/<이름>.html`이 생긴다. 엔진 CSS, JS, 상대 경로 이미지, 글꼴이 인라인된 단독 파일이다(글꼴 서브셋에 `uv`와 인터넷이 필요하다). PDF가 필요하면 `bun app/server.ts pdf <이름>`으로 `dist/<이름>.pdf`를 만든다. 슬라이드 한 장이 한 페이지(16:9)이고 stepper 슬라이드는 1단계 모습이다. `--notes`를 붙이면 A4 세로 쪽마다 슬라이드 한 장과 노트(`dist/<이름>.notes.pdf`), `--handout 4`처럼 붙이면 쪽마다 슬라이드 여러 장의 유인물(`dist/<이름>.handout.pdf`, 2, 3, 4, 6장)이 나온다. 편집기의 Export 메뉴도 같은 일을 한다.
 4. 단독 파일 확인: `dist/<이름>.html`을 다른 곳에 복사해서 열어도 슬라이드, 이동, 글꼴, 이미지가 그대로여야 한다. 상대 경로 `../../engine`이 남아 있으면 번들 실패다.
 5. 사용자에게 보고할 때는 만든 슬라이드 수와 장 구성, 확인한 항목, 확인하지 못한 항목을 짧게 쓴다.
 

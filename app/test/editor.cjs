@@ -204,7 +204,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
 
   // 색 팝오버: 스와치를 누르면 Fluid ColorPicker가 열린다
   const hx = await page.getByLabel('Text color hex').boundingBox();
-  if (hx) { await page.mouse.click(hx.x - 18, hx.y + hx.height / 2); await settle(); }
+  if (hx) { await page.mouse.click(hx.x - 18, hx.y + hx.height / 2); await page.getByLabel('Hue').first().waitFor({ timeout: 8000 }).catch(() => {}); } // 색 선택기 조각은 처음 열 때 불러온다
   check('스와치 클릭으로 색 선택기 열림', hx && (await page.getByLabel('Hue').count()) > 0);
   check('색 선택기 dialog와 슬라이더 이름', (await page.getByRole('dialog', { name: 'Color picker' }).count()) > 0 && (await page.getByRole('slider', { name: 'Hue' }).count()) > 0);
   check('헤더 Export 버튼', (await page.getByRole('button', { name: 'Export' }).count()) === 1);
@@ -600,6 +600,32 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   await cond(() => document.querySelectorAll('[data-testid=overflow-badge]').length === 0, null, 8000);
   check('되돌리면 경고가 사라짐', (await page.getByTestId('overflow-badge').count()) === 0);
   await page.keyboard.press('Escape');
+
+  // 찾기와 바꾸기(Cmd+F): 슬라이드별 일치 수, 다음으로 이동, 바꾸기와 모두 바꾸기(실행 취소 한 건), 노트 옵션
+  await focusBody(); await page.keyboard.press('Meta+f');
+  const findIn = page.getByLabel('Find', { exact: true });
+  await findIn.waitFor({ timeout: 5000 }).catch(() => {});
+  check('Cmd+F가 찾기 줄을 열고 포커스', await findIn.evaluate((e) => document.activeElement === e));
+  await findIn.fill('바이브'); await settle();
+  const total1 = (await page.getByTestId('find-count').textContent()) || '';
+  check('찾으면 일치 수와 슬라이드 수를 보임', /\d+ of \d+ in \d+ slide/.test(total1), total1);
+  const nMatches = Number((total1.match(/of (\d+)/) || [])[1] || 0);
+  check('필름스트립 타일에 슬라이드별 일치 수', (await page.getByLabel(/^\d+ matches$/).count()) >= 1);
+  const idx0 = await page.getByText(/^Slide \d+ \/ \d+$/).first().textContent().catch(() => '');
+  await page.getByRole('button', { name: 'Next match' }).click(); await settle();
+  check('다음 단추가 현재 위치를 옮김', /^2 of /.test((await page.getByTestId('find-count').textContent()) || '') || nMatches === 1);
+  await page.getByLabel('Replace with', { exact: true }).fill('Vibe');
+  await page.getByRole('button', { name: 'Replace all' }).click(); await settle();
+  const afterAll = await page.evaluate(() => [...document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll('#sk-stage > [data-slide]')].map((s) => s.textContent).join('|'));
+  check('모두 바꾸기가 덱 전체의 글자를 바꿈', !afterAll.includes('바이브') && afterAll.includes('Vibe'));
+  await focusBody(); await page.keyboard.press('Meta+z'); await settle();
+  const undone = await page.evaluate(() => [...document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll('#sk-stage > [data-slide]')].map((s) => s.textContent).join('|'));
+  check('모두 바꾸기는 실행 취소 한 번에 되돌아감', undone.includes('바이브'));
+  void idx0;
+  await page.getByLabel('Find', { exact: true }).fill('zzzz-없는-글'); await settle();
+  check('없는 글은 No results', ((await page.getByTestId('find-count').textContent()) || '').includes('No results'));
+  await page.getByLabel('Find', { exact: true }).press('Escape'); await settle();
+  check('Esc가 찾기 줄을 닫음', (await page.getByTestId('find-bar').count()) === 0);
 
   // 덱 설정: 헤더 버튼으로 열고 Author를 바꾸면 deck-meta에 저장되고 실행 취소 한 번에 되돌아간다
   await page.getByRole('button', { name: 'Deck settings' }).click();

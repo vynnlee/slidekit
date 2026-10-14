@@ -96,6 +96,7 @@ type Props = {
   origin: Map<string, number>;
   collapsed: boolean;
   onToggle(): void;
+  found?: Map<number, number>; // 찾기 결과: 슬라이드별 일치 수
   warn?: Set<number>; // 내용이 슬라이드 밖으로 넘치는 슬라이드(열어 본 것만 안다)
   updated?: Set<number>; // 밖에서 바뀐 슬라이드(잠시 표시)
   onSelect(i: number): void;
@@ -177,6 +178,7 @@ export function Filmstrip(p: Props) {
               >
                 {drop === i && drag !== null && <div className="absolute -left-1.5 inset-y-0 w-0.5 rounded bg-focus-ring" />}
                 {drop === i + 1 && i === p.units.length - 1 && drag !== null && <div className="absolute -right-1.5 inset-y-0 w-0.5 rounded bg-focus-ring" />}
+                {p.found?.get(i) ? <span aria-label={`${p.found.get(i)} matches`} className="pointer-events-none absolute left-6 top-1 z-10 rounded bg-focus-ring px-1 py-0.5 text-micro leading-none tabular-nums text-white">{p.found.get(i)}</span> : null}
                 {p.warn?.has(i) && <span role="img" aria-label="Content overflows" title="Content overflows the slide" className="pointer-events-none absolute bottom-1 right-1 z-10 rounded bg-destructive px-0.5 py-0.5 text-white"><TriangleAlert className="size-3" /></span>}
                 {p.updated?.has(i) && <span aria-label="Updated" className="pointer-events-none absolute bottom-1 left-1 z-10 rounded bg-focus-ring px-1 py-0.5 text-micro leading-none text-white">Updated</span>}
                 <Thumb shell={p.shell} unit={u} folder={p.folder} eager={i < 6} keep={i === p.index} />

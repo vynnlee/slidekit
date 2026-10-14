@@ -22,6 +22,8 @@ import type { CommentActions } from "@/lib/comment-actions";
 import { numbering } from "@/lib/comment-state";
 import { firstChild, isLeaf, isLockedDeep, parentOf, siblings } from "@/lib/selection";
 import { EditorTip } from "./EditorTip";
+import { FindBar, type FindState } from "./FindBar";
+import { findInUnits, replaceInUnits } from "@/lib/find";
 import type { Overflow } from "@/lib/overflow";
 import { DeckSettingsForm } from "./DeckSettings";
 import { readMeta, setMeta } from "@/lib/deck-meta";
@@ -37,7 +39,7 @@ const KEY_GROUPS: [string, [string, string][]][] = [
   ["Edit", [["Cmd+S", "Save"], ["Cmd+Z", "Undo"], ["Shift+Cmd+Z", "Redo"], ["Cmd+D", "Duplicate"], ["Cmd+[", "Send backward"], ["Cmd+]", "Bring forward"], ["F2", "Rename layer"], ["Cmd+C", "Copy"], ["Cmd+V", "Paste"], ["Delete", "Delete selection"], ["Cmd+B", "Bold"], ["Cmd+I", "Italic"]]],
   ["Select", [["Click", "Select a top-level element"], ["Double-click", "Go one level in, or edit text"], ["Cmd+Click", "Select the innermost element"], ["Enter", "First child, or edit text"], ["Shift+Enter", "Select the parent"], ["Shift+Click", "Add to selection"], ["Tab", "Next sibling"], ["Esc", "Finish editing, or deselect"]]],
   ["View", [["Up, Down", "Go to slide (no selection)"], ["Arrows", "Nudge 1px (Shift: 10px)"], ["Drag", "Move (Shift: lock axis)"], ["Cmd+Scroll", "Zoom"], ["Shift+1", "Zoom to fit"], ["Shift+0", "Zoom to 100%"], ["Cmd+0", "Zoom to fit"], ["Cmd+\\", "Toggle panels"], ["Shift+Cmd+\\", "Toggle filmstrip"]]],
-  ["General", [["Cmd+K", "Command palette"], ["Cmd+Enter", "Present from this slide"], ["Shift+Cmd+Enter", "Present from the start"], ["Opt+Enter", "Present from this slide"], ["Shift+F10", "Context menu"], ["Cmd+/", "Shortcuts"]]],
+  ["General", [["Cmd+K", "Command palette"], ["Cmd+F", "Find and replace"], ["Cmd+Enter", "Present from this slide"], ["Shift+Cmd+Enter", "Present from the start"], ["Opt+Enter", "Present from this slide"], ["Shift+F10", "Context menu"], ["Cmd+/", "Shortcuts"]]],
 ];
 const GLYPH: Record<string, string> = { Cmd: "⌘", Shift: "⇧", Enter: "↵", Delete: "⌫", Esc: "⎋", Up: "↑", Down: "↓" };
 // "Shift+Cmd+Z" -> 키캡 칩 여러 개. "Up, Down"은 쉼표로 나눈 두 키.
@@ -100,6 +102,10 @@ export function Editor({ id }: { id: string }) {
   const live = useCommentsLive(folder || null);
   const cm = useContextMenu();
   const [notFound, setNotFound] = useState(false);
+  // 찾기와 바꾸기(Cmd+F)
+  const [find, setFind] = useState<FindState | null>(null);
+  const [findTick, setFindTick] = useState(0);
+  const [findCur, setFindCur] = useState(0);
   // 넘침 표시: 캔버스 외곽선과 안전 영역은 보기 설정(기억함), 넘친 요소 목록은 Layers 경고와 필름스트립 표시에 쓴다.
   const [overflowOn, setOverflowOn] = useState(() => localStorage.getItem("slidekit.overflow") !== "0");
   const [safeArea, setSafeArea] = useState(() => localStorage.getItem("slidekit.safearea") === "1");
@@ -226,6 +232,24 @@ export function Editor({ id }: { id: string }) {
     record(coalesce);
     canvas.current!.mark(u.key, html);
     setUnits(unitsRef.current.map((x, k) => (k === i ? { ...x, html } : x)));
+  };
+  const matches = useMemo(() => (find?.q ? findInUnits(units, find.q, { matchCase: find.matchCase, notes: find.notes }) : []), [units, find?.q, find?.matchCase, find?.notes]); // eslint-disable-line
+  const findCurClamped = matches.length ? Math.min(findCur, matches.length - 1) : -1;
+  const matchSlides = useMemo(() => { const m = new Map<number, number>(); for (const x of matches) m.set(x.slide, (m.get(x.slide) ?? 0) + 1); return m; }, [matches]);
+  const goMatch = (k: number) => {
+    if (!matches.length) return;
+    const i = (k + matches.length) % matches.length, m = matches[i];
+    setFindCur(i);
+    if (m.slide !== indexRef.current) setIndex(m.slide);
+    // 슬라이드가 바뀐 뒤 그 요소를 선택해 캔버스에서 보이게 한다
+    requestAnimationFrame(() => requestAnimationFrame(() => { const s = canvas.current?.slide(m.slide); const el = s ? byPath(s, m.path) : null; if (el && el !== s) pickSel(el); }));
+  };
+  const applyReplace = (next: Unit[]) => { // 한 번 = 실행 취소 한 건
+    if (next === unitsRef.current) return;
+    record();
+    setUnits(next);
+    canvas.current?.apply(next);
+    pickSel(null);
   };
   const structure = (next: Unit[], to: number) => {
     record();
@@ -579,6 +603,7 @@ export function Editor({ id }: { id: string }) {
     else if (mod && k === "/") { e.preventDefault(); setHelp((v) => !v); }
     else if (mod && e.key === "Enter") { e.preventDefault(); present(e.shiftKey); }
     else if (mod && (k === "b" || k === "i") && !/^(INPUT|TEXTAREA)$/.test(t.tagName) && (sel || t.isContentEditable || e.view !== window)) { e.preventDefault(); emphasis(k); }
+    else if (mod && k === "f") { e.preventDefault(); setFind((f) => f ?? { q: "", r: "", matchCase: false, notes: false }); setFindTick((n) => n + 1); }
     else if (typing) return;
     else if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); const els = [sel, ...more].filter(Boolean) as Element[]; cm.open(canvas.current?.anchor(els[0] ?? null) ?? { x: 0, y: 0 }, menuFor(els)); }
     else if (!mod && e.shiftKey && e.code === "Digit0") { e.preventDefault(); canvas.current?.zoom100(); }
@@ -637,6 +662,7 @@ export function Editor({ id }: { id: string }) {
     { value: "act-del", label: "Delete slide", group: "Actions", disabled: units.length < 2, onSelect: () => delSlide(indexRef.current) },
     { value: "act-save", label: "Save", group: "Actions", shortcut: "mod+s", onSelect: () => { save(true); } },
     { value: "act-settings", label: "Deck settings", group: "Actions", onSelect: () => setSettingsOpen(true) },
+    { value: "act-find", label: "Find and replace", group: "Actions", shortcut: "mod+f", onSelect: () => { setFind((f) => f ?? { q: "", r: "", matchCase: false, notes: false }); setFindTick((n) => n + 1); } },
     { value: "act-undo", label: "Undo", group: "Actions", shortcut: "mod+z", disabled: !past.current.length, onSelect: () => restore(past.current, future.current) },
     { value: "act-redo", label: "Redo", group: "Actions", shortcut: "mod+shift+z", disabled: !future.current.length, onSelect: () => restore(future.current, past.current) },
     { value: "act-comment", label: "Add comment", group: "Actions", shortcut: "c", onSelect: () => canvas.current?.compose() },
@@ -709,7 +735,14 @@ export function Editor({ id }: { id: string }) {
         <Filmstrip shell={shell} folder={folder} units={units} index={index}
           marked={new Set(comments.filter((c) => !c.slideDeleted && c.status === "open").map((c) => c.slide))} origin={origin.current}
           collapsed={filmCollapsed} onToggle={toggleFilm}
-          updated={updated} warn={new Set(units.map((u, i) => (overflowByKey[u.key] ? i : -1)).filter((i) => i >= 0))} onSelect={setIndex} onMenu={tileMenuAt} onMove={moveSlide} onDuplicate={dupSlide} onDelete={delSlide} onAdd={addSlide} />
+          updated={updated} found={find ? matchSlides : undefined} warn={new Set(units.map((u, i) => (overflowByKey[u.key] ? i : -1)).filter((i) => i >= 0))} onSelect={setIndex} onMenu={tileMenuAt} onMove={moveSlide} onDuplicate={dupSlide} onDelete={delSlide} onAdd={addSlide} />
+        {find && (
+          <FindBar state={find} onChange={(p) => setFind({ ...find, ...p })} total={matches.length} current={findCurClamped} slides={matchSlides.size} focusTick={findTick}
+            onNext={() => goMatch(findCurClamped + 1)} onPrev={() => goMatch(findCurClamped - 1)}
+            onReplace={() => { const m = matches[findCurClamped]; if (m) applyReplace(replaceInUnits(unitsRef.current, find.q, find.r, { matchCase: find.matchCase, notes: find.notes }, m)); }}
+            onReplaceAll={() => { const n = matches.length; applyReplace(replaceInUnits(unitsRef.current, find.q, find.r, { matchCase: find.matchCase, notes: find.notes })); toast(`Replaced ${n} match${n === 1 ? "" : "es"}`, { ms: 3000 }); }}
+            onClose={() => setFind(null)} />
+        )}
         <div className="min-h-0 flex-1 bg-[var(--canvas-bg)]">
         <Canvas ref={canvas} shell={shell} folder={folder} units={units} index={index} sel={sel} more={more} onMulti={toggleSel} onGroup={pickGroup}
           comments={comments.filter((c) => !c.slideDeleted && c.slide === origin.current.get(units[index]?.key ?? ""))}

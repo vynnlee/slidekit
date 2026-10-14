@@ -60,6 +60,7 @@ export function Editor({ id }: { id: string }) {
   const [units, setUnitsState] = useState<Unit[]>([]);
   const [index, setIndexState] = useState(0);
   const [sel, setSel] = useState<Element | null>(null);
+  const [more, setMore] = useState<Element[]>([]); // 다중 선택의 나머지(같은 부모). sel이 대표다
   const [selId, setSelId] = useState(0);
   const [tab, setTab] = useState("props");
   const [saved, setSaved] = useState("");
@@ -166,7 +167,17 @@ export function Editor({ id }: { id: string }) {
     last.current = coalesce ? { key: coalesce, t: now } : null;
   };
   const setUnits = (next: Unit[]) => { unitsRef.current = next; setUnitsState(next); };
-  const pickSel = (el: Element | null) => { setSel(el); setSelId((n) => n + 1); };
+  const pickSel = (el: Element | null) => { setSel(el); setMore([]); setSelId((n) => n + 1); };
+  const pickGroup = (list: Element[]) => { setSel(list[0] ?? null); setMore(list.slice(1)); setSelId((n) => n + 1); };
+  // Shift+클릭(또는 Layers의 Shift+클릭): 같은 부모의 요소만 묶고, 잠긴 요소는 넣지 않는다.
+  const toggleSel = (el: Element | null) => {
+    if (!el) return;
+    if (!sel) return pickSel(el);
+    const group = [sel, ...more];
+    if (group.includes(el)) return pickGroup(group.filter((n) => n !== el));
+    if (isLockedDeep(el) || el.parentElement !== sel.parentElement) return;
+    pickGroup([...group, el]);
+  };
   const setIndex = (i: number) => {
     i = Math.max(0, Math.min(unitsRef.current.length - 1, i));
     if (i === indexRef.current) return;
@@ -197,10 +208,12 @@ export function Editor({ id }: { id: string }) {
     const pf = prefixOf.current.get(prev);
     if (pf !== undefined && shellRef.current && pf !== shellRef.current.prefix) setShell({ ...shellRef.current, prefix: pf });
     else canvas.current?.apply(prev);
-    const keep = sel && canvas.current?.slide(indexRef.current) ? pathOf(canvas.current.slide(indexRef.current)!, sel) : null;
+    const cs = canvas.current?.slide(indexRef.current);
+    const keeps = cs && sel ? [sel, ...more].map((n) => pathOf(cs, n)) : [];
+    const keep = keeps[0] ?? null;
     indexRef.current = Math.min(indexRef.current, prev.length - 1); setIndexState(indexRef.current);
     const s = canvas.current?.slide(indexRef.current);
-    pickSel(keep && s ? byPath(s, keep) : null); // 되돌린 뒤에도 같은 요소를 선택해 둔다
+    pickGroup(s ? keeps.map((k) => (k ? byPath(s, k) : null)).filter((n): n is Element => !!n) : []); // 되돌린 뒤에도 같은 요소를 선택해 둔다
   };
 
   // 덱 토큰(:root 변수) 변경은 head를 바꾸므로 한 번의 실행 취소 단위로 기록한다.
@@ -239,15 +252,17 @@ export function Editor({ id }: { id: string }) {
   };
   const delSelected = () => {
     if (!sel) return delSlide(indexRef.current);
-    if (isLockedDeep(sel)) return; // 잠긴 요소는 잠금을 풀기 전에 지우지 않는다
-    sel.remove(); pickSel(null); commit();
+    const del = [sel, ...more].filter((n) => !isLockedDeep(n)); // 잠긴 요소는 잠금을 풀기 전에 지우지 않는다
+    if (!del.length) return;
+    for (const n of del) n.remove();
+    pickSel(null); commit();
   };
   const [filmCollapsed, setFilmCollapsed] = useState(() => localStorage.getItem("slidekit.filmstrip.collapsed") === "1");
   const toggleFilm = () => setFilmCollapsed((v) => { localStorage.setItem("slidekit.filmstrip.collapsed", v ? "0" : "1"); return !v; });
   const clip = useRef("");
   const copySel = () => {
     if (!sel) return;
-    clip.current = sel.outerHTML;
+    clip.current = [sel, ...more].map((n) => n.outerHTML).join("\n");
     const b = (t: string) => new Blob([clip.current], { type: t });
     navigator.clipboard?.write?.([new ClipboardItem({ "text/html": b("text/html"), "text/plain": b("text/plain") })]).catch(() => {});
   };
@@ -256,12 +271,13 @@ export function Editor({ id }: { id: string }) {
     if (!s || !clip.current) return;
     const t = s.ownerDocument.createElement("template");
     t.innerHTML = clip.current;
-    const n = t.content.firstElementChild;
-    if (!n) return;
-    n.removeAttribute("id");
-    if (sel && s.contains(sel)) sel.after(n);
-    else { const a = s.querySelector(":scope > aside[data-notes]"); if (a) a.before(n); else s.append(n); }
-    pickSel(n); commit();
+    const ns = [...t.content.children];
+    if (!ns.length) return;
+    ns.forEach((n) => n.removeAttribute("id"));
+    const after = [sel, ...more].filter((n): n is Element => !!n && s.contains(n)).pop();
+    if (after) after.after(...ns);
+    else { const a = s.querySelector(":scope > aside[data-notes]"); if (a) a.before(...ns); else s.append(...ns); }
+    pickGroup(ns); commit();
   };
   const toggleHidden = (el: HTMLElement) => { if (el.style.display === "none") el.style.removeProperty("display"); else el.style.setProperty("display", "none"); pickSel(sel); commit(); };
   const toggleLock = (el: Element) => { if (el.hasAttribute("data-locked")) el.removeAttribute("data-locked"); else el.setAttribute("data-locked", ""); pickSel(sel); commit(); };
@@ -288,10 +304,10 @@ export function Editor({ id }: { id: string }) {
   };
   const dupSelected = () => {
     if (!sel) return dupSlide(indexRef.current);
-    if (isLockedDeep(sel)) return;
-    const c = sel.cloneNode(true) as Element;
-    c.removeAttribute("id");
-    sel.after(c); pickSel(c); commit();
+    const src = [sel, ...more].filter((n) => !isLockedDeep(n));
+    if (!src.length) return;
+    const clones = src.map((n) => { const c = n.cloneNode(true) as Element; c.removeAttribute("id"); n.after(c); return c; });
+    pickGroup(clones); commit();
   };
 
   // 선택 이동(SPEC 9.5): Tab은 같은 범위의 형제를 돌고, Enter는 첫 자식(글자면 편집), Shift+Enter는 부모.
@@ -486,7 +502,7 @@ export function Editor({ id }: { id: string }) {
           <div className="flex h-full flex-col">
             <div className="shrink-0 px-3 pt-2 text-caption font-semibold">Layers</div>
             <div className="min-h-0 flex-1 overflow-auto">
-              <LayerTree slide={canvas.current?.slide(index) ?? null} sel={sel} rev={units} slideName={canvas.current?.slide(index)?.getAttribute("data-title") || `Slide ${index + 1}`} onSelectSlide={() => pickSel(null)} onSelect={pickSel} onHover={(el) => canvas.current?.hover(el)}
+              <LayerTree slide={canvas.current?.slide(index) ?? null} sel={sel} more={more} onToggle={toggleSel} rev={units} slideName={canvas.current?.slide(index)?.getAttribute("data-title") || `Slide ${index + 1}`} onSelectSlide={() => pickSel(null)} onSelect={pickSel} onHover={(el) => canvas.current?.hover(el)}
                 onToggleHidden={toggleHidden} onToggleLock={toggleLock} renameSignal={renameTick} onRename={renameEl} onMove={moveEl} />
             </div>
           </div>
@@ -502,7 +518,7 @@ export function Editor({ id }: { id: string }) {
           collapsed={filmCollapsed} onToggle={toggleFilm}
           onSelect={setIndex} onMove={moveSlide} onDuplicate={dupSlide} onDelete={delSlide} onAdd={addSlide} />
         <div className="min-h-0 flex-1 bg-[var(--canvas-bg)]">
-        <Canvas ref={canvas} shell={shell} folder={folder} units={units} index={index} sel={sel}
+        <Canvas ref={canvas} shell={shell} folder={folder} units={units} index={index} sel={sel} more={more} onMulti={toggleSel}
           comments={comments.filter((c) => !c.slideDeleted && c.slide === origin.current.get(units[index]?.key ?? ""))}
           onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
           numbers={nums} hoverId={hoverId} onHover={setHoverId} channel={live.channel}

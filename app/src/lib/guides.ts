@@ -17,6 +17,12 @@ export const anchors = (r: Rect, a: Axis): [number, number, number] => [lo(r, a)
 export const toSlide = (r: { left: number; top: number; width: number; height: number }, origin: { left: number; top: number }, k: number): Rect =>
   ({ x: (r.left - origin.left) / k, y: (r.top - origin.top) / k, w: r.width / k, h: r.height / k });
 
+/** 여러 사각형을 감싸는 최소 사각형 */
+export const unionRect = (rs: Rect[]): Rect => {
+  const x = Math.min(...rs.map((r) => r.x)), y = Math.min(...rs.map((r) => r.y));
+  return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y };
+};
+
 /** Shift 축 고정: 이동량이 큰 쪽 축만 남긴다(같으면 x) */
 export const lockAxis = (dx: number, dy: number): { dx: number; dy: number; axis: Axis } =>
   Math.abs(dx) >= Math.abs(dy) ? { dx, dy: 0, axis: "x" } : { dx: 0, dy, axis: "y" };

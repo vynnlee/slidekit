@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { anchors, gapsOf, lockAxis, snapMove, snapResize, toSlide, type Rect } from "../src/lib/guides";
+import { anchors, gapsOf, lockAxis, snapMove, snapResize, toSlide, unionRect, type Rect } from "../src/lib/guides";
 
 const R = (x: number, y: number, w: number, h: number): Rect => ({ x, y, w, h });
 
@@ -61,4 +61,8 @@ test("리사이즈: 비율 유지이면 한 축만 맞추고 다른 축은 비�
 test("toSlide 변환", () => {
   expect(toSlide({ left: 150, top: 110, width: 50, height: 25 }, { left: 100, top: 10 }, 0.5)).toEqual({ x: 100, y: 200, w: 100, h: 50 });
   expect(anchors(R(10, 0, 20, 0), "x")).toEqual([10, 20, 30]);
+});
+
+test("unionRect는 여러 사각형을 감싼다", () => {
+  expect(unionRect([{ x: 10, y: 20, w: 30, h: 10 }, { x: 50, y: 0, w: 10, h: 10 }])).toEqual({ x: 10, y: 0, w: 50, h: 30 });
 });

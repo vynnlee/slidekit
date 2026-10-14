@@ -6,7 +6,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { byPath, previewHtml, serializeSlide, type Unit } from "@/lib/deck-source";
 import { childToward, isLeaf, isLockedDeep, pick as pickEl, siblings } from "@/lib/selection";
 import { canMove, canResize, fixSize, moveBy, readTranslate, toLocal, writeTranslate } from "@/lib/move";
-import { lockAxis, snapMove, snapResize, toSlide, type Gap, type Guide, type Rect } from "@/lib/guides";
+import { lockAxis, snapMove, snapResize, toSlide, unionRect, type Gap, type Guide, type Rect } from "@/lib/guides";
 import { CommentPin } from "./CommentPin";
 import { CommentComposer } from "./CommentComposer";
 import { nameOf } from "./LayerTree";
@@ -34,12 +34,14 @@ type Props = {
   units: Unit[];
   index: number;
   sel: Element | null;
+  more: Element[]; // 다중 선택의 나머지(같은 부모, sel과 함께 한 묶음)
   comments: Comment[];
   numbers: Map<string, number>; // 목록과 같은 코멘트 번호
   hoverId: string | null;
   onHover(id: string | null): void;
   channel: boolean | null;
   onSel(el: Element | null): void;
+  onMulti(el: Element | null): void; // Shift+클릭: 선택에 더하거나 뺀다
   onCommit(coalesce?: string): void;
   onKey(e: KeyboardEvent): void;
   onDelete(): void;
@@ -88,8 +90,9 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   const sizeTag = useRef<HTMLDivElement>(null);
   const guideSvg = useRef<SVGSVGElement>(null);
   const handles = useRef<HTMLDivElement>(null);
+  const extraBoxes = useRef<HTMLDivElement>(null);
   // 끌어서 이동: 시작 상태. moved는 3px 넘게 움직인 뒤에만 참이다.
-  const drag = useRef<{ el: HTMLElement; x0: number; y0: number; t0: [number, number]; ks: number; moved: boolean; start: Rect; cands: Rect[]; orig: string } | null>(null);
+  const drag = useRef<{ els: HTMLElement[]; x0: number; y0: number; t0: [number, number][]; ks: number; moved: boolean; start: Rect; cands: Rect[]; orig: string[]; primary: HTMLElement } | null>(null);
   const swallowClick = useRef(false);
   const hoverBox = useRef<HTMLDivElement>(null), selBox = useRef<HTMLDivElement>(null), bar = useRef<HTMLDivElement>(null), pop = useRef<HTMLDivElement>(null);
   const markers = useRef<HTMLDivElement>(null);
@@ -138,9 +141,9 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     zoom: (d) => zoomBy(d),
     compose: () => setComposing(true),
     nudge(dx, dy) {
-      const el = P.current.sel as HTMLElement | null;
-      if (!el || isLockedDeep(el) || !canMove(el)) return;
-      moveBy(el, dx, dy);
+      const els = ([P.current.sel, ...P.current.more].filter(Boolean) as HTMLElement[]).filter((el) => !isLockedDeep(el) && canMove(el));
+      if (!els.length) return;
+      for (const el of els) moveBy(el, dx, dy);
       P.current.onCommit("nudge");
     },
     reload: () => build(P.current.units),
@@ -319,11 +322,14 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     d.addEventListener("pointerdown", (e) => {
       const sl = cur();
       if (e.button !== 0 || editing.current || !sl) return;
+      if (e.shiftKey) return; // Shift+클릭은 선택 토글이라 끌기를 시작하지 않는다
       const el = pick(e) as HTMLElement | null;
       if (!el || isLockedDeep(el) || !canMove(el)) return;
+      const multi = [P.current.sel, ...P.current.more].filter(Boolean) as HTMLElement[];
+      const els = P.current.more.length && multi.includes(el) ? multi.filter((n) => !isLockedDeep(n) && canMove(n)) : [el];
       const sr = sl.getBoundingClientRect(), ks = sr.width / 1920 || 1;
-      const cands = siblings<Element>(sl, el).filter((n) => n !== el && n.getBoundingClientRect().width > 0 && getComputedStyle(n).display !== "none").map((n) => toSlide(n.getBoundingClientRect(), sr, ks));
-      drag.current = { el, x0: e.clientX, y0: e.clientY, t0: readTranslate(el), ks, moved: false, start: toSlide(el.getBoundingClientRect(), sr, ks), cands, orig: el.style.translate };
+      const cands = siblings<Element>(sl, el).filter((n) => !els.includes(n as HTMLElement) && n.getBoundingClientRect().width > 0 && getComputedStyle(n).display !== "none").map((n) => toSlide(n.getBoundingClientRect(), sr, ks));
+      drag.current = { els, primary: el, x0: e.clientX, y0: e.clientY, t0: els.map(readTranslate), ks, moved: false, start: unionRect(els.map((n) => toSlide(n.getBoundingClientRect(), sr, ks))), cands, orig: els.map((n) => n.style.translate) };
       (e.target as Element).setPointerCapture?.(e.pointerId);
     }, true);
     d.addEventListener("pointermove", (e) => {
@@ -333,7 +339,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       if (!g.moved) {
         if (Math.hypot(dx, dy) < 3) return;
         g.moved = true;
-        if (selRef.current !== g.el) { selRef.current = g.el; P.current.onSel(g.el); }
+        if (g.els.length === 1 && selRef.current !== g.primary) { selRef.current = g.primary; P.current.onSel(g.primary); }
         hover.current = null;
       }
       const lock = e.shiftKey ? lockAxis(dx, dy) : null;
@@ -341,8 +347,10 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       const sl = cur()!, sr = sl.getBoundingClientRect();
       const mv: Rect = { ...g.start, x: g.start.x + dx / g.ks, y: g.start.y + dy / g.ks };
       const snap = snapMove(mv, g.cands, 6 / g.ks, { lock: lock?.axis, frame: { x: 0, y: 0, w: 1920, h: 1080 } });
-      const [lx, ly] = toLocal(g.el, dx / g.ks + snap.dx, dy / g.ks + snap.dy); // 회전한 조상도 거꾸로 돌려 준다
-      writeTranslate(g.el, g.t0[0] + lx, g.t0[1] + ly);
+      g.els.forEach((el, i) => {
+        const [lx, ly] = toLocal(el, dx / g.ks + snap.dx, dy / g.ks + snap.dy); // 회전한 조상도 거꾸로 돌려 준다
+        writeTranslate(el, g.t0[i][0] + lx, g.t0[i][1] + ly);
+      });
       drawGuides(sr, g.ks, snap.guides, snap.gaps);
       e.preventDefault();
     }, true);
@@ -353,7 +361,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       if (!g || !g.moved) return;
       swallowClick.current = true; // 끌고 난 뒤의 click이 선택을 바꾸지 않게 한다
       setTimeout(() => { swallowClick.current = false; }, 0);
-      if (cancel) { if (g.orig) g.el.style.translate = g.orig; else g.el.style.removeProperty("translate"); return; }
+      if (cancel) { g.els.forEach((el, i) => { if (g.orig[i]) el.style.translate = g.orig[i]; else el.style.removeProperty("translate"); }); return; }
       P.current.onCommit(); // 한 번 끌기 = 실행 취소 한 건
     };
     d.addEventListener("pointerup", () => endDrag(false), true);
@@ -367,6 +375,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       e.preventDefault(); e.stopPropagation();
       if (swallowClick.current) { swallowClick.current = false; return; }
       const t = pick(e);
+      if (e.shiftKey && !e.metaKey && !e.ctrlKey) { P.current.onMulti(t); setComposing(false); return; }
       selRef.current = t;
       P.current.onSel(t);
       setComposing(false);
@@ -402,7 +411,24 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       return r;
     };
     const s = P.current.sel;
-    const r = put(selBox.current, s);
+    const group = [s, ...P.current.more].filter((n): n is Element => !!n && n.isConnected);
+    const multi = group.length > 1;
+    let r = put(selBox.current, s);
+    if (multi && selBox.current) { // 묶음: 모두를 감싸는 상자 하나와 구성 요소마다 얇은 외곽선
+      const rs = group.map((n) => n.getBoundingClientRect());
+      const l = Math.min(...rs.map((q) => q.left)), t = Math.min(...rs.map((q) => q.top)), rr = Math.max(...rs.map((q) => q.right)), b = Math.max(...rs.map((q) => q.bottom));
+      r = new DOMRect(l, t, rr - l, b - t);
+      selBox.current.style.transform = `translate(${l}px,${t}px)`;
+      const ex = extraBoxes.current;
+      if (ex) {
+        while (ex.children.length < group.length) { const d = document.createElement("div"); d.className = "absolute left-0 top-0 border border-focus-ring/70"; ex.appendChild(d); }
+        [...ex.children].forEach((c, i) => {
+          const d = c as HTMLElement, q = rs[i];
+          if (!q) { d.style.display = "none"; return; }
+          d.style.display = "block"; d.style.width = q.width + "px"; d.style.height = q.height + "px"; d.style.transform = `translate(${q.left}px,${q.top}px)`;
+        });
+      }
+    } else if (extraBoxes.current) [...extraBoxes.current.children].forEach((c) => { (c as HTMLElement).style.display = "none"; });
     if (r && selBox.current) { selBox.current.style.width = r.width + "px"; selBox.current.style.height = r.height + "px"; }
     // 선택 요소의 크기 칩(슬라이드 1920 기준 px)
     const tag = sizeTag.current;
@@ -419,7 +445,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     // 리사이즈 핸들: 이동할 수 있는 선택 요소에만 보인다(글자 블록은 가로 변과 모서리만, 높이는 내용이 정한다)
     const hs = handles.current;
     if (hs) {
-      const ok = !!(r && s && !editing.current && !composing && !isLockedDeep(s) && canResize(s as HTMLElement));
+      const ok = !!(r && s && !multi && !editing.current && !composing && !isLockedDeep(s) && canResize(s as HTMLElement));
       const textOnly = !!s && textual(s);
       hs.querySelectorAll<HTMLElement>("[data-handle]").forEach((h) => {
         const id = h.dataset.handle!;
@@ -434,7 +460,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     const hr = put(hoverBox.current, h);
     if (hr && hoverBox.current) { hoverBox.current.style.width = hr.width + "px"; hoverBox.current.style.height = hr.height + "px"; }
     if (bar.current) {
-      const show = s && !editing.current;
+      const show = s && !multi && !editing.current;
       if (!show || !r) bar.current.style.display = "none";
       else { bar.current.style.display = "flex"; bar.current.style.transform = `translate(${Math.max(0, r.left)}px,${r.top > 36 ? r.top - 34 : r.bottom + 6}px)`; }
     }
@@ -459,6 +485,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div ref={hoverBox} className="absolute left-0 top-0 hidden border border-focus-ring/60" />
           <div ref={selBox} className="absolute left-0 top-0 hidden border-2 border-focus-ring" />
+          <div ref={extraBoxes} />
           <div ref={handles}>
             {HANDLES.map(([id, cursor]) => (
               <div key={id} data-handle={id} aria-hidden="true" style={{ cursor }} onPointerDown={(e) => startResize(id, e)}

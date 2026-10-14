@@ -9,6 +9,8 @@ import { isLockedDeep } from "@/lib/selection";
 type Props = {
   slide: HTMLElement | null;
   sel: Element | null;
+  more: Element[]; // 다중 선택의 나머지
+  onToggle(el: Element): void; // Shift+클릭: 선택에 더하거나 뺀다
   slideName: string;
   onSelectSlide(): void;
   rev: unknown; // 슬라이드가 바뀔 때마다 달라져 트리를 다시 그린다
@@ -80,11 +82,11 @@ export function LayerTree(p: Props) {
     const hidden = (el as HTMLElement).style?.display === "none";
     const locked = el.hasAttribute("data-locked");
     const byParent = !locked && isLockedDeep(el); // 조상이 잠겨 있어 함께 잠긴 요소
-    const on = el === p.sel;
+    const on = el === p.sel || p.more.includes(el);
     return (
       <div key={[...(el.parentElement?.children ?? [])].indexOf(el)} role="treeitem" aria-selected={on} aria-expanded={ch.length ? isOpen : undefined}>
         <div
-          ref={on ? selRow : undefined}
+          ref={el === p.sel ? selRow : undefined}
           data-testid="layer-row"
           draggable={rename !== el}
           onDragStart={(e) => { setDrag(el); e.dataTransfer.effectAllowed = "move"; e.stopPropagation(); }}
@@ -98,7 +100,7 @@ export function LayerTree(p: Props) {
           onDragEnd={() => { setDrag(null); setDrop(null); }}
           tabIndex={on ? 0 : -1}
           onKeyDown={(e) => { if (e.key === "Enter" && e.target === e.currentTarget && !e.metaKey && !e.ctrlKey) { e.preventDefault(); e.stopPropagation(); setRename(el); } }}
-          onClick={(e) => { e.currentTarget.focus(); p.onSelect(el); }}
+          onClick={(e) => { e.currentTarget.focus(); if (e.shiftKey) p.onToggle(el); else p.onSelect(el); }}
           onDoubleClick={() => setRename(el)}
           onMouseEnter={() => p.onHover(el)}
           onMouseLeave={() => p.onHover(null)}

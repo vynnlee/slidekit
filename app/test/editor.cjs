@@ -51,7 +51,8 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('테스트 덱이 30장 이상(검사가 의미 있으려면)', nSlides >= 30, nSlides);
   check('끝까지 넘기면 iframe 수가 보이는 수 + 여유 이내이고 슬라이드 수보다 훨씬 적음', endN <= perScreen + 6 && endN < nSlides / 2, [endN, perScreen, nSlides]);
   check('끝에서는 마지막 썸네일이 올라와 있고 먼 2번은 내려감', (await has(nSlides)) === 1 && (await has(2)) === 0, [await has(nSlides), await has(2)]);
-  await vp.evaluate((e) => { e.scrollLeft = 0; }); await sleep(800);
+  await vp.evaluate((e) => { e.scrollLeft = 0; });
+  for (let i = 0; i < 40 && !((await has(nSlides)) === 0 && (await has(2)) === 1); i++) await sleep(150); // 큐를 거쳐 다시 올라오기를 기다린다
   check('처음으로 돌아오면 먼 쪽(마지막)이 내려가고 2번이 다시 올라옴', (await has(nSlides)) === 0 && (await has(2)) === 1, [await has(nSlides), await has(2)]);
   // 확대 축소, Tab 선택
   const wid = async () => (await frameEl.boundingBox()).width;
@@ -429,6 +430,32 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   const t2 = await tr();
   check('방향키 1px와 Shift+방향키 10px 넛지', /^1px 10px$/.test(t2), t2);
   await focusBody(); await page.keyboard.press('Meta+z'); await sleep(300); await page.keyboard.press('Escape');
+
+  // 다중 선택: Shift+클릭으로 같은 부모의 요소를 묶고 이동, 넛지, 복제, 삭제가 한 번에 적용된다(실행 취소 1건)
+  await layers.nth(1).click(); await sleep(500); await focusBody(); await page.keyboard.press('Escape');
+  const nKids = () => inDoc((s) => s.children.length);
+  const tr2 = () => inDoc((s) => [s.children[0].style.translate || '', s.children[1].style.translate || '']);
+  await fr().locator('[data-active] > :nth-child(1)').first().click(); await sleep(250);
+  await fr().locator('[data-active] > :nth-child(2)').first().click({ modifiers: ['Shift'] }); await sleep(300);
+  check('Shift+클릭으로 두 요소가 선택됨(Layers 행 2개)', (await page.locator('[role=treeitem] > [aria-selected], [role=treeitem][aria-selected=true]').count()) >= 2);
+  await focusBody(); await page.keyboard.press('ArrowRight'); await sleep(300);
+  const m1 = await tr2();
+  check('방향키 넛지가 둘 다 옮김', m1[0] === '1px' && m1[1] === '1px', m1);
+  await focusBody(); await page.keyboard.press('Meta+z'); await sleep(300);
+  check('넛지 실행 취소 한 번에 둘 다 되돌아감', (await tr2()).join('') === '', await tr2());
+  await fr().locator('[data-active] > :nth-child(1)').first().click(); await sleep(250);
+  await fr().locator('[data-active] > :nth-child(2)').first().click({ modifiers: ['Shift'] }); await sleep(300);
+  const k0n = await nKids();
+  await focusBody(); await page.keyboard.press('Meta+d'); await sleep(400);
+  check('Cmd+D가 선택한 둘을 모두 복제', (await nKids()) === k0n + 2, [k0n, await nKids()]);
+  await focusBody(); await page.keyboard.press('Meta+z'); await sleep(400);
+  await fr().locator('[data-active] > :nth-child(1)').first().click(); await sleep(250);
+  await fr().locator('[data-active] > :nth-child(2)').first().click({ modifiers: ['Shift'] }); await sleep(300);
+  await focusBody(); await page.keyboard.press('Delete'); await sleep(400);
+  check('Delete가 선택한 둘을 모두 지움', (await nKids()) === k0n - 2, [k0n, await nKids()]);
+  await focusBody(); await page.keyboard.press('Meta+z'); await sleep(400);
+  check('삭제 실행 취소 한 번에 둘 다 돌아옴', (await nKids()) === k0n, await nKids());
+  await page.keyboard.press('Escape');
 
   // Inspector Offset 필드와 리사이즈 핸들
   await fr().locator('[data-active] h2').first().click({ modifiers: ['Meta'] }); await sleep(300);

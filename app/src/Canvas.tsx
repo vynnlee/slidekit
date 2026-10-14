@@ -46,6 +46,7 @@ type Props = {
   onHover(id: string | null): void;
   channel: boolean | null;
   onStyle(prop: string, value: string): void; // 선택한 글자 요소의 서식 도구줄
+  onImage(file: File, over: Element | null): void; // 붙여넣거나 끌어 놓은 이미지(img 위면 교체)
   onSel(el: Element | null): void;
   onContext(info: { el: Element | null; x: number; y: number }): void; // 우클릭: 대상 요소(없으면 빈 곳)와 화면 좌표
   onGroup(list: Element[]): void; // 마퀴로 고른 묶음(첫 요소가 대표)
@@ -451,6 +452,16 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       const s = P.current.sel;
       if (!el && s && isLockedDeep(s)) { const r = s.getBoundingClientRect(); if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) el = s; } // 잠긴 선택 위
       P.current.onContext({ el, x: e.clientX + (fr?.left ?? 0), y: e.clientY + (fr?.top ?? 0) });
+    }, true);
+    const imageOf = (dt: DataTransfer | null) => [...(dt?.files ?? [])].find((f) => f.type.startsWith("image/")) ?? null;
+    d.addEventListener("paste", (e) => { if (editing.current) return; const f = imageOf(e.clipboardData); if (f) { e.preventDefault(); P.current.onImage(f, null); } }, true);
+    d.addEventListener("dragover", (e) => { if ([...(e.dataTransfer?.types ?? [])].includes("Files")) e.preventDefault(); }, true);
+    d.addEventListener("drop", (e) => {
+      const f = imageOf(e.dataTransfer);
+      if (!f) return;
+      e.preventDefault(); e.stopPropagation();
+      const img = (e.target as Element | null)?.closest?.("img") ?? null; // 이미지 위에 놓으면 그 이미지를 바꾼다
+      P.current.onImage(f, img && cur()?.contains(img) ? img : null);
     }, true);
     d.addEventListener("dblclick", (e) => {
       // 선택된 요소를 더블클릭: 글자 블록이면 편집, 컨테이너이면 한 단계 안쪽 요소를 선택한다.

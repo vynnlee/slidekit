@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical,
   ArrowDown, ArrowRight, Blend, CaseLower, CaseSensitive, CaseUpper, ALargeSmall, Droplets, Expand, EyeOff, Frame, Layers as LayersIcon,
@@ -23,6 +23,7 @@ import { Card, CardGroup, CardHeader, CardTitle, CardDescription } from "@/compo
 import { textual } from "./Canvas";
 import { iconOf, nameOf } from "./LayerTree";
 import { readTranslate } from "@/lib/move";
+import { LAYOUTS } from "../../engine/layouts";
 import { TokensPanel } from "./TokensPanel";
 import { CommentsPanel } from "./CommentsPanel";
 import type { Comment } from "@/lib/deck";
@@ -97,6 +98,7 @@ type Props = {
   onResolve(c: Comment, resolved: boolean): void;
   onTrust?(c: Comment): void;
   onRemove?(c: Comment): void;
+  onImageFile(file: File): void; // 선택한 이미지의 src를 고른 파일로 바꾼다
   onRevert?(c: Comment, undo?: boolean): void;
   hoverId: string | null;
   onHover(id: string | null): void;
@@ -148,6 +150,7 @@ export function Inspector(p: Props) {
   const val = (prop: string) => inl(prop) || cs?.getPropertyValue(prop) || "";
   const set = (prop: string, v: string) => { p.onStyle(prop, v); bump((n) => n + 1); };
   const multi = p.more.length > 0;
+  const imgInput = useRef<HTMLInputElement>(null);
   // 다중 선택에서 대표와 값이 다른 요소가 있으면 Mixed로 보인다
   const mixedOf = (prop: string) => multi && !!win && p.more.some((m) => ((m as HTMLElement).style.getPropertyValue(prop) || win.getComputedStyle(m).getPropertyValue(prop)) !== val(prop));
   const scrub = { onScrubStart: () => p.onScrub(true), onScrubEnd: () => p.onScrub(false) };
@@ -274,6 +277,12 @@ export function Inspector(p: Props) {
                 <span className="text-micro text-muted-foreground">Type</span>
                 <Pick label="Type" value={KINDS.some(([k]) => k === kind) ? kind : "content"} items={KINDS} onChange={(v) => p.onAttr("data-slide", v)} />
               </div>
+              {kind === "content" && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-micro text-muted-foreground">Layout</span>
+                  <Pick label="Layout" value={p.slide?.getAttribute("data-layout") ?? "title-body"} items={LAYOUTS.map((l) => [l.id, l.label] as const)} onChange={(v) => p.onAttr("data-layout", v === "title-body" ? null : v)} />
+                </div>
+              )}
               <div className="flex flex-col gap-1">
                 <span className="text-micro text-muted-foreground">Chapter title</span>
                 <Field aria-label="Chapter title" placeholder="Shown in the table of contents" defaultValue={p.slide?.getAttribute("data-title") ?? ""} onChange={(e) => p.onAttr("data-title", e.target.value || null)} />
@@ -400,6 +409,9 @@ export function Inspector(p: Props) {
 
             {el.tagName === "IMG" && (
               <InspectorSection id="image" title="Image">
+                <input ref={imgInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp" aria-label="Choose image file" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) p.onImageFile(f); }} />
+                <Button variant="secondary" size="compact" className="w-full" onClick={() => imgInput.current?.click()}>Replace image...</Button>
                 <div className="flex flex-col gap-1">
                   <span className="text-micro text-muted-foreground">Fit</span>
                   <Pick label="Image fit" value={val("object-fit")} items={FITS} onChange={(v) => set("object-fit", v)} />

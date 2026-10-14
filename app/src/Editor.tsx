@@ -12,7 +12,7 @@ import { Filmstrip } from "./Filmstrip";
 import { LayerTree } from "./LayerTree";
 import { Inspector } from "./Inspector";
 import { go } from "./App";
-import { byPath, compose, duplicateHtml, newKey, newSlideHtml, pathOf, splitDeck, type Unit } from "@/lib/deck-source";
+import { byPath, compose, duplicateHtml, layoutOf, newKey, newSlideHtml, pathOf, splitDeck, type Unit } from "@/lib/deck-source";
 import { ExportMenu } from "./ExportMenu";
 import { ChannelBadge } from "./CommentsPanel";
 import { ReplyToasts } from "./ReplyToasts";
@@ -21,6 +21,7 @@ import { canMove, readTranslate, toLocal, writeTranslate } from "@/lib/move";
 import type { CommentActions } from "@/lib/comment-actions";
 import { numbering } from "@/lib/comment-state";
 import { firstChild, isLeaf, isLockedDeep, parentOf, siblings } from "@/lib/selection";
+import { EditorTip } from "./EditorTip";
 import { ContextMenu, useContextMenu } from "@/components/ui/context-menu";
 import { elementMenu, groupMenu, slideMenu, tileMenu, type MenuItem, type SlideMenuActions } from "@/lib/menu-model";
 import { diffDecks, slidesLabel } from "@/lib/deck-diff";
@@ -261,9 +262,9 @@ export function Editor({ id }: { id: string }) {
     a.splice(i + 1, 0, { key: newKey(), gap: u.gap, html: duplicateHtml(u.html) });
     structure(a, i + 1);
   };
-  const addSlide = (i: number) => {
+  const addSlide = (i: number, layout?: string) => {
     const a = [...unitsRef.current];
-    a.splice(i + 1, 0, { key: newKey(), gap: a[i].gap, html: newSlideHtml() });
+    a.splice(i + 1, 0, { key: newKey(), gap: a[i].gap, html: newSlideHtml(layout ?? layoutOf(a[i].html)) }); // 직전 슬라이드와 같은 레이아웃으로
     structure(a, i + 1);
   };
   const delSlide = (i: number) => {
@@ -355,6 +356,40 @@ export function Editor({ id }: { id: string }) {
   const style = (prop: string, v: string) => { const els = [sel, ...more].filter(Boolean) as HTMLElement[]; if (!els.length) return; for (const el of els) { if (v) el.style.setProperty(prop, v); else el.style.removeProperty(prop); } commit("style:" + prop); };
   // 묶음 정렬: 모두를 감싸는 상자의 왼쪽, 가운데, 오른쪽(위, 가운데, 아래)에 맞춘다. translate만 바꾼다(SPEC 9.5).
   const commentActions: CommentActions = { resolve: live.resolve, trust: live.trust, remove: live.remove, revert: live.revert, openInPanel: (c) => { setTab("comments"); jump(c); } };
+  // 이미지 붙여넣기, 끌어 놓기, Replace image: 덱 폴더 images/에 저장하고 img를 넣거나 src를 바꾼다.
+  const addImage = async (file: File, over: Element | null) => {
+    const s = canvas.current?.slide(indexRef.current);
+    if (!deck || !s) return;
+    if (file.size > 20 * 1024 * 1024) { toast("That image is larger than 20 MB", { ms: 4000 }); return; }
+    // 저장, 형식 확인, 큰 이미지 축소와 EXIF 제거는 서버의 자산 API가 한다(engine/assets.ts).
+    const r = await fetch(`/api/decks/${deck.folder}/assets?name=${encodeURIComponent(file.name || "image.png")}`, { method: "POST", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file }).catch(() => null);
+    const j = r ? await r.json().catch(() => null) : null;
+    if (!r?.ok || !j?.path) { toast(j?.error ?? "Could not add the image", { ms: 6000 }); return; }
+    const src = j.path as string;
+    for (const w of (j.warnings ?? []) as string[]) toast(w, { ms: 6000 });
+    const target = over ?? (sel?.tagName === "IMG" ? sel : null); // iframe 안 요소라 instanceof가 아니라 tagName으로 본다
+    if (target?.tagName === "IMG") { target.setAttribute("src", src); pickSel(target); commit(); return; }
+    const img = s.ownerDocument.createElement("img");
+    img.setAttribute("src", src);
+    img.setAttribute("alt", file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim() || "Image");
+    img.setAttribute("style", `${j.width ? `width: ${Math.min(j.width, 1200)}px; ` : ""}max-width: 100%;`); // 원래 비율은 height:auto(기본)로 유지
+    const after = sel && s.contains(sel) && sel !== s ? sel : null;
+    if (after) after.after(img);
+    else { const a = s.querySelector(":scope > aside[data-notes]"); if (a) a.before(img); else s.append(img); }
+    pickSel(img); commit();
+  };
+  const addImageRef = useRef(addImage);
+  addImageRef.current = addImage;
+  useEffect(() => {
+    const on = (e: ClipboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA)$/.test(t.tagName))) return;
+      const f = [...(e.clipboardData?.files ?? [])].find((x) => x.type.startsWith("image/"));
+      if (f) { e.preventDefault(); void addImageRef.current(f, null); }
+    };
+    window.addEventListener("paste", on);
+    return () => window.removeEventListener("paste", on);
+  }, []);
   const alignGroup = (axis: "h" | "v", where: "start" | "center" | "end") => {
     const s = canvas.current?.slide(indexRef.current);
     const els = ([sel, ...more].filter(Boolean) as HTMLElement[]).filter((e) => !isLockedDeep(e) && canMove(e));
@@ -460,7 +495,7 @@ export function Editor({ id }: { id: string }) {
     pickGroup(els); commit();
   };
   const resetChanges = () => { const els = [sel, ...more].filter((e): e is HTMLElement => !!e && !isLockedDeep(e)); for (const e of els) e.removeAttribute("style"); pickGroup(els); commit(); };
-  const insertSlide = (at: number) => { const a = [...unitsRef.current], ref = a[Math.max(0, at - 1)]; a.splice(at, 0, { key: newKey(), gap: ref.gap, html: newSlideHtml() }); structure(a, at); };
+  const insertSlide = (at: number) => { const a = [...unitsRef.current], ref = a[Math.max(0, at - 1)]; a.splice(at, 0, { key: newKey(), gap: ref.gap, html: newSlideHtml(layoutOf(ref.html)) }); structure(a, at); };
   act.current = {
     comment: () => canvas.current?.compose(), editText: () => sel && canvas.current?.edit(sel),
     up: upSel, child: enterSel, next: () => cycle(1), prev: () => cycle(-1),
@@ -504,7 +539,7 @@ export function Editor({ id }: { id: string }) {
     const open = (items: MenuItem[]) => (changed ? requestAnimationFrame(() => requestAnimationFrame(() => cm.open(at, items))) : cm.open(at, items));
     open(tileMenu({
       presentFromHere: () => present(false), addComment: () => { setIndex(i); setTimeout(() => canvas.current?.compose(), 0); },
-      addAfter: () => addSlide(i), addBefore: () => insertSlide(i), moveToStart: () => moveSlide(i, 0), moveToEnd: () => moveSlide(i, n - 1),
+      addAfter: () => addSlide(i), addAfterLayout: (id) => addSlide(i, id), addBefore: () => insertSlide(i), moveToStart: () => moveSlide(i, 0), moveToEnd: () => moveSlide(i, n - 1),
       first: i === 0, last: i === n - 1, duplicate: () => dupSlide(i), remove: () => delSlide(i), canDelete: n > 1,
     }));
   };
@@ -639,7 +674,7 @@ export function Editor({ id }: { id: string }) {
         }
         right={
           <Inspector sel={sel} slide={canvas.current?.slide(index) ?? null} more={more} onAlignGroup={alignGroup} selId={selId} tab={tab} onTab={setTab}
-            comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} onRemove={live.remove} onRevert={live.revert} hoverId={hoverId} onHover={setHoverId} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
+            comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} onRemove={live.remove} onRevert={live.revert} onImageFile={(f) => addImage(f, sel)} hoverId={hoverId} onHover={setHoverId} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
         }
       >
         <div className="flex h-full flex-col">
@@ -650,7 +685,7 @@ export function Editor({ id }: { id: string }) {
         <div className="min-h-0 flex-1 bg-[var(--canvas-bg)]">
         <Canvas ref={canvas} shell={shell} folder={folder} units={units} index={index} sel={sel} more={more} onMulti={toggleSel} onGroup={pickGroup}
           comments={comments.filter((c) => !c.slideDeleted && c.slide === origin.current.get(units[index]?.key ?? ""))}
-          commentActions={commentActions} onStyle={style} onContext={({ el, x, y }) => contextAt({ x, y }, el)} onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
+          commentActions={commentActions} onImage={addImage} onStyle={style} onContext={({ el, x, y }) => contextAt({ x, y }, el)} onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
           numbers={nums} hoverId={hoverId} onHover={setHoverId} channel={live.channel}
           onComment={postComment} onMarker={(cid) => { setTab("comments"); const c = comments.find((x) => x.id === cid); if (c) jump(c); }} />
         </div>
@@ -689,6 +724,7 @@ export function Editor({ id }: { id: string }) {
       </CommandMenuDialog>
 
       <ContextMenu menu={cm} />
+      <EditorTip sample={/<h2>제목<\/h2>\s*<p>내용<\/p>/.test(text)} />
       <Dialog open={help} onOpenChange={setHelp}>
         <DialogContent size="lg">
           <DialogTitle>Shortcuts</DialogTitle>

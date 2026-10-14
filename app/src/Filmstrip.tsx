@@ -6,6 +6,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { previewHtml, type Unit } from "@/lib/deck-source";
 import { CURSOR_CLASS } from "@/lib/cursors";
 import { acquireThumb } from "@/lib/thumb-queue";
+import { DropdownMenu, DropdownTrigger, DropdownContent } from "@/components/ui/dropdown";
+import { MenuItems } from "@/components/ui/context-menu";
+import type { MenuItem as MenuItemModel } from "@/lib/menu-model";
+import { LAYOUTS } from "../../engine/layouts";
 
 // 스크립트 없는 정적 사본을 줄여 보여 준다. 화면 근처(좌우 120px)에서 대기열(동시 3개)을 거쳐 올리고,
 // 220px 넘게 멀어지면 내려 53장을 넘겨도 iframe이 쌓이지 않게 한다. 첫 6장(eager)과 활성 슬라이드(keep)는 큐 없이 바로 올리고 내리지 않는다.
@@ -61,6 +65,28 @@ const Thumb = memo(function Thumb({ shell, unit, folder, eager, keep }: { shell:
   );
 });
 
+// + 타일: 레이아웃 다섯 가지를 고른다. 메뉴가 열려 있을 때 1부터 5 키로도 고른다. 기본(Add slide를 그냥 누를 때)은 직전 슬라이드와 같은 레이아웃이다.
+function AddSlideMenu({ height, onAdd }: { height: number; onAdd(layoutId?: string): void }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const on = (e: KeyboardEvent) => { const n = Number(e.key); if (n >= 1 && n <= LAYOUTS.length && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); e.stopPropagation(); setOpen(false); onAdd(LAYOUTS[n - 1].id); } };
+    window.addEventListener("keydown", on, true);
+    return () => window.removeEventListener("keydown", on, true);
+  }, [open, onAdd]);
+  const items: MenuItemModel[] = LAYOUTS.map((l, i) => ({ type: "item", id: l.id, label: l.label, shortcut: String(i + 1), onSelect: () => onAdd(l.id) }));
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen} size="compact">
+      <Tooltip content="Add slide" side="bottom">
+        <DropdownTrigger render={<Button aria-label="Add slide" variant="ghost" size="icon-compact" className="shrink-0" style={{ height }}><Plus /></Button>} />
+      </Tooltip>
+      <DropdownContent align="start" side="bottom">
+        <MenuItems items={items} />
+      </DropdownContent>
+    </DropdownMenu>
+  );
+}
+
 type Props = {
   shell: { prefix: string; suffix: string };
   folder: string;
@@ -76,7 +102,7 @@ type Props = {
   onMove(from: number, to: number): void;
   onDuplicate(i: number): void;
   onDelete(i: number): void;
-  onAdd(after: number): void;
+  onAdd(after: number, layoutId?: string): void;
 };
 
 // 캔버스 위 가로 슬라이드 목록. 순서 변경은 가로 드래그, 키보드는 listbox 규칙(좌우, Home, End)이다.
@@ -156,9 +182,7 @@ export function Filmstrip(p: Props) {
                 {p.marked.has(p.origin.get(u.key) ?? -1) && <span aria-hidden="true" className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-focus-ring ring-2 ring-black" />}
               </div>
             ))}
-            <Tooltip content="Add slide" side="bottom">
-              <Button aria-label="Add slide" variant="ghost" size="icon-compact" className="shrink-0" style={{ height: H }} onClick={() => p.onAdd(p.units.length - 1)}><Plus /></Button>
-            </Tooltip>
+            <AddSlideMenu height={H} onAdd={(id) => p.onAdd(p.units.length - 1, id)} />
           </div>
         </ScrollArea>
       )}

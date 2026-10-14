@@ -377,10 +377,23 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   // 앞의 포커스 링 검사가 Home으로 첫 슬라이드에 돌려놓는다
   { const nOpt = await layers.count(), nTxt = await page.getByText(`Slide 1 / ${total}`).count(); check('접으면 썸네일 목록이 사라지고 위치 표시만 남음', nOpt === 0 && nTxt === 1, [nOpt, nTxt, total, await page.locator('[data-testid=filmstrip]').innerText()]); }
   await page.getByRole('button', { name: 'Show filmstrip' }).click(); await settle();
-  await page.getByRole('button', { name: 'Add slide' }).click(); await settle();
-  check('+ 타일로 슬라이드 추가', (await layers.count()) === total + 1, [total, await layers.count()]);
+  await page.getByRole('button', { name: 'Add slide' }).click();
+  const layoutItems = (await page.getByRole('menuitem').allTextContents()).join('|');
+  check('+ 타일 메뉴에 레이아웃 5종', ['Title and body', 'Two columns', 'Big number', 'Quote', 'Full image'].every((l) => layoutItems.includes(l)), layoutItems);
+  await page.getByRole('menuitem', { name: /^Quote/ }).click(); await settle();
+  check('+ 타일로 Quote 슬라이드 추가', (await layers.count()) === total + 1, [total, await layers.count()]);
+  check('새 슬라이드에 data-layout과 blockquote', await inDoc((s) => !!s.parentElement.querySelector('[data-layout=quote] blockquote')));
   await focusBody(); await page.keyboard.press('Meta+z'); await settle();
   check('추가 실행 취소', (await layers.count()) === total);
+  await page.getByRole('button', { name: 'Add slide' }).click(); await page.keyboard.press('2'); await settle();
+  check('메뉴에서 숫자 키 2로 Two columns 추가', (await layers.count()) === total + 1 && (await fr().locator('[data-layout=two-column] [data-col]').count()) >= 2);
+  // Inspector Layout Select: data-layout만 바꾸고 title-body는 속성 삭제
+  await page.getByLabel('Layout', { exact: true }).click(); await page.getByRole('option', { name: 'Big number' }).click(); await settle();
+  check('Layout Select가 data-layout을 바꿈', await inDoc((s) => s.getAttribute('data-layout') === 'big-number'));
+  await page.getByLabel('Layout', { exact: true }).click(); await page.getByRole('option', { name: 'Title and body' }).click(); await settle();
+  check('Title and body는 data-layout을 지움', await inDoc((s) => !s.hasAttribute('data-layout')));
+  await focusBody(); for (let i = 0; i < 4; i++) { await page.keyboard.press('Meta+z'); await settle(); }
+  check('레이아웃 추가와 변경 실행 취소', (await layers.count()) === total, [total, await layers.count()]);
 
   // 줌 컨트롤, 크기 칩, 명령 팔레트, 단축키 안내
   const pctBtn = page.getByRole('button', { name: 'Zoom to fit' });
@@ -542,6 +555,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   await fr().locator('[data-active] h2').first().click(); await settle();
   const fmtG = page.getByRole('group', { name: 'Text format' });
   check('글자 요소를 고르면 서식 도구줄이 보임', (await fmtG.count()) === 1);
+  const styleBefore = await inDoc((s) => s.querySelector('h2').getAttribute('style') || '');
   const fs0 = await inDoc((s) => parseFloat(getComputedStyle(s.querySelector('h2')).fontSize));
   await fmtG.getByRole('button', { name: 'Larger text' }).click(); await settle();
   const fs1 = await inDoc((s) => parseFloat(getComputedStyle(s.querySelector('h2')).fontSize));
@@ -551,7 +565,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   const fmtSt = await inDoc((s) => ({ w: s.querySelector('h2').style.fontWeight, a: s.querySelector('h2').style.textAlign }));
   check('Bold와 가운데 정렬이 요소 style에 저장', fmtSt.a === 'center' && !!fmtSt.w, fmtSt);
   await focusBody(); for (let i = 0; i < 3; i++) { await page.keyboard.press('Meta+z'); await settle(); }
-  check('서식 변경 실행 취소', (await inDoc((s) => s.querySelector('h2').getAttribute('style') || '')) === '', await inDoc((s) => s.querySelector('h2').getAttribute('style') || ''));
+  check('서식 변경 실행 취소', (await inDoc((s) => s.querySelector('h2').getAttribute('style') || '')) === styleBefore, [styleBefore, await inDoc((s) => s.querySelector('h2').getAttribute('style') || '')]);
   await page.keyboard.press('Escape');
 
   // 헤더 Undo와 Redo 버튼: 편집 뒤 켜지고 누르면 되돌린다
@@ -564,6 +578,24 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   await redoBtn.click(); await settle();
   check('Redo 버튼이 다시 적용', (await inDoc((s) => s.querySelector('h2').style.translate || '')) === '1px 0px' || (await inDoc((s) => s.querySelector('h2').style.translate || '')) === '1px');
   await undoBtn.click(); await settle(); await page.keyboard.press('Escape');
+
+  // 이미지: 붙여넣기와 끌어 놓기는 덱 assets/에 저장해 img를 넣거나 바꾼다. 서버는 이미지 형식만 받는다.
+  const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', GIF = 'R0lGODlhAQABAIAAAP8AAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  const apiImg = (bytes, name, type) => page.evaluate(async ([f, arr, n, t]) => (await fetch('/api/decks/' + f + '/assets?name=' + encodeURIComponent(n), { method: 'POST', headers: { 'Content-Type': t }, body: new Uint8Array(arr) })).status, [T.folder, [...bytes], name, type]);
+  check('이미지 API: 텍스트와 스크립트 든 SVG는 400', (await apiImg(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'), 'x.svg', 'image/svg+xml')) === 400 && (await apiImg(Buffer.from('hello'), 'x.png', 'image/png')) === 400);
+  check('이미지 API: PNG는 201', (await apiImg(Buffer.from(PNG, 'base64'), 'shot.png', 'image/png')) === 201);
+  await layers.nth(1).click(); await settle(); await focusBody(); await page.keyboard.press('Escape');
+  const imgBefore = await inDoc((s) => s.querySelectorAll('img').length);
+  await fr().evaluate(([b64]) => { const bin = atob(b64), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); const dt = new DataTransfer(); dt.items.add(new File([a], 'pasted shot.png', { type: 'image/png' })); document.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); }, [PNG]);
+  await cond(() => !!document.querySelector('iframe[title="Canvas"]').contentDocument.querySelector('[data-active] img[src^="assets/"]'));
+  check('이미지 붙여넣기가 img를 넣음', (await inDoc((s) => s.querySelectorAll('img').length)) === imgBefore + 1);
+  check('이미지 파일이 덱 assets/에 저장됨', fs.existsSync(path.join(T.dir, 'assets')) && fs.readdirSync(path.join(T.dir, 'assets')).some((f) => /\.png$/.test(f)));
+  const newSrc = await inDoc((s) => s.querySelector('img[src^="assets/"]').getAttribute('src'));
+  await fr().evaluate(([b64]) => { const bin = atob(b64), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); const dt = new DataTransfer(); dt.items.add(new File([a], 'drop.gif', { type: 'image/gif' })); const img = document.querySelector('[data-active] img[src^="assets/"]'); img.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true })); }, [GIF]);
+  await cond(([old]) => !document.querySelector('iframe[title="Canvas"]').contentDocument.querySelector('[data-active] img[src="' + old + '"]'), [newSrc]);
+  check('이미지 위에 놓으면 src가 바뀜(교체)', (await inDoc((s) => s.querySelectorAll('img').length)) === imgBefore + 1 && (await inDoc((s) => !!s.querySelector('img[src$=".gif"]'))));
+  await focusBody(); for (let i = 0; i < 2; i++) { await page.keyboard.press('Meta+z'); await settle(); }
+  check('이미지 추가와 교체 실행 취소', (await inDoc((s) => s.querySelectorAll('img').length)) === imgBefore);
 
   // 색 선택기 섹션: 덱 토큰은 var()로 연결되고, 글자 색에는 대비 칩이 붙는다
   await layers.nth(1).click(); await settle(); await focusBody(); await page.keyboard.press('Escape');

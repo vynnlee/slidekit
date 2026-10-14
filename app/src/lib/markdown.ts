@@ -6,14 +6,19 @@ const MAX_LINE = 2000;
 
 function inline(s: string) {
   if (s.length > MAX_LINE) return esc(s); // 긴 줄은 서식 없이 그대로(이스케이프만) 보인다
-  const codes: string[] = [];
+  s = s.replace(/[\0-\u0003]/g, ""); // 아래 자리표시자와 겹치는 제어 문자는 입력에서 뺀다
+  const codes: string[] = [], links: string[] = [];
   s = esc(s).replace(/`([^`]+)`/g, (_, c) => `\0${codes.push(c) - 1}\0`);
+  // 링크의 여는 태그(href 안에 * 나 _ 가 있을 수 있다)는 자리표시자로 빼 두어 아래 서식 치환이 건드리지 못하게 하고, 서식이 끝난 뒤에 되돌린다.
+  s = s.replace(/\[([^\]]{1,200})\]\((https?:\/\/[^\s)]{1,500}|mailto:[^\s)]{1,500})\)/g, (_, text, url) => `\u0001${links.push(url) - 1}\u0002${text}\u0003`);
   s = s
-    .replace(/\[([^\]]{1,200})\]\((https?:\/\/[^\s)]{1,500}|mailto:[^\s)]{1,500})\)/g, '<a href="$2" target="_blank" rel="noreferrer" class="underline">$1</a>')
     .replace(/\*\*([^*]{1,500})\*\*/g, "<strong>$1</strong>")
     .replace(/(^|[^*\w])\*([^*\s][^*]{0,500})\*/g, "$1<em>$2</em>")
     .replace(/(^|[^\w])_([^_\s][^_]{0,500})_(?!\w)/g, "$1<em>$2</em>");
-  return s.replace(/\0(\d+)\0/g, (_, i) => `<code>${codes[+i]}</code>`);
+  return s
+    .replace(/\u0001(\d+)\u0002/g, (_, i) => `<a href="${links[+i]}" target="_blank" rel="noreferrer" class="underline">`)
+    .replace(/\u0003/g, "</a>")
+    .replace(/\0(\d+)\0/g, (_, i) => `<code>${codes[+i]}</code>`);
 }
 
 export function markdown(src: string) {

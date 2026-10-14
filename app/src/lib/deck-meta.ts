@@ -29,7 +29,7 @@ export function setMeta(html: string, patch: unknown): { ok: true; html: string;
   if (typeof next.title === "string" && next.title !== meta.title) out = out.replace(/<title>[^<]*<\/title>/, () => `<title>${esc(next.title as string)}</title>`);
   if ("lang" in (patch as object)) { // 접근성: <html lang>도 같은 값으로 맞춘다(지우면 기본값 ko)
     const lang = typeof next.lang === "string" ? next.lang : "ko";
-    out = out.replace(/<html\b([^>]*)>/i, (_m, attrs: string) => (/\blang="[^"]*"/i.test(attrs) ? `<html${attrs.replace(/\blang="[^"]*"/i, `lang="${lang}"`)}>` : `<html lang="${lang}"${attrs}>`));
+    out = out.replace(/<html\b([^>]*)>/i, (_m, attrs: string) => (/\blang=(["'])[^"']*\1/i.test(attrs) ? `<html${attrs.replace(/\blang=(["'])[^"']*\1/i, `lang="${lang}"`)}>` : `<html lang="${lang}"${attrs}>`));
   }
   return { ok: true, html: out, meta: next };
 }

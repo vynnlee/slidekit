@@ -85,3 +85,10 @@ test("서버 PATCH: base가 맞을 때만 쓰고, 오래된 base는 409, 검증 
   expect((await api.patchDeckMeta(req({ patch: { author: "a" } }))).status).toBe(400); // base 없음
   expect((await api.patchDeckMeta(Object.assign(req({ patch: { author: "a" }, base: fresh }), { params: { folder: "../etc" } }))).status).toBe(404);
 });
+
+test("작은따옴표 lang 속성도 하나만 남기고 값이 바뀐다", () => {
+  const html = `<!doctype html><html lang='ko' data-x="1"><head><title>t</title><script type="application/json" id="deck-meta">\n    {"id":"a","title":"t"}\n  </script></head><body></body></html>`;
+  const r = setMeta(html, { lang: "en" });
+  expect(r.ok).toBe(true);
+  if (r.ok) { expect((r.html.match(/lang=/g) ?? []).length).toBe(1); expect(r.html).toContain('<html lang="en" data-x="1">'); }
+});

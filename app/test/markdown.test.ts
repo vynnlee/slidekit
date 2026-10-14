@@ -27,3 +27,16 @@ test("아주 긴 줄은 서식 없이 이스케이프만 한다", () => {
   expect(h).not.toContain("<strong>");
   expect(h).toContain("aaaa");
 });
+
+test("링크 href 안의 * 와 _ 는 서식으로 바뀌지 않고, 두 링크가 있어도 태그가 어긋나지 않는다", () => {
+  const html = markdown("[a](https://x.com/*) and [b](https://y.com/*) and *em*");
+  expect(html).toContain('<a href="https://x.com/*"');
+  expect(html).toContain('<a href="https://y.com/*"');
+  expect(html).not.toContain("<em>https");
+  expect(html).toContain("<em>em</em>");
+  expect((html.match(/<a /g) ?? []).length).toBe((html.match(/<\/a>/g) ?? []).length);
+});
+test("링크 글자 안의 서식은 유지되고, 입력의 제어 문자는 자리표시자로 위조되지 않는다", () => {
+  expect(markdown("[**bold**](https://x.com)")).toContain("<a href=\"https://x.com\" target=\"_blank\" rel=\"noreferrer\" class=\"underline\"><strong>bold</strong></a>");
+  expect(markdown("\u00010\u0002x\u0003")).not.toContain("<a ");
+});

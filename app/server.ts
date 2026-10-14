@@ -67,8 +67,10 @@ async function serveStatic(pathname: string) {
   if (top !== "decks" && top !== "engine") return null;
   const full = join(root, rel);
   // 덱 안의 심볼릭 링크가 저장소 밖(예: ~/.ssh)을 가리켜도 읽히지 않게, 실제 경로가 저장소 안인지 확인한다.
+  // 안정 미리보기(scripts/preview.ts)는 decks를 실제 저장소 폴더로 향한 심볼릭 링크로 둔다. 그 폴더 안만 추가로 허용한다.
   const real = await realpath(full).catch(() => null);
-  if (!real || !real.startsWith((await realpath(root)) + sep)) return null;
+  const inside = async (base: string) => real!.startsWith((await realpath(base).catch(() => base)) + sep);
+  if (!real || !((await inside(root)) || (await inside(join(root, "decks"))))) return null;
   const file = Bun.file(real);
   return (await file.exists()) ? new Response(file) : null;
 }

@@ -85,7 +85,7 @@ const MOCKS = {
     await page.bringToFront();
     check(`[${name}] 발표 창 -> 발표자 동기화`, await until(async () => (await counter()) === `${base + 2} / ${TOTAL}`), await counter());
     await pop.close();
-    check(`[${name}] 발표 창 닫힘 표시`, await until(async () => (await page.getByText('Presentation window closed').count()) === 1, 3000));
+    check(`[${name}] 발표 창 닫힘 표시`, await until(async () => (await page.getByText('Presentation window closed').count()) === 1, 7000)); // 하트비트 유예(2.5초)를 포함
     await ctx.close();
   }
   // 이미 12번에 있는 발표 창에 발표자 화면이 붙으면 12번으로 시작한다. 보기를 꺼도 이동과 동기화가 유지된다. 반복 입력 무시.
@@ -207,6 +207,31 @@ const MOCKS = {
     check('선택한 화면을 기억한다', (await page.evaluate(() => localStorage.getItem('slidekit:screen'))) === 'TV');
     await page.getByRole('button', { name: /Focus presentation|Present$/ }).click();
     check('다음 발표는 기억한 화면(TV)에 연다', await until(async () => (await page.evaluate(() => window.__opens)).some((f) => /left=3200,top=0,width=3840,height=2160/.test(f))), await page.evaluate(() => window.__opens));
+    await ctx.close();
+  }
+  // 발표 창 하트비트: 이 페이지에서 연 창이 아니어도 열림과 닫힘과 재연결을 알아본다
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/present/${ID}`);
+    await until(async () => (await page.getByText(/^\d+ \/ \d+$/).count()) >= 1);
+    check('발표 창이 없으면 상태를 표시하지 않는다', (await page.getByText(/Presentation window (open|closed)/).count()) === 0);
+    const w1 = await ctx.newPage();
+    await w1.goto(`${BASE}/decks/${DECK}/index.html?sync=1`);
+    check('따로 열린 발표 창을 하트비트로 알아본다', await until(async () => (await page.getByText('Presentation window open').count()) === 1, 12000));
+    await w1.close();
+    check('창이 닫히면 closed로 바뀐다', await until(async () => (await page.getByText('Presentation window closed').count()) === 1, 12000));
+    const w2 = await ctx.newPage();
+    await w2.goto(`${BASE}/decks/${DECK}/index.html?sync=1#5`);
+    check('다시 열리면 open으로 돌아온다', await until(async () => (await page.getByText('Presentation window open').count()) === 1, 12000));
+    check('재연결 안내 토스트', await until(async () => (await page.getByText('Presentation window reconnected').count()) >= 1, 6000));
+    check('다시 열린 창이 발표자 위치(1)로 맞춰진다', await until(async () => new URL(w2.url()).hash === '#1', 8000), w2.url());
+    // 가리기 상태: 엔진이 BroadcastChannel로 알리면 발표자 화면에 보인다
+    await w2.evaluate((id) => { window.__bc = new BroadcastChannel('slidekit:' + id); window.__bc.postMessage({ v: 1, type: 'blank', from: 'test', mode: 'black' }); }, ID);
+    check('발표 창이 가려지면 Blanked 표시', await until(async () => (await page.getByText('Blanked (black)').count()) === 1, 5000));
+    await w2.evaluate(() => window.__bc.postMessage({ v: 1, type: 'blank', from: 'test', mode: null }));
+    check('가리기가 풀리면 표시가 사라진다', await until(async () => (await page.getByText(/Blanked/).count()) === 0, 5000));
     await ctx.close();
   }
   // 타이머는 틱이 늦어도 시계 차이로 센다(백그라운드 탭 보정)

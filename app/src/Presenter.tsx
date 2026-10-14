@@ -51,7 +51,10 @@ export function Presenter({ id }: { id: string }) {
   // 리허설: 타이머가 도는 동안 슬라이드별 체류 시간을 메모리에만 센다(새로고침하면 사라진다).
   // 시간은 밀리초로 쌓고 틱마다 Date.now() 차이를 더한다(백그라운드 탭에서 틱이 늦어도 정확하다).
   const dwell = useRef<Record<number, number>>({});
+  // 발표 창 생존 확인: 2초마다 hello를 보내고, 발표 창(role이 presenter가 아닌 쪽)의 답이 5초 안에 있으면 열려 있다고 본다.
+  const peerAt = useRef(0), everSeen = useRef(false), hb = useRef<{ key: string; t: number } | null>(null), wasOpen = useRef<boolean | null>(null);
   const accMs = useRef(0), lastTick = useRef(Date.now()), resetArmed = useRef(0);
+  const [blank, setBlank] = useState<"black" | "white" | null>(null); // 발표 창이 B 또는 W로 가려진 상태(엔진이 알려 줄 때만)
   const [screens, setScreens] = useState<string[] | null>(listScreens);
   const [screen, setScreen] = useState<string | null>(chosenScreen);
   const [summary, setSummary] = useState(false);
@@ -107,7 +110,14 @@ export function Presenter({ id }: { id: string }) {
     const tick = () => {
       const t = Date.now(), dt = t - lastTick.current;
       lastTick.current = t;
-      setNow(new Date(t)); setWin(presentationOpen());
+      setNow(new Date(t));
+      const ref = presentationOpen(), recent = t - peerAt.current < 2500, heard = t - peerAt.current < 5000;
+      const open = ref === false ? recent : ref === true || heard;
+      const v = open ? true : ref === false || everSeen.current ? false : null;
+      if (v === true && wasOpen.current === false) toast("Presentation window reconnected", { ms: 3000 });
+      if (v !== null) wasOpen.current = v;
+      setWin(v);
+      if (v === false) setBlank(null);
       if (running) {
         accMs.current += dt;
         setElapsed(Math.floor(accMs.current / 1000));
@@ -123,7 +133,7 @@ export function Presenter({ id }: { id: string }) {
 
   const post = (f: HTMLIFrameElement | null, msg: object) =>
     f?.contentWindow?.postMessage({ source: "slidekit", v: 1, ...msg }, location.origin);
-  const send = (msg: object) => chan.current?.postMessage({ v: 1, from: me.current, ...msg });
+  const send = (msg: object) => chan.current?.postMessage({ v: 1, from: me.current, role: "presenter", ...msg });
   const total = info?.slides.length ?? 0;
   const goto = useCallback((slide: number, step = 1) => {
     if (ready.current) post(curRef.current, { type: "goto", slide, step });
@@ -138,12 +148,19 @@ export function Presenter({ id }: { id: string }) {
     ch.onmessage = (e) => {
       const m = e.data;
       if (!m || m.v !== 1 || m.from === me.current) return;
+      if (m.role !== "presenter") { peerAt.current = Date.now(); everSeen.current = true; }
+      if (m.type === "blank") { setBlank(m.mode === "black" || m.mode === "white" ? m.mode : null); return; }
       if (startFrom.current && !ready.current) return;
-      if (m.type === "state") { lastKey.current = `${m.slide}:${m.step}`; goto(m.slide, m.step); }
+      if (m.type === "state") {
+        // 하트비트 hello에 대한 답인데 그 사이 우리가 움직였으면 낡은 위치이니 따르지 않는다.
+        const h = hb.current;
+        if (h && Date.now() - h.t < 800 && h.key !== `${posRef.current.slide}:${posRef.current.step}`) return;
+        lastKey.current = `${m.slide}:${m.step}`; goto(m.slide, m.step); }
       else if (m.type === "hello") send({ type: "state", ...posRef.current });
     };
     send({ type: "hello" });
-    return () => { ch.close(); chan.current = null; };
+    const beat = setInterval(() => { hb.current = { key: `${posRef.current.slide}:${posRef.current.step}`, t: Date.now() }; send({ type: "hello" }); }, 2000);
+    return () => { clearInterval(beat); ch.close(); chan.current = null; };
   }, [deck, goto]);
 
   // iframe postMessage: 현재 슬라이드 iframe이 위치와 info의 원천이다.
@@ -258,6 +275,7 @@ export function Presenter({ id }: { id: string }) {
           <Tooltip content="All decks" side="bottom"><Button variant="ghost" size="icon-compact" aria-label="All decks" onClick={() => go("/")}><ArrowLeft /></Button></Tooltip>
           <span className="mr-auto truncate text-subtitle font-medium">{deck.title}</span>
           {err && <span role="status" className="truncate text-caption text-muted-foreground">{err}</span>}
+          {blank && win && <span role="status" className="rounded bg-hover px-1.5 text-caption text-foreground">Blanked ({blank})</span>}
           {win !== null && <span className="flex items-center gap-1.5 text-caption text-muted-foreground"><span className={`size-1.5 rounded-full ${win ? "bg-green-500" : "bg-red-500"}`} />{win ? "Presentation window open" : "Presentation window closed"}</span>}
           {screens && screens.length >= 2 && (
             <Select value={screens.includes(screen ?? "") ? screen! : screens[0]} onValueChange={(v) => { chooseScreen(v); setScreen(v); }} size="compact">

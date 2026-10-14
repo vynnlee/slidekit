@@ -166,7 +166,8 @@ export function DeckList() {
   useEffect(() => { localStorage.setItem("slidekit:list-view", view); localStorage.setItem("slidekit:list-sort", sort); }, [view, sort]);
 
   const recent = useMemo(readRecent, []);
-  const lastOpened = recent[0];
+  // 마지막으로 연 덱: 지금 있는 덱 중 가장 최근 것(지워졌거나 없는 덱의 기록은 건너뛴다).
+  const lastOpened = useMemo(() => recent.find((r) => decks?.some((d) => d.id === r.id || d.folder === r.id)), [recent, decks]);
   const sorted = useMemo(() => {
     const l = [...(decks ?? [])];
     if (sort === "title") return l.sort((a, b) => a.title.localeCompare(b.title, "ko"));
@@ -268,7 +269,9 @@ export function DeckList() {
         const hay = `${sl.title} ${sl.text} ${sl.notes}`.toLowerCase();
         if (!words.every((w) => hay.includes(w))) continue;
         const inNotes = snippet(sl.notes, words);
-        const hit = snippet(sl.text, words) || (inNotes ? `Notes: ${inNotes}` : "");
+        // 제목에서 이미 일치했으면 라벨이 보여 주니 본문 조각은 붙이지 않는다.
+        const inTitle = words.every((w) => sl.title.toLowerCase().includes(w));
+        const hit = inTitle ? "" : snippet(sl.text, words) || (inNotes ? `Notes: ${inNotes}` : "");
         out.push({
           value: `slide:${d.folder}:${sl.n}`, label: sl.title || `Slide ${sl.n}`, icon: Presentation, group: "Slides",
           description: `${d.title}, slide ${sl.n}${hit ? `: ${hit}` : ""}`, keywords: [sl.text, sl.notes],

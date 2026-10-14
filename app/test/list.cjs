@@ -142,6 +142,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   // 전체 검색: 슬라이드 본문에서 찾아 그 슬라이드의 편집기로 간다
   check('색인 API', Array.isArray(await (await ctx.request.get(BASE + '/api/search-index')).json()));
   await post('/api/decks', { name: 'zz-e2e-s', title: 'Zebra Quartz' });
+  check('색인에 HTML 주석 글자가 섞이지 않는다', !(await (await ctx.request.get(BASE + '/api/search-index')).json()).some((d) => d.slides.some((sl) => /<!--|-->/.test(sl.text + sl.notes + sl.title))));
   await page.goto(BASE + '/');
   await page.getByRole('button', { name: /^Search/ }).click();
   await page.getByRole('dialog').getByRole('combobox').fill('zebra quartz');

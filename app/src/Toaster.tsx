@@ -32,7 +32,7 @@ export function Toaster() {
       {items.map((t) => (
         <div key={t.id} className="pointer-events-auto flex items-center gap-2 rounded-lg bg-surface-3 py-1.5 pl-3 pr-1.5 text-body shadow-surface-3">
           <span>{t.text}</span>
-          {t.action && <Button variant="ghost" size="compact" onClick={() => { t.action!.onClick(); dismiss(t.id); }}>{t.action.label}</Button>}
+          {t.action && <Button variant="ghost" size="compact" className="font-medium text-foreground" onClick={() => { t.action!.onClick(); dismiss(t.id); }}>{t.action.label}</Button>}
         </div>
       ))}
     </div>

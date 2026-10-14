@@ -102,7 +102,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await p.goto(DECK + '#1'); await p.waitForSelector('#sk-stage');
   const chap = await p.evaluate(() => [].map.call(document.querySelectorAll('#sk-stage > [data-slide="chapter"]'), (e) => [].indexOf.call(e.parentNode.children, e) + 1));
   await p.keyboard.press('3');
-  check('digit shows indicator', await p.evaluate(() => { const n = document.getElementById('sk-num'); return !n.hidden && n.textContent === '3'; }));
+  check('digit shows indicator', await p.evaluate(() => { const n = document.getElementById('sk-num'); return !n.hidden && n.textContent.indexOf('3') === 0; }));
   await p.keyboard.press('Enter');
   check('3 Enter goes to chapter 3', (await active(p)) === chap[2] && (await hash(p)) === '#' + chap[2], [chap, await hash(p)]);
   await p.keyboard.press('9'); await p.keyboard.press('Enter');
@@ -318,6 +318,34 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const st = await h2.evaluate(() => log.filter((m) => m.type === 'state').pop());
     const fr2 = h2.frames().find((f) => f !== h2.mainFrame());
     check('data-step: embed goto(slide, step) shows that step', st && st.slide === 2 && st.step === 3 && (await fr2.evaluate(() => getComputedStyle(document.getElementById('b')).visibility)) === 'visible', st); await h2.close(); }
+
+  /* UX: crossfade, idle pointer, number pill with the chapter title, responsive overview */
+  page('ux', sec(3));
+  { const q = await ctx.newPage(); await q.goto(BASE + '/__t/ux#1'); await q.waitForSelector('#sk-stage'); await sleep(300);
+    await q.keyboard.press('ArrowRight');
+    const lv = await q.evaluate(() => { const o = document.querySelector('[data-slide]:not([data-active])'); const first = document.querySelectorAll('#sk-stage > [data-slide]')[0]; return { leaving: first.hasAttribute('data-leaving'), vis: getComputedStyle(first).visibility }; });
+    check('crossfade: the old slide stays visible while leaving (arrow)', lv.leaving && lv.vis === 'visible', lv);
+    await sleep(500);
+    check('crossfade: leaving clears after the animation', !(await q.evaluate(() => document.querySelector('[data-leaving]'))) && (await q.evaluate(() => getComputedStyle(document.querySelectorAll('#sk-stage > [data-slide]')[0]).visibility)) === 'hidden');
+    await q.evaluate(() => { location.hash = '#3'; }); await sleep(100);
+    check('crossfade: jumps (hash) do not crossfade', !(await q.evaluate(() => document.querySelector('[data-leaving]'))));
+    await sleep(2300);
+    check('idle: the pointer hides after 2s', await q.evaluate(() => document.documentElement.hasAttribute('data-idle')));
+    await q.mouse.move(50, 50); await q.mouse.move(80, 80);
+    check('idle: moving the mouse brings it back', !(await q.evaluate(() => document.documentElement.hasAttribute('data-idle'))));
+    await q.close(); }
+  { const rc = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' });
+    await rc.route('**/__t/*', (x) => x.fulfill({ contentType: 'text/html', body: pages.ux }));
+    const r = await rc.newPage(); await r.goto(BASE + '/__t/ux#1'); await r.waitForSelector('#sk-stage'); await r.keyboard.press('ArrowRight');
+    check('crossfade: reduced motion shows no leaving slide', (await r.evaluate(() => getComputedStyle(document.querySelectorAll('#sk-stage > [data-slide]')[0]).visibility)) === 'hidden'); await rc.close(); }
+  { const n = await open(DECK + '#1'); await n.keyboard.press('3');
+    const t = await n.evaluate(() => { const e = document.getElementById('sk-num'); return { text: e.textContent, bad: e.hasAttribute('data-bad') }; });
+    check('number pill shows the chapter title', /^3\s+\S/.test(t.text) && !t.bad, t);
+    await n.keyboard.press('Escape'); await n.keyboard.press('9');
+    check('number pill dims for a missing chapter', await n.evaluate(() => document.getElementById('sk-num').hasAttribute('data-bad'))); await n.close(); }
+  { const o = await open(DECK + '#3'); await o.setViewportSize({ width: 2000, height: 900 }); await o.keyboard.press('o'); await sleep(400);
+    const w = await o.evaluate(() => { const b = document.querySelectorAll('.sk-thumb-box'); const r = b[0].getBoundingClientRect(); return { w: r.width, h: r.height, t: document.querySelector('.sk-thumb-in').style.transform, cur: document.querySelectorAll('.sk-thumb[data-cur]').length }; });
+    check('overview: thumbnails fill the grid and scale to the box, one current marker', w.w > 250 && Math.abs(w.w / w.h - 16 / 9) < 0.05 && /scale\(0\.1[3-9]|scale\(0\.[2-9]/.test(w.t) && w.cur === 1, w); await o.close(); }
 
   /* blank screen (B, W) */
   page('blank', sec(3) + '<input id="inp">');

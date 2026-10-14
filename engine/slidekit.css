@@ -4,7 +4,7 @@
   --sk-bg: #000;
   --sk-fg: #fff;
   --sk-muted: #9a9a9f;
-  --sk-faint: #5c5c62;
+  --sk-faint: #7a7a80;
   --sk-line: #2b2b30;
   --sk-panel: #0f0f12;
   --sk-accent: #a78bfa;
@@ -17,7 +17,8 @@
   --sk-fs-h2: 68px;
   --sk-fs-body: 36px;
   --sk-fs-small: 28px;
-  --sk-step-ms: 280ms;
+  --sk-step-ms: 360ms;
+  --sk-ease: cubic-bezier(.22, 1, .36, 1);
 }
 
 html, body { height: 100%; margin: 0; background: var(--sk-bg); color: var(--sk-fg); overflow: hidden; }
@@ -38,48 +39,58 @@ p { font-size: var(--sk-fs-body); line-height: 1.65; color: var(--sk-muted); mar
   overflow: hidden; visibility: hidden;
 }
 [data-slide][data-active] { visibility: visible; }
+[data-slide][data-active] { z-index: 1; }
 @media (prefers-reduced-motion: no-preference) {
-  [data-slide][data-active] { animation: sk-in .35s ease-out; }
+  /* arrows crossfade: the old slide fades out quickly while the new one fades in on top */
+  [data-slide][data-active] { animation: sk-in .34s var(--sk-ease) .04s backwards; }
+  [data-slide][data-leaving] { visibility: visible; z-index: 0; pointer-events: none; animation: sk-out .2s ease-out forwards; }
 }
 @keyframes sk-in { from { opacity: .0001; } to { opacity: 1; } }
+@keyframes sk-out { to { opacity: .0001; } }
 
 aside[data-notes] { display: none; }
 
 /* declarative steps: data-step="N" shows the element from step N on (layout is kept while hidden) */
-[data-step] { transition: opacity var(--sk-step-ms) ease, transform var(--sk-step-ms) ease, visibility 0s; }
+[data-step] { transition: opacity var(--sk-step-ms) var(--sk-ease), transform var(--sk-step-ms) var(--sk-ease), visibility 0s; }
 [data-step]:not([data-shown]) { visibility: hidden; opacity: 0; transition-delay: 0s, 0s, var(--sk-step-ms); }
-[data-step]:not([data-shown]):not([data-step-effect="fade"]):not([data-step-effect="none"]) { transform: translateY(16px); }
+[data-step]:not([data-shown]):not([data-step-effect="fade"]):not([data-step-effect="none"]) { transform: translateY(20px); }
 [data-step][data-step-effect="none"] { transition: none; }
 [data-step-instant] [data-step] { transition: none !important; }
 @media (prefers-reduced-motion: reduce) { [data-step] { transition: none; } }
 /* the editor canvas can show every step while editing */
 html[data-sk-show-steps] [data-step] { visibility: visible !important; opacity: 1 !important; transform: none !important; }
 
-/* page number, progress, number entry */
-#sk-page, #sk-num { position: absolute; bottom: 40px; z-index: 3; font-size: 24px; font-variant-numeric: tabular-nums; }
-#sk-page { right: 56px; color: var(--sk-faint); }
-#sk-num { left: 56px; color: var(--sk-fg); font-size: 28px; }
-#sk-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--sk-line); z-index: 3; }
-#sk-progress i { display: block; height: 100%; width: 0; background: var(--sk-fg); }
+/* page number, progress, number entry: quiet, aligned to the slide grid */
+#sk-page, #sk-num { position: absolute; z-index: 3; font-variant-numeric: tabular-nums; }
+#sk-page { right: var(--sk-pad-x); bottom: 56px; font-size: 24px; color: var(--sk-faint); }
+#sk-num { left: 50%; bottom: 64px; transform: translateX(-50%); padding: 10px 32px; border-radius: 999px; font-size: 40px; color: var(--sk-fg); background: rgba(255, 255, 255, .14); white-space: pre; }
+#sk-num[data-bad] { opacity: .4; }
+#sk-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; z-index: 3; }
+#sk-progress i { display: block; height: 100%; width: 0; background: var(--sk-faint); }
 #sk-stage [hidden] { display: none; }
 
 /* overview */
+/* chapter counters restart inside the overview so copies of [data-slide="chapter"]::before count 01, 02, ... */
+#sk-overview { counter-reset: ch; }
 #sk-overview {
   display: none; position: fixed; inset: 0; z-index: 10; overflow-y: auto;
   box-sizing: border-box; padding: 40px 48px 56px;
   background: var(--sk-bg); color: var(--sk-fg); font-family: var(--sk-font);
 }
 #sk-overview[data-open] { display: block; }
-.sk-ov-group { margin-bottom: 36px; }
-.sk-ov-title { margin: 0 0 14px; font-size: 20px; font-weight: 500; color: var(--sk-fg); }
-.sk-ov-grid { display: grid; grid-template-columns: repeat(auto-fill, 288px); gap: 20px; }
-.sk-thumb { cursor: pointer; }
-.sk-thumb-box { position: relative; width: 288px; height: 162px; overflow: hidden; border: 1px solid var(--sk-line); box-sizing: border-box; background: var(--sk-bg); }
-.sk-thumb[data-sel] .sk-thumb-box { border-color: var(--sk-fg); }
+.sk-ov-group { margin-bottom: 40px; }
+.sk-ov-title { margin: 0 0 18px; font-size: 26px; font-weight: 600; letter-spacing: -.01em; color: var(--sk-fg); }
+.sk-ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 24px; }
+.sk-thumb { cursor: pointer; scroll-margin: 72px 0 24px; }
+.sk-thumb-box { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid var(--sk-line); box-sizing: border-box; background: var(--sk-bg); }
+.sk-thumb[data-sel] .sk-thumb-box { outline: 2px solid var(--sk-fg); outline-offset: 3px; border-color: transparent; }
 .sk-thumb-in { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform: scale(.15); transform-origin: 0 0; pointer-events: none; }
 .sk-thumb-in [data-slide] { visibility: visible; animation: none; }
-.sk-thumb-n { margin-top: 6px; font-size: 14px; color: var(--sk-muted); font-variant-numeric: tabular-nums; }
+.sk-thumb-n { margin-top: 8px; font-size: 16px; color: var(--sk-muted); font-variant-numeric: tabular-nums; }
 .sk-thumb[data-sel] .sk-thumb-n { color: var(--sk-fg); }
+.sk-thumb[data-cur] .sk-thumb-n::before { content: "\25CF  "; font-size: .7em; vertical-align: .1em; }
+/* the pointer hides after 2s of stillness */
+html[data-idle], html[data-idle] body, html[data-idle] [data-slide] { cursor: none; }
 
 /* print: one 1920x1080 page per slide, all slides, no engine UI or notes */
 /* blank screen (B black, W white): a full overlay above everything, no transition */

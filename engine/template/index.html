@@ -9,8 +9,15 @@
   <link rel="stylesheet" href="../../engine/slidekit.css">
   <style>
     /* Deck tokens and deck-only styles. Tokens: --sk-accent, --sk-font, ... (spec section 4) */
-    [data-slide="cover"] h1 { font-size: 96px; }
+    /* cover, chapter and end sit low on the left; content titles stay at a fixed height */
+    [data-slide="cover"], [data-slide="chapter"], [data-slide="end"] { justify-content: flex-end; padding-bottom: 200px; }
+    [data-slide="cover"] h1, [data-slide="end"] h1 { font-size: 160px; letter-spacing: -.03em; }
+    [data-slide="cover"] { gap: 28px; }
     [data-slide="chapter"] h1 { font-size: 132px; }
+    body { counter-reset: ch; }
+    [data-slide="chapter"] { counter-increment: ch; gap: 36px; }
+    [data-slide="chapter"]::before { content: counter(ch, decimal-leading-zero); font: 500 28px var(--sk-font-mono); color: var(--sk-faint); }
+    [data-slide="content"] { justify-content: flex-start; padding-top: 180px; gap: 40px; }
   </style>
 </head>
 <body>

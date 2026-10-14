@@ -126,8 +126,14 @@
       i = Math.max(0, Math.min(slides.length - 1, i));
       var st = stepperOf(i);
       if (i !== cur) {
-        if (cur >= 0) { slides[cur].el.removeAttribute('data-active'); fire(slides[cur].el, 'sk:leave', cur + 1); }
+        if (cur >= 0) {
+          var old = slides[cur].el;
+          old.removeAttribute('data-active'); fire(old, 'sk:leave', cur + 1);
+          /* arrows crossfade: the old slide stays on screen while it fades out (CSS, motion allowed only) */
+          if (mode !== 'jump' && !embed) { old.setAttribute('data-leaving', ''); clearTimeout(old._skLeave); old._skLeave = setTimeout(function () { old.removeAttribute('data-leaving'); }, 360); }
+        }
         cur = i;
+        clearTimeout(slides[i].el._skLeave); slides[i].el.removeAttribute('data-leaving');
         slides[i].el.setAttribute('data-active', '');
         if (st) st.enter(mode !== 'back');
         fire(slides[i].el, 'sk:enter', i + 1);
@@ -157,7 +163,7 @@
     function fit() {
       var s = Math.min(window.innerWidth / W, window.innerHeight / H);
       SK.scale = s;
-      stage.style.transform = 'translate(' + (window.innerWidth - W * s) / 2 + 'px,' + (window.innerHeight - H * s) / 2 + 'px) scale(' + s + ')';
+      stage.style.transform = 'translate(' + Math.round((window.innerWidth - W * s) / 2) + 'px,' + Math.round((window.innerHeight - H * s) / 2) + 'px) scale(' + s + ')';
     }
     window.addEventListener('resize', fit);
     document.addEventListener('fullscreenchange', fit);
@@ -219,6 +225,10 @@
     }
 
     /* overview: inert clones of every slide, grouped by chapter, placed after the stage */
+    /* thumbnails fill the grid cell; each copy is scaled to its box width */
+    var fitThumbs = window.ResizeObserver ? new ResizeObserver(function (es) {
+      es.forEach(function (e) { var w = e.contentRect.width; if (w) e.target.firstChild.style.transform = 'scale(' + (w / W) + ')'; });
+    }) : null;
     var ov = make('div', 'sk-overview'), thumbs = [], sel = 0, group, grid;
     ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Slide overview'); ov.tabIndex = 0;
     slides.forEach(function (s, i) {
@@ -234,6 +244,7 @@
       copy.removeAttribute('data-active');
       copy.setAttribute('inert', '');
       inner.appendChild(copy); box.appendChild(inner);
+      if (window.ResizeObserver) fitThumbs.observe(box);
       lab.textContent = s.n + (s.title ? '  ' + s.title : '');
       cell.appendChild(box); cell.appendChild(lab);
       cell.addEventListener('click', function () { closeOv(); show(i, 'jump', 1); });
@@ -247,7 +258,7 @@
       thumbs.forEach(function (t, i) { t.toggleAttribute('data-sel', i === sel); });
       thumbs[sel].scrollIntoView({ block: 'nearest' });
     }
-    function openOv() { sel = cur; ov.setAttribute('data-open', ''); mark(); }
+    function openOv() { sel = cur; thumbs.forEach(function (t, i) { t.toggleAttribute('data-cur', i === cur); }); ov.setAttribute('data-open', ''); mark(); }
     function closeOv() { ov.removeAttribute('data-open'); }
     function ovMove(key) {
       if (key === 'ArrowLeft' || key === 'ArrowRight') {
@@ -268,7 +279,11 @@
     /* number entry */
     var num = '', numTimer;
     function setNum(v) {
-      num = v; numEl.textContent = v; numEl.hidden = !v;
+      num = v;
+      var ch = v && chapters[parseInt(v, 10) - 1];
+      numEl.textContent = v + (ch ? '  ' + (ch.title || '') : '');
+      numEl.toggleAttribute('data-bad', !!v && !ch);
+      numEl.hidden = !v;
       clearTimeout(numTimer);
       if (v) numTimer = setTimeout(function () { setNum(''); }, 3000);
     }
@@ -289,6 +304,13 @@
       if (m) { blank.setAttribute('data-blank', m); stage.setAttribute('aria-hidden', 'true'); }
       else { blank.removeAttribute('data-blank'); stage.removeAttribute('aria-hidden'); }
     }
+
+    /* the pointer hides after 2s without moving (never while the overview is open) */
+    var idleT;
+    function wake() { root.removeAttribute('data-idle'); clearTimeout(idleT); idleT = setTimeout(function () { if (!isOpen()) root.setAttribute('data-idle', ''); }, 2000); }
+    document.addEventListener('mousemove', wake);
+    document.addEventListener('mousedown', wake);
+    wake();
 
     document.addEventListener('keydown', function (e) {
       if (e.metaKey || e.ctrlKey || e.altKey) return;

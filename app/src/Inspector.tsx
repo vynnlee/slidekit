@@ -22,6 +22,7 @@ import { AlignBox } from "@/components/ui/align-box";
 import { Card, CardGroup, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { textual } from "./Canvas";
 import { iconOf, nameOf } from "./LayerTree";
+import { readTranslate } from "@/lib/move";
 import { TokensPanel } from "./TokensPanel";
 import { CommentsPanel } from "./CommentsPanel";
 import type { Comment } from "@/lib/deck";
@@ -148,6 +149,8 @@ export function Inspector(p: Props) {
     <NumberField label={label} aria-label={aria} value={val(prop)} muted={!inl(prop)} dirty={!!inl(prop)} onReset={() => set(prop, "")} onChange={(v) => set(prop, v)} {...scrub} {...o} />
   );
 
+  const [tx, ty] = el ? readTranslate(el) : [0, 0];
+  const setOffset = (x: number, y: number) => set("translate", !x && !y ? "" : `${x}px ${y}px`);
   const isText = !!el && textual(el);
   const SelIcon = el ? iconOf(el) : Square;
   const isMedia = !!el && (el.tagName === "IMG" || el instanceof SVGElement);
@@ -331,6 +334,15 @@ export function Inspector(p: Props) {
             </InspectorSection>
 
             <InspectorSection id="position" title="Position">
+              <div className="flex flex-col gap-1">
+                <span className="text-micro text-muted-foreground">Offset</span>
+                <Grid>
+                  <NumberField label="X" aria-label="Offset X" value={Number.isFinite(tx) ? `${tx}px` : ""} mixed={!Number.isFinite(tx)} muted={!inl("translate")} dirty={!!inl("translate")} onReset={() => set("translate", "")}
+                    onChange={(v) => setOffset(px(v), Number.isFinite(ty) ? ty : 0)} {...scrub} />
+                  <NumberField label="Y" aria-label="Offset Y" value={Number.isFinite(ty) ? `${ty}px` : ""} mixed={!Number.isFinite(ty)} muted={!inl("translate")} dirty={!!inl("translate")} onReset={() => set("translate", "")}
+                    onChange={(v) => setOffset(Number.isFinite(tx) ? tx : 0, px(v))} {...scrub} />
+                </Grid>
+              </div>
               <Pick label="Position" value={val("position")} items={POSITIONS} onChange={(v) => set("position", v)} />
               <Grid>
                 {val("position") !== "static" && n("left", "X", "X")}

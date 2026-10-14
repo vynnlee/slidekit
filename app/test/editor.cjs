@@ -405,6 +405,26 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('방향키 1px와 Shift+방향키 10px 넛지', /^1px 10px$/.test(t2), t2);
   await focusBody(); await page.keyboard.press('Meta+z'); await sleep(300); await page.keyboard.press('Escape');
 
+  // Inspector Offset 필드와 리사이즈 핸들
+  await fr().locator('[data-active] h2').first().click({ modifiers: ['Meta'] }); await sleep(300);
+  await focusBody(); await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight'); await sleep(400);
+  check('Offset X 필드가 넛지 값을 보임', (await page.getByLabel('Offset X', { exact: true }).inputValue()) === '2', await page.getByLabel('Offset X', { exact: true }).inputValue());
+  const offX = page.getByLabel('Offset X', { exact: true }); await offX.fill('12'); await offX.press('Enter'); await sleep(300);
+  check('Offset 입력이 translate에 반영', /^12px( 0px)?$/.test(await tr()), await tr());
+  await offX.focus(); await page.keyboard.press('Meta+z'); await sleep(300); await focusBody(); await page.keyboard.press('Meta+z'); await sleep(300);
+  await fr().locator('[data-active] h2').first().click({ modifiers: ['Meta'] }); await sleep(300);
+  const wBefore = await inDoc((s) => s.querySelector('h2').getBoundingClientRect().width);
+  const hdl = page.locator('[data-handle=e]'); const hbx = await hdl.boundingBox();
+  await page.mouse.move(hbx.x + hbx.width / 2, hbx.y + hbx.height / 2); await page.mouse.down(); await page.mouse.move(hbx.x - 60, hbx.y + hbx.height / 2, { steps: 6 }); await sleep(200);
+  const chipTxt = await page.getByText(/^\d+ × \d+$/).textContent();
+  await page.mouse.up(); await sleep(400);
+  const wStyle = await inDoc((s) => s.querySelector('h2').style.width || '');
+  check('핸들로 줄이면 인라인 width가 생기고 크기 칩이 따라옴', /px$/.test(wStyle) && !!chipTxt, [wStyle, chipTxt]);
+  check('리사이즈 뒤 Inspector 크기 모드가 Fixed', (await page.getByRole('radiogroup', { name: 'Width mode' }).locator('[aria-checked=true]').getAttribute('aria-label')) !== null);
+  await focusBody(); await page.keyboard.press('Meta+z'); await sleep(400);
+  check('리사이즈는 실행 취소 한 번에 되돌아감', (await inDoc((s) => s.querySelector('h2').style.width || '')) === '', await inDoc((s) => s.querySelector('h2').style.cssText));
+  void wBefore; await page.keyboard.press('Escape');
+
   // 레이어: 잠금은 캔버스 선택에서 제외, Cmd+[ ]로 순서 이동, F2 이름 변경
   await layers.nth(1).click(); await sleep(600);
   const rowsL = page.getByTestId('layer-row');
@@ -429,6 +449,9 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('Cmd+[로 한 칸 앞으로(문서 순서)', o1 !== o0, [o0, o1]);
   await page.keyboard.press('Meta+]'); await sleep(400);
   check('Cmd+]로 되돌림', (await orderOf()) === o0);
+  await rowsL.nth(1).click(); await page.keyboard.press('Enter'); await sleep(300);
+  check('Layers 행에서 Enter로 이름 입력창', (await page.getByLabel('Layer name').count()) === 1);
+  await page.getByLabel('Layer name').press('Escape'); await sleep(300);
   await focusBody(); await page.keyboard.press('F2'); await sleep(300);
   check('F2로 레이어 이름 입력창', (await page.getByLabel('Layer name').count()) === 1);
   await page.getByLabel('Layer name').press('Escape'); await sleep(200);

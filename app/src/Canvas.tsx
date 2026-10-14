@@ -5,8 +5,8 @@ import { TextArea } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
 import { byPath, previewHtml, serializeSlide, type Unit } from "@/lib/deck-source";
 import { childToward, isLeaf, isLockedDeep, pick as pickEl, siblings } from "@/lib/selection";
-import { canMove, localScale, moveBy, readTranslate, writeTranslate } from "@/lib/move";
-import { lockAxis, snapMove, toSlide, type Gap, type Guide, type Rect } from "@/lib/guides";
+import { canMove, canResize, fixSize, localScale, moveBy, readTranslate, writeTranslate } from "@/lib/move";
+import { lockAxis, snapMove, snapResize, toSlide, type Gap, type Guide, type Rect } from "@/lib/guides";
 import { CommentPin } from "./CommentPin";
 import { CommentComposer } from "./CommentComposer";
 import { nameOf } from "./LayerTree";
@@ -55,6 +55,9 @@ export const textual = (el: Element) =>
 // 이 CSS는 편집용 iframe 문서의 head에만 들어간다. 저장 글자에는 슬라이드만 쓰이므로 새지 않는다.
 const EDIT_CSS = `*{user-select:none;-webkit-user-select:none}[contenteditable]{user-select:text;-webkit-user-select:text;outline:none}`;
 
+// 8방향 리사이즈 핸들: id의 n, s, e, w가 움직이는 변이다.
+const HANDLES: [string, string][] = [["nw", "nwse-resize"], ["n", "ns-resize"], ["ne", "nesw-resize"], ["e", "ew-resize"], ["se", "nwse-resize"], ["s", "ns-resize"], ["sw", "nesw-resize"], ["w", "ew-resize"]];
+
 export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   const box = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
@@ -84,6 +87,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   const hover = useRef<Element | null>(null);
   const sizeTag = useRef<HTMLDivElement>(null);
   const guideSvg = useRef<SVGSVGElement>(null);
+  const handles = useRef<HTMLDivElement>(null);
   // 끌어서 이동: 시작 상태. moved는 3px 넘게 움직인 뒤에만 참이다.
   const drag = useRef<{ el: HTMLElement; x0: number; y0: number; t0: [number, number]; ks: number; moved: boolean; start: Rect; cands: Rect[]; orig: string } | null>(null);
   const swallowClick = useRef(false);
@@ -237,28 +241,81 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     el.addEventListener("blur", endEdit, { once: true });
   }
 
+  const clearGuides = () => { if (guideSvg.current) guideSvg.current.replaceChildren(); };
+  const drawGuides = (sr: DOMRect, ks: number, guides: Guide[], gaps: Gap[]) => {
+    const svg = guideSvg.current;
+    if (!svg) return;
+    const X = (v: number) => sr.left + v * ks, Y = (v: number) => sr.top + v * ks;
+    let h = "";
+    for (const g of guides) h += g.axis === "x"
+      ? `<line data-testid="guide-line" x1="${X(g.pos)}" x2="${X(g.pos)}" y1="${Y(g.from)}" y2="${Y(g.to)}" stroke="#ff3ea5" stroke-width="1"/>`
+      : `<line data-testid="guide-line" y1="${Y(g.pos)}" y2="${Y(g.pos)}" x1="${X(g.from)}" x2="${X(g.to)}" stroke="#ff3ea5" stroke-width="1"/>`;
+    for (const g of gaps) {
+      const a = g.axis === "x" ? [X(g.from), Y(g.at), X(g.to), Y(g.at)] : [X(g.at), Y(g.from), X(g.at), Y(g.to)];
+      const mx = (a[0] + a[2]) / 2, my = (a[1] + a[3]) / 2, t = String(Math.round(g.value));
+      h += `<line x1="${a[0]}" y1="${a[1]}" x2="${a[2]}" y2="${a[3]}" stroke="#f24822" stroke-width="1"/><rect data-testid="gap-label" x="${mx - 12}" y="${my - 8}" width="24" height="16" rx="4" fill="#f24822"/><text x="${mx}" y="${my + 4}" font-size="11" fill="#fff" text-anchor="middle" font-family="system-ui">${t}</text>`;
+    }
+    svg.innerHTML = h;
+  };
+
+  // 핸들을 끌어 크기를 바꾼다(SPEC 9.2): 인라인 width, height만 바꾸고 고정한 모서리는 translate로 맞춘다.
+  // Shift는 모서리에서 비율 유지, Alt는 중심 기준. 스냅 가이드는 이동과 같다. 한 번 끌기 = 실행 취소 한 건.
+  const startResize = (id: string, e: React.PointerEvent) => {
+    const el = P.current.sel as HTMLElement | null, sl = cur();
+    if (!el || !sl || e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId); // 포인터가 iframe 위로 나가도 이벤트를 계속 받는다
+    const sr = sl.getBoundingClientRect(), ks = sr.width / 1920 || 1;
+    const edges = { l: id.includes("w"), r: id.includes("e"), t: id.includes("n"), b: id.includes("s") };
+    const textOnly = textual(el);
+    const w0 = el.offsetWidth, h0 = el.offsetHeight, t0 = readTranslate(el), orig = el.getAttribute("style");
+    const start = toSlide(el.getBoundingClientRect(), sr, ks);
+    const cands = siblings<Element>(sl, el).filter((n) => n !== el && n.getBoundingClientRect().width > 0 && getComputedStyle(n).display !== "none").map((n) => toSlide(n.getBoundingClientRect(), sr, ks));
+    const x0 = e.clientX, y0 = e.clientY;
+    const ls = localScale(el) / ks || 1;
+    fixSize(el);
+    let moved = false;
+    const move = (m: PointerEvent) => {
+      moved = true;
+      let dW = ((edges.r ? m.clientX - x0 : edges.l ? x0 - m.clientX : 0)) / ks;
+      let dH = textOnly ? 0 : ((edges.b ? m.clientY - y0 : edges.t ? y0 - m.clientY : 0)) / ks;
+      const corner = (edges.l || edges.r) && (edges.t || edges.b);
+      const ratio = m.shiftKey && corner && !textOnly ? start.w / start.h : undefined;
+      if (m.altKey) { dW *= 2; dH *= 2; }
+      if (ratio) { // 더 크게 바뀐 축을 따르고 다른 축은 비율로 맞춘다
+        if (Math.abs(dW / start.w) >= Math.abs(dH / start.h)) dH = (start.w + dW) / ratio - start.h; else dW = (start.h + dH) * ratio - start.w;
+      }
+      const nw = Math.max(1, start.w + dW), nh = Math.max(1, start.h + dH);
+      const rect: Rect = { x: edges.l ? start.x + start.w - nw : m.altKey ? start.x + (start.w - nw) / 2 : start.x, y: edges.t ? start.y + start.h - nh : m.altKey ? start.y + (start.h - nh) / 2 : start.y, w: nw, h: nh };
+      const snap = snapResize(rect, edges, cands, 6 / ks, { ratio });
+      const fw = snap.rect.w, fh = snap.rect.h;
+      if (edges.l || edges.r) el.style.width = `${Math.max(1, w0 + (fw - start.w) / ls)}px`;
+      if (!textOnly && (edges.t || edges.b)) el.style.height = `${Math.max(1, h0 + (fh - start.h) / ls)}px`;
+      // 고정할 변이 움직이지 않도록 측정해서 translate를 보정한다
+      writeTranslate(el, t0[0], t0[1]);
+      const now = toSlide(el.getBoundingClientRect(), sr, ks);
+      const wantX = edges.l ? start.x + start.w - now.w : m.altKey ? start.x + start.w / 2 - now.w / 2 : start.x;
+      const wantY = edges.t ? start.y + start.h - now.h : m.altKey ? start.y + start.h / 2 - now.h / 2 : start.y;
+      writeTranslate(el, t0[0] + (wantX - now.x) / ls, t0[1] + (wantY - now.y) / ls);
+      drawGuides(sr, ks, snap.guides, snap.gaps);
+    };
+    const finish = (cancel: boolean) => {
+      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("keydown", key, true);
+      clearGuides();
+      if (cancel || !moved) { if (orig === null) el.removeAttribute("style"); else el.setAttribute("style", orig); return; }
+      P.current.onCommit();
+    };
+    const up = () => finish(false);
+    const key = (k: KeyboardEvent) => { if (k.key === "Escape") { k.preventDefault(); k.stopPropagation(); finish(true); } };
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", up); window.addEventListener("keydown", key, true);
+  };
+
   const attach = () => {
     const d = doc();
     if (!d) return;
     const st = d.createElement("style");
     st.textContent = EDIT_CSS;
     d.head.appendChild(st);
-    const clearGuides = () => { if (guideSvg.current) guideSvg.current.replaceChildren(); };
-    const draw = (sr: DOMRect, ks: number, guides: Guide[], gaps: Gap[]) => {
-      const svg = guideSvg.current;
-      if (!svg) return;
-      const X = (v: number) => sr.left + v * ks, Y = (v: number) => sr.top + v * ks;
-      let h = "";
-      for (const g of guides) h += g.axis === "x"
-        ? `<line data-testid="guide-line" x1="${X(g.pos)}" x2="${X(g.pos)}" y1="${Y(g.from)}" y2="${Y(g.to)}" stroke="#ff3ea5" stroke-width="1"/>`
-        : `<line data-testid="guide-line" y1="${Y(g.pos)}" y2="${Y(g.pos)}" x1="${X(g.from)}" x2="${X(g.to)}" stroke="#ff3ea5" stroke-width="1"/>`;
-      for (const g of gaps) {
-        const a = g.axis === "x" ? [X(g.from), Y(g.at), X(g.to), Y(g.at)] : [X(g.at), Y(g.from), X(g.at), Y(g.to)];
-        const mx = (a[0] + a[2]) / 2, my = (a[1] + a[3]) / 2, t = String(Math.round(g.value));
-        h += `<line x1="${a[0]}" y1="${a[1]}" x2="${a[2]}" y2="${a[3]}" stroke="#f24822" stroke-width="1"/><rect data-testid="gap-label" x="${mx - 12}" y="${my - 8}" width="24" height="16" rx="4" fill="#f24822"/><text x="${mx}" y="${my + 4}" font-size="11" fill="#fff" text-anchor="middle" font-family="system-ui">${t}</text>`;
-      }
-      svg.innerHTML = h;
-    };
     d.addEventListener("pointerdown", (e) => {
       const sl = cur();
       if (e.button !== 0 || editing.current || !sl) return;
@@ -286,7 +343,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       const snap = snapMove(mv, g.cands, 6 / g.ks, { lock: lock?.axis, frame: { x: 0, y: 0, w: 1920, h: 1080 } });
       const ls = localScale(g.el) / g.ks || 1; // 화면 배율과 로컬 배율의 비(보통 1)
       writeTranslate(g.el, g.t0[0] + (dx / g.ks + snap.dx) / ls, g.t0[1] + (dy / g.ks + snap.dy) / ls);
-      draw(sr, g.ks, snap.guides, snap.gaps);
+      drawGuides(sr, g.ks, snap.guides, snap.gaps);
       e.preventDefault();
     }, true);
     const endDrag = (cancel: boolean) => {
@@ -359,6 +416,20 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
         tag.style.transform = `translate(${r.left + r.width / 2}px,${r.bottom + 6}px) translateX(-50%)`;
       }
     }
+    // 리사이즈 핸들: 이동할 수 있는 선택 요소에만 보인다(글자 블록은 가로 변과 모서리만, 높이는 내용이 정한다)
+    const hs = handles.current;
+    if (hs) {
+      const ok = !!(r && s && !editing.current && !composing && !isLockedDeep(s) && canResize(s as HTMLElement));
+      const textOnly = !!s && textual(s);
+      hs.querySelectorAll<HTMLElement>("[data-handle]").forEach((h) => {
+        const id = h.dataset.handle!;
+        if (!ok || !r || (textOnly && (id === "n" || id === "s"))) { h.style.display = "none"; return; }
+        const x = id.includes("w") ? r.left : id.includes("e") ? r.right : r.left + r.width / 2;
+        const y = id.includes("n") ? r.top : id.includes("s") ? r.bottom : r.top + r.height / 2;
+        h.style.display = "block";
+        h.style.transform = `translate(${x - 4}px,${y - 4}px)`;
+      });
+    }
     const h = hover.current && hover.current !== s && hover.current !== cur() ? hover.current : null;
     const hr = put(hoverBox.current, h);
     if (hr && hoverBox.current) { hoverBox.current.style.width = hr.width + "px"; hoverBox.current.style.height = hr.height + "px"; }
@@ -388,6 +459,12 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div ref={hoverBox} className="absolute left-0 top-0 hidden border border-focus-ring/60" />
           <div ref={selBox} className="absolute left-0 top-0 hidden border-2 border-focus-ring" />
+          <div ref={handles}>
+            {HANDLES.map(([id, cursor]) => (
+              <div key={id} data-handle={id} aria-hidden="true" style={{ cursor }} onPointerDown={(e) => startResize(id, e)}
+                className="pointer-events-auto absolute left-0 top-0 hidden size-2 rounded-[2px] border border-focus-ring bg-white" />
+            ))}
+          </div>
           <svg ref={guideSvg} aria-hidden="true" className="absolute inset-0 size-full overflow-visible" />
           <div ref={sizeTag} aria-hidden="true" className="absolute left-0 top-0 hidden whitespace-nowrap rounded bg-focus-ring px-1.5 py-0.5 text-micro tabular-nums text-white" />
           <div ref={markers}>

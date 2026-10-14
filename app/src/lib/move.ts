@@ -40,3 +40,16 @@ export function moveBy(el: HTMLElement, dx: number, dy: number) {
   const [x, y] = readTranslate(el);
   writeTranslate(el, x + dx, y + dy);
 }
+
+/** 크기를 인라인 px로 정할 때의 정리: 플렉스 `1 1` 채움을 풀고, 플렉스 부모 안에서는 줄어들지 않게 한다(Inspector의 Fixed 모드와 같다) */
+export function fixSize(el: HTMLElement) {
+  if (/^1 1/.test(el.style.flex)) el.style.removeProperty("flex");
+  const parent = el.parentElement && getComputedStyle(el.parentElement).display;
+  if (parent && parent.includes("flex")) el.style.flexShrink = "0";
+}
+
+/** 리사이즈 핸들을 보일 수 있는 요소인지: 이동 가능하고, viewBox 없는 svg는 제외 */
+export function canResize(el: HTMLElement): boolean {
+  if (!canMove(el)) return false;
+  return !(el instanceof SVGElement) || el.tagName.toLowerCase() !== "svg" || el.hasAttribute("viewBox");
+}

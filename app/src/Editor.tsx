@@ -395,7 +395,7 @@ export function Editor({ id }: { id: string }) {
 
   keyRef.current = (e) => {
     const t = e.target as HTMLElement, mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
-    const typing = t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || (!!t.closest?.('[role=dialog],[role=menu],[role=listbox],[role=radiogroup]') && !t.closest?.('[data-testid=filmstrip]')); // 슬라이드 필름스트립은 편집기 단축키(실행 취소 등)를 그대로 쓴다
+    const typing = t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || (!!t.closest?.('[role=dialog],[role=menu],[role=listbox],[role=radiogroup]') && !t.closest?.('[data-testid=filmstrip]') && !t.closest?.('[data-shell-panel]')); // 슬라이드 필름스트립은 편집기 단축키(실행 취소 등)를 그대로 쓴다
     if (mod && k === "\\" && e.view !== window) {
       e.preventDefault();
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "\\", metaKey: e.metaKey, ctrlKey: e.ctrlKey, cancelable: true }));

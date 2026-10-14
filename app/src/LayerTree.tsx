@@ -94,7 +94,9 @@ export function LayerTree(p: Props) {
           }}
           onDrop={(e) => { e.preventDefault(); if (drag && drop) p.onMove(drag, drop.el, drop.after); setDrag(null); setDrop(null); }}
           onDragEnd={() => { setDrag(null); setDrop(null); }}
-          onClick={() => p.onSelect(el)}
+          tabIndex={on ? 0 : -1}
+          onKeyDown={(e) => { if (e.key === "Enter" && e.target === e.currentTarget && !e.metaKey && !e.ctrlKey) { e.preventDefault(); e.stopPropagation(); setRename(el); } }}
+          onClick={(e) => { e.currentTarget.focus(); p.onSelect(el); }}
           onDoubleClick={() => setRename(el)}
           onMouseEnter={() => p.onHover(el)}
           onMouseLeave={() => p.onHover(null)}
@@ -116,7 +118,12 @@ export function LayerTree(p: Props) {
               autoFocus aria-label="Layer name" defaultValue={el.getAttribute("data-name") ?? nameOf(el)}
               className="min-w-0 flex-1 rounded bg-surface-2 px-1 text-body text-foreground outline-none ring-1 ring-focus-ring"
               onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => { if (e.key === "Enter") { p.onRename(el, e.currentTarget.value.trim()); setRename(null); } else if (e.key === "Escape") setRename(null); e.stopPropagation(); }}
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing) return; // 한글 조합 확정 Enter는 이름 확정이 아니다
+                if (e.key === "Enter") { p.onRename(el, e.currentTarget.value.trim()); setRename(null); requestAnimationFrame(() => selRow.current?.focus()); }
+                else if (e.key === "Escape") { setRename(null); requestAnimationFrame(() => selRow.current?.focus()); }
+                e.stopPropagation();
+              }}
               onBlur={() => setRename(null)}
             />
           ) : <span className="min-w-0 flex-1 truncate">{nameOf(el)}</span>}

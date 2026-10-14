@@ -14,8 +14,11 @@ const file = join(dir, "index.html");
 if (await Bun.file(file).exists()) { console.error(`decks/${name}가 이미 있다. 다른 이름을 쓰거나 그 덱을 편집한다(bun run slidekit 후 덱 목록에서 열기).`); process.exit(1); }
 
 const date = new Date().toLocaleDateString("sv"); // YYYY-MM-DD
+// git 사용자 이름이 있으면 author로 채운다. 없으면 빈 문자열(목록과 lint는 빈 author를 정상으로 본다). JSON 문자열 안에 들어가므로 이스케이프한다.
+const gitName = Bun.spawnSync(["git", "config", "user.name"]).stdout.toString().trim();
+const author = JSON.stringify(gitName).slice(1, -1).replaceAll("<", "\\u003c");
 const html = (await Bun.file(join(root, "engine", "template", "index.html")).text())
-  .replaceAll("__TITLE__", "제목을 여기에 적는다").replaceAll("__DATE__", date).replaceAll("__ID__", name);
+  .replaceAll("__TITLE__", "제목을 여기에 적는다").replaceAll("__DATE__", date).replaceAll("__AUTHOR__", author).replaceAll("__ID__", name);
 await mkdir(dir, { recursive: true });
 await Bun.write(file, html);
 console.log(`만들었다: decks/${name}/index.html

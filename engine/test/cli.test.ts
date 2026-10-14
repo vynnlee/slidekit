@@ -29,3 +29,16 @@ test("lint와 bundle: 없는 덱이면 있는 덱 목록과 만드는 법을 알
   expect(b.code).toBe(1);
   expect(b.err).toContain("없는 덱");
 });
+
+test("new: author는 placeholder 문구 없이 git 사용자 이름이나 빈 값이고, lint를 통과한다", async () => {
+  const { readFileSync, rmSync } = await import("node:fs");
+  const dir = join(import.meta.dir, "..", "..", "decks", "qa-cli-author");
+  try {
+    expect(run("new", "qa-cli-author").code).toBe(0);
+    const html = readFileSync(join(dir, "index.html"), "utf8");
+    expect(html).not.toContain("이름을 여기에 적는다");
+    expect(html).not.toContain("__AUTHOR__");
+    expect(JSON.parse(html.match(/id="deck-meta">([\s\S]*?)<\/script>/)![1]).author).toBeString();
+    expect(run("lint", "qa-cli-author").code).toBe(0);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

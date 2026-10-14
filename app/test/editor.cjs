@@ -261,6 +261,20 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('토큰 저장: 슬라이드 본문 그대로', tokPost.slice(tokPost.indexOf('<body>')) === tokPre.slice(tokPre.indexOf('<body>')));
   for (let i = 0; i < 3 && (await page.getByLabel('Accent hex').inputValue()).toLowerCase().includes('ff5500'); i++) { await page.keyboard.press('Meta+z'); await settle(); } // 토큰 변경은 입력별로 1건씩 기록된다
   check('토큰 변경 실행 취소', !(await page.getByLabel('Accent hex').inputValue()).toLowerCase().includes('ff5500'), await page.getByLabel('Accent hex').inputValue());
+  // 테마 프리셋: 토큰 아홉 개가 한 번에 바뀌고 실행 취소 한 건이며, 값을 따로 바꾸면 Custom이 된다
+  const themeSel = page.getByLabel('Theme', { exact: true });
+  const bgHex = () => page.getByLabel('Page background hex').inputValue();
+  const bg0 = await bgHex();
+  await themeSel.click(); await page.getByRole('option', { name: 'Paper' }).click(); await settle();
+  check('테마 Paper가 페이지 배경 토큰을 바꿈', (await bgHex()).toLowerCase() === '#f6f1e7', await bgHex());
+  check('선택한 테마가 표시됨', ((await themeSel.textContent()) || '').includes('Paper'));
+  await focusBody(); await page.keyboard.press('Meta+z'); await settle();
+  check('테마 변경은 실행 취소 한 번에 되돌아감', (await bgHex()) === bg0, [bg0, await bgHex()]);
+  await themeSel.click(); await page.getByRole('option', { name: 'Light' }).click(); await settle();
+  const acc2 = page.getByLabel('Accent hex'); await acc2.fill('#ff0000'); await acc2.press('Enter'); await cond(() => (document.querySelector('[aria-label=Theme]')?.textContent || '').includes('Custom'), null, 6000); // 토큰 입력은 400ms 디바운스 뒤 반영된다
+  check('토큰을 따로 바꾸면 Custom', ((await themeSel.textContent()) || '').includes('Custom'), await themeSel.textContent());
+  await focusBody(); for (let i = 0; i < 3; i++) { await page.keyboard.press('Meta+z'); await settle(); }
+  check('테마 시험 뒤 원래 배경으로 복귀', (await bgHex()) === bg0, [bg0, await bgHex()]);
   // 선언형 단계: Appears at step
   await page.keyboard.press('Escape'); await focusBody(); await page.keyboard.press('Tab'); await settle();
   const st = page.getByLabel('Appears at step'); await st.fill('3'); await st.press('Enter'); await settle();
@@ -566,6 +580,25 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('Bold와 가운데 정렬이 요소 style에 저장', fmtSt.a === 'center' && !!fmtSt.w, fmtSt);
   await focusBody(); for (let i = 0; i < 3; i++) { await page.keyboard.press('Meta+z'); await settle(); }
   check('서식 변경 실행 취소', (await inDoc((s) => s.querySelector('h2').getAttribute('style') || '')) === styleBefore, [styleBefore, await inDoc((s) => s.querySelector('h2').getAttribute('style') || '')]);
+  await page.keyboard.press('Escape');
+
+  // 넘침 표시: 슬라이드 밖으로 나가면 캔버스 점선 외곽선, Layers 경고, 필름스트립 표시가 뜨고 안전 영역을 켤 수 있다
+  await layers.nth(1).click(); await settle(); await focusBody(); await page.keyboard.press('Escape');
+  await fr().locator('[data-active] h2').first().click({ modifiers: ['Meta'] }); await settle();
+  const offXo = page.getByLabel('Offset X', { exact: true }); await offXo.fill('3000'); await offXo.press('Enter');
+  await cond(() => document.querySelectorAll('[data-testid=overflow-badge]').length > 0, null, 8000); // 검사는 0.6초 주기라 Layers 경고가 뜰 때까지 기다린다
+  check('넘친 요소에 점선 외곽선이 그려짐', (await page.getByTestId('overflow-box').evaluateAll((els) => els.filter((e) => e.style.display === 'block').length)) >= 1);
+  check('Layers 행에 경고 아이콘', (await page.getByTestId('overflow-badge').count()) >= 1);
+  check('필름스트립 타일에 넘침 표시', (await page.getByRole('img', { name: 'Content overflows' }).count()) >= 1);
+  await page.getByRole('button', { name: 'Show overflow' }).click(); await settle();
+  check('Show overflow를 끄면 외곽선이 사라짐', (await page.getByTestId('overflow-box').evaluateAll((els) => els.filter((e) => e.style.display === 'block').length)) === 0);
+  await page.getByRole('button', { name: 'Show overflow' }).click();
+  await page.getByRole('button', { name: 'Safe area' }).click(); await settle();
+  check('안전 영역 가이드가 보임', await page.getByTestId('safe-area').evaluate((e) => e.style.display === 'block'));
+  await page.getByRole('button', { name: 'Safe area' }).click();
+  await offXo.fill('0'); await offXo.press('Enter'); await settle(); // 오프셋을 되돌린다
+  await cond(() => document.querySelectorAll('[data-testid=overflow-badge]').length === 0, null, 8000);
+  check('되돌리면 경고가 사라짐', (await page.getByTestId('overflow-badge').count()) === 0);
   await page.keyboard.press('Escape');
 
   // 덱 설정: 헤더 버튼으로 열고 Author를 바꾸면 deck-meta에 저장되고 실행 취소 한 번에 되돌아간다

@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
-import { AArrowDown, AArrowUp, AlignCenter, AlignLeft, AlignRight, Bold, MessageSquare, Minus, Pencil, Plus, Trash2 } from "lucide-react";
+import { ScanLine, TriangleAlert, AArrowDown, AArrowUp, AlignCenter, AlignLeft, AlignRight, Bold, MessageSquare, Minus, Pencil, Plus, Trash2 } from "lucide-react";
 import { ColorField } from "@/components/ui/color-field";
 import { Button } from "@/components/ui/button";
 import { TextArea } from "@/components/ui/field";
@@ -9,6 +9,7 @@ import { childToward, isLeaf, isLockedDeep, pick as pickEl, siblings } from "@/l
 import { canMove, canResize, fixSize, moveBy, readTranslate, toLocal, writeTranslate } from "@/lib/move";
 import { lockAxis, snapMove, snapResize, toSlide, unionRect, type Gap, type Guide, type Rect } from "@/lib/guides";
 import { cursorOf, HANDLE_CURSOR, type CursorName } from "@/lib/cursors";
+import { findOverflow, type Overflow } from "@/lib/overflow";
 import { CommentPin } from "./CommentPin";
 import { CommentComposer } from "./CommentComposer";
 import { nameOf } from "./LayerTree";
@@ -47,6 +48,10 @@ type Props = {
   channel: boolean | null;
   onStyle(prop: string, value: string): void; // 선택한 글자 요소의 서식 도구줄
   onImage(file: File, over: Element | null): void; // 붙여넣거나 끌어 놓은 이미지(img 위면 교체)
+  overflowOn: boolean; // 넘친 요소를 점선 빨강 외곽선으로 보임
+  safeArea: boolean; // 바깥 여백 80px 안전 영역 가이드
+  onToggleGuide(kind: "overflow" | "safe"): void;
+  onOverflow(list: Overflow[]): void; // 현재 슬라이드에서 넘친 요소가 바뀔 때
   onSel(el: Element | null): void;
   onContext(info: { el: Element | null; x: number; y: number }): void; // 우클릭: 대상 요소(없으면 빈 곳)와 화면 좌표
   onGroup(list: Element[]): void; // 마퀴로 고른 묶음(첫 요소가 대표)
@@ -101,6 +106,8 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   const guideSvg = useRef<SVGSVGElement>(null);
   const handles = useRef<HTMLDivElement>(null);
   const extraBoxes = useRef<HTMLDivElement>(null);
+  const overflowBoxes = useRef<HTMLDivElement>(null), safeBox = useRef<HTMLDivElement>(null);
+  const overflowList = useRef<Overflow[]>([]);
   // 끌어서 이동: 시작 상태. moved는 3px 넘게 움직인 뒤에만 참이다.
   const drag = useRef<{ els: HTMLElement[]; x0: number; y0: number; t0: [number, number][]; ks: number; moved: boolean; start: Rect; cands: Rect[]; orig: string[]; primary: HTMLElement } | null>(null);
   const swallowClick = useRef(false);
@@ -235,6 +242,19 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     window.addEventListener("pointerup", clear, true); window.addEventListener("pointercancel", clear, true);
     window.addEventListener("blur", clear); document.addEventListener("visibilitychange", clear);
     return () => { window.removeEventListener("pointerup", clear, true); window.removeEventListener("pointercancel", clear, true); window.removeEventListener("blur", clear); document.removeEventListener("visibilitychange", clear); };
+  }, []);
+
+  // 넘친 요소 검사: 0.6초마다 현재 슬라이드를 훑고, 결과가 달라졌을 때만 알린다(상자 위치는 place가 매 프레임 따라간다).
+  useEffect(() => {
+    let sig = "";
+    const t = setInterval(() => {
+      const sl = cur();
+      const list = sl && !drag.current && !editing.current ? findOverflow(sl) : overflowList.current;
+      overflowList.current = list;
+      const s = list.map((o) => o.kind + (o.el.id || o.el.tagName) + Math.round(o.el.getBoundingClientRect().width)).join("|") + ":" + P.current.index;
+      if (s !== sig) { sig = s; P.current.onOverflow(list); }
+    }, 600);
+    return () => clearInterval(t);
   }, []);
 
   const goto = useCallback(() => {
@@ -539,6 +559,22 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
         h.style.transform = `translate(${x - 4}px,${y - 4}px)`;
       });
     }
+    const ob = overflowBoxes.current;
+    if (ob) {
+      const list = P.current.overflowOn ? overflowList.current.filter((o) => o.el.isConnected) : [];
+      while (ob.children.length < list.length) { const d = document.createElement("div"); d.dataset.testid = "overflow-box"; d.className = "absolute left-0 top-0 border border-dashed border-destructive"; ob.appendChild(d); }
+      [...ob.children].forEach((c, i) => {
+        const d = c as HTMLElement, o = list[i];
+        if (!o) { d.style.display = "none"; return; }
+        const q = o.el.getBoundingClientRect();
+        d.style.display = "block"; d.style.width = q.width + "px"; d.style.height = q.height + "px"; d.style.transform = `translate(${q.left}px,${q.top}px)`;
+      });
+    }
+    const sb = safeBox.current, slr = cur()?.getBoundingClientRect();
+    if (sb) {
+      if (!P.current.safeArea || !slr) sb.style.display = "none";
+      else { const k = slr.width / 1920, m = 80 * k; sb.style.display = "block"; sb.style.width = slr.width - 2 * m + "px"; sb.style.height = slr.height - 2 * m + "px"; sb.style.transform = `translate(${slr.left + m}px,${slr.top + m}px)`; }
+    }
     const h = hover.current && hover.current !== s && hover.current !== cur() ? hover.current : null;
     const hr = put(hoverBox.current, h);
     if (hr && hoverBox.current) { hoverBox.current.style.width = hr.width + "px"; hoverBox.current.style.height = hr.height + "px"; }
@@ -571,6 +607,8 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div ref={hoverBox} className="absolute left-0 top-0 hidden border border-focus-ring/60" />
           <div ref={selBox} className="absolute left-0 top-0 hidden border-2 border-focus-ring" />
+          <div ref={safeBox} data-testid="safe-area" className="absolute left-0 top-0 hidden border border-dashed border-white/30" />
+          <div ref={overflowBoxes} />
           <div ref={marqueeBox} className="absolute left-0 top-0 hidden border border-focus-ring bg-focus-ring/10" />
           <div ref={extraBoxes} />
           <div ref={handles}>
@@ -632,6 +670,8 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     <div role="group" aria-label="Zoom" className="absolute bottom-3 right-3 flex items-center gap-0.5 rounded-lg bg-surface-3 p-0.5 shadow-surface-3">
       <Tooltip content="Zoom out (Cmd+-)" side="top"><Button aria-label="Zoom out" variant="ghost" size="icon-compact" onClick={() => zoomBy(-1)}><Minus /></Button></Tooltip>
       <Tooltip content="Zoom to fit (Cmd+0, Shift+1)" side="top"><Button aria-label="Zoom to fit" variant="ghost" size="compact" className="min-w-12 tabular-nums" onClick={() => zoomBy(0)}>{pct}%</Button></Tooltip>
+      <Tooltip content="Safe area (80px margin)" side="top"><Button aria-label="Safe area" aria-pressed={p.safeArea} variant="ghost" size="icon-compact" onClick={() => p.onToggleGuide("safe")}><ScanLine /></Button></Tooltip>
+      <Tooltip content="Show overflow" side="top"><Button aria-label="Show overflow" aria-pressed={p.overflowOn} variant="ghost" size="icon-compact" onClick={() => p.onToggleGuide("overflow")}><TriangleAlert /></Button></Tooltip>
       <Tooltip content="Zoom in (Cmd+=)" side="top"><Button aria-label="Zoom in" variant="ghost" size="icon-compact" onClick={() => zoomBy(1)}><Plus /></Button></Tooltip>
     </div>
     </div>

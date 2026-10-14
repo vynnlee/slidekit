@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Eye, EyeOff, Lock, LockOpen, Frame, Image as ImageIcon, Shapes, Square, Type } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, EyeOff, Lock, LockOpen, TriangleAlert, Frame, Image as ImageIcon, Shapes, Square, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { textual } from "./Canvas";
@@ -9,6 +9,7 @@ import { isLockedDeep } from "@/lib/selection";
 type Props = {
   slide: HTMLElement | null;
   sel: Element | null;
+  overflow: { el: Element; kind: "outside" | "clipped" }[]; // 슬라이드 밖으로 나가거나 잘리는 요소
   more: Element[]; // 다중 선택의 나머지
   onToggle(el: Element): void;
   onContext(el: Element | null, at: { x: number; y: number }): void; // 우클릭(Slide 루트 행은 null) // Shift+클릭: 선택에 더하거나 뺀다
@@ -84,6 +85,7 @@ export function LayerTree(p: Props) {
     const locked = el.hasAttribute("data-locked");
     const byParent = !locked && isLockedDeep(el); // 조상이 잠겨 있어 함께 잠긴 요소
     const on = el === p.sel || p.more.includes(el);
+    const over = p.overflow.find((o) => o.el === el);
     return (
       <div key={[...(el.parentElement?.children ?? [])].indexOf(el)} role="treeitem" aria-selected={on} aria-expanded={ch.length ? isOpen : undefined}>
         <div
@@ -133,6 +135,7 @@ export function LayerTree(p: Props) {
               onBlur={() => setRename(null)}
             />
           ) : <span className="min-w-0 flex-1 truncate">{nameOf(el)}</span>}
+          {over && <span role="img" aria-label={over.kind === "outside" ? "Extends past the slide" : "Content is clipped"} title={over.kind === "outside" ? "Extends past the slide" : "Content is clipped"} data-testid="overflow-badge" className="shrink-0 text-destructive"><TriangleAlert className="size-3.5" /></span>}
           {el.hasAttribute("data-step") && <span title={`Appears at step ${el.getAttribute("data-step")}`} className="shrink-0 rounded bg-surface-2 px-1 text-micro tabular-nums text-muted-foreground">{el.getAttribute("data-step")}</span>}
           {byParent ? (
             <Tooltip content="Locked by a parent layer" side="left">

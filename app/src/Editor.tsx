@@ -22,6 +22,7 @@ import type { CommentActions } from "@/lib/comment-actions";
 import { numbering } from "@/lib/comment-state";
 import { firstChild, isLeaf, isLockedDeep, parentOf, siblings } from "@/lib/selection";
 import { EditorTip } from "./EditorTip";
+import type { Overflow } from "@/lib/overflow";
 import { DeckSettingsForm } from "./DeckSettings";
 import { readMeta, setMeta } from "@/lib/deck-meta";
 import { ContextMenu, useContextMenu } from "@/components/ui/context-menu";
@@ -99,6 +100,15 @@ export function Editor({ id }: { id: string }) {
   const live = useCommentsLive(folder || null);
   const cm = useContextMenu();
   const [notFound, setNotFound] = useState(false);
+  // 넘침 표시: 캔버스 외곽선과 안전 영역은 보기 설정(기억함), 넘친 요소 목록은 Layers 경고와 필름스트립 표시에 쓴다.
+  const [overflowOn, setOverflowOn] = useState(() => localStorage.getItem("slidekit.overflow") !== "0");
+  const [safeArea, setSafeArea] = useState(() => localStorage.getItem("slidekit.safearea") === "1");
+  const [overflowEls, setOverflowEls] = useState<Overflow[]>([]);
+  const [overflowByKey, setOverflowByKey] = useState<Record<string, number>>({}); // 슬라이드를 열어 본 만큼 기억한다
+  const toggleGuide = (k: "overflow" | "safe") => {
+    if (k === "overflow") setOverflowOn((v) => { localStorage.setItem("slidekit.overflow", v ? "0" : "1"); return !v; });
+    else setSafeArea((v) => { localStorage.setItem("slidekit.safearea", v ? "0" : "1"); return !v; });
+  };
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [metaError, setMetaError] = useState("");
   const [updated, setUpdated] = useState<Set<number>>(new Set()); // 밖에서 바뀐 슬라이드(필름스트립에 4초 표시)
@@ -638,6 +648,8 @@ export function Editor({ id }: { id: string }) {
     { value: "act-hide", label: "Hide or show selection", group: "Selection", disabled: !sel, onSelect: () => toggleAll("hide") },
     { value: "act-reset", label: "Reset changes", group: "Selection", disabled: !sel, onSelect: () => resetChanges() },
     { value: "act-fit100", label: "Zoom to 100%", group: "View", shortcut: "shift+0", onSelect: () => canvas.current?.zoom100() },
+    { value: "act-overflow", label: overflowOn ? "Hide overflow outlines" : "Show overflow outlines", group: "View", onSelect: () => toggleGuide("overflow") },
+    { value: "act-safe", label: safeArea ? "Hide safe area" : "Show safe area", group: "View", onSelect: () => toggleGuide("safe") },
     { value: "act-fit", label: "Zoom to fit", group: "View", shortcut: "shift+1", onSelect: () => canvas.current?.zoom(0) },
     { value: "act-film", label: filmCollapsed ? "Show filmstrip" : "Hide filmstrip", group: "View", shortcut: "mod+shift+\\", onSelect: toggleFilm },
     { value: "act-keys", label: "Keyboard shortcuts", group: "Help", shortcut: "mod+/", onSelect: () => setHelp(true) },
@@ -683,7 +695,7 @@ export function Editor({ id }: { id: string }) {
           <div className="flex h-full flex-col">
             <div className="shrink-0 px-3 pt-2 text-caption font-semibold">Layers</div>
             <div className="min-h-0 flex-1 overflow-auto">
-              <LayerTree slide={canvas.current?.slide(index) ?? null} sel={sel} more={more} onContext={(el, at) => (el ? contextAt(at, el) : cm.open(at, slideMenu(slideActions(false))))} onToggle={toggleSel} rev={units} slideName={canvas.current?.slide(index)?.getAttribute("data-title") || `Slide ${index + 1}`} onSelectSlide={() => pickSel(null)} onSelect={pickSel} onHover={(el) => canvas.current?.hover(el)}
+              <LayerTree slide={canvas.current?.slide(index) ?? null} sel={sel} more={more} overflow={overflowEls} onContext={(el, at) => (el ? contextAt(at, el) : cm.open(at, slideMenu(slideActions(false))))} onToggle={toggleSel} rev={units} slideName={canvas.current?.slide(index)?.getAttribute("data-title") || `Slide ${index + 1}`} onSelectSlide={() => pickSel(null)} onSelect={pickSel} onHover={(el) => canvas.current?.hover(el)}
                 onToggleHidden={toggleHidden} onToggleLock={toggleLock} renameSignal={renameTick} onRename={renameEl} onMove={moveEl} />
             </div>
           </div>
@@ -697,11 +709,11 @@ export function Editor({ id }: { id: string }) {
         <Filmstrip shell={shell} folder={folder} units={units} index={index}
           marked={new Set(comments.filter((c) => !c.slideDeleted && c.status === "open").map((c) => c.slide))} origin={origin.current}
           collapsed={filmCollapsed} onToggle={toggleFilm}
-          updated={updated} onSelect={setIndex} onMenu={tileMenuAt} onMove={moveSlide} onDuplicate={dupSlide} onDelete={delSlide} onAdd={addSlide} />
+          updated={updated} warn={new Set(units.map((u, i) => (overflowByKey[u.key] ? i : -1)).filter((i) => i >= 0))} onSelect={setIndex} onMenu={tileMenuAt} onMove={moveSlide} onDuplicate={dupSlide} onDelete={delSlide} onAdd={addSlide} />
         <div className="min-h-0 flex-1 bg-[var(--canvas-bg)]">
         <Canvas ref={canvas} shell={shell} folder={folder} units={units} index={index} sel={sel} more={more} onMulti={toggleSel} onGroup={pickGroup}
           comments={comments.filter((c) => !c.slideDeleted && c.slide === origin.current.get(units[index]?.key ?? ""))}
-          commentActions={commentActions} onImage={addImage} onStyle={style} onContext={({ el, x, y }) => contextAt({ x, y }, el)} onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
+          commentActions={commentActions} overflowOn={overflowOn} safeArea={safeArea} onToggleGuide={toggleGuide} onOverflow={(l) => { setOverflowEls(l); const k = unitsRef.current[indexRef.current]?.key; if (k) setOverflowByKey((m) => (m[k] === l.length ? m : { ...m, [k]: l.length })); }} onImage={addImage} onStyle={style} onContext={({ el, x, y }) => contextAt({ x, y }, el)} onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
           numbers={nums} hoverId={hoverId} onHover={setHoverId} channel={live.channel}
           onComment={postComment} onMarker={(cid) => { setTab("comments"); const c = comments.find((x) => x.id === cid); if (c) jump(c); }} />
         </div>

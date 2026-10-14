@@ -434,12 +434,28 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('리사이즈는 실행 취소 한 번에 되돌아감', (await inDoc((s) => s.querySelector('h2').style.width || '')) === '', await inDoc((s) => s.querySelector('h2').style.cssText));
   void wBefore; await page.keyboard.press('Escape');
 
+  // 회전한 조상 아래에서도 끌면 화면에서 포인터를 따라간다(로컬 축이 아니라)
+  await layers.nth(1).click(); await sleep(500); await focusBody(); await page.keyboard.press('Escape');
+  const rkpos = () => inDoc((s) => { const r = s.children[1].children[0].getBoundingClientRect(); return [r.x, r.y]; });
+  await inDoc((s) => { s.children[1].style.transform = 'rotate(30deg)'; });
+  await sleep(300);
+  const rkl = fr().locator('[data-active] > :nth-child(2) > :first-child').first(); const rb = await rkl.boundingBox();
+  const rk0 = await rkpos();
+  const sx = rb.x + rb.width / 2, sy = rb.y + rb.height / 2;
+  await page.mouse.move(sx, sy); await page.mouse.down(); await page.mouse.move(sx + 50, sy, { steps: 8 }); await page.mouse.up(); await sleep(400);
+  const rk1 = await rkpos();
+  check('회전한 부모 아래 요소가 가로로 끌림(세로로 새지 않음)', rk1[0] - rk0[0] > 10 && Math.abs(rk1[1] - rk0[1]) < Math.abs(rk1[0] - rk0[0]) * 0.2, [rk0, rk1]);
+  await focusBody(); await page.keyboard.press('Meta+z'); await sleep(300);
+  await inDoc((s) => { s.children[1].style.transform = ''; }); await page.keyboard.press('Escape');
+
   // 레이어: 잠금은 캔버스 선택에서 제외, Cmd+[ ]로 순서 이동, F2 이름 변경
   await layers.nth(1).click(); await sleep(600);
   const rowsL = page.getByTestId('layer-row');
   await rowsL.nth(1).click(); await sleep(300);
   await rowsL.nth(1).getByRole('button', { name: 'Lock layer' }).click({ force: true }); await sleep(300);
   check('잠금이 data-locked로 저장됨', await inDoc((s) => !!s.querySelector('[data-locked]')));
+  await rowsL.nth(1).locator('svg').first().click(); await sleep(300);
+  check('잠긴 부모 아래 행에 잠금 표시', (await page.getByTestId('parent-lock').count()) >= 1);
   await focusBody(); await page.keyboard.press('Escape');
   const lockedBox = await fr().locator('[data-active] [data-locked]').first().boundingBox();
   await page.mouse.click(lockedBox.x + lockedBox.width / 2, lockedBox.y + lockedBox.height / 2); await sleep(300);

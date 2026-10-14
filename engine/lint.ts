@@ -132,8 +132,8 @@ export function lint(html: string): Issue[] {
   // 템플릿의 예제 문구가 남은 채 배포되는 것을 막는다(engine/template/index.html의 문구와 편집기의 새 슬라이드 기본값).
   const PLACEHOLDER = /여기에 적는다|핵심 문장 하나|뒷받침하는 설명을 짧게 쓴다|작은 글자는 보조 정보에만 쓴다|두 번째 본문/;
   const phText = rest.replace(/<[^>]+>/g, " ") + " " + (metaS?.body ?? "");
-  const ph = phText.match(PLACEHOLDER);
-  if (ph) add("warn", "placeholder", `예제 문구("${ph[0]}")가 남아 있다. 템플릿 문구를 실제 내용으로 바꾼 뒤 배포한다`);
+  const phAll = [...phText.matchAll(new RegExp(`.{0,16}(?:${PLACEHOLDER.source})`, "g"))].map((m) => m[0].replace(/\s+/g, " ").trim());
+  if (phAll.length) add("warn", "placeholder", `예제 문구가 ${phAll.length}곳에 남아 있다("${phAll[0]}"${phAll.length > 1 ? " 등" : ""}). 새 덱의 예제는 실제 내용으로 바꾼 뒤 배포한다. 만드는 중에는 무시해도 된다`);
   if (/<h2>\s*제목\s*<\/h2>\s*<p>\s*내용\s*<\/p>/.test(rest)) add("warn", "placeholder", '제목이 "제목", 본문이 "내용"인 새 슬라이드가 남아 있다. 실제 내용으로 바꾸거나 지운다');
   return out;
 }

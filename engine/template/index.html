@@ -4,6 +4,7 @@
   고치는 곳: 슬라이드 안의 글자, deck-meta의 title과 author(비어 있어도 된다), 아래 style의 토큰.
   유지할 것: data-slide 값(cover, chapter, content, end), chapter의 data-title은 h1과 같은 글자.
   이동은 방향키만 쓴다. 슬라이드를 늘릴 때는 data-slide="content"가 붙은 section 요소 하나를 통째로 복사한다.
+  모양은 data-layout으로 고른다(목록은 `bun run slidekit layouts`). 예제 문구(...를 여기에 적는다)는 모두 바꾼다.
 -->
 <html lang="ko" data-slidekit="1">
 <head>
@@ -46,9 +47,16 @@
   <p data-step="2">방향키를 한 번 더 누르면 나타나는 문장</p>
 </section>
 
-<section data-slide="content">
-  <h2>두 번째 본문</h2>
-  <p class="small">작은 글자는 보조 정보에만 쓴다.</p>
+<section data-slide="content" data-layout="two-column">
+  <h2>둘을 나란히 놓을 때는 두 열을 쓴다</h2>
+  <div data-col>
+    <h3>왼쪽 소제목을 여기에 적는다</h3>
+    <p>왼쪽 설명을 여기에 적는다</p>
+  </div>
+  <div data-col>
+    <h3>오른쪽 소제목을 여기에 적는다</h3>
+    <p>오른쪽 설명을 여기에 적는다</p>
+  </div>
 </section>
 
 <section data-slide="end">

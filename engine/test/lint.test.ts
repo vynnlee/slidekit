@@ -75,3 +75,10 @@ test("data-layout: 알 수 없는 값, content 아닌 종류, 마크업 불일�
   // 프리셋 조각의 예제 문구는 placeholder 경고로 잡힌다(title-body 포함)
   for (const l of LAYOUTS) expect(lint(ok.replace("</body>", `${l.html}</body>`)).some((i) => i.rule === "placeholder"), l.id).toBe(true);
 });
+
+test("img에 alt가 없으면 경고, alt=\"\"(장식)는 통과", () => {
+  const w = (b: string) => lint(ok.replace("</body>", `${b}</body>`)).filter((i) => i.rule === "img-alt");
+  expect(w('<section data-slide="content"><img src="a.png"></section>').length).toBe(1);
+  expect(w('<section data-slide="content"><img src="a.png"><img src="b.png" alt="설명"></section>')[0].msg).toContain("1개");
+  expect(w('<section data-slide="content"><img src="a.png" alt=""><img src="b.png" alt="설명"></section>')).toEqual([]);
+});

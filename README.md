@@ -26,6 +26,7 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 ## 명령
 - `bun run slidekit help`: 명령 목록. 알 수 없는 명령은 사용법을 보여 주고 종료 코드 1이다.
 - `bun run slidekit new <이름> [--template talk|blank|workshop]`: `decks/<이름>/`을 템플릿에서 만든다(`slidekit templates`로 목록). `slidekit layouts`는 슬라이드 레이아웃 프리셋 목록.
+- `bun run slidekit image <덱> <파일> [--max 2400]`: 이미지를 덱의 `assets/`에 안전하게 저장하고 상대 경로를 출력한다(이름 정리, svg 스크립트 거부, GPS 정보 제거, 큰 이미지 축소는 macOS `sips`).
 - `bun run slidekit lint <덱>`: 덱이 SPEC을 지키는지 규칙별로 점검한다(오류가 있으면 종료 코드 1).
 - `bun run slidekit pdf <덱> [--notes | --handout [2|3|4|6]]`: 번들한 덱을 `dist/<덱>.pdf`로 인쇄한다(슬라이드당 한 페이지, 16:9). `--notes`는 A4 세로 쪽마다 슬라이드 한 장과 노트, `--handout`은 쪽마다 슬라이드 여러 장의 유인물이다.
 - `bun run slidekit doctor`: bun, Chrome, 키체인 토큰, 포트, Host 가드, 덱 lint를 한 화면에 점검한다.

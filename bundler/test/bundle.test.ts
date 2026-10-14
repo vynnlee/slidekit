@@ -68,3 +68,19 @@ test("저장소 내부(.git, 다른 덱, .env)와 덱 밖을 가리키는 심볼
     }
   } finally { rmSync(dir, { recursive: true, force: true }); rmSync(join(root, "dist", "_bundletest.html"), { force: true }); }
 });
+
+test("assets/ 안의 이미지(slidekit image가 저장한 경로)를 인라인한다", async () => {
+  const d = join(root, "decks", "_bundleassets");
+  mkdirSync(join(d, "assets"), { recursive: true });
+  try {
+    writeFileSync(join(d, "assets", "pic-one.png"), Buffer.from("iVBORw0KGgo=", "base64"));
+    writeFileSync(join(d, "index.html"), `<!doctype html><html data-slidekit="1"><head><title>t</title>
+<script type="application/json" id="deck-meta">{"title":"t"}</script></head><body>
+<section data-slide="cover"><img src="assets/pic-one.png" alt="x"></section><script src="../../engine/slidekit.js"></script></body></html>`);
+    const r = Bun.spawnSync(["bun", join(root, "bundler", "bundle.ts"), "_bundleassets"], { stderr: "pipe" });
+    expect(r.stderr.toString()).toBe("");
+    const out = await Bun.file(join(root, "dist", "_bundleassets.html")).text();
+    expect(out).not.toContain("assets/pic-one.png");
+    expect(out).toContain("data:image/png;base64");
+  } finally { rmSync(d, { recursive: true, force: true }); rmSync(join(root, "dist", "_bundleassets.html"), { force: true }); }
+});

@@ -108,3 +108,28 @@ test("pdf 옵션 오류: --notes와 --handout 동시, 쪽당 장 수는 2, 3, 4,
   expect(bad.err).toContain("2, 3, 4, 6");
   expect(run("pdf").err).toContain("--notes");
 });
+
+test("image: 덱 assets/에 저장하고 상대 경로를 출력, 잘못된 입력은 종료 코드 1", async () => {
+  const { readFileSync, rmSync, writeFileSync, existsSync, mkdtempSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const name = "qa-cli-image", deckDir = join(import.meta.dir, "..", "..", "decks", name), tmp = mkdtempSync(join(tmpdir(), "sk-img-"));
+  try {
+    expect(run("new", name).code).toBe(0);
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAwS2OUAAAAABJRU5ErkJggg==", "base64");
+    writeFileSync(join(tmp, "My Photo.PNG"), png);
+    const ok = run("image", name, join(tmp, "My Photo.PNG"));
+    expect(ok.code).toBe(0);
+    expect(ok.out.trim().split("\n").at(-1)).toBe("assets/my-photo.png");
+    expect(existsSync(join(deckDir, "assets", "my-photo.png"))).toBe(true);
+    expect(run("image", name, join(tmp, "My Photo.PNG")).out.trim().split("\n").at(-1)).toBe("assets/my-photo-2.png");
+    writeFileSync(join(tmp, "x.exe"), "MZ");
+    expect(run("image", name, join(tmp, "x.exe")).code).toBe(1);
+    writeFileSync(join(tmp, "evil.png"), "<html><script>1</script>");
+    expect(run("image", name, join(tmp, "evil.png")).err).toContain("내용이 확장자");
+    expect(run("image", "no-such-deck-xyz", join(tmp, "My Photo.PNG")).code).toBe(1);
+    expect(run("image", name, join(tmp, "missing.png")).code).toBe(1);
+    expect(run("image", "../x", join(tmp, "My Photo.PNG")).code).toBe(1);
+    expect(run("image").err).toContain("사용법");
+    expect(readFileSync(join(deckDir, "assets", "my-photo.png")).length).toBe(png.length);
+  } finally { rmSync(deckDir, { recursive: true, force: true }); rmSync(tmp, { recursive: true, force: true }); }
+});

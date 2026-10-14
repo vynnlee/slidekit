@@ -4,6 +4,8 @@
 
 ## 1. 덱 파일
 
+덱의 이미지는 덱 폴더의 `assets/`에 두고 상대 경로(`assets/foo.jpg`)로 부른다. 앱의 붙여넣기와 업로드, `slidekit image <덱> <파일>`이 같은 저장 규칙(`engine/assets.ts`)을 쓴다: 파일명은 소문자, 숫자, 하이픈이고 충돌하면 `-2`를 붙이며, 확장자는 png, jpg, webp, gif, svg만 되고(heic는 macOS `sips`가 있으면 jpg로 바꿔 저장) 20MB를 넘지 않는다. 내용(매직 바이트)이 확장자와 맞아야 하고, 스크립트나 `on*` 속성이 든 svg는 거부한다. jpg의 GPS 위치정보와 XMP, png의 텍스트 메타데이터는 저장할 때 지운다. `sips`가 있으면 긴 변이 2400px(`--max`)을 넘는 png, jpg를 줄이고, 없으면 원본을 저장하고 경고한다. `<img>`에는 `alt`를 적는다(장식이면 `alt=""`, 없으면 lint가 경고한다). 400KB를 넘는 이미지는 lint와 번들이 경고한다.
+
 ```html
 <!doctype html>
 <html lang="ko" data-slidekit="1">

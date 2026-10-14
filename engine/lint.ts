@@ -2,6 +2,7 @@
 import { join } from "node:path";
 import { LAYOUT_IDS } from "./layouts";
 import { validateMeta } from "./deck-meta";
+import { localImageRefs } from "./publish-record";
 
 export type Issue = { level: "error" | "warn"; rule: string; msg: string };
 
@@ -137,6 +138,9 @@ export function lint(html: string): Issue[] {
   if (/['"](?:Space|PageDown|PageUp)['"]|key\s*===?\s*['"] ['"]/.test(js)) add("error", "nav", "스페이스와 PageUp, PageDown 이동은 쓰지 않는다. 방향키만 쓴다");
   for (const m of rest.matchAll(/\b(?:src|href)=["'](https?:\/\/[^"']+)/g)) if (!/fonts\.(?:googleapis|gstatic)\.com|font|pretendard|woff/i.test(m[1])) add("warn", "external", `외부 리소스: ${m[1].slice(0, 60)}. 파일을 덱 폴더에 내려받아 상대 경로로 쓴다(글꼴 CSS는 번들 때 인라인된다)`);
   for (const m of css.matchAll(/url\(\s*["']?(https?:\/\/[^)"']+)/g)) if (!/fonts\.(?:googleapis|gstatic)\.com/.test(m[1])) add("warn", "external", `외부 리소스: ${m[1].slice(0, 60)}. 파일을 덱 폴더에 내려받아 상대 경로로 쓴다`);
+  // 이미지의 대체 텍스트: alt 속성이 없으면 경고한다(장식이면 alt=""를 쓴다).
+  const noAlt = [...rest.matchAll(/<img\b[^>]*>/gi)].filter((m) => !/\balt\s*=/i.test(m[0])).length;
+  if (noAlt) add("warn", "img-alt", `<img> ${noAlt}개에 alt가 없다. 내용을 설명하는 alt를 적고, 장식이면 alt=""로 둔다`);
   // 템플릿의 예제 문구가 남은 채 배포되는 것을 막는다(engine/templates.ts의 문구와 편집기의 새 슬라이드 기본값).
   const PLACEHOLDER = /여기에 적는다|핵심 문장 하나|뒷받침하는 설명을 짧게 쓴다|작은 글자는 보조 정보에만 쓴다|두 번째 본문/;
   const phText = rest.replace(/<[^>]+>/g, " ") + " " + (metaS?.body ?? "");
@@ -155,7 +159,10 @@ export async function runCli(name: string | undefined) {
     console.error(`없는 덱: decks/${name}. 있는 덱: ${have.join(", ") || "(없음)"}. 새 덱은 slidekit new <이름>`);
     process.exit(1);
   }
-  const issues = lint(await Bun.file(file).text());
+  const text = await Bun.file(file).text();
+  const issues = lint(text);
+  // 파일 크기가 필요한 검사는 파일을 읽는 CLI에서만 한다(lint 함수는 순수하게 둔다): 400KB를 넘는 로컬 이미지
+  for (const r of localImageRefs(text, join(import.meta.dir, "..", "decks", name))) if (r.size > 400 * 1024) issues.push({ level: "warn", rule: "image-size", msg: `이미지 ${r.rel}가 ${(r.size / 1024).toFixed(0)} KB다. 줄이면 번들이 가벼워진다(slidekit image <덱> <파일> --max 1600 으로 다시 저장)` });
   for (const i of issues) console.log(`${i.level} ${i.rule}: ${i.msg}`);
   const errs = issues.filter((i) => i.level === "error").length;
   console.log(errs ? `실패: 오류 ${errs}개` : `통과 (경고 ${issues.length}개)`);

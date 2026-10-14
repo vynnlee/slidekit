@@ -88,7 +88,7 @@
 - 세로나 좁은 창에서는 무대 비율(16:9)을 유지한 채 줄어들고, 남는 위아래나 좌우는 `--sk-bg`로 채워진다. 화면에 안내나 버튼을 띄우지 않는다.
 - 접근성: 무대 `#sk-stage`는 `role="main"`, 전체 보기는 `role="dialog"`(`aria-label` "Slide overview", 포커스 가능)이다. 썸네일 번호는 `--sk-muted`로 대비를 맞춘다. axe-core 검사에서 슬라이드와 전체 보기 위반 0건.
 - 인쇄(`@media print`): 브라우저 인쇄와 PDF 저장은 슬라이드 한 장을 한 페이지(1920x1080px, 16:9)로 모든 슬라이드를 출력한다. 배경색을 유지하고 노트와 엔진 UI(페이지 번호, 진행률, 전체 보기, 숫자 입력)는 숨긴다. stepper 슬라이드는 1단계 모습이고, 인쇄 직전 `beforeprint`에서 활성 슬라이드의 stepper를 `goto(1)`로 맞췄다가 `afterprint`에서 되돌린다.
-- 그라디언트 채우기(요소 `background-image`, 슬라이드 `style`의 `linear-gradient(각도deg, 색 위치%, ...)`, 색에 `var(--sk-*)` 허용)는 엔진 화면, 번들, 인쇄 CSS에서 같은 computed 값이고 PDF에는 벡터 셰이딩(`/ShadingType 2`)으로 들어간다. 검증은 `engine/test/gradient.cjs`(러너 단계 `engine-gradient`)가 PDF 바이트에서 끝 색을 읽는다. macOS `sips`와 Quick Look은 이 셰이딩을 검게 그리므로 PDF 확인에 쓰지 않는다.
+- 그라디언트 채우기(요소 `background-image`, 슬라이드 `style`의 `linear-gradient(각도deg, 색 위치%, ...)`, 색에 `var(--sk-*)` 허용)는 엔진 화면, 번들, 인쇄 CSS에서 같은 computed 값이고 PDF에는 벡터 셰이딩(`/ShadingType 2`)으로 들어간다. 검증은 `engine/test/gradient.cjs`(러너 단계 `engine-gradient`)가 PDF 바이트에서 끝 색을 읽고, 투명도 있는 스톱(hex8, rgba)이 `/SMask`로 남는지도 본다. macOS `sips`와 Quick Look은 이 셰이딩을 검게 그리므로 PDF 확인에 쓰지 않는다.
 
 ## 4. 디자인 토큰
 

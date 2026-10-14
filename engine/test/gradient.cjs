@@ -55,6 +55,8 @@ const bgs = (p) => p.evaluate(() => ['s1', 'e1', 'e2'].map((id) => getComputedSt
     const shadings = raw.match(/<<[^<>]*?(?:<<[^<>]*?>>[^<>]*?)*\/ShadingType 2[^>]*>>/g) || [];
     check('PDF: 슬라이드 배경이 벡터 셰이딩으로 들어 있고 양 끝 색이 초록(0 1 0)과 파랑(0 0 1)이다',
       /\/C0 \[0 1 0\][^>]*\/C1 \[0 0 1\]/.test(raw) && /\/Coords \[0 0 1920 0\]/.test(raw), raw.match(/\/ShadingType \d/g));
+    // 투명도 있는 스톱(e1, hex8과 rgba)은 Chrome이 SMask(소프트 마스크)로 내보낸다. SMask가 있으면 투명도가 PDF에 살아 있다(일반 알파 항목 /ca는 늘 있어 근거가 못 된다).
+    check('PDF: 투명도 있는 그라디언트 스톱이 SMask로 남아 있다', /\/SMask\s*\d+ 0 R|\/SMask <</.test(raw), { smask: (raw.match(/\/SMask/g) || []).length, ca: (raw.match(/\/ca [.\d]+/g) || []).slice(0, 4) });
     check('PDF: 3스톱 요소(var 스톱 포함)도 셰이딩이며 끝 색이 흰색(1 1 1)이다', /\/Coords \[0 0 0 200\][^]*?\/ShadingType 2/.test(raw) || /\/C1 \[1 1 1\]/.test(raw), shadings.length);
   } finally {
     await b.close(); fs.rmSync(DIR, { recursive: true, force: true });

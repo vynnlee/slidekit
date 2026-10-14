@@ -51,3 +51,13 @@ test("덱 스크립트의 네트워크 호출은 경고(fetch, XMLHttpRequest, W
   }
   expect(lint(withJs("const a = 1; // fetched later")).filter((i) => i.rule === "network")).toEqual([]);
 });
+
+test("예제 문구가 남은 덱은 placeholder 경고(템플릿 문구, 제목/내용 새 슬라이드), 실제 문구는 경고 없음", () => {
+  const withBody = (b: string) => ok.replace("</body>", `${b}</body>`);
+  const w = (h: string) => lint(h).filter((i) => i.rule === "placeholder");
+  expect(w(ok)).toEqual([]);
+  expect(w(withBody('<section data-slide="content"><h2>핵심 문장 하나</h2></section>')).length).toBe(1);
+  expect(w(withBody('<section data-slide="content"><h2>제목</h2>\n<p>내용</p></section>')).length).toBe(1);
+  expect(w(ok.replace('"title"', '"title": "제목을 여기에 적는다", "x"')).length).toBe(1);
+  expect(w(withBody('<!-- 핵심 문장 하나 --><section data-slide="content"><h2>실제 제목</h2></section>'))).toEqual([]);
+});

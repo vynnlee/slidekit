@@ -12,7 +12,7 @@ import { routes as searchRoutes } from "./search-api";
 
 // 하위 명령: slidekit new|lint|pdf|doctor|bundle|deploy <덱>. 해당 스크립트는 argv[2]를 덱 이름으로 읽는다.
 const sub = process.argv[2];
-const SUBS: Record<string, string> = { new: "../engine/new.ts", lint: "../engine/lint.ts", pdf: "../engine/pdf.ts", doctor: "../engine/doctor.ts", bundle: "../bundler/bundle.ts", deploy: "../deploy/deploy.ts" };
+const SUBS: Record<string, string> = { new: "../engine/new.ts", lint: "../engine/lint-cli.ts", pdf: "../engine/pdf.ts", doctor: "../engine/doctor.ts", bundle: "../bundler/bundle.ts", deploy: "../deploy/deploy.ts" };
 const USAGE = `사용법: slidekit [명령]
   (명령 없음)      앱을 연다(덱 목록, 편집기, 발표자 화면)
   new <이름>       새 덱을 만든다

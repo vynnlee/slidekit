@@ -114,12 +114,18 @@ export function lint(html: string): Issue[] {
   if (/['"](?:Space|PageDown|PageUp)['"]|key\s*===?\s*['"] ['"]/.test(js)) add("error", "nav", "스페이스와 PageUp, PageDown 이동은 쓰지 않는다. 방향키만 쓴다");
   for (const m of rest.matchAll(/\b(?:src|href)=["'](https?:\/\/[^"']+)/g)) if (!/fonts\.(?:googleapis|gstatic)\.com|font|pretendard|woff/i.test(m[1])) add("warn", "external", `외부 리소스: ${m[1].slice(0, 60)}. 파일을 덱 폴더에 내려받아 상대 경로로 쓴다(글꼴 CSS는 번들 때 인라인된다)`);
   for (const m of css.matchAll(/url\(\s*["']?(https?:\/\/[^)"']+)/g)) if (!/fonts\.(?:googleapis|gstatic)\.com/.test(m[1])) add("warn", "external", `외부 리소스: ${m[1].slice(0, 60)}. 파일을 덱 폴더에 내려받아 상대 경로로 쓴다`);
+  // 템플릿의 예제 문구가 남은 채 배포되는 것을 막는다(engine/template/index.html의 문구와 편집기의 새 슬라이드 기본값).
+  const PLACEHOLDER = /여기에 적는다|핵심 문장 하나|뒷받침하는 설명을 짧게 쓴다|작은 글자는 보조 정보에만 쓴다|두 번째 본문/;
+  const phText = rest.replace(/<[^>]+>/g, " ") + " " + (metaS?.body ?? "");
+  const ph = phText.match(PLACEHOLDER);
+  if (ph) add("warn", "placeholder", `예제 문구("${ph[0]}")가 남아 있다. 템플릿 문구를 실제 내용으로 바꾼 뒤 배포한다`);
+  if (/<h2>\s*제목\s*<\/h2>\s*<p>\s*내용\s*<\/p>/.test(rest)) add("warn", "placeholder", '제목이 "제목", 본문이 "내용"인 새 슬라이드가 남아 있다. 실제 내용으로 바꾸거나 지운다');
   return out;
 }
 
-if (import.meta.main || process.env.SLIDEKIT_SUB === "lint") {
-  const name = process.argv[2];
-  if (!name) { console.error("사용법: slidekit lint <덱>  (예: slidekit lint my-talk)"); process.exit(1); }
+/** CLI 본체. 앱 서버가 이 파일을 정적으로 import해도(공개 API 검사 등) 하위 명령 실행에 영향이 없도록 engine/lint-cli.ts에서 부른다. */
+export async function runCli(name: string | undefined) {
+    if (!name) { console.error("사용법: slidekit lint <덱>  (예: slidekit lint my-talk)"); process.exit(1); }
   const file = join(import.meta.dir, "..", "decks", name, "index.html");
   if (!(await Bun.file(file).exists())) {
     const have = (await import("node:fs")).readdirSync(join(import.meta.dir, "..", "decks")).filter((d) => !d.startsWith(".") && !d.startsWith("_"));
@@ -132,3 +138,5 @@ if (import.meta.main || process.env.SLIDEKIT_SUB === "lint") {
   console.log(errs ? `실패: 오류 ${errs}개` : `통과 (경고 ${issues.length}개)`);
   process.exit(errs ? 1 : 0);
 }
+
+if (import.meta.main) await runCli(process.argv[2]);

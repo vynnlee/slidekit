@@ -6,23 +6,38 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { DropdownMenu, DropdownTrigger, DropdownContent } from "@/components/ui/dropdown";
 import { MenuItem } from "@/components/ui/menu-item";
 import { previewHtml, type Unit } from "@/lib/deck-source";
+import { acquireThumb } from "@/lib/thumb-queue";
 
-// 스크립트 없는 정적 사본을 줄여 보여 준다. 스크롤 영역 안에 들어오면(좌우 120px 여유) 한 번만 만든다.
-const Thumb = memo(function Thumb({ shell, unit, folder, eager }: { shell: { prefix: string; suffix: string }; unit: Unit; folder: string; eager: boolean }) {
+// 스크립트 없는 정적 사본을 줄여 보여 준다. 화면 근처(좌우 120px)에서 대기열(동시 3개)을 거쳐 올리고,
+// 220px 넘게 멀어지면 내려 53장을 넘겨도 iframe이 쌓이지 않게 한다. 첫 6장(eager)과 활성 슬라이드(keep)는 큐 없이 바로 올리고 내리지 않는다.
+const Thumb = memo(function Thumb({ shell, unit, folder, eager, keep }: { shell: { prefix: string; suffix: string }; unit: Unit; folder: string; eager: boolean; keep: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(128);
   const [seen, setSeen] = useState(eager);
+  const keepRef = useRef(keep);
+  keepRef.current = keep;
+  const releaseRef = useRef<(() => void) | null>(null);
+  useEffect(() => { if (keep) setSeen(true); }, [keep]);
   useEffect(() => {
-    // 가까이(120px) 오면 올리고, 220px 넘게 멀어지면 내려 53장을 끝까지 넘겨도 iframe이 쌓이지 않게 한다.
-    let t: ReturnType<typeof setTimeout> | undefined;
+    let t: ReturnType<typeof setTimeout> | undefined, guard: ReturnType<typeof setTimeout> | undefined, cancel: (() => void) | null = null;
     const root = ref.current!.closest("[data-radix-scroll-area-viewport],[data-slot=scroll-area-viewport]");
-    const near = new IntersectionObserver(([e]) => {
-      clearTimeout(t);
-      if (e.isIntersecting) t = setTimeout(() => setSeen(true), 60);
-    }, { root, rootMargin: "0px 120px 0px 120px" });
-    const far = new IntersectionObserver(([e]) => { if (!e.isIntersecting) { clearTimeout(t); setSeen(false); } }, { root, rootMargin: "0px 220px 0px 220px" });
+    const start = () => {
+      if (cancel || keepRef.current) return;
+      cancel = acquireThumb((release) => {
+        releaseRef.current = release;
+        setSeen(true);
+        guard = setTimeout(release, 5000); // 로드 이벤트가 안 와도 슬롯은 돌려준다
+      });
+    };
+    const stop = () => {
+      clearTimeout(t); clearTimeout(guard);
+      if (keepRef.current) return;
+      cancel?.(); cancel = null; releaseRef.current = null; setSeen(false);
+    };
+    const near = new IntersectionObserver(([e]) => { clearTimeout(t); if (e.isIntersecting) t = setTimeout(start, 60); }, { root, rootMargin: "0px 120px 0px 120px" });
+    const far = new IntersectionObserver(([e]) => { if (!e.isIntersecting) stop(); }, { root, rootMargin: "0px 220px 0px 220px" });
     near.observe(ref.current!); far.observe(ref.current!);
-    return () => { clearTimeout(t); near.disconnect(); far.disconnect(); };
+    return () => { near.disconnect(); far.disconnect(); stop(); };
   }, []);
   useEffect(() => {
     const ro = new ResizeObserver(([e]) => setW(e.contentRect.width));
@@ -38,6 +53,7 @@ const Thumb = memo(function Thumb({ shell, unit, folder, eager }: { shell: { pre
       {doc && (
         <iframe
           sandbox="" srcDoc={doc} tabIndex={-1} title=""
+          onLoad={() => releaseRef.current?.()}
           className="pointer-events-none absolute left-0 top-0 border-0"
           style={{ width: 1920, height: 1080, transform: `scale(${w / 1920})`, transformOrigin: "0 0" }}
         />
@@ -133,7 +149,7 @@ export function Filmstrip(p: Props) {
               >
                 {drop === i && drag !== null && <div className="absolute -left-1.5 inset-y-0 w-0.5 rounded bg-focus-ring" />}
                 {drop === i + 1 && i === p.units.length - 1 && drag !== null && <div className="absolute -right-1.5 inset-y-0 w-0.5 rounded bg-focus-ring" />}
-                <Thumb shell={p.shell} unit={u} folder={p.folder} eager={i < 6} />
+                <Thumb shell={p.shell} unit={u} folder={p.folder} eager={i < 6} keep={i === p.index} />
                 <span aria-hidden="true" className={`pointer-events-none absolute left-1 top-1 rounded px-1 py-0.5 text-micro leading-none tabular-nums text-white ${i === p.index ? "bg-focus-ring" : "bg-black/75"}`}>{i + 1}</span>
                 {p.marked.has(p.origin.get(u.key) ?? -1) && <span aria-hidden="true" className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-focus-ring ring-2 ring-black" />}
               </div>

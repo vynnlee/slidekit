@@ -69,7 +69,8 @@ export function previewHtml(doc: Doc, units: Unit[], folder: string, opts: { emb
   let s = opts.thumb && units[0]
     ? doc.prefix + '<div id="sk-stage" style="transform:none">' + units[0].html.replace(/^<section\b([^>]*)>/i, "<section data-active $1>") + "</div>" + doc.suffix
     : compose(doc, units);
-  const base = `<base href="${location.origin}/decks/${folder}/">`;
+  // 썸네일은 정지 화면이면 충분하다: sandbox로 스크립트는 못 돌지만 CSS 애니메이션은 멈춘다.
+  const base = `<base href="${location.origin}/decks/${folder}/">` + (opts.thumb ? "<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>" : "");
   s = s.replace(/<html\b/i, opts.embed ? (opts.showSteps ? "<html data-sk-embed data-sk-show-steps" : "<html data-sk-embed") : "<html");
   s = s.replace(/<head[^>]*>/i, (h) => h + base);
   if (opts.thumb) {

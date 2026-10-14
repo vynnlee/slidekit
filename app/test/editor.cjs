@@ -37,8 +37,17 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   await p2.close();
   console.log('INFO 썸네일 3개 표시 ' + thumbMs + 'ms'); // 부하에 따라 흔들려 회귀 감시용으로만 쓴다
   check('썸네일 3개 3초 안에 표시', thumbMs < 3000, thumbMs);
-  const nThumbs = await page.locator('iframe[srcdoc]').count();
-  check('필름스트립은 화면 근처 썸네일만 올림', nThumbs < slides(fs.readFileSync(FILE, 'utf8')) || nThumbs <= 12, nThumbs);
+  // 필름스트립을 끝까지 넘겨도(53장 덱) 화면 근처 썸네일만 iframe으로 남는다
+  const nSlides = slides(fs.readFileSync(FILE, 'utf8'));
+  const nIframes = () => page.locator('iframe[srcdoc]').count();
+  const vp = page.locator('[data-testid=filmstrip] [data-slot=scroll-area-viewport], [data-testid=filmstrip] [data-radix-scroll-area-viewport]').first();
+  const firstN = await nIframes();
+  for (let x = 0; x <= 12000; x += 600) { await vp.evaluate((e, v) => { e.scrollLeft = v; }, x); await sleep(120); }
+  await sleep(600);
+  const endN = await nIframes();
+  console.log('INFO 필름스트립 iframe 수 처음 ' + firstN + ', 끝까지 넘긴 뒤 ' + endN + ' (슬라이드 ' + nSlides + '장)');
+  check('필름스트립은 끝까지 넘겨도 근처 썸네일만 올림', nSlides < 20 || endN <= 14, endN);
+  await vp.evaluate((e) => { e.scrollLeft = 0; }); await sleep(600);
   // 확대 축소, Tab 선택
   const wid = async () => (await frameEl.boundingBox()).width;
   const w0 = await wid();

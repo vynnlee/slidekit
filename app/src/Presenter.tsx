@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronsDown, Minus, MonitorPlay, Pause, Play, Plus, RotateCcw } from "lucide-react";
+import { ArrowLeft, ChevronsDown, Minus, MonitorPlay, Smartphone, Pause, Play, Plus, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabItem, TabPanel } from "@/components/ui/tabs";
@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/u
 import { toast } from "./Toaster";
 import { markdown } from "@/lib/markdown";
 import { saveRun, type Run } from "@/lib/rehearsals";
+import { isLocalOrigin, remoteUrl, useRemoteHost, type Cmd } from "@/lib/remote-host";
 import { cn } from "@/lib/utils";
 import { Field } from "@/components/ui/field";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -255,6 +256,18 @@ export function Presenter({ id }: { id: string }) {
     }
     if (issues.length) setCheck(issues); else void start();
   };
+  // 휴대폰 리모컨: 명령은 키보드와 같은 동작(post/goto/타이머)으로 실행하고, 상태는 서버로 올린다. 이 대화상자와 코드는 발표자 화면에만 있다.
+  const [remoteOpen, setRemoteOpen] = useState(false);
+  const runCmd = (c: Cmd) => {
+    if (c.type === "next" || c.type === "prev") post(curRef.current, { type: c.type });
+    else if (c.type === "goto") goto(Math.min(Math.max(1, c.n), Math.max(1, total)));
+    else if (c.type === "timer") { if (c.action === "toggle") setRunning((r) => !r); else { setRunning(false); setElapsed(0); accMs.current = 0; dwell.current = {}; } }
+    else send({ type: "setblank", mode: c.mode });
+  };
+  const curSlide = info?.slides[pos.slide - 1];
+  const remote = useRemoteHost(deck?.folder, info ? { slide: pos.slide, total, title: curSlide?.title ?? curSlide?.kind ?? `Slide ${pos.slide}`, notes: curSlide?.notes ?? "", elapsed, running, blank, target } : null, runCmd);
+  const [remoteErr, setRemoteErr] = useState("");
+  const startRemote = () => { setRemoteErr(""); remote.start().catch(() => setRemoteErr("Could not start the remote. Check that the server is running.")); };
   // 발표 전 가벼운 점검: 슬라이드 수, 노트, 글꼴, 표시할 화면. 발표 버튼의 툴팁으로만 보인다.
   const withNotes = info?.slides.filter((x) => x.notes).length ?? 0;
   let fonts = "";
@@ -301,6 +314,9 @@ export function Presenter({ id }: { id: string }) {
               <SelectContent>{screens.map((l, i) => <SelectItem key={l} index={i} value={l}>{l}</SelectItem>)}</SelectContent>
             </Select>
           )}
+          <Tooltip content="Use your phone as a remote" side="bottom">
+            <Button variant="ghost" size="compact" leadingIcon={Smartphone} aria-pressed={!!remote.session} onClick={() => setRemoteOpen(true)}><span className="max-[900px]:sr-only">Remote</span></Button>
+          </Tooltip>
           <Tooltip content={readyNote} side="bottom">
             <Button variant={win ? "secondary" : "primary"} size="compact" leadingIcon={MonitorPlay} onClick={present}>{win ? "Focus presentation" : "Present"}</Button>
           </Tooltip>
@@ -422,6 +438,28 @@ export function Presenter({ id }: { id: string }) {
           </div>
         )}
       </div>
+      <Dialog open={remoteOpen} onOpenChange={setRemoteOpen}>
+        <DialogContent size="sm">
+          <DialogTitle>Phone remote</DialogTitle>
+          <DialogDescription>Control the slides from your phone. The code works once and expires in 2 hours.</DialogDescription>
+          {remote.session ? (
+            <div className="flex flex-col gap-2 pt-2">
+              <Field readOnly aria-label="Remote address" value={remoteUrl(deck.folder, remote.session.code)} onFocus={(e) => e.currentTarget.select()} />
+              <p className="text-body tabular-nums">Code: <span aria-label="Pairing code" className="font-medium">{remote.session.code}</span></p>
+              {isLocalOrigin() && <p className="text-caption text-muted-foreground">This page is open on this computer only. Open slidekit through your tailnet address so the phone can reach it.</p>}
+              <div className="flex justify-end gap-2 pt-1">
+                <Button variant="ghost" size="compact" onClick={() => { navigator.clipboard?.writeText(remoteUrl(deck.folder, remote.session!.code)).then(() => toast("Remote address copied", { ms: 2000 }), () => toast("Could not copy the address", { ms: 3000 })); }}>Copy address</Button>
+                <Button variant="secondary" size="compact" onClick={() => { void remote.stop(); }}>Stop remote</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2 pt-2">
+              <p role={remoteErr ? "alert" : undefined} className={remoteErr ? "text-caption text-destructive" : "text-caption text-muted-foreground"}>{remoteErr || "Anyone with the address can move the slides until you stop the remote."}</p>
+              <Button variant="primary" size="compact" className="self-end" onClick={startRemote}>Start remote</Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
       <Dialog open={!!check} onOpenChange={(o) => { if (!o) setCheck(null); }}>
         <DialogContent size="sm">
           <DialogTitle>Before you present</DialogTitle>

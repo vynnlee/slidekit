@@ -4,6 +4,7 @@ import { Suspense, lazy, useEffect, useState, type ComponentType, type ReactNode
 const DeckList = lazy(() => import("./DeckList").then((m) => ({ default: m.DeckList })));
 const Presenter = lazy(() => import("./Presenter").then((m) => ({ default: m.Presenter })));
 const Editor = lazy(() => import("./Editor").then((m) => ({ default: m.Editor })));
+const Remote = lazy(() => import("./Remote").then((m) => ({ default: m.Remote })));
 
 // 개발용 데모 라우트는 production 번들에서 빠진다(NODE_ENV 분기는 번들 때 접혀 import가 사라진다).
 const dev: Record<string, ComponentType> = {};
@@ -33,9 +34,11 @@ export function App() {
   }, []);
   const p = path.match(/^\/present\/([^/]+)/);
   const e = path.match(/^\/edit\/([^/]+)/);
+  const r = path.match(/^\/remote\/([^/]+)/);
   useEffect(() => { const m = p ?? e; if (m) recordRecent(decodeURIComponent(m[1])); }, [p?.[1], e?.[1]]);
   const Demo = dev[path];
   if (Demo) return <Page><Demo /></Page>;
+  if (r) return <Page><Remote id={decodeURIComponent(r[1])} /></Page>; // 휴대폰 리모컨: 최근 목록에 기록하지 않는다
   if (p) return <Page><Presenter id={decodeURIComponent(p[1])} /></Page>;
   return <Page>{e ? <Editor id={decodeURIComponent(e[1])} /> : <DeckList />}</Page>;
 }

@@ -5,6 +5,8 @@ import { TextArea } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 
 const MAX = 2000; // app/comments.ts의 본문 상한과 같다
+// 글이 비어 있을 때만 보이는 자주 쓰는 요청 문구. 누르면 입력창에 채워 바로 고칠 수 있다.
+const QUICK = ["Make this shorter", "Simplify the wording", "Match the other slides"];
 
 interface CommentComposerProps {
   /** 전송한다. 실패하면 던지거나 reject해서 글을 남기고 다시 시도하게 한다. */
@@ -49,6 +51,11 @@ export function CommentComposer({ onSend, onCancel, target, channel, className }
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
         }}
       />
+      {!text && (
+        <div role="group" aria-label="Quick comments" className="flex flex-wrap gap-1">
+          {QUICK.map((q) => <Button key={q} size="compact" variant="ghost" onClick={() => { setText(q); ref.current?.focus(); }}>{q}</Button>)}
+        </div>
+      )}
       {channel === false && <p className="px-1 text-micro text-muted-foreground">Claude is not connected. The comment is saved and sent when a session connects.</p>}
       {err && <p role="alert" className="px-1 text-micro">{err}</p>}
       <div className="flex items-center gap-2">

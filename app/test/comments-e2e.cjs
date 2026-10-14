@@ -47,6 +47,8 @@ const json = { 'Content-Type': 'application/json' };
     await box.waitFor({ timeout: 1500 }).catch(() => {});
     if (!(await box.count())) { await page.getByRole('button', { name: 'Comment', exact: true }).click(); await box.waitFor({ timeout: 3000 }).catch(() => {}); box = page.getByRole('textbox', { name: 'Comment' }); }
     check('C 키(또는 툴바 버튼)로 작성창이 열린다', (await box.count()) === 1);
+    await page.getByRole('button', { name: 'Make this shorter' }).click();
+    check('빠른 문구 칩이 입력창을 채운다(글이 있으면 칩은 사라진다)', (await box.inputValue()) === 'Make this shorter' && (await page.getByRole('group', { name: 'Quick comments' }).count()) === 0);
     check('연결 안 됨 안내가 작성창에도 보인다', /not connected/i.test(await page.getByRole('group', { name: 'New comment' }).textContent()));
     await box.fill('E2E 코멘트입니다');
     const posted = page.waitForResponse((r) => r.url().endsWith('/api/comments') && r.request().method() === 'POST');

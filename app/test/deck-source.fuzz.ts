@@ -15,6 +15,7 @@ const inner = [
   "<SECTION class=\"card\"><p>중첩</p></SECTION>", "<section class=\"nested\"><section><b>깊은</b></section></section>",
   "<img src=\"a.png\"/>", "<br>", "<aside data-notes>노트 &lt;/section&gt;</aside>", "<svg><g><path d=\"M0 0\"/></g></svg>",
   "<section-card>커스텀</section-card>", "<sectionx>?</sectionx>", "<textarea></section></textarea>",
+  "<xmp></section><section data-slide=\"x\"></xmp>", "<noembed></section></noembed>", "<noframes><section data-slide=\"x\"></noframes>", "<iframe srcdoc=\"x\"></section></iframe>",
 ];
 const slideAttrs = ["data-slide=\"content\"", "data-slide=\"chapter\" data-title=\"장\"", "class=\"a\" data-slide=\"content\"",
   "data-title=\"a>b\" data-slide=\"chapter\"", "id=\"x\" data-steps=\"3\" data-slide='content'", "DATA-SLIDE=\"content\"",

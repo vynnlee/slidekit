@@ -9,7 +9,7 @@ export const newKey = () => `u${++seq}`;
 
 // 작은 토크나이저로 최상위 section의 범위를 찾는다. 주석, 따옴표 속성 값, script, style, textarea, title 안의
 // "<section"과 "</section>"은 경계로 보지 않는다. 최상위 section 중 data-slide 속성이 있는 것만 슬라이드다.
-const RAW = new Set(["script", "style", "textarea", "title"]);
+const RAW = new Set(["script", "style", "textarea", "title", "xmp", "noembed", "noframes", "plaintext", "iframe"]);
 function sections(src: string) {
   const out: { a: number; b: number; slide: boolean }[] = [];
   const n = src.length;

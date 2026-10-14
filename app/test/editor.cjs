@@ -457,6 +457,20 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('삭제 실행 취소 한 번에 둘 다 돌아옴', (await nKids()) === k0n, await nKids());
   await page.keyboard.press('Escape');
 
+  // 묶음 Inspector: 값이 다르면 Mixed, Align은 묶음 상자 기준이고 한 번에 실행 취소
+  await fr().locator('[data-active] > :nth-child(1)').first().click(); await sleep(250);
+  await fr().locator('[data-active] > :nth-child(2)').first().click({ modifiers: ['Shift'] }); await sleep(400);
+  check('묶음 헤더가 2 layers', (await page.getByRole('button', { name: 'Show in layers' }).textContent()).includes('2 layers'));
+  check('값이 다른 필드는 Mixed', (await page.locator('input[placeholder="Mixed"]').count()) >= 1);
+  const lefts = () => inDoc((s) => [s.children[0].getBoundingClientRect().left, s.children[1].getBoundingClientRect().left]);
+  await page.getByRole('button', { name: 'Align right', exact: true }).click(); await sleep(400);
+  const rights = await inDoc((s) => [s.children[0].getBoundingClientRect().right, s.children[1].getBoundingClientRect().right]);
+  check('묶음 Align right가 오른쪽 가장자리를 맞춤', Math.abs(rights[0] - rights[1]) < 1.5, rights);
+  await focusBody(); await page.keyboard.press('Meta+z'); await sleep(400);
+  const back = await tr2();
+  check('Align 실행 취소 한 번에 둘 다 되돌아감', back.join('') === '', back);
+  void lefts; await focusBody(); await page.keyboard.press('Escape');
+
   // 마퀴: 빈 곳을 끌면 겹친 최상위 요소가 모두 선택된다
   await focusBody(); await page.keyboard.press('Escape'); await sleep(200);
   const sbox = await fr().locator('[data-active]').first().boundingBox();

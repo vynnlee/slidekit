@@ -92,6 +92,8 @@ type Props = {
   comments: Comment[];
   onJump(c: Comment): void;
   channel: boolean | null;
+  more: Element[]; // 다중 선택의 나머지(같은 부모). 편집은 모두에 적용된다
+  onAlignGroup(axis: "h" | "v", where: "start" | "center" | "end"): void; // 묶음 전체의 상자를 기준으로 정렬
   onResolve(c: Comment, resolved: boolean): void;
   onTrust?(c: Comment): void;
   hoverId: string | null;
@@ -143,11 +145,14 @@ export function Inspector(p: Props) {
   const inl = (prop: string) => el?.style.getPropertyValue(prop) ?? "";
   const val = (prop: string) => inl(prop) || cs?.getPropertyValue(prop) || "";
   const set = (prop: string, v: string) => { p.onStyle(prop, v); bump((n) => n + 1); };
+  const multi = p.more.length > 0;
+  // 다중 선택에서 대표와 값이 다른 요소가 있으면 Mixed로 보인다
+  const mixedOf = (prop: string) => multi && !!win && p.more.some((m) => ((m as HTMLElement).style.getPropertyValue(prop) || win.getComputedStyle(m).getPropertyValue(prop)) !== val(prop));
   const scrub = { onScrubStart: () => p.onScrub(true), onScrubEnd: () => p.onScrub(false) };
 
   // 계산값 그대로 쓰는 일반 숫자 필드
   const n = (prop: string, label: ReactNode, aria: string, o: { unit?: string; step?: number; min?: number; max?: number } = {}) => (
-    <NumberField label={label} aria-label={aria} value={val(prop)} muted={!inl(prop)} dirty={!!inl(prop)} onReset={() => set(prop, "")} onChange={(v) => set(prop, v)} {...scrub} {...o} />
+    <NumberField label={label} aria-label={aria} value={val(prop)} mixed={mixedOf(prop)} muted={!inl(prop)} dirty={!!inl(prop)} onReset={() => set(prop, "")} onChange={(v) => set(prop, v)} {...scrub} {...o} />
   );
 
   const [tx, ty] = el ? readTranslate(el) : [0, 0];
@@ -168,19 +173,21 @@ export function Inspector(p: Props) {
   const blockParent = !parentFlex && !parentGrid;
   const hHow = parentFlexRow ? "auto margins" : parentGrid ? "justify-self" : parentFlexCol ? "align-self" : isText ? "text-align" : "auto margins";
   const vHow = parentFlexCol ? "auto margins" : "align-self";
-  const hOff = blockParent && !isText && !!el && isAuto(el, "width") ? "Set a width first, a full-width block has no room to move" : "";
-  const vOff = blockParent ? "Needs a flex or grid parent" : "";
+  const hOff = !multi && blockParent && !isText && !!el && isAuto(el, "width") ? "Set a width first, a full-width block has no room to move" : "";
+  const vOff = !multi && blockParent ? "Needs a flex or grid parent" : "";
   const autoMargins = (side: "h" | "v", where: "start" | "center" | "end") => {
     const [a, b] = side === "h" ? ["margin-left", "margin-right"] : ["margin-top", "margin-bottom"];
     set(a, where === "start" ? "0" : "auto"); set(b, where === "end" ? "0" : "auto");
   };
   const alignH = (where: "start" | "center" | "end") => {
+    if (multi) return p.onAlignGroup("h", where);
     if (parentFlexRow) autoMargins("h", where);
     else if (parentFlexCol || parentGrid) set(parentGrid ? "justify-self" : "align-self", where === "start" ? "flex-start" : where === "end" ? "flex-end" : "center");
     else if (isText) set("text-align", where === "start" ? "left" : where === "end" ? "right" : "center");
     else autoMargins("h", where);
   };
   const alignV = (where: "start" | "center" | "end") => {
+    if (multi) return p.onAlignGroup("v", where);
     if (parentFlexCol) autoMargins("v", where);
     else if (parentFlexRow || parentGrid) set("align-self", where === "start" ? "flex-start" : where === "end" ? "flex-end" : "center");
   };
@@ -282,8 +289,8 @@ export function Inspector(p: Props) {
               <Tooltip content="Show in Layers" side="top">
                 <Button aria-label="Show in layers" data-depth={depthOf(el, p.slide)} variant="ghost" size="compact" leadingIcon={SelIcon} className="w-full justify-start" onClick={p.onShowLayers}>
                   <span className="flex min-w-0 flex-1 items-center gap-2">
-                    <span className="min-w-0 truncate text-left">{nameOf(el)}</span>
-                    <span className="shrink-0 rounded bg-surface-2 px-1 text-micro text-muted-foreground">{el.tagName.toLowerCase()}</span>
+                    <span className="min-w-0 truncate text-left">{multi ? `${p.more.length + 1} layers` : nameOf(el)}</span>
+                    {!multi && <span className="shrink-0 rounded bg-surface-2 px-1 text-micro text-muted-foreground">{el.tagName.toLowerCase()}</span>}
                   </span>
                 </Button>
               </Tooltip>

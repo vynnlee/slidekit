@@ -16,6 +16,7 @@ import { ExportMenu } from "./ExportMenu";
 import { ChannelBadge } from "./CommentsPanel";
 import { ReplyToasts } from "./ReplyToasts";
 import { useCommentsLive } from "@/lib/use-comments-live";
+import { canMove, readTranslate, toLocal, writeTranslate } from "@/lib/move";
 import { numbering } from "@/lib/comment-state";
 import { firstChild, isLeaf, isLockedDeep, parentOf, siblings } from "@/lib/selection";
 import { startPresentation } from "@/lib/present";
@@ -332,8 +333,27 @@ export function Editor({ id }: { id: string }) {
     const p = s && sel ? parentOf<Element>(s, sel) : null;
     if (p) pickSel(p);
   };
-  const style = (prop: string, v: string) => { const el = sel as HTMLElement | null; if (!el) return; if (v) el.style.setProperty(prop, v); else el.style.removeProperty(prop); commit("style:" + prop); };
-  const elAttr = (name: string, v: string | null) => { const el = sel as HTMLElement | null; if (!el) return; if (v === null) el.removeAttribute(name); else el.setAttribute(name, v); pickSel(el); commit("elattr:" + name); };
+  const style = (prop: string, v: string) => { const els = [sel, ...more].filter(Boolean) as HTMLElement[]; if (!els.length) return; for (const el of els) { if (v) el.style.setProperty(prop, v); else el.style.removeProperty(prop); } commit("style:" + prop); };
+  // 묶음 정렬: 모두를 감싸는 상자의 왼쪽, 가운데, 오른쪽(위, 가운데, 아래)에 맞춘다. translate만 바꾼다(SPEC 9.5).
+  const alignGroup = (axis: "h" | "v", where: "start" | "center" | "end") => {
+    const s = canvas.current?.slide(indexRef.current);
+    const els = ([sel, ...more].filter(Boolean) as HTMLElement[]).filter((e) => !isLockedDeep(e) && canMove(e));
+    if (!s || els.length < 2) return;
+    const ks = s.getBoundingClientRect().width / 1920 || 1;
+    const rs = els.map((e) => e.getBoundingClientRect());
+    const lo = (r: DOMRect) => (axis === "h" ? r.left : r.top), hi = (r: DOMRect) => (axis === "h" ? r.right : r.bottom);
+    const a = Math.min(...rs.map(lo)), b = Math.max(...rs.map(hi));
+    els.forEach((e, i) => {
+      const r = rs[i], size = hi(r) - lo(r);
+      const target = where === "start" ? a : where === "end" ? b - size : (a + b) / 2 - size / 2;
+      const d = (target - lo(r)) / ks;
+      const [lx, ly] = toLocal(e, axis === "h" ? d : 0, axis === "v" ? d : 0);
+      const [tx, ty] = readTranslate(e);
+      writeTranslate(e, tx + lx, ty + ly);
+    });
+    commit();
+  };
+  const elAttr = (name: string, v: string | null) => { const els = [sel, ...more].filter(Boolean) as HTMLElement[]; if (!els.length) return; for (const el of els) { if (v === null) el.removeAttribute(name); else el.setAttribute(name, v); } pickGroup(els); commit("elattr:" + name); };
   const slideStyle = (prop: string, v: string) => { const s = canvas.current?.slide(indexRef.current); if (!s) return; if (v) s.style.setProperty(prop, v); else s.style.removeProperty(prop); commit("slide:" + prop); };
   const attr = (name: string, v: string | null) => {
     const s = canvas.current?.slide(indexRef.current);
@@ -508,7 +528,7 @@ export function Editor({ id }: { id: string }) {
           </div>
         }
         right={
-          <Inspector sel={sel} slide={canvas.current?.slide(index) ?? null} selId={selId} tab={tab} onTab={setTab}
+          <Inspector sel={sel} slide={canvas.current?.slide(index) ?? null} more={more} onAlignGroup={alignGroup} selId={selId} tab={tab} onTab={setTab}
             comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} hoverId={hoverId} onHover={setHoverId} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
         }
       >

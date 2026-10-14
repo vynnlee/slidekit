@@ -16,10 +16,14 @@ const dryRun = process.argv.includes("--dry-run") || !!process.env.SLIDEKIT_DEPL
 const token = process.env.CLOUDFLARE_API_TOKEN
   ?? Bun.spawnSync(["security", "find-generic-password", "-s", "slidekit-cloudflare-token", "-w"]).stdout.toString().trim();
 if (!token && !dryRun) { console.error("Cloudflare 토큰이 없습니다. 키체인 slidekit-cloudflare-token에 토큰을 저장하세요(deploy/README.md 1절)."); process.exit(1); }
-const env = { ...process.env, CLOUDFLARE_API_TOKEN: token };
+// wrangler 자식 프로세스에는 비밀번호를 넘기지 않는다(같은 사용자의 ps로 보이지 않게).
+const { SLIDEKIT_DEPLOY_PASSWORD: _pw, ...baseEnv } = process.env;
+const env = { ...baseEnv, CLOUDFLARE_API_TOKEN: token };
+const MIN_PW = 8;
 
 function wrangler(...args: string[]) {
-  const r = Bun.spawnSync(["bunx", "wrangler", ...args], { cwd: workerDir, env, stdout: "inherit", stderr: "inherit" });
+  // 버전을 고정한다. 최신 패키지를 토큰이 있는 환경에서 실행하지 않는다(올릴 때는 이 숫자를 의도적으로 바꾼다).
+  const r = Bun.spawnSync(["bunx", "wrangler@4.150.0", ...args], { cwd: workerDir, env, stdout: "inherit", stderr: "inherit" });
   if (r.exitCode !== 0) throw new Error(`wrangler 실패 (종료 코드 ${r.exitCode})`); // finally가 임시 폴더를 지우도록 throw
 }
 
@@ -41,18 +45,21 @@ if (!/^[\w-]+$/.test(arg)) { console.error("덱 이름이 올바르지 않습니
 if (!existsSync(join(root, "dist", `${arg}.html`))) { console.error(`dist/${arg}.html이 없습니다. 먼저 slidekit bundle ${arg} 로 묶으세요.`); process.exit(1); }
 const html = readFileSync(join(root, "dist", `${arg}.html`), "utf8");
 const metaJson = html.match(/<script[^>]*id="deck-meta"[^>]*>([\s\S]*?)<\/script>/)?.[1];
-const visibility = metaJson ? (JSON.parse(metaJson).visibility ?? "public") : "public";
+// deck-meta를 읽지 못하면 공개 범위를 알 수 없으므로 올리지 않는다(비밀번호를 걸려던 덱이 공개로 올라가는 일을 막는다).
+let dm: { visibility?: string; lang?: string; title?: string; lockTitle?: boolean } = {};
+try { dm = JSON.parse(metaJson ?? ""); } catch { console.error("deck-meta를 읽지 못했습니다. 공개 범위를 알 수 없어 올리지 않습니다. slidekit lint로 점검하세요."); process.exit(1); }
+const visibility = dm.visibility ?? "public";
 if (visibility !== "public" && visibility !== "password") { console.error(`알 수 없는 visibility: ${visibility}`); process.exit(1); }
 
-const lang = metaJson ? JSON.parse(metaJson).lang : undefined;
-const title = metaJson ? JSON.parse(metaJson).title : undefined;
-// 비밀번호 페이지에 덱 제목을 보여 주려고 title을 함께 올린다(비밀 값이 아니다).
+const lang = dm.lang;
+// 공개 덱은 제목을 올린다. 비밀번호 덱은 인증 전에 제목이 보이므로 deck-meta에 "lockTitle": true를 적은 경우에만 올린다.
+const title = visibility === "public" || dm.lockTitle === true ? dm.title : undefined;
 const meta: Record<string, string> = { visibility, ...(lang === "en" || lang === "ko" ? { lang } : {}), ...(typeof title === "string" && title ? { title: title.slice(0, 120) } : {}) };
 console.log(`덱 ${arg}: ${(statSync(join(root, "dist", `${arg}.html`)).size / 1024).toFixed(0)} KB, 공개 범위 ${visibility === "password" ? "비밀번호" : "공개"}`);
 if (visibility === "password") {
   // 앱의 Export 메뉴는 비밀번호를 환경 변수로 넘긴다(명령줄과 로그에 남기지 않는다). 터미널에서는 숨김 입력으로 묻는다.
   const pw = process.env.SLIDEKIT_DEPLOY_PASSWORD ?? askHidden("덱 비밀번호: ");
-  if (!pw || (process.env.SLIDEKIT_DEPLOY_PASSWORD === undefined && pw !== askHidden("다시 입력: "))) { console.error("비밀번호가 비었거나 서로 다릅니다"); process.exit(1); }
+  if (pw.length < MIN_PW || (process.env.SLIDEKIT_DEPLOY_PASSWORD === undefined && pw !== askHidden("다시 입력: "))) { console.error(`비밀번호는 ${MIN_PW}자 이상이어야 하고 두 번 입력이 같아야 합니다`); process.exit(1); }
   Object.assign(meta, await hashPassword(pw));
 }
 

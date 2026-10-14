@@ -1,3 +1,4 @@
+import { deckFolder } from "./folder";
 import { join } from "node:path";
 import { copyFileSync, existsSync, readFileSync, renameSync, statSync, watch, writeFileSync } from "node:fs";
 
@@ -31,8 +32,7 @@ function emit(event: string, data: unknown) {
 }
 
 // 덱 폴더 이름만 허용한다(경로 이탈 방지).
-const validDeck = (d: unknown): d is string =>
-  typeof d === "string" && /^[\w.-]+$/.test(d) && d !== "." && d !== ".." && existsSync(join(decksDir, d));
+const validDeck = (d: unknown): d is string => deckFolder(d, false) !== null; // 규칙은 app/folder.ts 한 곳
 const file = (deck: string) => join(decksDir, deck, "comments.json");
 // 파일을 믿지 않는다(남에게 받은 덱의 comments.json은 사용자가 쓴 것이 아니다). 형식이 틀린 항목은 버리고 길이를 자른다.
 const ID = /^[\w][\w.-]{0,63}$/;

@@ -111,7 +111,7 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
   const copy = async () => { try { await navigator.clipboard.writeText(url); setCopied(true); } catch { /* 클립보드 거부: 링크를 직접 복사한다 */ } };
   const copyLast = async () => { try { await navigator.clipboard.writeText(last!.url); say("Link copied"); } catch { say("Could not copy. Open Publish to see the link"); } };
   const needPw = visibility === "password";
-  const canPublish = !busy && !url && (!needPw || (pw.length > 0 && pw === pw2));
+  const canPublish = !busy && !url && (!needPw || (pw.length >= 8 && pw === pw2));
 
   return (
     <>
@@ -143,6 +143,7 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
                   <Field type="password" aria-label="Deck password" placeholder="Password" autoComplete="new-password" value={pw} disabled={busy || !!url} onChange={(e) => setPw(e.target.value)} />
                   <Field type="password" aria-label="Confirm password" placeholder="Confirm password" autoComplete="new-password" value={pw2} disabled={busy || !!url} onChange={(e) => setPw2(e.target.value)} />
                   {pw2 && pw !== pw2 && <span className="text-caption text-muted-foreground">Passwords do not match</span>}
+                  {pw.length > 0 && pw.length < 8 && <span className="text-caption text-muted-foreground">Use at least 8 characters</span>}
                 </div>
               )}
               {last && !url && !busy && stage === "idle" && (

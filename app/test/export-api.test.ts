@@ -38,3 +38,19 @@ test("download: kind 검증과 산출물이 없으면 404", () => {
   expect(r["/api/decks/:id/download"].GET(req("vibe-coding-workshop", undefined, "http://x/?kind=exe")).status).toBe(400);
   expect(r["/api/decks/:id/download"].GET(req("no-such", undefined, "http://x/?kind=html")).status).toBe(404);
 });
+
+test("비밀번호 덱: 6자 미만이나 없는 비밀번호는 400, 공개 범위는 덱 원본으로 판단", async () => {
+  const { mkdirSync, rmSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const dir = join(import.meta.dir, "..", "..", "decks", "qa-pwlen");
+  mkdirSync(dir, { recursive: true });
+  try {
+    writeFileSync(join(dir, "index.html"), `<html data-slidekit="1"><head><script type="application/json" id="deck-meta">{"title":"t","visibility":"password"}</script></head><body><section data-slide="cover"><h1>x</h1></section></body></html>`);
+    let ran = 0;
+    const r = makeRoutes(async () => { ran++; return { code: 0, lines: [] }; });
+    const p = (b: unknown) => r["/api/decks/:id/deploy"].POST(req("qa-pwlen", b));
+    expect((await p({ confirm: true })).status).toBe(400);
+    expect((await p({ confirm: true, password: "1234567" })).status).toBe(400);
+    expect(ran).toBe(0);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

@@ -54,3 +54,17 @@ test("head: 파비콘, og:title, description, 비밀번호 덱의 noindex, lang�
     expect(out).toContain('name="viewport"');
   } finally { rmSync(dir, { recursive: true, force: true }); rmSync(join(root, "dist", "_bundletest.html"), { force: true }); }
 });
+
+test("저장소 내부(.git, 다른 덱, .env)와 덱 밖을 가리키는 심볼릭 링크는 번들에 넣지 않는다", () => {
+  const { symlinkSync } = require("node:fs");
+  mkdirSync(dir, { recursive: true });
+  try {
+    for (const [src, why] of [["../../.git/config", ".git"], ["../vibe-coding-workshop/index.html", "다른 덱"], ["../../.env", ".env"], ["../../deploy/deploy.ts", "deploy"], ["link.txt", "심볼릭 링크"]] as const) {
+      if (src === "link.txt") { try { symlinkSync("/etc/hosts", join(dir, "link.txt")); } catch { /* 이미 있음 */ } }
+      writeFileSync(join(dir, "index.html"), `<html data-slidekit="1"><head><title>t</title><script type="application/json" id="deck-meta">{"title":"t"}</script></head><body><section data-slide="cover"><img src="${src}"></section></body></html>`);
+      const r = Bun.spawnSync(["bun", join(root, "bundler", "bundle.ts"), "_bundletest"], { stderr: "pipe" });
+      expect(r.exitCode, why).not.toBe(0);
+      expect(r.stderr.toString(), why).toMatch(/덱 폴더 밖|심볼릭 링크/);
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); rmSync(join(root, "dist", "_bundletest.html"), { force: true }); }
+});

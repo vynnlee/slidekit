@@ -33,8 +33,9 @@ const spawnRun: Run = async (script, id, env = {}, onLine) => {
 
 const dist = (id: string, ext: string) => join(root, "dist", `${id}.${ext}`);
 const meta = (id: string) => {
-  const html = existsSync(dist(id, "html")) ? readFileSync(dist(id, "html"), "utf8") : readFileSync(join(root, "decks", id, "index.html"), "utf8");
-  try { return JSON.parse(html.match(/<script[^>]*id="deck-meta"[^>]*>([\s\S]*?)<\/script>/)?.[1] ?? "{}"); } catch { return {}; }
+  // 공개 범위는 항상 덱 원본의 deck-meta로 판단한다(오래된 dist가 public이라고 말해도 따르지 않는다).
+  const html = readFileSync(join(root, "decks", id, "index.html"), "utf8");
+  try { return JSON.parse(html.match(/<script[^>]*id="deck-meta"[^>]*>([\s\S]*?)<\/script>/)?.[1] ?? ""); } catch { return null; } // 읽지 못하면 공개로 가정하지 않는다
 };
 
 export function makeRoutes(run: Run = spawnRun) {
@@ -80,16 +81,20 @@ export function makeRoutes(run: Run = spawnRun) {
         if (!id) return bad("deck", 404);
         const b = (await req.json().catch(() => null)) as { confirm?: unknown; password?: unknown } | null;
         if (!b || b.confirm !== true) return bad("confirm");
-        const visibility = meta(id).visibility ?? "public";
+        const dm = meta(id);
+        if (!dm) return bad("deck-meta"); // 공개 범위를 알 수 없으면 올리지 않는다
+        const visibility = dm.visibility ?? "public";
         let pw = "";
         if (visibility === "password") {
-          if (typeof b.password !== "string" || !b.password || b.password.length > 200) return bad("password");
+          if (typeof b.password !== "string" || b.password.length < 8 || b.password.length > 200) return bad("password");
           pw = b.password;
         }
         if (busy) return bad("busy", 409);
         busy = true;
         const enc = new TextEncoder();
-        const scrub = (l: string) => (pw ? l.split(pw).join("***") : l);
+        // 비밀번호와 그 인코딩 변형(URL, JSON 이스케이프)을 로그에서 지운다.
+        const secrets = pw ? [...new Set([pw, encodeURIComponent(pw), JSON.stringify(pw).slice(1, -1)])] : [];
+        const scrub = (l: string) => secrets.reduce((t, x) => t.split(x).join("***"), l);
         const stream = new ReadableStream({
           async start(c) {
             const send = (o: unknown) => c.enqueue(enc.encode(JSON.stringify(o) + "\n"));

@@ -3,6 +3,7 @@
    One self-contained file: engine, local images, subset fonts, all inlined. Opens from file://. */
 import { dirname, join, resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { fetchCached, processFaces, usedChars } from "./fonts";
 
 const root = join(import.meta.dir, "..");
@@ -12,10 +13,19 @@ if (!name) fail("사용법: slidekit bundle <덱>  (예: slidekit bundle my-talk
 const deckDir = join(root, "decks", name);
 
 const isLocal = (u: string) => !/^(data:|https?:|\/\/|#|mailto:|about:)/i.test(u);
-/* url (relative to a base dir) -> file path: drop ?query and #hash, decode %xx, stay inside the repo */
+/* url (relative to a base dir) -> file path: drop ?query and #hash, decode %xx.
+   Only the deck folder and engine/ may be read (the deck links ../../engine/...), symlinks are resolved first,
+   and repo internals such as .git, .env*, comments.json are refused, so a bundle can never carry them out. */
+const allowedRoots = [deckDir, join(root, "engine")];
+const inside = (p: string, dir: string) => p === dir || p.startsWith(dir + "/");
+const BLOCKED = /(?:^|\/)(?:\.git(?:\/|$)|\.env|\.mcp\.json|\.claude(?:\/|$)|comments\.json$|node_modules(?:\/|$))/;
 function localPath(base: string, u: string) {
   const p = resolve(base, decodeURIComponent(u.split(/[?#]/)[0]).replace(/^\//, ""));
-  if (p !== root && !p.startsWith(root + "/")) fail(`덱 폴더 밖의 파일은 쓸 수 없다: ${u}. 파일을 덱 폴더 안으로 옮기고 상대 경로로 쓴다.`);
+  if (!allowedRoots.some((d) => inside(p, d)) || BLOCKED.test(p.replace(root, ""))) fail(`덱 폴더 밖의 파일은 쓸 수 없다: ${u}. 파일을 덱 폴더 안으로 옮기고 상대 경로로 쓴다.`);
+  try {
+    const real = realpathSync(p);
+    if (!allowedRoots.some((d) => inside(real, realpathSync(d)))) fail(`심볼릭 링크가 덱 폴더 밖을 가리킨다: ${u}`);
+  } catch { /* 없는 파일은 dataUri가 안내한다 */ }
   return p;
 }
 const assetBytes = new Map<string, number>(); // 큰 이미지 경고용
@@ -111,7 +121,7 @@ if (dm.title && !/property=["']og:title["']/i.test(html)) heads.push(`<meta prop
 if (dm.subtitle && !/name=["']description["']/i.test(html)) heads.push(`<meta name="description" content="${esc(dm.subtitle)}">`, `<meta property="og:description" content="${esc(dm.subtitle)}">`);
 if (dm.visibility === "password" && !/name=["']robots["']/i.test(html)) heads.push('<meta name="robots" content="noindex">');
 if (heads.length) html = html.replace(/<head[^>]*>/i, (h) => `${h}\n  ${heads.join("\n  ")}`);
-if (!/<title>[^<]+<\/title>/i.test(html) && dm.title) html = html.replace(/<\/head>/i, `  <title>${esc(dm.title)}</title>\n</head>`);
+if (!/<title>[^<]+<\/title>/i.test(html) && dm.title) html = html.replace(/<\/head>/i, () => `  <title>${esc(dm.title!)}</title>\n</head>`);
 if (!/<html[^>]*\blang=/i.test(html)) html = html.replace(/<html\b/i, `<html lang="${dm.lang === "en" ? "en" : "ko"}"`);
 
 await mkdir(join(root, "dist"), { recursive: true });

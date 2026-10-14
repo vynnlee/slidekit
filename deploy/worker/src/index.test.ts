@@ -28,12 +28,13 @@ test("비밀번호 틀림 401, 맞음 303과 쿠키", async () => {
 });
 test("쿠키 없음, 위조, 만료는 거부", async () => {
   expect(await (await get("sec")).text()).not.toContain("secret");
-  const good = (await makeCookie("test-secret", "sec")).split(";")[0];
+  const good = (await makeCookie("test-secret", "sec", pw.salt)).split(";")[0];
   const forged = good.replace(/\.[^.]*$/, ".AAAA");
+  expect(await (await get("sec", good)).text()).toBe("<p>secret</p>"); // 올바르게 서명한 쿠키는 통과
   expect(await (await get("sec", forged)).text()).not.toContain("secret");
-  const other = (await makeCookie("wrong-secret", "sec")).split(";")[0];
+  const other = (await makeCookie("wrong-secret", "sec", pw.salt)).split(";")[0];
   expect(await (await get("sec", other)).text()).not.toContain("secret");
-  const old = (await makeCookie("test-secret", "sec", 0)).split(";")[0];
+  const old = (await makeCookie("test-secret", "sec", pw.salt, 0)).split(";")[0];
   expect(await (await get("sec", old)).text()).not.toContain("secret");
 });
 
@@ -68,9 +69,14 @@ test("보안 헤더와 캐시", async () => {
   for (const r of [await get("open"), await get("sec"), await post("틀림", "9.9.9.9")]) {
     expect(r.headers.get("X-Content-Type-Options")).toBe("nosniff");
     expect(r.headers.get("Referrer-Policy")).toBe("no-referrer");
-    expect(r.headers.get("Content-Security-Policy")).toBe("frame-ancestors 'none'");
+    expect(r.headers.get("Content-Security-Policy")).toContain("frame-ancestors 'none'");
+    expect(r.headers.get("Cross-Origin-Opener-Policy")).toBe("same-origin");
+    expect(r.headers.get("Strict-Transport-Security")).toContain("max-age=");
   }
-  expect((await get("open")).headers.get("Cache-Control")).toBe("public, max-age=60");
+  // 공개 덱은 덱 스크립트가 돌아야 해서 script-src를 건드리지 않는다. 입력 폼은 nonce 기반 CSP다.
+  expect((await get("open")).headers.get("Content-Security-Policy")).toBe("frame-ancestors 'none'");
+  expect((await get("sec")).headers.get("Content-Security-Policy")).toMatch(/script-src 'nonce-[0-9a-f]{32}'.*form-action 'self'/);
+  expect((await get("open")).headers.get("Cache-Control")).toBe("public, max-age=0, must-revalidate");
   expect((await get("sec")).headers.get("Cache-Control")).toBe("private, no-store");
   const ok = await post("열쇠", "8.8.8.8");
   expect((await get("sec", ok.headers.get("Set-Cookie")!.split(";")[0])).headers.get("Cache-Control")).toBe("private, no-store");
@@ -98,4 +104,22 @@ test("안내 페이지: 제목은 이스케이프해 보이고, 잠금 안내는
   const bad = await (await post("x", "8.8.8.8", now)).text();
   expect(bad).toContain('aria-invalid="true"');
   expect(bad).toContain('role="alert"');
+});
+
+test("보안: 비밀번호(salt)가 바뀌면 옛 쿠키 무효, 보호된 덱은 문서 요청에만 서빙, 메서드와 Origin 방어", async () => {
+  const cookie = (await makeCookie("test-secret", "sec", pw.salt)).split(";")[0];
+  expect(await (await get("sec", cookie)).text()).toBe("<p>secret</p>");
+  const other = await hashPassword("다른 비밀번호");
+  store["meta:rot"] = JSON.stringify({ visibility: "password", ...other }); store["html:rot"] = "<p>rot</p>";
+  const oldCookie = (await makeCookie("test-secret", "rot", pw.salt)).split(";")[0];
+  expect(await (await get("rot", oldCookie)).text()).not.toContain("rot</p>");
+  // 같은 출처의 다른 덱 스크립트가 fetch로 읽는 경우(Sec-Fetch-Dest: empty)는 쿠키가 있어도 거부
+  const f = await handle(new Request("https://x/sec", { headers: { Cookie: cookie, "Sec-Fetch-Dest": "empty", "Sec-Fetch-Mode": "cors" } }), env);
+  expect(f.status).toBe(403);
+  expect((await handle(new Request("https://x/sec", { headers: { Cookie: cookie, "Sec-Fetch-Dest": "document" } }), env)).status).toBe(200);
+  expect((await handle(new Request("https://x/open", { method: "DELETE" }), env)).status).toBe(405);
+  const nul = await handle(new Request("https://x/sec", { method: "POST", headers: { Origin: "null", "cf-connecting-ip": "6.6.6.6" }, body: new URLSearchParams({ password: "열쇠" }) }), env);
+  expect(nul.status).toBe(403);
+  store["meta:broken"] = JSON.stringify({ visibility: "password" }); store["html:broken"] = "x";
+  expect((await get("broken")).status).toBe(404);
 });

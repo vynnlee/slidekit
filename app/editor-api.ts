@@ -1,9 +1,10 @@
 import { join } from "node:path";
 import { remap } from "./comments";
+import { deckFolder } from "./folder";
 import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 
 const decksDir = join(import.meta.dir, "..", "decks");
-const folderOk = (f: string) => /^[\w.-]+$/.test(f) && f !== "." && f !== ".." && existsSync(join(decksDir, f, "index.html"));
+const folderOk = (f: string) => deckFolder(f) !== null; // 규칙은 app/folder.ts 한 곳
 const bad = (error: string, status = 400) => Response.json({ error }, { status });
 
 // 덱 원문을 그대로 읽고 쓴다. 쪼개고 합치는 일은 편집기가 한다(SPEC 9절).

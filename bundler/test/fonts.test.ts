@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { faceBlocks, parseRange, pickSrc, processFaces, rangeHits, usedChars, withSrc } from "../fonts";
+import { faceBlocks, fetchCached, isPrivateAddress, parseRange, pickSrc, processFaces, rangeHits, usedChars, withSrc } from "../fonts";
 
 const css = `/* c */
 @font-face{font-family:'P';font-weight:45 920;src:url(../x/P.0.woff2) format('woff2-variations');unicode-range:U+f9ca-fa0b,U+ff03-ff05,U+4??}
@@ -42,4 +42,11 @@ test("같은 url을 굵기마다 선언한 블록은 하나로 합친다(가변 
   const r = await processFaces(c, usedChars("a가"), async () => null);
   expect(r.css.match(/@font-face/g)!.length).toBe(2);
   expect(r.css).toContain("font-weight:400 700");
+});
+
+test("SSRF 방어: 사설과 루프백과 링크로컬 주소, http, 내부 이름은 거부", async () => {
+  for (const ip of ["127.0.0.1", "10.0.0.5", "172.16.1.1", "192.168.0.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "fd00::1", "fe80::1", "::ffff:127.0.0.1"]) expect(isPrivateAddress(ip), ip).toBe(true);
+  for (const ip of ["8.8.8.8", "151.101.1.1", "2606:4700::1111"]) expect(isPrivateAddress(ip), ip).toBe(false);
+  for (const u of ["http://example.com/a.woff2", "https://localhost/x", "https://127.0.0.1/x", "https://169.254.169.254/latest", "https://[::1]/x", "https://printer.local/x"])
+    await expect(fetchCached(u + "?ssrf-test=" + Date.now())).rejects.toThrow();
 });

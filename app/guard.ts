@@ -12,7 +12,11 @@ export function guardReq(req: Request): Response | null {
   if (denied) return denied;
   const host = req.headers.get("host") ?? "";
   const origin = req.headers.get("origin");
-  if (origin && new URL(origin).host !== host) return new Response("origin", { status: 403 });
+  // Origin: null이나 깨진 값은 파싱 예외 대신 403이다. 다른 사이트에서 온 요청(Sec-Fetch-Site: cross-site)도 거절한다.
+  let originHost = "";
+  if (origin) { try { originHost = new URL(origin).host; } catch { return new Response("origin", { status: 403 }); } }
+  if (origin && originHost !== host) return new Response("origin", { status: 403 });
+  if (req.headers.get("sec-fetch-site") === "cross-site") return new Response("origin", { status: 403 });
   if (req.method !== "GET" && !req.headers.get("content-type")?.startsWith("application/json")) return new Response("type", { status: 415 });
   return null;
 }

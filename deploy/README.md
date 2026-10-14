@@ -6,4 +6,4 @@
 4. vynnlee.com이 Cloudflare DNS에 있으면 Worker 배포 때 `static.vynnlee.com`이 자동 연결된다. 첫 배포: `bun run deploy --worker`
 5. 덱 올리기: 번들 후 `bun run deploy <덱>` (비밀번호 덱이면 비밀번호를 물어본다). 주소는 static.vynnlee.com/<덱>.
 
-덱을 올릴 때 `deck-meta`의 `title`도 함께 올라가 비밀번호 페이지의 제목으로 쓰인다(비밀 값이 아니다). 비밀번호, 잠금(5회 틀리면 15분), 404 안내 페이지는 같은 모양이며 모바일 390px에서도 한 칸 폭을 지킨다. Worker 변경은 `bun run deploy --worker`로 올려야 반영된다.
+공개 덱은 올릴 때 `deck-meta`의 `title`도 함께 올라간다. 비밀번호 덱은 인증 전에 제목이 보이므로 `deck-meta`에 `"lockTitle": true`를 적은 경우에만 올린다. 비밀번호는 8자 이상이고, 바꾸면 이미 발급된 쿠키가 모두 무효가 된다. 비밀번호, 잠금(5회 틀리면 15분), 404 안내 페이지는 같은 모양이며 모바일 390px에서도 한 칸 폭을 지킨다. Worker 변경은 `bun run deploy --worker`로 올려야 반영된다.

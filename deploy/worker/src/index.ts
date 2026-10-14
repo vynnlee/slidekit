@@ -31,24 +31,27 @@ async function hmac(secret: string, msg: string) {
 }
 const same = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.reduce((d, x, i) => d | (x ^ b[i]), 0) === 0;
 
-export async function makeCookie(secret: string, deck: string, now = Date.now()) {
+// 서명 대상에 덱 이름과 비밀번호 salt를 넣는다. 비밀번호를 바꾸면(salt가 바뀌면) 이미 발급된 쿠키가 모두 무효가 된다.
+export async function makeCookie(secret: string, deck: string, salt: string, now = Date.now()) {
   const exp = Math.floor(now / 1000) + DAY;
-  const sig = b64((await hmac(secret, `${deck}.${exp}`)).buffer as ArrayBuffer);
+  const sig = b64((await hmac(secret, `${deck}.${exp}.${salt}`)).buffer as ArrayBuffer);
   return `sk_${deck}=${exp}.${encodeURIComponent(sig)}; Path=/${deck}; Max-Age=${DAY}; HttpOnly; Secure; SameSite=Strict`;
 }
 
-async function validCookie(req: Request, secret: string, deck: string, now = Date.now()) {
+async function validCookie(req: Request, secret: string, deck: string, salt: string, now = Date.now()) {
   const m = (req.headers.get("Cookie") ?? "").match(new RegExp(`(?:^|;\\s*)sk_${deck}=(\\d+)\\.([^;]+)`));
   if (!m || Number(m[1]) < now / 1000) return false;
   try {
-    return same(await hmac(secret, `${deck}.${m[1]}`), unb64(decodeURIComponent(m[2])));
+    return same(await hmac(secret, `${deck}.${m[1]}.${salt}`), unb64(decodeURIComponent(m[2])));
   } catch { return false; }
 }
 
 // script-src는 건드리지 않는다. 덱이 인라인 스크립트와 스타일을 쓴다.
+// Cross-Origin-Opener-Policy와 Resource-Policy: 같은 출처의 다른 덱이 window.open이나 fetch로 잠금 해제된 덱을 읽지 못하게 한다.
 const headers = {
   "X-Robots-Tag": "noindex", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer",
-  "Content-Security-Policy": "frame-ancestors 'none'",
+  "Content-Security-Policy": "frame-ancestors 'none'", "Strict-Transport-Security": "max-age=31536000",
+  "Cross-Origin-Opener-Policy": "same-origin", "Cross-Origin-Resource-Policy": "same-origin",
 };
 
 const T = {
@@ -80,9 +83,10 @@ button{background:#fff;color:#000;border-color:#fff;font-weight:600;cursor:point
 button:disabled{opacity:.6;cursor:progress}
 input:focus-visible,button:focus-visible{outline:2px solid #fff;outline-offset:2px}
 </style>`;
-const shell = (m: Msg, title: string, body: string, status: number, extra: Record<string, string> = {}) => new Response(
+const shell = (m: Msg, title: string, body: string, status: number, extra: Record<string, string> = {}, nonce = "") => new Response(
   `<!doctype html><html lang="${m === T.en ? "en" : "ko"}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><link rel="icon" href="data:,"><title>${esc(title)}</title>${CSS}<main>${body}</main>`,
-  { status, headers: { ...headers, "Content-Type": "text/html; charset=utf-8", "Cache-Control": "private, no-store", ...extra } },
+  { status, headers: { ...headers, "Content-Type": "text/html; charset=utf-8", "Cache-Control": "private, no-store",
+    "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; ${nonce ? `script-src 'nonce-${nonce}'; ` : ""}form-action 'self'; base-uri 'none'; frame-ancestors 'none'`, ...extra } },
 );
 // 없음, 잠금, 거부 같은 막다른 안내
 const plain = (status: number, text: string, extra: Record<string, string> = {}, m: Msg = T.ko, detail = "") =>
@@ -95,27 +99,30 @@ async function failsOf(env: Env, key: string, now: number): Promise<Fails> {
   return f && now / 1000 - f.start < WINDOW ? f : { n: 0, start: now / 1000 };
 }
 
-const form = (m: Msg, meta: Meta, err = "") => shell(m, meta.title || m.title,
+const form = (m: Msg, meta: Meta, err = "", nonce = crypto.randomUUID().replace(/-/g, "")) => shell(m, meta.title || m.title,
   `<form method="post"><h1>${esc(meta.title || m.title)}</h1><p id="h">${m.hint}</p><input type="password" name="password" placeholder="${m.ph}" aria-label="${m.ph}" aria-describedby="${err ? "e" : "h"}"${err ? ' aria-invalid="true"' : ""} autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" autofocus required>${err ? `<p class="e" id="e" role="alert">${err}</p>` : ""}<button>${m.open}</button></form>
-<script>(function(){var f=document.forms[0],b=f.querySelector("button"),t=b.textContent;f.addEventListener("submit",function(){b.disabled=true;b.textContent="${m.opening}..."});addEventListener("pageshow",function(){b.disabled=false;b.textContent=t})})()</script>`,
-  err ? 401 : 200);
+<script nonce="${nonce}">(function(){var f=document.forms[0],b=f.querySelector("button"),t=b.textContent;f.addEventListener("submit",function(){b.disabled=true;b.textContent="${m.opening}..."});addEventListener("pageshow",function(){b.disabled=false;b.textContent=t})})()</script>`,
+  err ? 401 : 200, {}, nonce);
 
 export async function handle(req: Request, env: Env, now = Date.now()): Promise<Response> {
   const deck = new URL(req.url).pathname.replace(/^\/|\/$/g, "");
   if (!/^[\w-]+$/.test(deck)) return plain(404, msgs(req).none, {}, msgs(req));
   const meta: Meta | null = JSON.parse((await env.DECKS.get(`meta:${deck}`)) ?? "null");
   const html = meta && (await env.DECKS.get(`html:${deck}`));
+  if (!["GET", "HEAD", "POST"].includes(req.method)) return plain(405, "Method not allowed", { Allow: "GET, HEAD, POST" }, msgs(req));
   if (!meta || !html) return plain(404, msgs(req, meta).none, {}, msgs(req, meta));
   const m = msgs(req, meta);
 
   const page = (cache: string) => new Response(html, { headers: { ...headers, "Content-Type": "text/html; charset=utf-8", "Cache-Control": cache } });
-  if (meta.visibility !== "password") return page("public, max-age=60");
-  if (!meta.salt || !meta.hash) return new Response("Misconfigured", { status: 500 });
+  if (meta.visibility !== "password") return page("public, max-age=0, must-revalidate");
+  if (!meta.salt || !meta.hash) return plain(404, m.none, {}, m);
 
   if (req.method === "POST") {
     // 로그인 CSRF 방지: 다른 사이트에서 온 폼 전송은 거부한다. SameSite=Strict 쿠키가 나머지를 막는다.
     const origin = req.headers.get("Origin");
-    if (origin && new URL(origin).host !== new URL(req.url).host) return plain(403, m.denied, {}, m);
+    let oh = ""; // Origin: null이나 깨진 값은 파싱 예외 대신 거부한다
+    if (origin) { try { oh = new URL(origin).host; } catch { return plain(403, m.denied, {}, m); } }
+    if (origin && oh !== new URL(req.url).host) return plain(403, m.denied, {}, m);
     const key = `rl:${deck}:${req.headers.get("cf-connecting-ip") ?? "unknown"}`;
     const fails = await failsOf(env, key, now);
     if (fails.n >= MAX_FAILS) { const wait = Math.ceil(fails.start + WINDOW - now / 1000); return plain(429, m.locked, { "Retry-After": String(wait) }, m, m.retry(Math.max(1, Math.ceil(wait / 60)))); } // 맞는 비밀번호도 잠금 중이면 거부한다
@@ -127,9 +134,12 @@ export async function handle(req: Request, env: Env, now = Date.now()): Promise<
       return form(m, meta, m.wrong);
     }
     await env.DECKS.delete(key);
-    return new Response(null, { status: 303, headers: { ...headers, Location: `/${deck}`, "Set-Cookie": await makeCookie(env.COOKIE_SECRET, deck, now) } });
+    return new Response(null, { status: 303, headers: { ...headers, Location: `/${deck}`, "Set-Cookie": await makeCookie(env.COOKIE_SECRET, deck, meta.salt, now) } });
   }
-  return (await validCookie(req, env.COOKIE_SECRET, deck)) ? page("private, no-store") : form(m, meta);
+  // 같은 출처의 다른 덱 스크립트가 fetch로 읽는 것을 막는다: 보호된 덱은 주소창 이동(문서) 요청에만 서빙한다.
+  const dest = req.headers.get("Sec-Fetch-Dest");
+  if (dest && dest !== "document") return plain(403, m.denied, {}, m);
+  return (await validCookie(req, env.COOKIE_SECRET, deck, meta.salt)) ? page("private, no-store") : form(m, meta);
 }
 
 export default { fetch: handle };

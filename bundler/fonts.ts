@@ -1,7 +1,7 @@
 /* 번들러의 글꼴 처리: CSS의 @font-face를 찾아 덱이 쓰는 글자만 남긴 woff2로 바꿔 인라인한다.
    원격(Google Fonts, jsdelivr 등 CDN CSS)과 로컬(url(./fonts/X.woff2))을 같은 방식으로 다룬다. */
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -41,15 +41,48 @@ export const usedChars = (text: string) => new Set<number>([...text].map((c) => 
 const cacheDir = process.env.SLIDEKIT_CACHE ?? join(homedir(), ".cache", "slidekit", "fonts");
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 
-/** URL을 받아 캐시에 둔다(저장소에는 글꼴 파일을 두지 않는다). 같은 URL은 다시 받지 않는다. */
+/** 사설망, 루프백, 링크로컬 주소인지(SSRF 방어). IP 리터럴과 DNS 결과 모두에 쓴다. */
+export function isPrivateAddress(ip: string): boolean {
+  const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(ip);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return a === 10 || a === 127 || a === 0 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
+  }
+  const l = ip.toLowerCase();
+  return l === "::1" || l === "::" || l.startsWith("fc") || l.startsWith("fd") || l.startsWith("fe80") || l.startsWith("::ffff:127.") || l.startsWith("::ffff:10.") || l.startsWith("::ffff:192.168.") || l.startsWith("::ffff:169.254.");
+}
+async function assertPublicHttps(u: URL) {
+  if (u.protocol !== "https:") throw new Error(`https 주소만 받는다: ${u.href}`);
+  const host = u.hostname.replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) throw new Error(`내부 주소는 받지 않는다: ${host}`);
+  if (/^[\d.]+$/.test(host) || host.includes(":")) { if (isPrivateAddress(host)) throw new Error(`내부 주소는 받지 않는다: ${host}`); return; }
+  const addrs = await (await import("node:dns/promises")).lookup(host, { all: true });
+  if (addrs.some((a) => isPrivateAddress(a.address))) throw new Error(`내부 주소로 연결되는 이름은 받지 않는다: ${host}`);
+}
+const MAX_BYTES = 20 * 1024 * 1024;
+
+/** URL을 받아 캐시에 둔다(저장소에는 글꼴 파일을 두지 않는다). 같은 URL은 다시 받지 않는다.
+    https만, 사설 주소 거부, 리다이렉트는 직접 따라가며 매번 검사, 15초 제한, 20MB 제한, 임시 파일에 쓴 뒤 rename. */
 export async function fetchCached(url: string): Promise<Uint8Array> {
-  mkdirSync(join(cacheDir, "net"), { recursive: true });
+  mkdirSync(join(cacheDir, "net"), { recursive: true, mode: 0o700 });
   const f = join(cacheDir, "net", createHash("sha1").update(url).digest("hex"));
   if (existsSync(f)) return new Uint8Array(await Bun.file(f).arrayBuffer());
-  const res = await fetch(url, { headers: { "User-Agent": UA } });
-  if (!res.ok) throw new Error(`cannot download ${url} (${res.status}); 인터넷이 필요하다. 받은 파일은 ${cacheDir}에 캐시된다`);
+  let cur = new URL(url), res: Response | undefined;
+  for (let hop = 0; hop < 4; hop++) {
+    await assertPublicHttps(cur);
+    res = await fetch(cur, { headers: { "User-Agent": UA }, redirect: "manual", signal: AbortSignal.timeout(15_000) });
+    const loc = res.headers.get("location");
+    if (res.status >= 300 && res.status < 400 && loc) { cur = new URL(loc, cur); continue; }
+    break;
+  }
+  if (!res || !res.ok) throw new Error(`cannot download ${url} (${res?.status}); 인터넷이 필요하다. 받은 파일은 ${cacheDir}에 캐시된다`);
+  const len = Number(res.headers.get("content-length") ?? 0);
+  if (len > MAX_BYTES) throw new Error(`너무 큰 파일이다(${(len / 1048576).toFixed(0)}MB): ${url}`);
   const buf = new Uint8Array(await res.arrayBuffer());
-  writeFileSync(f, buf);
+  if (buf.length > MAX_BYTES) throw new Error(`너무 큰 파일이다: ${url}`);
+  const tmp = `${f}.tmp-${process.pid}-${Date.now()}`;
+  writeFileSync(tmp, buf);
+  renameSync(tmp, f); // 쓰다 중단된 잘린 파일이 캐시로 남지 않게 한다
   return buf;
 }
 
@@ -61,7 +94,7 @@ export function subsetAll(inputs: Uint8Array[], chars: Set<number>): Uint8Array[
     writeFileSync(join(work, "chars.txt"), String.fromCodePoint(...chars));
     const jobs = inputs.map((b, i) => { writeFileSync(join(work, `in${i}`), b); return { in: join(work, `in${i}`), out: join(work, `out${i}.woff2`) }; });
     writeFileSync(join(work, "jobs.json"), JSON.stringify(jobs));
-    const r = Bun.spawnSync(["uv", "run", "--quiet", "--with", "fonttools", "--with", "brotli", "python", join(import.meta.dir, "subset.py"), join(work, "chars.txt"), join(work, "jobs.json")], { stderr: "pipe" });
+    const r = Bun.spawnSync(["uv", "run", "--quiet", "--with", "fonttools==4.66.1", "--with", "brotli==1.2.0", "python", join(import.meta.dir, "subset.py"), join(work, "chars.txt"), join(work, "jobs.json")], { stderr: "pipe" });
     if (r.exitCode !== 0) throw new Error("글꼴 부분집합 실패: " + r.stderr.toString().slice(-400));
     return jobs.map((j) => new Uint8Array(require("node:fs").readFileSync(j.out)));
   } finally { rmSync(work, { recursive: true, force: true }); }

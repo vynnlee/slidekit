@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, MonitorPlay } from "lucide-react";
+import { ArrowLeft, MonitorPlay, Redo2, Undo2 } from "lucide-react";
 import { TextArea } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { CommandMenu, CommandMenuDialog, CommandMenuEmpty, CommandMenuFooter, CommandMenuInput, CommandMenuList, type CommandMenuItemData } from "@/components/ui/command-menu";
 import { Shell } from "./Shell";
+import { StatusPage } from "./StatusPage";
 import { Canvas, textual, type CanvasApi } from "./Canvas";
 import { Filmstrip } from "./Filmstrip";
 import { LayerTree } from "./LayerTree";
@@ -22,6 +23,9 @@ import { numbering } from "@/lib/comment-state";
 import { firstChild, isLeaf, isLockedDeep, parentOf, siblings } from "@/lib/selection";
 import { ContextMenu, useContextMenu } from "@/components/ui/context-menu";
 import { elementMenu, groupMenu, slideMenu, tileMenu, type MenuItem, type SlideMenuActions } from "@/lib/menu-model";
+import { diffDecks, slidesLabel } from "@/lib/deck-diff";
+import { toast } from "@/Toaster";
+import { DeckColorsContext } from "@/lib/deck-colors-context";
 import { startPresentation } from "@/lib/present";
 import type { Comment, DeckEntry } from "@/lib/deck";
 
@@ -91,6 +95,9 @@ export function Editor({ id }: { id: string }) {
   const folder = deck?.folder ?? "";
   const live = useCommentsLive(folder || null);
   const cm = useContextMenu();
+  const [notFound, setNotFound] = useState(false);
+  const [updated, setUpdated] = useState<Set<number>>(new Set()); // 밖에서 바뀐 슬라이드(필름스트립에 4초 표시)
+  const updatedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const comments = live.comments;
   const nums = useMemo(() => numbering(comments), [comments]);
   const [hoverId, setHoverId] = useState<string | null>(null);
@@ -125,10 +132,10 @@ export function Editor({ id }: { id: string }) {
   useEffect(() => {
     fetch("/api/decks").then((r) => { if (!r.ok) throw new Error(`Could not load decks (${r.status})`); return r.json(); }).then((l: DeckEntry[]) => {
       const d = l.find((x) => x.id === id) ?? null;
-      setDeck(d);
+      setDeck(d); setNotFound(!d);
       if (d) {
         const q = parseInt(new URLSearchParams(location.search).get("slide") ?? "", 10); // /edit/<id>?slide=N(1부터). 범위 밖이면 가까운 슬라이드
-        load(d.folder, Number.isFinite(q) ? Math.max(0, q - 1) : 0).catch((e) => setErr(String(e)));
+        load(d.folder, Number.isFinite(q) ? Math.max(0, q - 1) : 0).catch((e) => setErr(String(e.message ?? e)));
       }
     }).catch((e) => setErr(String(e.message ?? e)));
   }, [id, load]);
@@ -146,8 +153,16 @@ export function Editor({ id }: { id: string }) {
         if (!res.ok) throw new Error(`Could not check the file (${res.status})`);
         const r = await res.json();
         if (r.source === savedRef.current) return; // 우리가 쓴 저장
+        const d = diffDecks(savedRef.current, r.source);
         if (dirtyRef.current) setChanged(true);
-        else await load(folder, indexRef.current);
+        else {
+          await load(folder, indexRef.current);
+          if (d.changed.length) { // 밖에서 바뀐 슬라이드를 알린다(예: Claude가 코멘트를 처리했을 때)
+            setUpdated(new Set(d.changed));
+            clearTimeout(updatedTimer.current); updatedTimer.current = setTimeout(() => setUpdated(new Set()), 4000);
+            toast(`${slidesLabel(d.changed)} updated`, { action: { label: "View", onClick: () => setIndex(d.changed[0]) } });
+          }
+        }
       } catch (e: any) { setErr(String(e.message ?? e)); }
     });
     return () => es.close();
@@ -252,7 +267,7 @@ export function Editor({ id }: { id: string }) {
     structure(a, i + 1);
   };
   const delSlide = (i: number) => {
-    if (unitsRef.current.length < 2) return;
+    if (unitsRef.current.length < 2) { toast("A deck needs at least one slide", { ms: 3000 }); return; }
     structure(unitsRef.current.filter((_, k) => k !== i), Math.min(i, unitsRef.current.length - 2));
   };
   const delSelected = () => {
@@ -339,7 +354,7 @@ export function Editor({ id }: { id: string }) {
   };
   const style = (prop: string, v: string) => { const els = [sel, ...more].filter(Boolean) as HTMLElement[]; if (!els.length) return; for (const el of els) { if (v) el.style.setProperty(prop, v); else el.style.removeProperty(prop); } commit("style:" + prop); };
   // 묶음 정렬: 모두를 감싸는 상자의 왼쪽, 가운데, 오른쪽(위, 가운데, 아래)에 맞춘다. translate만 바꾼다(SPEC 9.5).
-  const commentActions: CommentActions = { resolve: live.resolve, trust: live.trust, remove: live.remove, openInPanel: (c) => { setTab("comments"); jump(c); } };
+  const commentActions: CommentActions = { resolve: live.resolve, trust: live.trust, remove: live.remove, revert: live.revert, openInPanel: (c) => { setTab("comments"); jump(c); } };
   const alignGroup = (axis: "h" | "v", where: "start" | "center" | "end") => {
     const s = canvas.current?.slide(indexRef.current);
     const els = ([sel, ...more].filter(Boolean) as HTMLElement[]).filter((e) => !isLockedDeep(e) && canMove(e));
@@ -534,11 +549,20 @@ export function Editor({ id }: { id: string }) {
     return () => window.removeEventListener("keydown", on);
   }, []);
 
-  if (!deck || !shell) return err ? <p className="p-4 text-caption text-muted-foreground">{err}</p> : null;
+  if (!deck || !shell) {
+    if (!err && !notFound) return null;
+    return (
+      <StatusPage role="alert" title={notFound ? "Deck not found" : "Could not open the deck"} actions={<>
+        <Button variant="primary" size="compact" onClick={() => go("/")}>Back to decks</Button>
+        <Button variant="ghost" size="compact" onClick={() => location.reload()}>Retry</Button>
+      </>}>{notFound ? "This deck does not exist or was moved to the trash." : err}</StatusPage>
+    );
+  }
 
   const present = async (fromStart = false) => {
     if (!(await save())) return;
-    setErr(await startPresentation(deck.folder, fromStart ? 1 : indexRef.current + 1));
+    const problem = await startPresentation(deck.folder, fromStart ? 1 : indexRef.current + 1, (m) => toast(m, { ms: 5000 }));
+    if (problem) toast(problem === "Popup blocked" ? "Popup blocked. Allow popups for this site to show the audience window." : problem, { ms: 9000 }); // 발표자 화면으로 넘어가도 읽히게 토스트로 알린다
     go(`/present/${encodeURIComponent(deck.id)}`);
   };
   const back = async () => { if (await save()) go("/"); };
@@ -553,6 +577,8 @@ export function Editor({ id }: { id: string }) {
     { value: "act-dup", label: "Duplicate slide", group: "Actions", onSelect: () => dupSlide(indexRef.current) },
     { value: "act-del", label: "Delete slide", group: "Actions", disabled: units.length < 2, onSelect: () => delSlide(indexRef.current) },
     { value: "act-save", label: "Save", group: "Actions", shortcut: "mod+s", onSelect: () => { save(true); } },
+    { value: "act-undo", label: "Undo", group: "Actions", shortcut: "mod+z", disabled: !past.current.length, onSelect: () => restore(past.current, future.current) },
+    { value: "act-redo", label: "Redo", group: "Actions", shortcut: "mod+shift+z", disabled: !future.current.length, onSelect: () => restore(future.current, past.current) },
     { value: "act-comment", label: "Add comment", group: "Actions", shortcut: "c", onSelect: () => canvas.current?.compose() },
     { value: "act-add-before", label: "Add slide before this one", group: "Actions", onSelect: () => insertSlide(indexRef.current) },
     { value: "act-to-start", label: "Move slide to start", group: "Actions", disabled: index === 0, onSelect: () => moveSlide(indexRef.current, 0) },
@@ -569,7 +595,7 @@ export function Editor({ id }: { id: string }) {
   ] : [];
 
   return (
-    <>
+    <DeckColorsContext.Provider value={{ html: text }}>
       <Shell
         heading={deck.title} leftLabel="Layers" rightLabel="Properties"
         toolbar={
@@ -578,7 +604,7 @@ export function Editor({ id }: { id: string }) {
             <span className="truncate text-subtitle font-medium">{deck.title}</span>
             {status === "error"
               ? <Button variant="ghost" size="compact" onClick={() => save()}>Save failed. Retry</Button>
-              : <span className="text-caption text-muted-foreground">{label}</span>}
+              : <span data-testid="status" className="text-caption text-muted-foreground">{label}</span>}
             <ChannelBadge connected={live.channel} />
             {changed && (
               <>
@@ -589,6 +615,14 @@ export function Editor({ id }: { id: string }) {
             )}
             {err && <span className="text-caption text-muted-foreground">{err}</span>}
             <span className="ml-auto" />
+            <div role="group" aria-label="History" className="flex items-center">
+              <Tooltip content={`Undo (Cmd+Z)${past.current.length ? `, ${past.current.length} step${past.current.length > 1 ? "s" : ""}` : ""}`} side="bottom">
+                <span className="inline-flex"><Button aria-label="Undo" variant="ghost" size="icon-compact" disabled={!past.current.length} onClick={() => restore(past.current, future.current)}><Undo2 /></Button></span>
+              </Tooltip>
+              <Tooltip content={`Redo (Shift+Cmd+Z)${future.current.length ? `, ${future.current.length} step${future.current.length > 1 ? "s" : ""}` : ""}`} side="bottom">
+                <span className="inline-flex"><Button aria-label="Redo" variant="ghost" size="icon-compact" disabled={!future.current.length} onClick={() => restore(future.current, past.current)}><Redo2 /></Button></span>
+              </Tooltip>
+            </div>
             {dirty && !changed && <Button variant="ghost" size="compact" onClick={() => save()}>Save</Button>}
             <ExportMenu folder={deck.folder} dirty={dirty} onSave={() => save()} />
             <Button variant="primary" size="compact" leadingIcon={MonitorPlay} onClick={() => present()}>Present</Button>
@@ -605,18 +639,18 @@ export function Editor({ id }: { id: string }) {
         }
         right={
           <Inspector sel={sel} slide={canvas.current?.slide(index) ?? null} more={more} onAlignGroup={alignGroup} selId={selId} tab={tab} onTab={setTab}
-            comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} onRemove={live.remove} hoverId={hoverId} onHover={setHoverId} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
+            comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} onRemove={live.remove} onRevert={live.revert} hoverId={hoverId} onHover={setHoverId} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
         }
       >
         <div className="flex h-full flex-col">
         <Filmstrip shell={shell} folder={folder} units={units} index={index}
           marked={new Set(comments.filter((c) => !c.slideDeleted && c.status === "open").map((c) => c.slide))} origin={origin.current}
           collapsed={filmCollapsed} onToggle={toggleFilm}
-          onSelect={setIndex} onMenu={tileMenuAt} onMove={moveSlide} onDuplicate={dupSlide} onDelete={delSlide} onAdd={addSlide} />
+          updated={updated} onSelect={setIndex} onMenu={tileMenuAt} onMove={moveSlide} onDuplicate={dupSlide} onDelete={delSlide} onAdd={addSlide} />
         <div className="min-h-0 flex-1 bg-[var(--canvas-bg)]">
         <Canvas ref={canvas} shell={shell} folder={folder} units={units} index={index} sel={sel} more={more} onMulti={toggleSel} onGroup={pickGroup}
           comments={comments.filter((c) => !c.slideDeleted && c.slide === origin.current.get(units[index]?.key ?? ""))}
-          commentActions={commentActions} onContext={({ el, x, y }) => contextAt({ x, y }, el)} onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
+          commentActions={commentActions} onStyle={style} onContext={({ el, x, y }) => contextAt({ x, y }, el)} onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
           numbers={nums} hoverId={hoverId} onHover={setHoverId} channel={live.channel}
           onComment={postComment} onMarker={(cid) => { setTab("comments"); const c = comments.find((x) => x.id === cid); if (c) jump(c); }} />
         </div>
@@ -670,6 +704,6 @@ export function Editor({ id }: { id: string }) {
           </div>
         </DialogContent>
       </Dialog>
-    </>
+    </DeckColorsContext.Provider>
   );
 }

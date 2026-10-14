@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
-import { MessageSquare, Minus, Pencil, Plus, Trash2 } from "lucide-react";
+import { AArrowDown, AArrowUp, AlignCenter, AlignLeft, AlignRight, Bold, MessageSquare, Minus, Pencil, Plus, Trash2 } from "lucide-react";
+import { ColorField } from "@/components/ui/color-field";
 import { Button } from "@/components/ui/button";
 import { TextArea } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -44,6 +45,7 @@ type Props = {
   hoverId: string | null;
   onHover(id: string | null): void;
   channel: boolean | null;
+  onStyle(prop: string, value: string): void; // 선택한 글자 요소의 서식 도구줄
   onSel(el: Element | null): void;
   onContext(info: { el: Element | null; x: number; y: number }): void; // 우클릭: 대상 요소(없으면 빈 곳)와 화면 좌표
   onGroup(list: Element[]): void; // 마퀴로 고른 묶음(첫 요소가 대표)
@@ -224,6 +226,14 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     const off = () => setPanning(false);
     window.addEventListener("keydown", down); window.addEventListener("keyup", up); window.addEventListener("blur", off);
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); window.removeEventListener("blur", off); };
+  }, []);
+
+  // 끌기 방패는 포인터를 누른 동안에만 있어야 한다. 어떤 경로로든(창 밖에서 놓기, 포커스 이동, 예외) 끝이 놓치면 문서 전체가 막히므로 안전망으로 지운다.
+  useEffect(() => {
+    const clear = () => setShield(null);
+    window.addEventListener("pointerup", clear, true); window.addEventListener("pointercancel", clear, true);
+    window.addEventListener("blur", clear); document.addEventListener("visibilitychange", clear);
+    return () => { window.removeEventListener("pointerup", clear, true); window.removeEventListener("pointercancel", clear, true); window.removeEventListener("blur", clear); document.removeEventListener("visibilitychange", clear); };
   }, []);
 
   const goto = useCallback(() => {
@@ -416,7 +426,8 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       selRef.current = hit[0] ?? null;
       P.current.onGroup(hit);
     };
-    d.addEventListener("pointerup", (e) => { endMarquee(e); endDrag(false); }, true);
+    d.addEventListener("pointerup", (e) => { endMarquee(e); endDrag(false); setShield(null); }, true);
+    d.addEventListener("lostpointercapture", () => { if (!drag.current) setShield(null); }, true);
     d.addEventListener("pointercancel", () => { endMarquee(null); endDrag(true); }, true);
     d.addEventListener("keydown", (e) => { if (e.key === "Escape" && drag.current?.moved) { e.preventDefault(); e.stopPropagation(); endDrag(true); } }, true);
     const inEdit = (e: Event) => !!editing.current && editing.current.contains(e.target as Node);
@@ -537,6 +548,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   useEffect(() => { place(); const t = setInterval(place, 60); return () => clearInterval(t); });
 
   const here = p.comments;
+  const fmt = p.sel && !p.more.length && !composing && textual(p.sel) && !isLockedDeep(p.sel) ? p.sel.ownerDocument.defaultView!.getComputedStyle(p.sel) : null;
 
   const pct = Math.round(((size.w * zoom) / 1920) * 100);
   return (
@@ -569,6 +581,17 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
           <div ref={bar} className="pointer-events-auto absolute left-0 top-0 hidden gap-0.5 rounded-lg bg-surface-3 p-0.5 shadow-surface-3">
             {p.sel && textual(p.sel) && (
               <Tooltip content="Edit" side="top"><Button aria-label="Edit" variant="ghost" size="icon-compact" onClick={() => startEdit(p.sel as HTMLElement)}><Pencil /></Button></Tooltip>
+            )}
+            {fmt && (
+              <div role="group" aria-label="Text format" className="flex items-center gap-0.5 border-x border-border px-0.5">
+                <Tooltip content="Bold" side="top"><Button aria-label="Bold" aria-pressed={+fmt.fontWeight >= 600} variant="ghost" size="icon-compact" onClick={() => p.onStyle("font-weight", +fmt.fontWeight >= 600 ? "400" : "700")}><Bold /></Button></Tooltip>
+                <Tooltip content="Smaller" side="top"><Button aria-label="Smaller text" variant="ghost" size="icon-compact" onClick={() => p.onStyle("font-size", `${Math.max(8, Math.round(parseFloat(fmt.fontSize) - (parseFloat(fmt.fontSize) < 40 ? 2 : 4)))}px`)}><AArrowDown /></Button></Tooltip>
+                <Tooltip content="Larger" side="top"><Button aria-label="Larger text" variant="ghost" size="icon-compact" onClick={() => p.onStyle("font-size", `${Math.round(parseFloat(fmt.fontSize) + (parseFloat(fmt.fontSize) < 40 ? 2 : 4))}px`)}><AArrowUp /></Button></Tooltip>
+                {([["left", AlignLeft], ["center", AlignCenter], ["right", AlignRight]] as const).map(([v, I]) => (
+                  <Tooltip key={v} content={`Align ${v}`} side="top"><Button aria-label={`Text align ${v}`} aria-pressed={fmt.textAlign === v || (v === "left" && fmt.textAlign === "start")} variant="ghost" size="icon-compact" onClick={() => p.onStyle("text-align", v)}><I /></Button></Tooltip>
+                ))}
+                <ColorField aria-label="Quick color" swatchOnly value={p.sel!.ownerDocument.defaultView!.getComputedStyle(p.sel!).color} onChange={(v) => p.onStyle("color", v)} className="px-0.5" />
+              </div>
             )}
             <Tooltip content="Comment" side="top"><Button aria-label="Comment" variant="ghost" size="icon-compact" onClick={() => setComposing((v) => !v)}><MessageSquare /></Button></Tooltip>
             <Tooltip content="Delete" side="top"><Button aria-label="Delete" variant="ghost" size="icon-compact" onClick={p.onDelete}><Trash2 /></Button></Tooltip>

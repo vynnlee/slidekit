@@ -158,7 +158,7 @@ export function TokensPanel({ prefix, onPrefixChange, canvas }: TokensPanelProps
                 <Tooltip content={`${label} (${n})`} side="top"><span className="block truncate pr-3 text-caption text-muted-foreground">{short}</span></Tooltip>
                 <ResetDot changed={changed(n)} label={label} onReset={() => set(n, DEFAULTS[n], true)} />
               </div>
-              <ColorField aria-label={label} value={val(n)} onChange={(v) => set(n, v)} className={cn("min-w-0 flex-1", !hasAlpha(val(n)) && HIDE_ALPHA)} />
+              <ColorField aria-label={label} tokenLinks={false} value={val(n)} onChange={(v) => set(n, v)} className={cn("min-w-0 flex-1", !hasAlpha(val(n)) && HIDE_ALPHA)} />
             </div>
           ))}
         </div>
@@ -178,7 +178,7 @@ export function TokensPanel({ prefix, onPrefixChange, canvas }: TokensPanelProps
               <div key={n} className="flex items-center gap-2">
                 <Tooltip content={n} side="top"><span className="w-16 shrink-0 truncate text-caption text-muted-foreground">{n}</span></Tooltip>
                 {isColor(v)
-                  ? <ColorField aria-label={n} value={v} onChange={(x) => set(n, x)} className={cn("min-w-0 flex-1", !hasAlpha(v) && HIDE_ALPHA)} />
+                  ? <ColorField aria-label={n} tokenLinks={false} value={v} onChange={(x) => set(n, x)} className={cn("min-w-0 flex-1", !hasAlpha(v) && HIDE_ALPHA)} />
                   : <Field aria-label={n} defaultValue={v} key={v} className={ref ? "flex-1 text-muted-foreground" : "flex-1"} title={ref ? `Reference: ${v}. Type a value to override it` : undefined}
                       onBlur={(e) => e.target.value !== v && set(n, e.target.value.trim(), true)}
                       onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />}

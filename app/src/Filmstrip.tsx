@@ -70,6 +70,7 @@ type Props = {
   origin: Map<string, number>;
   collapsed: boolean;
   onToggle(): void;
+  updated?: Set<number>; // 밖에서 바뀐 슬라이드(잠시 표시)
   onSelect(i: number): void;
   onMenu(i: number, at: { x: number; y: number }): void; // 우클릭이나 메뉴 키(선택은 호출 쪽이 먼저 한다)
   onMove(from: number, to: number): void;
@@ -149,6 +150,7 @@ export function Filmstrip(p: Props) {
               >
                 {drop === i && drag !== null && <div className="absolute -left-1.5 inset-y-0 w-0.5 rounded bg-focus-ring" />}
                 {drop === i + 1 && i === p.units.length - 1 && drag !== null && <div className="absolute -right-1.5 inset-y-0 w-0.5 rounded bg-focus-ring" />}
+                {p.updated?.has(i) && <span aria-label="Updated" className="pointer-events-none absolute bottom-1 left-1 z-10 rounded bg-focus-ring px-1 py-0.5 text-micro leading-none text-white">Updated</span>}
                 <Thumb shell={p.shell} unit={u} folder={p.folder} eager={i < 6} keep={i === p.index} />
                 <span aria-hidden="true" className={`pointer-events-none absolute left-1 top-1 rounded px-1 py-0.5 text-micro leading-none tabular-nums text-white ${i === p.index ? "bg-focus-ring" : "bg-black/75"}`}>{i + 1}</span>
                 {p.marked.has(p.origin.get(u.key) ?? -1) && <span aria-hidden="true" className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-focus-ring ring-2 ring-black" />}

@@ -97,6 +97,7 @@ type Props = {
   onResolve(c: Comment, resolved: boolean): void;
   onTrust?(c: Comment): void;
   onRemove?(c: Comment): void;
+  onRevert?(c: Comment, undo?: boolean): void;
   hoverId: string | null;
   onHover(id: string | null): void;
   onStyle(prop: string, value: string): void;
@@ -156,6 +157,14 @@ export function Inspector(p: Props) {
     <NumberField label={label} aria-label={aria} value={val(prop)} mixed={mixedOf(prop)} muted={!inl(prop)} dirty={!!inl(prop)} onReset={() => set(prop, "")} onChange={(v) => set(prop, v)} {...scrub} {...o} />
   );
 
+  // 글자 색 대비를 재는 배경: 슬라이드(없으면 문서 body)의 불투명한 배경색
+  const slideBg = (() => {
+    for (const n of [p.slide, p.slide?.ownerDocument.body]) {
+      const c = n && win ? win.getComputedStyle(n).backgroundColor : "";
+      if (c && c !== "transparent" && !/^rgba\(.*,\s*0\)$/.test(c)) return c;
+    }
+    return "#000000";
+  })();
   const [tx, ty] = el ? readTranslate(el) : [0, 0];
   const setOffset = (x: number, y: number) => set("translate", !x && !y ? "" : `${x}px ${y}px`);
   const isText = !!el && textual(el);
@@ -430,7 +439,7 @@ export function Inspector(p: Props) {
               {(isText || container) && (
                 <div className="flex flex-col gap-1">
                   <span className="text-micro text-muted-foreground">Text color</span>
-                  <ColorField aria-label="Text color" value={val("color")} onChange={(v) => set("color", v)} />
+                  <ColorField aria-label="Text color" value={val("color")} onChange={(v) => set("color", v)} contrastBg={slideBg} />
                 </div>
               )}
               {hasFill && (
@@ -535,7 +544,7 @@ export function Inspector(p: Props) {
         )}
       </TabPanel>
       <TabPanel value="comments">
-        <CommentsPanel comments={p.comments} channel={p.channel} onJump={p.onJump} onResolve={p.onResolve} onTrust={p.onTrust} onRemove={p.onRemove} hoverId={p.hoverId} onHover={p.onHover} />
+        <CommentsPanel comments={p.comments} channel={p.channel} onJump={p.onJump} onResolve={p.onResolve} onTrust={p.onTrust} onRemove={p.onRemove} onRevert={p.onRevert} hoverId={p.hoverId} onHover={p.onHover} />
       </TabPanel>
     </Tabs>
   );

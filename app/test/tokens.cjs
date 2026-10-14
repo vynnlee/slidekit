@@ -34,7 +34,7 @@ async function run(label, prep, expectDiff) {
   await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))); // 폭 변경이 레이아웃에 반영될 때까지
   const clipped = await p.evaluate(() => [...document.querySelectorAll('input[aria-label$=" hex"]')].filter((e) => e.scrollWidth > e.clientWidth + 1).map((e) => e.getAttribute('aria-label')));
   check(label + ': 패널 240px에서도 hex가 잘리지 않음', clipped.length === 0, clipped);
-  check(label + ': 불투명한 색은 투명도 칸을 숨김', (await p.getByLabel('Accent opacity percent').isVisible()) === false);
+  check(label + ': 불투명한 색은 투명도 칸을 숨김', await p.getByLabel('Accent opacity percent').waitFor({ state: 'hidden', timeout: 3000 }).then(() => true, () => false));
   const padx = p.getByLabel('Padding X', { exact: true }); await padx.fill('120'); await padx.press('Enter');
   await sleep(500); // 패널이 변경을 400ms 디바운스로 모아 한 번에 커밋한다. 이 사이에 Save를 누르면 pad-x가 빠지고, 상태 문구는 accent 변경으로 이미 Unsaved라 조건으로 볼 수 없다.
   await p.waitForFunction(() => document.querySelector('[data-testid="status"]')?.textContent === 'Unsaved', null, { timeout: 5000 }).catch(() => {});

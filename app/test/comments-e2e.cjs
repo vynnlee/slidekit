@@ -61,6 +61,7 @@ const json = { 'Content-Type': 'application/json' };
     check('전송 뒤 작성창이 닫힌다', (await page.getByRole('group', { name: 'New comment' }).count()) === 0);
     check('Waiting 상태로 목록에 나타난다', await stateIs('waiting'));
     const pin = page.locator('[data-comment-pin]');
+    await pin.first().waitFor({ timeout: 5000 }).catch(() => {}); // 핀은 목록과 같은 데이터로 그려지지만 다음 프레임에 놓인다
     check('캔버스에 번호 핀이 있고 이름에 번호와 상태가 있다', (await pin.count()) === 1 && /^Comment 1, Waiting: E2E/.test((await pin.getAttribute('aria-label')) ?? ''), await pin.getAttribute('aria-label'));
 
     // 가짜 채널 소비자: /api/events?client=channel 로 연결, 연결 때 대기 코멘트를 따라잡아 전달 표시, 잠시 뒤 답한다.

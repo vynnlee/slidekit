@@ -73,7 +73,7 @@ const PW = 'S3cret-pass-ZZ';
   await p.getByRole('menuitem', { name: 'Published...' }).click();
   const pd = p.getByTestId('published-dialog');
   check('Published 대화상자: 주소, 시각, 크기', await pd.waitFor({ timeout: 5000 }).then(() => true, () => false) && /static\.vynnlee\.com\/qa-exp-pub/.test(await pd.textContent()) && /1 h ago|60 min ago/.test(await pd.textContent()) && /121 KB|0\.1 MB/.test(await pd.textContent()), await pd.textContent().catch(() => ''));
-  check('덱이 기록의 지문과 다르면 Changed since publish', await p.getByTestId('changed-since-publish').isVisible());
+  check('덱이 기록의 지문과 다르면 Changed since publish', await p.getByTestId('changed-since-publish').waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false));
   await pd.getByRole('button', { name: /^Unpublish/ }).click();
   const ud = p.getByTestId('unpublish-dialog');
   await ud.waitFor({ timeout: 5000 });

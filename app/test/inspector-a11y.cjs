@@ -31,7 +31,8 @@ const findAxe = () => {
   const open = async () => {
     await page.goto(`${BASE}/edit/${t.id}`);
     await page.waitForFunction(() => { const f = document.querySelector('iframe[title="Canvas"]'); return f && f.contentDocument && f.contentDocument.querySelector('[data-active]'); });
-    await sleep(800);
+    await page.getByTestId('filmstrip').waitFor(); // 편집기 화면이 그려졌다
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))); // 레이아웃이 자리를 잡은 뒤
   };
   const fr = () => page.frames().find((f) => f.url().startsWith('blob:'));
   const panelSel = 'aside[aria-label]:last-of-type';
@@ -155,16 +156,17 @@ const findAxe = () => {
     check('중간', 'order', 'filmstrip', 'roving tabindex: tabindex 0인 옵션은 선택된 하나뿐이다', info.filter((i) => i.tab === 0).length === 1 && info.find((i) => i.tab === 0)?.sel === 'true', info.filter((i) => i.tab === 0).length);
     if (n < 3) return;
     const selIdx = () => opts.evaluateAll((l) => l.findIndex((e) => e.getAttribute('aria-selected') === 'true'));
-    const focusSel = async () => { await opts.nth(await selIdx()).focus(); await sleep(150); };
+    const selIs = async (i) => { for (let k = 0; k < 40 && (await selIdx()) !== i; k++) await sleep(100); }; // 키 입력 뒤 선택이 바뀔 때까지 조건으로 기다린다
+    const focusSel = async () => { await opts.nth(await selIdx()).focus(); };
     await page.keyboard.press('Shift'); // 키보드 모달리티
-    await opts.nth(0).click(); await sleep(400); await focusSel();
-    await page.keyboard.press('ArrowRight'); await sleep(400);
+    await opts.nth(0).click(); await selIs(0); await focusSel();
+    await page.keyboard.press('ArrowRight'); await selIs(1);
     check('높음', 'value', 'filmstrip', '→는 다음 슬라이드를 선택하고 포커스가 함께 이동한다', (await selIdx()) === 1 && (await opts.nth(1).evaluate((e) => e === document.activeElement)), await selIdx());
-    await page.keyboard.press('ArrowLeft'); await sleep(400);
+    await page.keyboard.press('ArrowLeft'); await selIs(0);
     check('높음', 'value', 'filmstrip', '←는 이전 슬라이드를 선택한다', (await selIdx()) === 0, await selIdx());
-    await page.keyboard.press('End'); await sleep(500);
+    await page.keyboard.press('End'); await selIs(n - 1);
     check('중간', 'value', 'filmstrip', 'End는 마지막 슬라이드를 선택한다', (await selIdx()) === n - 1, [await selIdx(), n]);
-    await page.keyboard.press('Home'); await sleep(500);
+    await page.keyboard.press('Home'); await selIs(0);
     check('중간', 'value', 'filmstrip', 'Home은 첫 슬라이드를 선택한다', (await selIdx()) === 0, await selIdx());
     const ring = await opts.nth(0).evaluate((e) => { let n = e, ok = false; for (let k = 0; k < 3 && n && !ok; k++, n = n.parentElement) { const s = getComputedStyle(n); ok = (s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) > 0) || (!!s.boxShadow && s.boxShadow !== 'none') || /ring|focus/.test(String(n.className)); } return ok; });
     check('높음', 'nofocus', 'filmstrip', '포커스된 옵션에 포커스 링이 있다', ring);

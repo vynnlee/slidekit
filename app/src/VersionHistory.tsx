@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ExternalLink, History, Loader2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { toast } from "@/Toaster";
+import { toast, TOAST } from "@/Toaster";
 import { ago } from "@/lib/comment-state";
 import { diffDecks, slidesLabel } from "@/lib/deck-diff";
 
@@ -56,7 +56,7 @@ export function VersionHistory({ folder, open, onOpenChange, ensureSaved }: Vers
       if (!r.ok) throw new Error(String(r.status));
       const { undo } = (await r.json()) as { undo?: string | null };
       onOpenChange(false);
-      toast(`Restored the version from ${new Date(v.at).toLocaleTimeString()}`, undo ? { ms: 10000, action: { label: "Undo", onClick: () => { post(`/api/decks/${folder}/versions/${undo}/restore`).then((u) => toast(u.ok ? "Restore undone" : "Could not undo the restore", { ms: 3000 })).catch(() => toast("Could not undo the restore", { ms: 3000 })); } } } : { ms: 5000 });
+      toast(`Restored the version from ${new Date(v.at).toLocaleTimeString()}`, undo ? { action: { label: "Undo", onClick: () => { post(`/api/decks/${folder}/versions/${undo}/restore`).then((u) => toast(u.ok ? "Restore undone" : "Could not undo the restore", { ms: 3000 })).catch(() => toast("Could not undo the restore", { ms: 3000 })); } } } : { ms: 5000 });
     } catch { setErr("Could not restore this version"); } finally { setBusy(""); }
   };
 
@@ -90,7 +90,6 @@ export function VersionHistory({ folder, open, onOpenChange, ensureSaved }: Vers
               ))}
             </ul>
           )}
-          <div className="flex justify-end"><Button size="compact" variant="ghost" onClick={() => onOpenChange(false)}>Close</Button></div>
         </div>
       </DialogContent>
     </Dialog>

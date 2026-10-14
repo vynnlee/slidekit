@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Comment } from "@/lib/deck";
-import { toast } from "@/Toaster";
+import { toast, TOAST } from "@/Toaster";
 
 // 한 덱의 코멘트와 Claude 채널 연결 상태를 서버(SSE)와 맞춰 둔다.
 //  - comment(새 코멘트), reply(갱신: 답, 전달됨, 해결), comments(전체 교체), channel({connected})
@@ -66,12 +66,12 @@ export function useCommentsLive(folder: string | null) {
     try {
       const r = await fetch(`/api/comments/${c.id}/revert`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deck: folder, undo }) });
       if (r.status === 409 && !undo && ((await r.json().catch(() => ({}))) as { error?: string }).error === "changed") {
-        toast("The deck changed after Claude's edit, so it was not reverted.", { ms: 9000, action: { label: "Version history", onClick: () => window.dispatchEvent(new Event("slidekit:open-versions")) } });
+        toast("The deck changed after Claude's edit, so it was not reverted", { ms: TOAST.error, action: { label: "Version history", onClick: () => window.dispatchEvent(new Event("slidekit:open-versions")) } });
         return;
       }
       if (!r.ok) throw new Error(String(r.status));
     } catch { setError("Could not revert the edit"); return; }
-    toast(undo ? "Revert undone" : "Reverted Claude's edit", undo ? { ms: 3000 } : { action: { label: "Undo", onClick: () => { void revert(c, true); } } });
+    toast(undo ? "Revert undone" : "Reverted Claude's edit", undo ? { ms: TOAST.info } : { action: { label: "Undo", onClick: () => { void revert(c, true); } } });
   }, [folder]);
 
   return { comments, setComments, channel, error, upsert, resolve, trust, remove, revert };

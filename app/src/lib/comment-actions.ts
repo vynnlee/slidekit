@@ -1,6 +1,6 @@
 import type { Comment } from "@/lib/deck";
 import { stateOf } from "@/lib/comment-state";
-import { toast } from "@/Toaster";
+import { toast, TOAST } from "@/Toaster";
 import { Check, Copy, ExternalLink, RotateCcw, ShieldAlert, Trash2, Undo2 } from "lucide-react";
 import { commentMenu as buildCommentMenu, type MenuItem } from "@/lib/menu-model";
 
@@ -16,7 +16,7 @@ export interface CommentActions {
 }
 
 export async function copyCommentText(c: Comment) {
-  try { await navigator.clipboard.writeText(c.text); toast("Comment copied", { ms: 2000 }); } catch { toast("Could not copy the comment", { ms: 3000 }); }
+  try { await navigator.clipboard.writeText(c.text); toast("Comment copied", { ms: TOAST.copy }); } catch { toast("Could not copy the comment", { ms: TOAST.error }); }
 }
 
 // 우클릭과 ContextMenu 키로 여는 메뉴 항목(맥락은 핀 또는 패널 항목). 목록의 원천은 lib/menu-model.ts의 commentMenu다.

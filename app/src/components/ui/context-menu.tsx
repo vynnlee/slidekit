@@ -84,7 +84,7 @@ export function useContextMenu(): ContextMenuController {
 }
 
 const DESTRUCTIVE = "text-destructive [&_span]:text-destructive [&_svg]:text-destructive";
-const KEYCAP = "after:ml-auto after:pl-6 after:text-caption after:text-muted-foreground after:content-[attr(data-shortcut)]";
+const KEYCAP = "after:ml-auto after:pl-6 after:text-caption after:text-muted-foreground after:[font-family:var(--font-keys)] after:content-[attr(data-shortcut)]";
 
 /** 항목 목록을 Fluid 메뉴 행으로 그린다. DropdownContent 안에서 쓴다(우클릭 메뉴와 ... 버튼 메뉴가 같이 쓴다). */
 export function MenuItems({ items }: { items: MenuItem[] }) {

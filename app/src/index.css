@@ -309,7 +309,9 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-border: var(--border);
-  --font-sans: "Inter Variable", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --font-sans: "Inter Variable", system-ui, "Apple SD Gothic Neo", sans-serif;
+  /* 번들한 Inter(latin)에는 ⌘ ⇧ ⌥ ↵ ⌫ ← → 가 없다(↑ ↓만 있음). 단축키 글자는 이 기호를 모두 가진 시스템 글꼴 하나로 통일한다. */
+  --font-keys: system-ui, "Apple SD Gothic Neo", sans-serif;
 }
 .dark {
   --background: var(--surface-1);
@@ -320,5 +322,6 @@
   --accent: var(--surface-3);
   --border: rgb(255 255 255 / 0.1);
 }
+kbd { font-family: var(--font-keys); }
 html, body, #root { height: 100%; }
 body { margin: 0; font-family: var(--font-sans); background: var(--background); color: var(--foreground); overflow: hidden; -webkit-font-smoothing: antialiased; }

@@ -69,7 +69,7 @@ export async function duplicateDeck(req: Request & { params: { folder: string } 
   if (!from) return err("Deck not found", 404);
   let name = `${folder}-copy`;
   for (let i = 2; await exists(join(decks, name)); i++) name = `${folder}-copy-${i}`;
-  await cp(from, join(decks, name), { recursive: true, filter: (p) => !p.startsWith(join(from, "history")) && p !== join(from, "comments.json") // 코멘트는 복제하지 않는다 });
+  await cp(from, join(decks, name), { recursive: true, filter: (p) => !p.startsWith(join(from, "history")) && p !== join(from, "comments.json") }); // 코멘트는 복제하지 않는다
   await patchMeta(name, (m) => { if ("id" in m) m.id = name; if (typeof m.title === "string") m.title += " copy"; });
   return Response.json({ id: name, folder: name }, { status: 201 });
 }

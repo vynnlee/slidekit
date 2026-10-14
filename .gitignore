@@ -10,3 +10,4 @@ decks/zz-e2e*/
 decks/**/*.tmp-*
 decks/.vibe-test-backup.html
 decks/*/.versions/
+decks/*/.publish.json

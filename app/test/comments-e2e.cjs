@@ -114,6 +114,22 @@ const json = { 'Content-Type': 'application/json' };
     await items.first().hover(); await sleep(300);
     check('목록 호버가 핀을 강조한다', /scale-125/.test((await pin.getAttribute('class')) ?? ''));
 
+    // 키보드: J/K와 화살표로 코멘트 사이를 옮기고 E로 해결과 되돌리기
+    await fetch(`${BASE}/api/comments`, { method: 'POST', headers: json, body: JSON.stringify({ deck: DECK, slide: 1, path: 'h1', excerpt: 'k', text: '키보드 확인용' }) });
+    await page.waitForFunction(() => document.querySelectorAll('[data-testid=comments-panel] li[data-comment-id]').length === 2, null, { timeout: 8000 }).catch(() => {});
+    const mains = panel.locator('[data-comment-main]');
+    const focused = (i) => mains.nth(i).evaluate((e) => e === document.activeElement);
+    await mains.first().focus(); await page.keyboard.press('j');
+    check('J로 다음 코멘트에 포커스', await focused(1));
+    await page.keyboard.press('k');
+    check('K로 이전 코멘트에 포커스', await focused(0));
+    await page.keyboard.press('ArrowDown');
+    check('아래 화살표도 다음 코멘트로 이동(슬라이드 이동으로 새지 않는다)', await focused(1));
+    await page.keyboard.press('e');
+    check('E로 해결', await page.waitForFunction(() => document.querySelectorAll('[data-testid=comments-panel] li[data-state="resolved"]').length === 1, null, { timeout: 5000 }).then(() => true, () => false));
+    await page.keyboard.press('e');
+    check('E를 다시 누르면 해결 취소', await page.waitForFunction(() => document.querySelectorAll('[data-testid=comments-panel] li[data-state="resolved"]').length === 0, null, { timeout: 5000 }).then(() => true, () => false));
+
     // 파일 변경 -> 캔버스 새로고침
     const src = fs.readFileSync(t.file, 'utf8');
     const title = (await fr().locator('[data-active] h1, [data-active] h2').first().textContent()).trim();

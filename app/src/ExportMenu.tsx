@@ -180,10 +180,10 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
               {url && (
                 <div className="flex flex-col gap-2" data-testid="publish-done">
                   <p className="text-body">Published{needPw ? ". Viewers need the password you set." : ". Anyone with the link can view it."}</p>
+                  <a href={url} target="_blank" rel="noreferrer" className="break-all underline">{url}</a>
                   <div className="flex items-center gap-2">
-                    <a href={url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate underline">{url}</a>
-                    <Button size="compact" variant="secondary" onClick={copy} aria-label="Copy link">{copied ? <Check /> : <Copy />}{copied ? "Copied" : "Copy"}</Button>
-                    <a href={url} target="_blank" rel="noreferrer" aria-label="Open in new tab" className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-hover"><ExternalLink className="h-4 w-4" aria-hidden="true" /></a>
+                    <Button size="compact" variant="secondary" onClick={copy} aria-label="Copy link" leadingIcon={copied ? Check : Copy}>{copied ? "Copied" : "Copy link"}</Button>
+                    <a href={url} target="_blank" rel="noreferrer" aria-label="Open in new tab" className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-body hover:bg-hover"><ExternalLink className="h-4 w-4" aria-hidden="true" />Open</a>
                   </div>
                 </div>
               )}

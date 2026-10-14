@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Check, CheckCheck, Clock, Copy, MessageSquare, RotateCcw, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -77,6 +77,7 @@ interface CommentsPanelProps {
 export function CommentsPanel({ comments, channel, onJump, onResolve, hoverId, onHover }: CommentsPanelProps) {
   const [filter, setFilter] = useState<Filter>("all");
   const [open, setOpen] = useState<Set<string>>(new Set()); // 길어서 펼친 코멘트
+  const root = useRef<HTMLDivElement>(null);
   const nums = useMemo(() => numbering(comments), [comments]);
   const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, comments.filter((c) => f.match(stateOf(c))).length])) as Record<Filter, number>, [comments]);
   const shown = comments.filter((c) => FILTERS.find((f) => f.id === filter)!.match(stateOf(c)));
@@ -86,8 +87,26 @@ export function CommentsPanel({ comments, channel, onJump, onResolve, hoverId, o
     return [...m.entries()].sort(([a], [b]) => (a === -1 ? 1 : b === -1 ? -1 : a - b));
   }, [shown]);
 
+  // 목록 키보드: J/K 또는 아래/위 화살표로 코멘트 사이를 옮기고, E로 해결과 되돌리기. 입력창 안에서는 동작하지 않는다.
+  const onKeys = (e: KeyboardEvent) => {
+    const t = e.target as HTMLElement;
+    if (e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    const k = e.key.toLowerCase();
+    const mains = [...(root.current?.querySelectorAll<HTMLElement>("[data-comment-main]") ?? [])];
+    const li = t.closest("li[data-comment-id]");
+    const cur = mains.findIndex((m) => m.closest("li") === li);
+    if (k === "j" || k === "k" || k === "arrowdown" || k === "arrowup") {
+      e.preventDefault(); e.stopPropagation(); // 편집기 전역 위아래 화살표(슬라이드 이동)와 겹치지 않게 한다
+      const down = k === "j" || k === "arrowdown";
+      mains[Math.max(0, Math.min(mains.length - 1, cur < 0 ? (down ? 0 : mains.length - 1) : cur + (down ? 1 : -1)))]?.focus();
+    } else if (k === "e" && li) {
+      const c = comments.find((x) => x.id === li.getAttribute("data-comment-id"));
+      if (c) { e.preventDefault(); e.stopPropagation(); onResolve(c, stateOf(c) !== "resolved"); }
+    }
+  };
+
   return (
-    <div className="flex flex-col gap-3 pt-3" data-testid="comments-panel">
+    <div ref={root} onKeyDown={onKeys} className="flex flex-col gap-3 pt-3" data-testid="comments-panel">
       {channel === false ? <NotConnected open={comments.length === 0} /> : <ChannelBadge connected={channel} />}
       {comments.length > 0 && (
         <div role="group" aria-label="Filter comments" className="flex flex-wrap gap-1">
@@ -98,6 +117,7 @@ export function CommentsPanel({ comments, channel, onJump, onResolve, hoverId, o
           ))}
         </div>
       )}
+      {comments.length > 1 && <p className="px-1 text-micro text-muted-foreground">J and K move between comments, E resolves.</p>}
       {comments.length === 0 && (
         <p className="text-caption text-muted-foreground">No comments yet. Select an element and press C, or use the comment button in its toolbar.</p>
       )}
@@ -121,6 +141,8 @@ export function CommentsPanel({ comments, channel, onJump, onResolve, hoverId, o
                 >
                   <button
                     type="button"
+                    data-comment-main
+                    aria-keyshortcuts="J K E"
                     onClick={() => onJump(c)}
                     aria-label={`Comment ${nums.get(c.id)}, ${STATE_LABEL[st]}: ${c.text.slice(0, 60)}`}
                     className="flex flex-col gap-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"

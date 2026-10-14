@@ -2,8 +2,8 @@
 // 전체 검증. 실행: bun run test [--only <이름 일부>...] [--list] [--bail] [--slow]
 // 무거운 작업이라 /tmp/slidekit-heavy.lock을 한 번 잡고 모든 단계를 순서대로 돈다.
 // 실제 덱은 읽기 전용이다. 덱을 고치는 테스트는 scripts/lib/test-deck.cjs의 사본(decks/_e2e-*/)만 쓴다.
-// 단계 전후로 실제 덱(decks/_* 제외)의 내용 해시를 비교해 달라졌으면 WARN으로 보고만 한다(복원하지 않고 실패로도 치지 않는다).
-import { globSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync } from "node:fs";
+// 단계 전후로 실제 덱(decks/_* 제외)의 내용 해시를 비교해 달라졌으면 WARN으로 보고만 한다(복원하지 않고 실패로도 치지 않는다). 지문은 경로, 크기, 수정 시각이다..
+import { createWriteStream, globSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
@@ -20,8 +20,8 @@ const CHROME = last(join(homedir(), "Library/Caches/ms-playwright/chromium_headl
 
 // 테스트 서버는 이 덱들에 PUT하지 못한다(실제 덱 보호). 고치는 테스트는 makeTestDeck 사본을 쓴다.
 const READONLY = "vibe-coding-workshop,slidekit-guide";
-// 포트: 3240 정적(엔진), 3241 앱, 3242 채널, 3245 앱(배포 dry-run)
-const APP = "http://127.0.0.1:3241", DRY = "http://127.0.0.1:3245", STATIC = "http://127.0.0.1:3240";
+// 포트: 3240 정적(엔진), 3242 채널, 3245 앱(배포 dry-run, 모든 앱 단계가 공유)
+const DRY = "http://127.0.0.1:3245", APP = DRY, STATIC = "http://127.0.0.1:3240";
 type Step = { name: string; cmd: string[]; env?: Record<string, string>; server?: "app" | "dry" | "static"; slow?: boolean };
 const browser = (name: string, file: string, server: "app" | "dry" | "static", base: string, extra: Record<string, string> = {}): Step =>
   ({ name, cmd: ["node", file], server, env: { PW: PW ?? "", CHROME: CHROME ?? "", BASE: base, ...extra } });
@@ -41,6 +41,7 @@ const steps: Step[] = [
   bun("scan-secrets", "test", "scripts/scan-secrets.test.ts"),
   bun("deploy-worker", "test", "deploy/worker"),
   { name: "channel", cmd: ["bun", "channel/test.ts"], env: { TEST_PORT: "3242" } },
+  { name: "channel-resilience", cmd: ["bun", "channel/resilience.ts"], env: { TEST_PORT: "3247" } },
   browser("engine-verify", "engine/test/verify.cjs", "static", STATIC),
   browser("routes", "app/test/routes.cjs", "app", APP),
   browser("list", "app/test/list.cjs", "app", APP),
@@ -61,20 +62,57 @@ const picked = steps.filter((s) => (only.length ? only.some((o) => s.name.includ
 if (!picked.length) { console.error("맞는 단계가 없음. --list로 확인"); process.exit(2); }
 if (picked.some((s) => s.cmd[0] === "node") && (!PW || !CHROME)) { console.error("playwright-core 또는 headless shell을 찾지 못함"); process.exit(2); }
 
-for (;;) {
-  try { mkdirSync(lock); break; } catch { console.log("잠금 대기 중"); await Bun.sleep(30_000); }
+const servers = new Map<string, () => void>();
+// 공정한 대기열: /tmp/slidekit-heavy.queue/<시각>-<pid> 표를 받고, 살아 있는 표 중 가장 앞일 때만 잠금을 시도한다.
+// 손으로 mkdir 하는 팀원과도 같은 잠금 디렉터리를 공유한다(pid 파일에는 보유자 이름을 적는다).
+const queue = "/tmp/slidekit-heavy.queue";
+const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+const holder = () => { try { return readFileSync(join(lock, "pid"), "utf8").trim() || "알 수 없음"; } catch { return "알 수 없음"; } };
+mkdirSync(queue, { recursive: true });
+const ticket = join(queue, `${Date.now().toString().padStart(14, "0")}-${process.pid}`);
+writeFileSync(ticket, "");
+let held = false;
+const release = () => { rmSync(ticket, { force: true }); if (held) { held = false; try { rmSync(lock, { recursive: true }); } catch {} } };
+for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => { for (const stop of servers.values()) stop(); release(); process.exit(130); });
+{
+  let lastMsg = "", lastAt = 0;
+  for (;;) {
+    const live = readdirSync(queue).filter((n) => alive(Number(n.split("-")[1]))).sort();
+    for (const n of readdirSync(queue)) if (!live.includes(n)) rmSync(join(queue, n), { force: true }); // 죽은 대기자의 표
+    const pos = live.indexOf(ticket.split("/").pop()!);
+    if (pos === 0) {
+      try { mkdirSync(lock); writeFileSync(join(lock, "pid"), `test-runner pid=${process.pid}`); held = true; break; } catch {}
+    }
+    // 같은 메시지는 5분에 한 번만 다시 찍는다.
+    const h = holder(), m = `잠금 대기: 앞에 ${pos}명, 보유자 ${h}`;
+    if (m !== lastMsg || Date.now() - lastAt > 300_000) { console.log(m); lastMsg = m; lastAt = Date.now(); }
+    // 보유자가 test-runner인데 죽었으면 남은 잠금이다.
+    const dead = h.match(/^test-runner pid=(\d+)/);
+    if (dead && !alive(Number(dead[1]))) { console.log("죽은 test-runner의 잠금을 치웁니다"); rmSync(lock, { recursive: true, force: true }); continue; }
+    await Bun.sleep(5_000);
+  }
 }
+console.log(`잠금 획득 (pid ${process.pid})`);
 
-const spawn = (cmd: string[], env: Record<string, string> = {}) =>
-  Bun.spawn(["taskpolicy", "-b", ...cmd], { cwd: root, env: { ...process.env, ...env }, stdout: "inherit", stderr: "inherit" });
+// 단계 출력은 화면과 /tmp/slidekit-test-logs/<단계>.log에 함께 남긴다(실패 때 다시 볼 수 있게).
+const logDir = "/tmp/slidekit-test-logs";
+mkdirSync(logDir, { recursive: true });
+async function run(name: string, cmd: string[], env: Record<string, string> = {}) {
+  const out = createWriteStream(join(logDir, `${name}.log`));
+  const p = Bun.spawn(["taskpolicy", "-b", ...cmd], { cwd: root, env: { ...process.env, ...env }, stdout: "pipe", stderr: "pipe" });
+  const pump = async (s: ReadableStream<Uint8Array>, to: NodeJS.WriteStream) => { for await (const c of s) { to.write(c); out.write(c); } };
+  await Promise.all([pump(p.stdout, process.stdout), pump(p.stderr, process.stderr)]);
+  out.end();
+  return p.exited;
+}
 const waitUp = async (url: string) => {
   for (let i = 0; i < 75; i++) { if (await fetch(`${url}/api/decks`).then((r) => r.ok).catch(() => false)) return; await Bun.sleep(200); }
   throw new Error(`서버가 안 뜸: ${url}`);
 };
 
 // 서버는 처음 필요할 때 띄우고 끝까지 둔다.
-const servers = new Map<string, () => void>();
 async function ensure(kind: "app" | "dry" | "static") {
+  if (kind !== "static") kind = "dry";
   if (servers.has(kind)) return;
   if (kind === "static") {
     const srv = Bun.serve({ hostname: "127.0.0.1", port: 3240, fetch: (req) => {
@@ -84,15 +122,15 @@ async function ensure(kind: "app" | "dry" | "static") {
     servers.set(kind, () => srv.stop(true));
     return;
   }
-  const dry = kind === "dry";
+  // 앱 서버 하나(deploy dry-run 켬)를 app과 dry가 같이 쓴다. 서버를 두 번 띄우고 첫 빌드를 두 번 치르지 않는다.
   // export.cjs가 서버 로그(/tmp/sk-eng-srv.log)에 비밀번호가 없는지 검사하므로 dry-run 서버의 출력을 거기에 남긴다.
-  const log = dry ? Bun.file("/tmp/sk-eng-srv.log") : "ignore";
+  const log = Bun.file("/tmp/sk-eng-srv.log");
   const p = Bun.spawn(["taskpolicy", "-b", "bun", "run", "app/server.ts"], {
     cwd: root, stdout: log, stderr: log,
-    env: { ...process.env, PORT: dry ? "3245" : "3241", SLIDEKIT_READONLY_DECKS: READONLY, ...(dry ? { SLIDEKIT_DEPLOY_DRY_RUN: "1" } : {}) },
+    env: { ...process.env, PORT: "3245", SLIDEKIT_STABLE: "1", SLIDEKIT_READONLY_DECKS: READONLY, SLIDEKIT_DEPLOY_DRY_RUN: "1" },
   });
   servers.set(kind, () => p.kill());
-  await waitUp(dry ? DRY : APP);
+  await waitUp(DRY);
 }
 
 // 이전 실행이 중단되어 남은 export 테스트 덱(qa-exp-*)만 지운다. 이름을 _로 못 바꾸는 테스트 전용 덱이다.
@@ -108,7 +146,7 @@ function fingerprint() {
       if (e.name.includes(".tmp-")) continue;
       const p = join(dir, e.name);
       if (e.isDirectory()) { h.update(`d:${p}\n`); walk(p, false); }
-      else { h.update(`f:${p}\n`); try { h.update(readFileSync(p)); } catch {} }
+      else { try { const st = statSync(p); h.update(`f:${p}:${st.size}:${st.mtimeMs}\n`); } catch {} } // 내용 대신 크기와 수정 시각(단계마다 전체를 읽지 않는다)
     }
   };
   walk(decksDir, true);
@@ -125,7 +163,7 @@ try {
     let ok = false;
     try {
       if (s.server) await ensure(s.server);
-      ok = (await spawn(s.cmd, s.env).exited) === 0;
+      ok = (await run(s.name, s.cmd, s.env)) === 0;
     } catch (e) { console.log(String(e)); }
     const after = fingerprint();
     // 사용자나 다른 팀원이 같은 시각에 편집했을 수 있어 실패로 치지 않고 경고만 한다. 복원하지 않는다.
@@ -137,11 +175,16 @@ try {
   }
 } finally {
   for (const stop of servers.values()) stop();
-  rmdirSync(lock);
+  release();
 }
 
 console.log("\n" + results.map(([n, ok, t]) => `${ok ? "PASS" : "FAIL"} ${n} ${t.toFixed(1)}초`).join("\n"));
+const total = results.reduce((a, [, , t]) => a + t, 0);
+console.log(`\n합계 ${total.toFixed(0)}초. 오래 걸린 단계: ` + [...results].sort((a, b) => b[2] - a[2]).slice(0, 3).map(([n, , t]) => `${n} ${t.toFixed(0)}초`).join(", "));
 const failed = results.filter(([, ok]) => !ok).map(([n]) => n);
 if (warned.length) console.log(`\nWARN: 실제 덱이 바뀐 단계 ${warned.join(", ")}`);
-console.log(failed.length ? `\nFAIL: ${failed.join(", ")}` : "\n전체 통과");
+if (failed.length) {
+  console.log(`\nFAIL: ${failed.join(", ")}`);
+  for (const n of failed) console.log(`  다시 실행: bun run test --only ${n}   로그: ${logDir}/${n}.log` + (n === "export" || n === "tokens" ? "   서버 로그: /tmp/sk-eng-srv.log" : ""));
+} else console.log("\n전체 통과");
 process.exit(failed.length ? 1 : 0);

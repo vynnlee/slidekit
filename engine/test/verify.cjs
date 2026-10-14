@@ -325,7 +325,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await q.keyboard.press('ArrowRight');
     const lv = await q.evaluate(() => { const o = document.querySelector('[data-slide]:not([data-active])'); const first = document.querySelectorAll('#sk-stage > [data-slide]')[0]; return { leaving: first.hasAttribute('data-leaving'), vis: getComputedStyle(first).visibility }; });
     check('crossfade: the old slide stays visible while leaving (arrow)', lv.leaving && lv.vis === 'visible', lv);
-    await sleep(500);
+    await q.waitForFunction(() => !document.querySelector('[data-leaving]'), null, { timeout: 4000 }).catch(() => {}); // 360ms 전환이 부하에서 500ms를 넘길 수 있다
     check('crossfade: leaving clears after the animation', !(await q.evaluate(() => document.querySelector('[data-leaving]'))) && (await q.evaluate(() => getComputedStyle(document.querySelectorAll('#sk-stage > [data-slide]')[0]).visibility)) === 'hidden');
     await q.evaluate(() => { location.hash = '#3'; }); await sleep(100);
     check('crossfade: jumps (hash) do not crossfade', !(await q.evaluate(() => document.querySelector('[data-leaving]'))));

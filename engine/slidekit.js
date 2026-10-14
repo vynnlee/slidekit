@@ -287,6 +287,8 @@
           inner = make('div', '', 'sk-thumb-in'), copy = s.el.cloneNode(true), lab = make('div', '', 'sk-thumb-n');
       copy.removeAttribute('data-active');
       copy.setAttribute('inert', '');
+      /* thumbnails load and decode images lazily: only the thumbnails on screen when the overview opens (a 30-photo deck would otherwise decode every full-size image) */
+      [].forEach.call(copy.querySelectorAll('img'), function (im) { im.loading = 'lazy'; im.decoding = 'async'; });
       inner.appendChild(copy); box.appendChild(inner);
       if (window.ResizeObserver) fitThumbs.observe(box);
       lab.textContent = s.n + (s.title ? '  ' + s.title : '');

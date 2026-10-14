@@ -18,6 +18,7 @@ if (notes && handout) { console.error(`--notes와 --handout은 함께 쓸 수 �
 if (![2, 3, 4, 6].includes(per)) { console.error(`--handout은 쪽당 2, 3, 4, 6장만 된다(받은 값 ${per}). ${USAGE}`); process.exit(1); }
 const mode = notes ? "notes" : handout ? "handout" : "slides";
 
+const SYSTEM_CHROMES = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Chromium.app/Contents/MacOS/Chromium", "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"];
 function findChrome(): string | null {
   const env = process.env.SLIDEKIT_CHROME;
   if (env) return existsSync(env) ? env : null;
@@ -28,7 +29,8 @@ function findChrome(): string | null {
     const exe = join(base, d, sub, "chrome-headless-shell");
     if (existsSync(exe)) return exe;
   }
-  return null;
+  // Playwright의 headless shell이 없으면 설치된 Chrome 계열을 쓴다(mac-local처럼 개발용 브라우저를 따로 받지 않은 기계)
+  return SYSTEM_CHROMES.find(existsSync) ?? null;
 }
 
 const chrome = findChrome();

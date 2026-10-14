@@ -8,14 +8,19 @@ const root = join(import.meta.dir, "..");
 let warns = 0;
 const row = (ok: boolean, name: string, msg: string) => { if (!ok) warns++; console.log(`${ok ? "OK  " : "WARN"} ${name.padEnd(8)} ${msg}`); };
 
-row(true, "bun", Bun.version);
+const [bmaj, bmin, bpat] = Bun.version.split(".").map(Number);
+const bunOk = bmaj > 1 || (bmaj === 1 && (bmin > 2 || (bmin === 2 && bpat >= 3))); // Bun.serve routes는 1.2.3부터
+row(bunOk, "bun", bunOk ? Bun.version : `${Bun.version}. 1.2.3 이상이 필요하다(bun upgrade)`);
+// uv는 외부 글꼴을 쓰는 덱을 번들할 때만 필요하다(글꼴 서브셋)
+row(!!Bun.which(process.env.SLIDEKIT_UV ?? "uv"), "uv", Bun.which(process.env.SLIDEKIT_UV ?? "uv") ? "있음" : "없음. 외부 글꼴을 쓰는 덱을 번들할 때만 필요하다(brew install uv)");
 
 const envChrome = process.env.SLIDEKIT_CHROME;
 const cache = join(homedir(), "Library", "Caches", "ms-playwright");
-const shell = existsSync(cache) ? readdirSync(cache).filter((d) => d.startsWith("chromium_headless_shell-")).sort().reverse()
-  .flatMap((d) => readdirSync(join(cache, d)).map((s) => join(cache, d, s, "chrome-headless-shell"))).find(existsSync) : undefined;
+const SYSTEM = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Chromium.app/Contents/MacOS/Chromium", "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"].find(existsSync);
+const shell = (existsSync(cache) ? readdirSync(cache).filter((d) => d.startsWith("chromium_headless_shell-")).sort().reverse()
+  .flatMap((d) => readdirSync(join(cache, d)).map((s) => join(cache, d, s, "chrome-headless-shell"))).find(existsSync) : undefined) ?? (SYSTEM ? `${SYSTEM} (설치된 Chrome 계열. pdf는 Playwright의 headless shell로 검증했다)` : undefined);
 if (envChrome) row(existsSync(envChrome), "chrome", existsSync(envChrome) ? `SLIDEKIT_CHROME ${envChrome}` : `SLIDEKIT_CHROME 경로가 없다: ${envChrome}`);
-else row(!!shell, "chrome", shell ?? "없음. SLIDEKIT_CHROME을 지정하거나 playwright로 chromium_headless_shell을 설치한다(pdf 명령에 필요)");
+else row(!!shell, "chrome", shell ?? "없음. Chrome을 설치하거나 SLIDEKIT_CHROME을 지정하거나 playwright로 chromium_headless_shell을 설치한다(pdf 명령에 필요)");
 
 for (const svc of ["slidekit-cloudflare-token"]) {
   const r = Bun.spawnSync(["security", "find-generic-password", "-s", svc], { stdout: "ignore", stderr: "ignore" });

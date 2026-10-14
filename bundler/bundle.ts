@@ -10,6 +10,8 @@ const root = join(import.meta.dir, "..");
 const name = process.argv[2];
 const fail = (m: string): never => { console.error(m); process.exit(1); };
 if (!name) fail("사용법: slidekit bundle <덱>  (예: slidekit bundle my-talk)");
+// 예상한 실패(uv 없음, 인터넷 없음 등)는 소스 발췌 없이 메시지만 보인다. 자세한 스택은 SLIDEKIT_DEBUG=1.
+for (const ev of ["uncaughtException", "unhandledRejection"] as const) process.on(ev, (e) => { if (process.env.SLIDEKIT_DEBUG) console.error(e); else console.error(e instanceof Error ? e.message : String(e)); process.exit(1); });
 const deckDir = join(root, "decks", name);
 
 const isLocal = (u: string) => !/^(data:|https?:|\/\/|#|mailto:|about:)/i.test(u);

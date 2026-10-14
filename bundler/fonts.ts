@@ -94,7 +94,10 @@ export function subsetAll(inputs: Uint8Array[], chars: Set<number>): Uint8Array[
     writeFileSync(join(work, "chars.txt"), String.fromCodePoint(...chars));
     const jobs = inputs.map((b, i) => { writeFileSync(join(work, `in${i}`), b); return { in: join(work, `in${i}`), out: join(work, `out${i}.woff2`) }; });
     writeFileSync(join(work, "jobs.json"), JSON.stringify(jobs));
-    const r = Bun.spawnSync(["uv", "run", "--quiet", "--with", "fonttools==4.66.1", "--with", "brotli==1.2.0", "python", join(import.meta.dir, "subset.py"), join(work, "chars.txt"), join(work, "jobs.json")], { stderr: "pipe" });
+    // uv는 SLIDEKIT_UV로 바꿀 수 있다(테스트와 uv가 PATH에 없는 환경). 없으면 설치 방법을 알려 준다.
+    let r;
+    try { r = Bun.spawnSync([process.env.SLIDEKIT_UV ?? "uv", "run", "--quiet", "--with", "fonttools==4.66.1", "--with", "brotli==1.2.0", "python", join(import.meta.dir, "subset.py"), join(work, "chars.txt"), join(work, "jobs.json")], { stderr: "pipe" }); }
+    catch (e) { throw new Error(`글꼴을 부분집합으로 줄이려면 uv가 필요하다. 설치: brew install uv 또는 https://docs.astral.sh/uv/ . 덱이 외부 글꼴 링크를 쓰지 않으면 이 단계는 필요 없다. (${String(e).slice(0, 120)})`); }
     if (r.exitCode !== 0) throw new Error("글꼴 부분집합 실패: " + r.stderr.toString().slice(-400));
     return jobs.map((j) => new Uint8Array(require("node:fs").readFileSync(j.out)));
   } finally { rmSync(work, { recursive: true, force: true }); }

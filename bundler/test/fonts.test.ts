@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { faceBlocks, fetchCached, isPrivateAddress, parseRange, pickSrc, processFaces, rangeHits, usedChars, withSrc } from "../fonts";
+import { subsetAll, faceBlocks, fetchCached, isPrivateAddress, parseRange, pickSrc, processFaces, rangeHits, usedChars, withSrc } from "../fonts";
 
 const css = `/* c */
 @font-face{font-family:'P';font-weight:45 920;src:url(../x/P.0.woff2) format('woff2-variations');unicode-range:U+f9ca-fa0b,U+ff03-ff05,U+4??}
@@ -49,4 +49,9 @@ test("SSRF 방어: 사설과 루프백과 링크로컬 주소, http, 내부 이�
   for (const ip of ["8.8.8.8", "151.101.1.1", "2606:4700::1111"]) expect(isPrivateAddress(ip), ip).toBe(false);
   for (const u of ["http://example.com/a.woff2", "https://localhost/x", "https://127.0.0.1/x", "https://169.254.169.254/latest", "https://[::1]/x", "https://printer.local/x"])
     await expect(fetchCached(u + "?ssrf-test=" + Date.now())).rejects.toThrow();
+});
+
+test("uv가 없으면 부분집합 단계가 설치 방법을 알려 주고 실패한다", () => {
+  process.env.SLIDEKIT_UV = "/nonexistent/uv";
+  try { expect(() => subsetAll([new Uint8Array([1, 2, 3])], new Set([65]))).toThrow("uv가 필요하다"); } finally { delete process.env.SLIDEKIT_UV; }
 });

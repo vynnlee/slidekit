@@ -67,14 +67,18 @@ p { font-size: var(--sk-fs-body); line-height: 1.65; color: var(--sk-muted); mar
 aside[data-notes] { display: none; }
 
 /* declarative steps: data-step="N" shows the element from step N on (layout is kept while hidden) */
-[data-step] { transition: opacity var(--sk-step-ms) var(--sk-ease), transform var(--sk-step-ms) var(--sk-ease), visibility 0s; }
-[data-step]:not([data-shown]) { visibility: hidden; opacity: 0; transition-delay: 0s, 0s, var(--sk-step-ms); }
-[data-step]:not([data-shown]):not([data-step-effect="fade"]):not([data-step-effect="none"]) { transform: translateY(20px); }
+[data-step] { transition: opacity var(--sk-step-ms) var(--sk-ease), transform var(--sk-step-ms) var(--sk-ease), filter var(--sk-step-ms) var(--sk-ease), visibility 0s; }
+[data-step]:not([data-shown]) { visibility: hidden; opacity: 0; transition-delay: 0s, 0s, 0s, var(--sk-step-ms); }
+/* effects (list: engine/steps.ts): rise is the default, fade is opacity only, none is instant */
+[data-step]:not([data-shown]):not([data-step-effect="fade"]):not([data-step-effect="none"]):not([data-step-effect="left"]):not([data-step-effect="scale"]):not([data-step-effect="blur"]) { transform: translateY(20px); }
+[data-step][data-step-effect="left"]:not([data-shown]) { transform: translateX(-32px); }
+[data-step][data-step-effect="scale"]:not([data-shown]) { transform: scale(.92); }
+[data-step][data-step-effect="blur"]:not([data-shown]) { filter: blur(12px); }
 [data-step][data-step-effect="none"] { transition: none; }
 [data-step-instant] [data-step] { transition: none !important; }
 @media (prefers-reduced-motion: reduce) { [data-step] { transition: none; } }
 /* the editor canvas can show every step while editing */
-html[data-sk-show-steps] [data-step] { visibility: visible !important; opacity: 1 !important; transform: none !important; }
+html[data-sk-show-steps] [data-step] { visibility: visible !important; opacity: 1 !important; transform: none !important; filter: none !important; }
 
 /* screen reader live region: not drawn */
 #sk-live { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
@@ -126,5 +130,5 @@ html[data-idle], html[data-idle] body, html[data-idle] [data-slide] { cursor: no
   [data-slide] { position: relative; inset: auto; width: 1920px; height: 1080px; visibility: visible; animation: none; break-after: page; break-inside: avoid; }
   section[data-slide]:last-of-type { break-after: auto; }
   #sk-overview, #sk-num, #sk-page, #sk-progress, #sk-blank, #sk-debug { display: none !important; }
-  [data-step] { visibility: visible !important; opacity: 1 !important; transform: none !important; transition: none !important; }
+  [data-step] { visibility: visible !important; opacity: 1 !important; transform: none !important; filter: none !important; transition: none !important; }
 }

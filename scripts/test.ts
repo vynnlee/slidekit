@@ -55,6 +55,7 @@ const steps: Step[] = [
   browser("inspector", "app/test/inspector.cjs", "app", APP),
   browser("inspector-a11y", "app/test/inspector-a11y.cjs", "app", APP),
   browser("editor", "app/test/editor.cjs", "app", APP),
+  browser("editor-assets", "app/test/editor-assets.cjs", "app", APP),
   browser("comments-e2e", "app/test/comments-e2e.cjs", "app", APP),
   browser("versions-e2e", "app/test/versions-e2e.cjs", "app", APP),
   browser("tokens", "app/test/tokens.cjs", "dry", DRY),
@@ -81,6 +82,7 @@ if (flag("--list")) { console.log(steps.map((s) => s.name + (s.slow ? " (slow)" 
 // 변경 파일 -> 단계 매핑표(여기 한 곳). 규칙은 모두 적용해 단계를 합친다. 문서만 바뀌면 단계가 없다.
 const NOSTEP = /^(package\.json|bun\.lock|\.gitignore|\.githooks\/|tsconfig.*\.json)$/;
 const DOCS = /(^|\/)(HANDOFF|README|PLAN|SKILL|INTERACTION|SPEC)\.md$|^(spec|docs)\/|\.md$/;
+const EDITOR_ALL = ["editor", "editor-assets"]; // 편집기 브라우저 검증은 영역별 파일로 나뉘어 있다(app/test/editor-*.cjs, 하네스는 app/test/lib/editor-harness.cjs)
 const BROWSER_APP = ["routes", "responsive", "list"]; // 앱 공통 화면 변경 때의 연기 검사
 const MAP: [RegExp, string[]][] = [
   [/^engine\/(slidekit\.(js|css)|test\/(verify|moved|gradient)\.cjs)/, ["engine-verify", "engine-moved", "engine-gradient", "bundler-bundle"]],
@@ -92,7 +94,10 @@ const MAP: [RegExp, string[]][] = [
   [/^app\/(versions\.ts|src\/(VersionHistory|ExportMenu)|test\/versions)/, ["versions", "versions-e2e"]],
   [/^app\/(export-api\.ts|src\/ExportMenu)/, ["export-api", "export"]],
   [/^app\/(editor-api\.ts|src\/lib\/(deck-source|move|selection|guides))/, ["roundtrip", "deck-source.fuzz", "editor-readonly", "editor", "inspector"]],
-  [/^app\/src\/(Editor|Canvas|LayerTree|Filmstrip|Notes)/, ["editor", "inspector"]],
+  [/^app\/src\/(Editor|Canvas|LayerTree|Filmstrip|Notes)/, [...EDITOR_ALL, "inspector"]],
+  [/^app\/src\/(FindBar|DeckSettings|EditorTip|lib\/(find|overflow|deck-meta))/, ["editor-assets"]],
+  [/^app\/test\/editor-assets\.cjs/, ["editor-assets"]],
+  [/^app\/test\/(editor\.cjs|lib\/editor-harness\.cjs)/, EDITOR_ALL],
   [/^app\/src\/(Inspector|components\/inspector)/, ["inspector", "inspector-a11y", "editor"]],
   [/^app\/src\/(TokensPanel|TokensDemo|lib\/deck-(tokens|fonts))|^app\/test\/deck-(tokens|fonts)/, ["deck-tokens", "deck-fonts", "tokens"]],
   [/^app\/src\/(Presenter|lib\/present)/, ["present"]],

@@ -27,6 +27,8 @@
     .key { background: var(--sk-panel); border: 1px solid var(--sk-line); border-radius: 14px; padding: 30px 34px; display: flex; flex-direction: column; gap: 14px; }
     .key .k { font: 500 52px var(--sk-font-mono); color: var(--sk-fg); line-height: 1; }
     .key .d { word-break: keep-all; font-size: 28px; line-height: 1.45; color: var(--sk-muted); }
+    .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 28px; }
+    .grid2 .k { font: 700 40px var(--sk-font); letter-spacing: -.01em; }
     .flow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; align-items: stretch; }
     .flow .node { background: var(--sk-panel); border: 1px solid var(--sk-line); border-radius: 14px; padding: 30px 34px; display: flex; flex-direction: column; gap: 16px; }
     .flow .node .t { font: 500 30px var(--sk-font-mono); color: var(--sk-fg); }
@@ -54,13 +56,13 @@
 </section>
 
 <section data-slide="content">
-  <h2>실행과 새 덱과 편집기</h2>
-  <ul class="items">
-    <li><code>bun run slidekit</code>으로 앱이 127.0.0.1:3200에서 열린다.</li>
-    <li>덱 목록에서 덱을 고르거나 <code>bun run slidekit new &lt;이름&gt;</code>으로 새 덱을 만든다.</li>
-    <li>편집기는 레이어, 캔버스, 속성 패널, 순서 변경과 복제와 삭제, 노트 입력을 한 화면에서 한다.</li>
-    <li>더블클릭하면 글자를 고친다. 입력이 1.5초 멈추면 자동 저장하고 Cmd+S로도 저장한다.</li>
-  </ul>
+  <h2>명령 하나로 시작한다</h2>
+  <div class="flow">
+    <div class="node"><span class="t">bun run slidekit</span><span class="d">앱이 127.0.0.1:3200에서 열리고 덱 목록이 나온다</span></div>
+    <div class="node"><span class="t">slidekit new &lt;이름&gt;</span><span class="d">새 덱을 만든다. 덱 목록에서도 만들 수 있다</span></div>
+    <div class="node"><span class="t">편집기</span><span class="d">레이어, 캔버스, 속성 패널, 노트를 한 화면에서 쓴다</span></div>
+  </div>
+  <p>더블클릭하면 글자를 고친다. 입력이 1.5초 멈추면 자동 저장하고 Cmd+S로도 저장한다.</p>
   <aside data-notes>앱 실행 한 줄이면 덱 목록이 열린다.
 
 **편집은 한 화면**에서 끝나고, 저장은 자동이다.</aside>
@@ -94,16 +96,16 @@
 </section>
 
 <section data-slide="content">
-  <h2>규격과 토큰과 노트와 글꼴</h2>
-  <ul class="items">
-    <li>슬라이드 종류는 cover, chapter, content, end 네 가지이고 장 표지에는 <code>data-title</code>이 필요하다.</li>
-    <li>화면은 1920x1080 고정이고 창에 맞춰 엔진이 줄이고 늘린다.</li>
-    <li>색, 글꼴, 여백, 글자 크기는 <code>--sk-</code> 토큰이고 편집기의 토큰 패널에서 바꾼다.</li>
-    <li>노트는 <code>&lt;aside data-notes&gt;</code>에 마크다운으로 쓴다. 글꼴은 번들 때 쓰는 글자만 남겨 인라인한다.</li>
-  </ul>
-  <aside data-notes>덱은 **네 종류의 슬라이드**와 토큰으로 구성된다.
+  <h2>규격은 네 가지만 기억한다</h2>
+  <div class="grid2">
+    <div class="key"><span class="k">종류</span><span class="d">cover, chapter, content, end. 장 표지에는 data-title이 필요하다.</span></div>
+    <div class="key"><span class="k">화면</span><span class="d">1920x1080 고정이고 창에 맞춰 엔진이 줄이고 늘린다.</span></div>
+    <div class="key"><span class="k">토큰</span><span class="d">색, 글꼴, 여백, 글자 크기는 --sk- 변수이고 토큰 패널에서 바꾼다.</span></div>
+    <div class="key"><span class="k">노트와 글꼴</span><span class="d">노트는 aside에 마크다운으로 쓴다. 글꼴은 번들 때 쓰는 글자만 남겨 인라인한다.</span></div>
+  </div>
+  <aside data-notes>규격 문서는 `spec/SPEC.md`이고 AI에게는 **스킬**이 같은 내용을 요약해 준다.
 
-글꼴은 Google Fonts, CDN 글꼴 CSS, 폴더 안 글꼴 파일 어느 것이든 같은 방식으로 처리된다.</aside>
+토큰은 `:root` 한 블록에 모으면 편집기가 원문 그대로 고친다.</aside>
 </section>
 
 <section data-slide="content">

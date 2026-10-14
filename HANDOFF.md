@@ -1,4 +1,4 @@
-# slidekit 핸드오프 (2026-10-13 갱신)
+# slidekit 핸드오프 (2026-10-14 갱신)
 
 새 세션은 이 문서를 먼저 읽는다. 기획은 `PLAN.md`, 덱 규격은 `spec/SPEC.md`(9절은 편집), 속성 패널 설계는 `spec/INSPECTOR.md`, 사용법은 `README.md`.
 
@@ -10,15 +10,24 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 
 | 경로 | 내용 |
 |---|---|
-| `engine/` | `slidekit.js`, `slidekit.css`(인쇄 CSS 포함), `new.ts`, `lint.ts`, `pdf.ts`, `doctor.ts`, `template/`, `test/verify.cjs`, `test/lint.test.ts` |
+| `engine/` | `slidekit.js`, `slidekit.css`(인쇄 CSS 포함), `new.ts`, `lint.ts`, `pdf.ts`, `doctor.ts`, `template/`, `test/verify.cjs`, `test/lint.test.ts`, `test/cli.test.ts` |
 | `app/` | Bun 서버(`server.ts`, `guard.ts`, `comments.ts`, `editor-api.ts`, `decks-api.ts`, `export-api.ts`(번들, PDF, 게시 API), `launch.ts`, `preview-proxy.ts`), React 앱(`src/`), 테스트(`test/`) |
 | `bundler/` | 덱을 외부 파일 없는 단일 HTML로 묶음(이미지, srcset, 글꼴 서브셋 인라인) |
 | `deploy/` | `deploy.ts`와 Cloudflare Worker(`worker/`, KV, 비밀번호 쿠키) |
 | `channel/` | Claude Code Channels MCP 서버(코멘트 전달) |
-| `scripts/test.ts` | `bun run test` 집계 |
+| `scripts/` | `test.ts`(`bun run test` 집계), `lib/test-deck.cjs`(테스트 덱 사본 `decks/_e2e-*`), `inspector-shots.cjs`와 `ux-shots-comments.cjs`(UX 리뷰용 스크린샷 도구, 사용법 주석 참조), `scan-secrets.*` |
 | `.claude/skills/slidekit/` | AI가 덱을 만들 때 읽는 스킬(규격, 토큰, 문구 규칙, 확인 방법) |
 | `spec/` | SPEC.md, INSPECTOR.md |
 | `decks/`, `dist/` | 덱 원본, 번들과 PDF 산출물(dist는 git 무시, `decks/_*/`도 무시) |
+
+## 2026-10-14 UX 라운드 요약 (코드와 git log 기준)
+
+- **편집기**: 요소 선택은 Figma식 계층(클릭은 최상위, 더블클릭은 한 단계 안쪽, Cmd+클릭은 가장 안쪽, Enter는 첫 자식, Shift+Enter는 부모, Tab은 같은 범위 형제, SPEC 9.5). 요소 트리(Layers: 숨김, 잠금, 이름 바꾸기, 드래그 순서), 슬라이드는 캔버스 위 가로 필름스트립. 줌 25~400%(Cmd+휠, Cmd+=, Cmd+-, Cmd+0 맞춤), Space 드래그로 이동, 선택 크기 칩. Cmd+K 명령 팔레트(슬라이드 이동, 발표, 추가, 복제, 삭제, 저장 등), Cmd+/ 단축키 안내. 코멘트는 요소를 고르고 `C`(전송 Cmd+Enter): 상태 Waiting, Sent to Claude, Replied, Resolved, 패널 필터, 캔버스 핀, 답이 오면 토스트. Inspector는 설정됨 점과 Reset, 크기 모드 추정, 단계 등장 편집(Appears at step), 덱 토큰 패널(Deck styles), Export 메뉴(번들, PDF, 게시). 자동 저장은 편집 뒤 1.5초, Cmd+S, 충돌 시 Reload 또는 Overwrite.
+- **발표자 화면**: 현재와 다음 슬라이드, 노트(마크다운, 14~56px), 타이머와 목표 시간(분, 초과는 빨강), 장 위치, 항목별 토글. 키는 방향키, F, T(타이머), R(리셋), + -(노트 크기), PageUp과 PageDown(노트 스크롤). 현재 슬라이드부터 발표는 Cmd+Enter, 처음부터는 Shift+Cmd+Enter, `?from=N`도 된다.
+- **덱 목록**: 검색 팔레트, 날짜 또는 이름 정렬, 그리드와 리스트, 카드 키보드 이동과 Cmd+Enter 빠른 발표, 새 덱(폴더명 자동 제안과 실시간 검사), 복제, 이름 바꾸기, 휴지통(Undo 토스트, 영구 삭제는 폴더명 입력).
+- **청중 화면(엔진)**: 방향키 이동은 크로스페이드, O 전체 보기는 반응형 격자와 선택 윤곽과 현재 점, 마우스는 2초 뒤 숨김, 숫자 입력은 장 제목을 보여 주는 알약, B와 W는 검은 화면과 흰 화면(창별), 단계 등장은 `data-step`(JS 없이). 진행 막대는 2px.
+- **CLI와 DX**: `slidekit help`, 알 수 없는 명령은 사용법과 함께 종료 코드 1, `new`는 다음 단계를 안내, lint와 doctor와 bundle 메시지는 고치는 방법을 말한다. 새 덱 템플릿과 `slidekit-guide` 덱(12장, 기능 데모)과 SKILL.md 6-1 디자인 가이드.
+- **번들**: head에 파비콘, og:title, description, 비밀번호 덱 noindex, lang을 채우고 큰 이미지(400KB 초과)를 경고한다.
 
 ## 실행과 명령
 
@@ -51,13 +60,15 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 - Cloudflare 토큰은 키체인 `slidekit-cloudflare-token`(2026-10-13 생성, 이름 slidekit-static-deploy, 값은 출력 금지). 쓰는 법과 범위는 `deploy/README.md`. `COOKIE_SECRET`은 `wrangler secret`.
 - 2026-10-13에 Worker(`slidekit-static`)와 워크숍 덱(public)을 배포했다: https://static.vynnlee.com/vibe-coding-workshop . mac-cloud의 로컬 DNS 캐시가 실패 결과를 들고 있어 `curl`이 000(DNS 실패)일 수 있다. 그때는 `dig +short @1.1.1.1 static.vynnlee.com`의 IP로 `curl --resolve static.vynnlee.com:443:<IP> ...`로 확인한다(캐시 비우기는 sudo 필요). 응답 없음을 미배포로 판단하지 않는다.
 - 배포 순서: meta를 먼저, html을 나중에 올린다(공개에서 비밀번호로 바꿀 때 노출 방지).
+- **미배포(승인 대기)**: 2026-10-14에 Worker 안내 페이지(비밀번호, 잠금, 404 통일, 덱 제목 표시, 로딩 상태)와 `deploy`가 meta에 `title`을 올리는 변경, 번들 head 변경을 코드와 테스트까지만 했다. 반영하려면 사용자 승인 뒤 `bun run deploy --worker`를 실행한다(이미 올린 덱은 다시 `slidekit deploy <덱>`으로 올려야 제목이 보인다).
 
 ## 알려진 한계
 
 - 번들러 글꼴: 원격 글꼴 CSS(Google Fonts, jsdelivr 등)와 로컬 `@font-face` 파일을 덱이 쓰는 글자만 남긴 woff2로 인라인한다(`uv`와 인터넷 필요, 받은 파일은 `~/.cache/slidekit/fonts`에만 캐시하고 저장소에 글꼴 파일을 커밋하지 않는다). 시스템 글꼴만 쓰는 덱은 아무것도 받지 않는다. `<video>` 파일과 글꼴이 아닌 외부 CDN 자원은 인라인하지 않는다. 종단 검증: `node bundler/test/fonts.cjs`.
+- 인쇄(PDF)는 `data-step` 요소를 모두 보인다. 전체 보기 축소판과 편집기 필름스트립은 1단계 모습이다.
 - 화면별 lazy import(`App.tsx`)가 있지만 Bun.serve HTML 번들은 코드 분할을 하지 않아 production JS가 단일 청크(약 1MB, 2026-10-13 측정). 필요하면 서버 시작 때 Bun.build splitting 사용.
 - lint는 정규식 기반이라 아주 특이한 마크업에서 오탐이 있을 수 있다. error만 종료 코드에 반영한다.
-- 발표 동기화는 같은 출처의 BroadcastChannel 전용(기기 간 동기화 없음). 인쇄 PDF의 stepper 슬라이드는 1단계 모습.
+- 발표 동기화는 같은 출처의 BroadcastChannel 전용(기기 간 동기화 없음). 세로나 좁은 창은 무대 비율을 유지하고 남는 영역을 배경색으로 채운다.
 - 편집기는 슬라이드 단위 원문 보존(`app/src/lib/deck-source.ts`)을 전제로 한다. 인라인 편집은 글자만 담은 요소 중심.
 - Chrome 계열 전용(Window Management API). mac-cloud에는 화면이 없어 외장 모니터 기능은 검증하지 못한다.
 

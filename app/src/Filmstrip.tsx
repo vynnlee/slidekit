@@ -1,10 +1,8 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Copy, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { DropdownMenu, DropdownTrigger, DropdownContent } from "@/components/ui/dropdown";
-import { MenuItem } from "@/components/ui/menu-item";
 import { previewHtml, type Unit } from "@/lib/deck-source";
 import { CURSOR_CLASS } from "@/lib/cursors";
 import { acquireThumb } from "@/lib/thumb-queue";
@@ -73,6 +71,7 @@ type Props = {
   collapsed: boolean;
   onToggle(): void;
   onSelect(i: number): void;
+  onMenu(i: number, at: { x: number; y: number }): void; // 우클릭이나 메뉴 키(선택은 호출 쪽이 먼저 한다)
   onMove(from: number, to: number): void;
   onDuplicate(i: number): void;
   onDelete(i: number): void;
@@ -81,7 +80,6 @@ type Props = {
 
 // 캔버스 위 가로 슬라이드 목록. 순서 변경은 가로 드래그, 키보드는 listbox 규칙(좌우, Home, End)이다.
 export function Filmstrip(p: Props) {
-  const [menu, setMenu] = useState<{ x: number; y: number; i: number } | null>(null);
   const [drag, setDrag] = useState<number | null>(null);
   const [drop, setDrop] = useState<number | null>(null); // 삽입 위치(0..n)
   const [narrow, setNarrow] = useState(() => matchMedia("(max-width: 1100px)").matches);
@@ -123,6 +121,7 @@ export function Filmstrip(p: Props) {
             role="listbox" aria-label="Slides" aria-orientation="horizontal" className="flex items-center gap-2 p-2" /* 링(ring-2)이 스크롤 영역 안쪽에서 잘리지 않게 여유를 둔다 */
             onDragEnd={end}
             onKeyDown={(e) => {
+              if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); e.stopPropagation(); const r = (e.target as HTMLElement).getBoundingClientRect(); p.onMenu(p.index, { x: r.left, y: r.bottom }); return; }
               const move = e.key === "ArrowLeft" ? p.index - 1 : e.key === "ArrowRight" ? p.index + 1 : e.key === "Home" ? 0 : e.key === "End" ? p.units.length - 1 : null;
               if (move === null) return;
               e.preventDefault(); e.stopPropagation(); // 편집기 전체 방향키 이동과 겹치지 않게 한다
@@ -144,7 +143,7 @@ export function Filmstrip(p: Props) {
                   end();
                 }}
                 onClick={() => p.onSelect(i)}
-                onContextMenu={(e) => { e.preventDefault(); p.onSelect(i); setMenu({ x: e.clientX, y: e.clientY, i }); }}
+                onContextMenu={(e) => { e.preventDefault(); p.onMenu(i, { x: e.clientX, y: e.clientY }); }}
                 className={`relative shrink-0 ${CURSOR_CLASS.grab} rounded-md outline-none ring-2 focus-visible:ring-focus-ring ${i === p.index ? "ring-focus-ring" : "ring-transparent"}`}
                 style={{ width: W, height: H }}
               >
@@ -161,14 +160,6 @@ export function Filmstrip(p: Props) {
           </div>
         </ScrollArea>
       )}
-      <DropdownMenu open={!!menu} onOpenChange={(o) => !o && setMenu(null)} size="compact">
-        <DropdownTrigger render={<button type="button" aria-label="Slide menu" tabIndex={-1} className="fixed h-0 w-0 border-0 p-0" style={{ left: menu?.x ?? 0, top: menu?.y ?? 0 }} />} />
-        <DropdownContent align="start" side="bottom" sideOffset={0}>
-          <MenuItem index={0} icon={Copy} label="Duplicate" onSelect={() => menu && p.onDuplicate(menu.i)} />
-          <MenuItem index={1} icon={Plus} label="Add after" onSelect={() => menu && p.onAdd(menu.i)} />
-          <MenuItem index={2} icon={Trash2} label="Delete" disabled={p.units.length < 2} onSelect={() => menu && p.onDelete(menu.i)} />
-        </DropdownContent>
-      </DropdownMenu>
     </section>
   );
 }

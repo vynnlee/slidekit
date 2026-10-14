@@ -22,6 +22,8 @@ export type CanvasApi = {
   edit(el: Element): void;
   select(el: Element | null): void;
   zoom(dir: 1 | -1 | 0): void; // 0은 맞춤
+  zoom100(): void; // 슬라이드가 1920px 폭으로 보이는 배율
+  anchor(el: Element | null): { x: number; y: number }; // 메뉴를 키보드로 열 때의 화면 좌표(요소 왼쪽 아래, 없으면 캔버스 중앙)
   compose(): void; // 선택한 요소에 코멘트 작성창을 연다
   nudge(dx: number, dy: number): void; // 선택한 요소를 슬라이드 px만큼 옮긴다(방향키)
   reload(): void; // 덱 head(prefix)가 바뀐 뒤 현재 모델로 캔버스를 다시 만든다
@@ -43,6 +45,7 @@ type Props = {
   onHover(id: string | null): void;
   channel: boolean | null;
   onSel(el: Element | null): void;
+  onContext(info: { el: Element | null; x: number; y: number }): void; // 우클릭: 대상 요소(없으면 빈 곳)와 화면 좌표
   onGroup(list: Element[]): void; // 마퀴로 고른 묶음(첫 요소가 대표)
   onMulti(el: Element | null): void; // Shift+클릭: 선택에 더하거나 뺀다
   onCommit(coalesce?: string): void;
@@ -147,6 +150,14 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     edit: (el) => startEdit(el as HTMLElement),
     select: (el) => P.current.onSel(el),
     zoom: (d) => zoomBy(d),
+    zoom100: () => setZoom(size.w ? 1920 / size.w : 1),
+    anchor(el) {
+      const fr = frame.current?.getBoundingClientRect();
+      if (!fr) return { x: 0, y: 0 };
+      if (!el) return { x: fr.left + fr.width / 2, y: fr.top + fr.height / 2 };
+      const r = el.getBoundingClientRect();
+      return { x: fr.left + r.left, y: fr.top + r.bottom };
+    },
     compose: () => setComposing(true),
     nudge(dx, dy) {
       const els = ([P.current.sel, ...P.current.more].filter(Boolean) as HTMLElement[]).filter((el) => !isLockedDeep(el) && canMove(el));
@@ -421,6 +432,15 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       P.current.onSel(t);
       setComposing(false);
     }, true);
+    d.addEventListener("contextmenu", (e) => {
+      if (editing.current) return; // 글자 편집 중에는 브라우저 기본 메뉴(복사, 붙여넣기, 맞춤법)
+      e.preventDefault(); e.stopPropagation();
+      const fr = frame.current?.getBoundingClientRect();
+      let el = cur() ? pick(e) : null;
+      const s = P.current.sel;
+      if (!el && s && isLockedDeep(s)) { const r = s.getBoundingClientRect(); if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) el = s; } // 잠긴 선택 위
+      P.current.onContext({ el, x: e.clientX + (fr?.left ?? 0), y: e.clientY + (fr?.top ?? 0) });
+    }, true);
     d.addEventListener("dblclick", (e) => {
       // 선택된 요소를 더블클릭: 글자 블록이면 편집, 컨테이너이면 한 단계 안쪽 요소를 선택한다.
       const sl = cur(), c = selRef.current;
@@ -505,7 +525,8 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       if (!show || !r) bar.current.style.display = "none";
       else { bar.current.style.display = "flex"; bar.current.style.transform = `translate(${Math.max(0, r.left)}px,${r.top > 36 ? r.top - 34 : r.bottom + 6}px)`; }
     }
-    if (pop.current && r) pop.current.style.transform = `translate(${Math.max(0, Math.min(r.left, size.w * zoom - 260))}px,${Math.min(r.bottom + 6, size.h * zoom - 130)}px)`;
+    if (pop.current && !r) pop.current.style.transform = "translate(16px,16px)"; // 선택이 없으면 슬라이드 전체에 거는 코멘트
+    else if (pop.current && r) pop.current.style.transform = `translate(${Math.max(0, Math.min(r.left, size.w * zoom - 260))}px,${Math.min(r.bottom + 6, size.h * zoom - 130)}px)`;
     const sl = cur();
     markers.current?.querySelectorAll<HTMLElement>("[data-path]").forEach((m) => {
       const t = sl ? byPath(sl, m.dataset.path!) : null;
@@ -552,9 +573,9 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
             <Tooltip content="Comment" side="top"><Button aria-label="Comment" variant="ghost" size="icon-compact" onClick={() => setComposing((v) => !v)}><MessageSquare /></Button></Tooltip>
             <Tooltip content="Delete" side="top"><Button aria-label="Delete" variant="ghost" size="icon-compact" onClick={p.onDelete}><Trash2 /></Button></Tooltip>
           </div>
-          {composing && p.sel && (
+          {composing && (
             <div ref={pop} className="pointer-events-auto absolute left-0 top-0 w-64">
-              <CommentComposer channel={p.channel} target={nameOf(p.sel)} onCancel={() => setComposing(false)}
+              <CommentComposer channel={p.channel} target={p.sel ? nameOf(p.sel) : `Slide ${p.index + 1}`} onCancel={() => setComposing(false)}
                 onSend={async (t) => { await p.onComment(t); setComposing(false); }} />
             </div>
           )}

@@ -89,3 +89,123 @@ export function commentMenu(a: CommentMenuActions, icons: { open?: IconComponent
     item("delete", "Delete", a.remove, { shortcut: "delete", destructive: true, icon: icons.trash }),
   ]);
 }
+
+// ---- 편집기: 캔버스 요소, 슬라이드 빈 곳, Layers 행, 필름스트립 타일 (2.1~2.4) ----
+export type ElementMenuActions = {
+  /** 글자 블록일 때만 준다. */
+  editText?(): void;
+  addComment(): void;
+  selectParent(): void; selectFirstChild(): void; selectNext(): void; selectPrev(): void;
+  bringForward(): void; sendBackward(): void;
+  rename(): void;
+  locked: boolean; toggleLock(): void;
+  hidden: boolean; toggleHidden(): void;
+  resetChanges(): void;
+  duplicate(): void;
+  remove(): void;
+  /** 쓸 수 없는 항목은 흐리게 둔다. */
+  has: { parent: boolean; child: boolean; next: boolean; prev: boolean; forward: boolean; backward: boolean; reset: boolean };
+};
+/** 2.1 단일 요소. 잠긴 요소는 Unlock, Select parent, Add comment만 보인다. */
+export function elementMenu(a: ElementMenuActions): MenuItem[] {
+  if (a.locked) {
+    return tidy([
+      item("unlock", "Unlock", a.toggleLock),
+      separator,
+      item("select-parent", "Select parent", a.selectParent, { shortcut: "shift+enter", disabled: !a.has.parent }),
+      item("comment", "Add comment", a.addComment, { shortcut: "c" }),
+    ]);
+  }
+  return tidy([
+    a.editText && item("edit-text", "Edit text", a.editText, { shortcut: "enter" }),
+    item("comment", "Add comment", a.addComment, { shortcut: "c" }),
+    separator,
+    { type: "sub", id: "select", label: "Select", items: [
+      item("select-parent", "Parent", a.selectParent, { shortcut: "shift+enter", disabled: !a.has.parent }),
+      item("select-child", "First child", a.selectFirstChild, { shortcut: "enter", disabled: !a.has.child }),
+      item("select-next", "Next sibling", a.selectNext, { shortcut: "tab", disabled: !a.has.next }),
+      item("select-prev", "Previous sibling", a.selectPrev, { shortcut: "shift+tab", disabled: !a.has.prev }),
+    ] },
+    separator,
+    item("forward", "Bring forward", a.bringForward, { shortcut: "mod+]", disabled: !a.has.forward }),
+    item("backward", "Send backward", a.sendBackward, { shortcut: "mod+[", disabled: !a.has.backward }),
+    item("rename", "Rename layer", a.rename, { shortcut: "f2" }),
+    item("lock", "Lock", a.toggleLock),
+    item("hide", a.hidden ? "Show" : "Hide", a.toggleHidden),
+    separator,
+    item("reset", "Reset changes", a.resetChanges, { disabled: !a.has.reset }),
+    item("duplicate", "Duplicate", a.duplicate, { shortcut: "mod+d" }),
+    separator,
+    item("delete", "Delete", a.remove, { shortcut: "delete", destructive: true }),
+  ]);
+}
+
+export type GroupMenuActions = {
+  align(axis: "h" | "v", where: "start" | "center" | "end"): void;
+  duplicate(): void; toggleLock(): void; toggleHidden(): void; remove(): void;
+};
+/** 2.1 다중 선택 */
+export function groupMenu(a: GroupMenuActions): MenuItem[] {
+  return tidy([
+    { type: "sub", id: "align", label: "Align", items: [
+      item("align-left", "Left", () => a.align("h", "start")),
+      item("align-hcenter", "Horizontal center", () => a.align("h", "center")),
+      item("align-right", "Right", () => a.align("h", "end")),
+      item("align-top", "Top", () => a.align("v", "start")),
+      item("align-vcenter", "Vertical center", () => a.align("v", "center")),
+      item("align-bottom", "Bottom", () => a.align("v", "end")),
+    ] },
+    separator,
+    item("duplicate", "Duplicate", a.duplicate, { shortcut: "mod+d" }),
+    item("lock", "Lock", a.toggleLock),
+    item("hide", "Hide", a.toggleHidden),
+    separator,
+    item("delete", "Delete", a.remove, { shortcut: "delete", destructive: true }),
+  ]);
+}
+
+export type SlideMenuActions = {
+  addComment?(): void;
+  zoomFit?(): void; zoom100?(): void;
+  addAfter(): void; duplicate(): void; remove(): void;
+  canDelete: boolean;
+};
+/** 2.2 슬라이드 빈 곳(위쪽 그룹은 캔버스에서만), 2.3 Layers의 Slide 루트 행(슬라이드 그룹만) */
+export function slideMenu(a: SlideMenuActions): MenuItem[] {
+  return tidy([
+    a.addComment && item("comment", "Add comment", a.addComment, { shortcut: "c" }),
+    a.addComment && separator,
+    a.zoomFit && item("zoom-fit", "Zoom to fit", a.zoomFit, { shortcut: "shift+1" }),
+    a.zoom100 && item("zoom-100", "Zoom to 100%", a.zoom100, { shortcut: "shift+0" }),
+    a.zoomFit && separator,
+    item("add-after", "Add slide after", a.addAfter),
+    item("duplicate", "Duplicate slide", a.duplicate),
+    separator,
+    item("delete", "Delete slide", a.remove, { disabled: !a.canDelete, destructive: true }),
+  ]);
+}
+
+export type TileMenuActions = {
+  presentFromHere(): void; addComment(): void;
+  addAfter(): void; addBefore(): void;
+  moveToStart(): void; moveToEnd(): void;
+  /** 처음, 끝에 있으면 해당 이동은 흐리게 */
+  first: boolean; last: boolean;
+  duplicate(): void; remove(): void; canDelete: boolean;
+};
+/** 2.4 필름스트립 타일 */
+export function tileMenu(a: TileMenuActions): MenuItem[] {
+  return tidy([
+    item("present", "Present from here", a.presentFromHere, { shortcut: "alt+enter" }),
+    item("comment", "Add comment", a.addComment),
+    separator,
+    item("add-after", "Add slide after", a.addAfter),
+    item("add-before", "Add slide before", a.addBefore),
+    item("to-start", "Move to start", a.moveToStart, { disabled: a.first }),
+    item("to-end", "Move to end", a.moveToEnd, { disabled: a.last }),
+    separator,
+    item("duplicate", "Duplicate", a.duplicate, { shortcut: "mod+d" }),
+    separator,
+    item("delete", "Delete", a.remove, { shortcut: "delete", disabled: !a.canDelete, destructive: true }),
+  ]);
+}

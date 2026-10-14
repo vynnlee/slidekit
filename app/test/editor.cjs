@@ -483,6 +483,47 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('Align 실행 취소 한 번에 둘 다 되돌아감', back.join('') === '', back);
   void lefts; await focusBody(); await page.keyboard.press('Escape');
 
+  // 컨텍스트 메뉴: 우클릭은 먼저 선택하고, 맥락에 맞는 항목을 보인다
+  await layers.nth(1).click(); await sleep(500); await focusBody(); await page.keyboard.press('Escape');
+  const menuLabels = () => page.getByRole('menuitem').allTextContents();
+  const h2b = await fr().locator('[data-active] h2').first().boundingBox();
+  await page.mouse.click(h2b.x + 20, h2b.y + h2b.height / 2, { button: 'right' }); await sleep(500);
+  check('요소 우클릭이 먼저 선택함', (await page.getByRole('button', { name: 'Show in layers' }).count()) === 1);
+  const ml = (await menuLabels()).join('|');
+  check('요소 메뉴 항목(글자 요소)', /Edit text/.test(ml) && /Add comment/.test(ml) && /Select/.test(ml) && /Duplicate/.test(ml) && /Delete/.test(ml) && /Reset changes/.test(ml), ml);
+  const dupBefore = await nKids();
+  await page.getByRole('menuitem', { name: /^Duplicate/ }).click(); await sleep(500);
+  check('메뉴의 Duplicate가 동작', (await nKids()) === dupBefore + 1, [dupBefore, await nKids()]);
+  await focusBody(); await page.keyboard.press('Meta+z'); await sleep(400);
+  await page.keyboard.press('Escape');
+  // 빈 곳 우클릭: 선택이 풀리고 슬라이드 메뉴
+  const sb2 = await fr().locator('[data-active]').first().boundingBox();
+  await page.mouse.click(sb2.x + sb2.width - 6, sb2.y + sb2.height - 6, { button: 'right' }); await sleep(500);
+  const bl = (await menuLabels()).join('|');
+  check('빈 곳 메뉴: 슬라이드 항목과 줌', /Add comment/.test(bl) && /Zoom to fit/.test(bl) && /Zoom to 100%/.test(bl) && /Add slide after/.test(bl) && /Delete slide/.test(bl), bl);
+  await page.getByRole('menuitem', { name: /^Zoom to 100%/ }).click(); await sleep(500);
+  check('Zoom to 100% 메뉴가 100%를 만듦', /^100%$/.test((await page.getByRole('button', { name: 'Zoom to fit' }).textContent()).trim()), await page.getByRole('button', { name: 'Zoom to fit' }).textContent());
+  await focusBody(); await page.keyboard.press('Shift+1'); await sleep(400);
+  // 키보드: 선택 후 Shift+F10
+  await fr().locator('[data-active] h2').first().click(); await sleep(250); await focusBody();
+  await page.keyboard.press('Shift+F10'); await sleep(400);
+  check('Shift+F10으로 요소 메뉴가 열림', (await page.getByRole('menuitem', { name: /^Add comment/ }).count()) === 1);
+  await page.keyboard.press('Escape'); await sleep(300);
+  check('Esc가 메뉴를 닫음', (await page.getByRole('menu').count()) === 0);
+  // Layers 행 우클릭(잠긴 요소는 세 항목만)
+  const rowsL = page.getByTestId('layer-row');
+  await rowsL.nth(1).getByRole('button', { name: 'Lock layer' }).click({ force: true }); await sleep(300);
+  await rowsL.nth(1).click({ button: 'right' }); await sleep(500);
+  const ll = (await menuLabels()).map((s) => s.replace(/\s+/g, ' ').trim());
+  check('잠긴 요소의 Layers 메뉴는 Unlock, Select parent, Add comment', ll.length === 3 && /^Unlock/.test(ll[0]) && /^Select parent/.test(ll[1]) && /^Add comment/.test(ll[2]), ll);
+  await page.getByRole('menuitem', { name: /^Unlock/ }).click(); await sleep(400);
+  check('메뉴 Unlock으로 잠금 해제', !(await inDoc((s) => !!s.querySelector('[data-locked]'))));
+  // 필름스트립 타일 우클릭
+  await page.getByRole('option', { name: 'Slide 2', exact: true }).click({ button: 'right' }); await sleep(500);
+  const tileL = (await menuLabels()).join('|');
+  check('필름스트립 타일 메뉴', /Present from here/.test(tileL) && /Add slide before/.test(tileL) && /Move to start/.test(tileL) && /Move to end/.test(tileL) && /Delete/.test(tileL), tileL);
+  await page.keyboard.press('Escape'); await sleep(300);
+
   // 마퀴: 빈 곳을 끌면 겹친 최상위 요소가 모두 선택된다
   await focusBody(); await page.keyboard.press('Escape'); await sleep(200);
   const sbox = await fr().locator('[data-active]').first().boundingBox();
@@ -535,7 +576,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
 
   // 레이어: 잠금은 캔버스 선택에서 제외, Cmd+[ ]로 순서 이동, F2 이름 변경
   await layers.nth(1).click(); await sleep(600);
-  const rowsL = page.getByTestId('layer-row');
+  // (rowsL는 위에서 선언됨)
   await rowsL.nth(1).click(); await sleep(300);
   await rowsL.nth(1).getByRole('button', { name: 'Lock layer' }).click({ force: true }); await sleep(300);
   check('잠금이 data-locked로 저장됨', await inDoc((s) => !!s.querySelector('[data-locked]')));

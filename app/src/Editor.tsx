@@ -20,14 +20,16 @@ import { canMove, readTranslate, toLocal, writeTranslate } from "@/lib/move";
 import type { CommentActions } from "@/lib/comment-actions";
 import { numbering } from "@/lib/comment-state";
 import { firstChild, isLeaf, isLockedDeep, parentOf, siblings } from "@/lib/selection";
+import { ContextMenu, useContextMenu } from "@/components/ui/context-menu";
+import { elementMenu, groupMenu, slideMenu, tileMenu, type MenuItem, type SlideMenuActions } from "@/lib/menu-model";
 import { startPresentation } from "@/lib/present";
 import type { Comment, DeckEntry } from "@/lib/deck";
 
 const KEY_GROUPS: [string, [string, string][]][] = [
   ["Edit", [["Cmd+S", "Save"], ["Cmd+Z", "Undo"], ["Shift+Cmd+Z", "Redo"], ["Cmd+D", "Duplicate"], ["Cmd+[", "Send backward"], ["Cmd+]", "Bring forward"], ["F2", "Rename layer"], ["Cmd+C", "Copy"], ["Cmd+V", "Paste"], ["Delete", "Delete selection"], ["Cmd+B", "Bold"], ["Cmd+I", "Italic"]]],
-  ["Select", [["Click", "Select a top-level element"], ["Double-click", "Go one level in, or edit text"], ["Cmd+Click", "Select the innermost element"], ["Enter", "First child, or edit text"], ["Shift+Enter", "Select the parent"], ["Tab", "Next sibling"], ["Esc", "Finish editing, or deselect"]]],
-  ["View", [["Up, Down", "Go to slide (no selection)"], ["Arrows", "Nudge 1px (Shift: 10px)"], ["Drag", "Move (Shift: lock axis)"], ["Cmd+Scroll", "Zoom"], ["Shift+1", "Zoom to fit"], ["Cmd+0", "Zoom to fit"], ["Cmd+\\", "Toggle panels"], ["Shift+Cmd+\\", "Toggle filmstrip"]]],
-  ["General", [["Cmd+K", "Command palette"], ["Cmd+Enter", "Present from this slide"], ["Shift+Cmd+Enter", "Present from the start"], ["Cmd+/", "Shortcuts"]]],
+  ["Select", [["Click", "Select a top-level element"], ["Double-click", "Go one level in, or edit text"], ["Cmd+Click", "Select the innermost element"], ["Enter", "First child, or edit text"], ["Shift+Enter", "Select the parent"], ["Shift+Click", "Add to selection"], ["Tab", "Next sibling"], ["Esc", "Finish editing, or deselect"]]],
+  ["View", [["Up, Down", "Go to slide (no selection)"], ["Arrows", "Nudge 1px (Shift: 10px)"], ["Drag", "Move (Shift: lock axis)"], ["Cmd+Scroll", "Zoom"], ["Shift+1", "Zoom to fit"], ["Shift+0", "Zoom to 100%"], ["Cmd+0", "Zoom to fit"], ["Cmd+\\", "Toggle panels"], ["Shift+Cmd+\\", "Toggle filmstrip"]]],
+  ["General", [["Cmd+K", "Command palette"], ["Cmd+Enter", "Present from this slide"], ["Shift+Cmd+Enter", "Present from the start"], ["Opt+Enter", "Present from this slide"], ["Shift+F10", "Context menu"], ["Cmd+/", "Shortcuts"]]],
 ];
 const GLYPH: Record<string, string> = { Cmd: "⌘", Shift: "⇧", Enter: "↵", Delete: "⌫", Esc: "⎋", Up: "↑", Down: "↓" };
 // "Shift+Cmd+Z" -> 키캡 칩 여러 개. "Up, Down"은 쉼표로 나눈 두 키.
@@ -88,6 +90,7 @@ export function Editor({ id }: { id: string }) {
 
   const folder = deck?.folder ?? "";
   const live = useCommentsLive(folder || null);
+  const cm = useContextMenu();
   const comments = live.comments;
   const nums = useMemo(() => numbering(comments), [comments]);
   const [hoverId, setHoverId] = useState<string | null>(null);
@@ -412,10 +415,11 @@ export function Editor({ id }: { id: string }) {
   };
 
   const postComment = async (t: string) => {
-    if (!deck || !sel || !t || !(await save())) return; // 번호가 파일과 맞도록 먼저 저장한다
+    if (!deck || !t || !(await save())) return; // 번호가 파일과 맞도록 먼저 저장한다
     const s = canvas.current?.slide(indexRef.current);
     if (!s) return;
-    const body = { deck: deck.folder, slide: indexRef.current + 1, path: pathOf(s, sel), excerpt: (sel.textContent ?? "").trim().slice(0, 80), text: t };
+    const target = sel ?? s; // 선택이 없으면 슬라이드 전체(path는 빈 글자)
+    const body = { deck: deck.folder, slide: indexRef.current + 1, path: pathOf(s, target), excerpt: (target.textContent ?? "").trim().slice(0, 80), text: t };
     const r = await fetch("/api/comments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!r.ok) throw new Error(`Could not send the comment (${r.status})`); // 작성창이 글을 남기고 다시 시도하게 한다
     const { id } = await r.json();
@@ -431,6 +435,64 @@ export function Editor({ id }: { id: string }) {
     pickSel((s && byPath(s, c.path)) ?? null);
   };
 
+  // ---- 컨텍스트 메뉴(INTERACTION 2절). 항목은 최신 렌더의 동작을 부르도록 act를 거친다(우클릭이 선택을 바꾸는 같은 틱에 만들어지므로). ----
+  const act = useRef<Record<string, (...a: any[]) => void>>({});
+  const toggleAll = (attr: "lock" | "hide") => {
+    const els = [sel, ...more].filter(Boolean) as HTMLElement[];
+    if (!els.length) return;
+    if (attr === "lock") { const off = els.every((e) => e.hasAttribute("data-locked")); for (const e of els) { if (off) e.removeAttribute("data-locked"); else e.setAttribute("data-locked", ""); } }
+    else { const show = els.every((e) => e.style.display === "none"); for (const e of els) { if (show) e.style.removeProperty("display"); else e.style.setProperty("display", "none"); } }
+    pickGroup(els); commit();
+  };
+  const resetChanges = () => { const els = [sel, ...more].filter((e): e is HTMLElement => !!e && !isLockedDeep(e)); for (const e of els) e.removeAttribute("style"); pickGroup(els); commit(); };
+  const insertSlide = (at: number) => { const a = [...unitsRef.current], ref = a[Math.max(0, at - 1)]; a.splice(at, 0, { key: newKey(), gap: ref.gap, html: newSlideHtml() }); structure(a, at); };
+  act.current = {
+    comment: () => canvas.current?.compose(), editText: () => sel && canvas.current?.edit(sel),
+    up: upSel, child: enterSel, next: () => cycle(1), prev: () => cycle(-1),
+    forward: () => reorder(1), backward: () => reorder(-1), rename: () => setRenameTick((n) => n + 1),
+    lock: () => toggleAll("lock"), hide: () => toggleAll("hide"), reset: resetChanges, dup: dupSelected, del: delSelected, align: alignGroup,
+    zoomFit: () => canvas.current?.zoom(0), zoom100: () => canvas.current?.zoom100(),
+    addAfter: () => addSlide(indexRef.current), dupSlide: () => dupSlide(indexRef.current), delSlide: () => delSlide(indexRef.current),
+  };
+  const call = (k: string, ...a: any[]) => () => act.current[k]?.(...a);
+  const slideActions = (canvasOnly: boolean): SlideMenuActions => ({
+    ...(canvasOnly ? { addComment: call("comment"), zoomFit: call("zoomFit"), zoom100: call("zoom100") } : {}),
+    addAfter: call("addAfter"), duplicate: call("dupSlide"), remove: call("delSlide"), canDelete: unitsRef.current.length > 1,
+  });
+  // 대상(요소 묶음, 없으면 빈 곳)에 맞는 항목. 호출 전에 선택은 이미 바뀐 상태여야 한다.
+  const menuFor = (els: Element[]): MenuItem[] => {
+    const s = canvas.current?.slide(indexRef.current);
+    if (!els.length || !s) return slideMenu(slideActions(true));
+    if (els.length > 1) return groupMenu({ align: call("align") as never, duplicate: call("dup"), toggleLock: call("lock"), toggleHidden: call("hide"), remove: call("del") });
+    const el = els[0] as HTMLElement, sibs = siblings<Element>(s, el), i = sibs.indexOf(el);
+    return elementMenu({
+      editText: !isLockedDeep(el) && isLeaf(el) && textual(el) ? call("editText") : undefined,
+      addComment: call("comment"), selectParent: call("up"), selectFirstChild: call("child"), selectNext: call("next"), selectPrev: call("prev"),
+      bringForward: call("forward"), sendBackward: call("backward"), rename: call("rename"),
+      locked: el.hasAttribute("data-locked"), toggleLock: call("lock"), hidden: el.style.display === "none", toggleHidden: call("hide"),
+      resetChanges: call("reset"), duplicate: call("dup"), remove: call("del"),
+      has: { parent: !!parentOf<Element>(s, el), child: !isLeaf(el) && !!firstChild<Element>(el), next: sibs.length > 1, prev: sibs.length > 1, forward: i >= 0 && i < sibs.length - 1, backward: i > 0, reset: !!el.getAttribute("style") },
+    });
+  };
+  // 우클릭은 먼저 선택한다: 이미 선택에 있으면 그대로, 아니면 왼쪽 클릭과 같은 결과로 바꾼다.
+  const contextAt = (at: { x: number; y: number }, el: Element | null) => {
+    const group = [sel, ...more].filter(Boolean) as Element[];
+    const target = el && group.includes(el) ? group : el ? [el] : [];
+    if (!(el && group.includes(el))) pickSel(el);
+    cm.open(at, menuFor(target));
+  };
+  const tileMenuAt = (i: number, at: { x: number; y: number }) => {
+    const n = unitsRef.current.length;
+    const changed = i !== indexRef.current;
+    if (changed) setIndex(i);
+    // 필름스트립이 새 타일로 스크롤하는 동안에는 메뉴가 스크롤로 닫히므로, 그 뒤에 연다.
+    const open = (items: MenuItem[]) => (changed ? requestAnimationFrame(() => requestAnimationFrame(() => cm.open(at, items))) : cm.open(at, items));
+    open(tileMenu({
+      presentFromHere: () => present(false), addComment: () => { setIndex(i); setTimeout(() => canvas.current?.compose(), 0); },
+      addAfter: () => addSlide(i), addBefore: () => insertSlide(i), moveToStart: () => moveSlide(i, 0), moveToEnd: () => moveSlide(i, n - 1),
+      first: i === 0, last: i === n - 1, duplicate: () => dupSlide(i), remove: () => delSlide(i), canDelete: n > 1,
+    }));
+  };
   keyRef.current = (e) => {
     const t = e.target as HTMLElement, mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
     const typing = t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || (!!t.closest?.('[role=dialog],[role=menu],[role=listbox],[role=radiogroup]') && !t.closest?.('[data-testid=filmstrip]') && !t.closest?.('[data-shell-panel]')); // 슬라이드 필름스트립은 편집기 단축키(실행 취소 등)를 그대로 쓴다
@@ -444,6 +506,9 @@ export function Editor({ id }: { id: string }) {
     else if (mod && e.key === "Enter") { e.preventDefault(); present(e.shiftKey); }
     else if (mod && (k === "b" || k === "i") && !/^(INPUT|TEXTAREA)$/.test(t.tagName) && (sel || t.isContentEditable || e.view !== window)) { e.preventDefault(); emphasis(k); }
     else if (typing) return;
+    else if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); const els = [sel, ...more].filter(Boolean) as Element[]; cm.open(canvas.current?.anchor(els[0] ?? null) ?? { x: 0, y: 0 }, menuFor(els)); }
+    else if (!mod && e.shiftKey && e.code === "Digit0") { e.preventDefault(); canvas.current?.zoom100(); }
+    else if (e.altKey && e.key === "Enter") { e.preventDefault(); present(false); }
     else if (mod && k === "c" && sel) { e.preventDefault(); copySel(); }
     else if (mod && k === "v" && clip.current) { e.preventDefault(); pasteSel(); }
     else if (!mod && e.shiftKey && e.code === "Digit1") { e.preventDefault(); canvas.current?.zoom(0); }
@@ -488,6 +553,15 @@ export function Editor({ id }: { id: string }) {
     { value: "act-dup", label: "Duplicate slide", group: "Actions", onSelect: () => dupSlide(indexRef.current) },
     { value: "act-del", label: "Delete slide", group: "Actions", disabled: units.length < 2, onSelect: () => delSlide(indexRef.current) },
     { value: "act-save", label: "Save", group: "Actions", shortcut: "mod+s", onSelect: () => { save(true); } },
+    { value: "act-comment", label: "Add comment", group: "Actions", shortcut: "c", onSelect: () => canvas.current?.compose() },
+    { value: "act-add-before", label: "Add slide before this one", group: "Actions", onSelect: () => insertSlide(indexRef.current) },
+    { value: "act-to-start", label: "Move slide to start", group: "Actions", disabled: index === 0, onSelect: () => moveSlide(indexRef.current, 0) },
+    { value: "act-to-end", label: "Move slide to end", group: "Actions", disabled: index === units.length - 1, onSelect: () => moveSlide(indexRef.current, units.length - 1) },
+    { value: "act-rename", label: "Rename layer", group: "Selection", shortcut: "f2", disabled: !sel, onSelect: () => setRenameTick((n) => n + 1) },
+    { value: "act-lock", label: "Lock or unlock selection", group: "Selection", disabled: !sel, onSelect: () => toggleAll("lock") },
+    { value: "act-hide", label: "Hide or show selection", group: "Selection", disabled: !sel, onSelect: () => toggleAll("hide") },
+    { value: "act-reset", label: "Reset changes", group: "Selection", disabled: !sel, onSelect: () => resetChanges() },
+    { value: "act-fit100", label: "Zoom to 100%", group: "View", shortcut: "shift+0", onSelect: () => canvas.current?.zoom100() },
     { value: "act-fit", label: "Zoom to fit", group: "View", shortcut: "shift+1", onSelect: () => canvas.current?.zoom(0) },
     { value: "act-film", label: filmCollapsed ? "Show filmstrip" : "Hide filmstrip", group: "View", shortcut: "mod+shift+\\", onSelect: toggleFilm },
     { value: "act-keys", label: "Keyboard shortcuts", group: "Help", shortcut: "mod+/", onSelect: () => setHelp(true) },
@@ -524,7 +598,7 @@ export function Editor({ id }: { id: string }) {
           <div className="flex h-full flex-col">
             <div className="shrink-0 px-3 pt-2 text-caption font-semibold">Layers</div>
             <div className="min-h-0 flex-1 overflow-auto">
-              <LayerTree slide={canvas.current?.slide(index) ?? null} sel={sel} more={more} onToggle={toggleSel} rev={units} slideName={canvas.current?.slide(index)?.getAttribute("data-title") || `Slide ${index + 1}`} onSelectSlide={() => pickSel(null)} onSelect={pickSel} onHover={(el) => canvas.current?.hover(el)}
+              <LayerTree slide={canvas.current?.slide(index) ?? null} sel={sel} more={more} onContext={(el, at) => (el ? contextAt(at, el) : cm.open(at, slideMenu(slideActions(false))))} onToggle={toggleSel} rev={units} slideName={canvas.current?.slide(index)?.getAttribute("data-title") || `Slide ${index + 1}`} onSelectSlide={() => pickSel(null)} onSelect={pickSel} onHover={(el) => canvas.current?.hover(el)}
                 onToggleHidden={toggleHidden} onToggleLock={toggleLock} renameSignal={renameTick} onRename={renameEl} onMove={moveEl} />
             </div>
           </div>
@@ -538,11 +612,11 @@ export function Editor({ id }: { id: string }) {
         <Filmstrip shell={shell} folder={folder} units={units} index={index}
           marked={new Set(comments.filter((c) => !c.slideDeleted && c.status === "open").map((c) => c.slide))} origin={origin.current}
           collapsed={filmCollapsed} onToggle={toggleFilm}
-          onSelect={setIndex} onMove={moveSlide} onDuplicate={dupSlide} onDelete={delSlide} onAdd={addSlide} />
+          onSelect={setIndex} onMenu={tileMenuAt} onMove={moveSlide} onDuplicate={dupSlide} onDelete={delSlide} onAdd={addSlide} />
         <div className="min-h-0 flex-1 bg-[var(--canvas-bg)]">
         <Canvas ref={canvas} shell={shell} folder={folder} units={units} index={index} sel={sel} more={more} onMulti={toggleSel} onGroup={pickGroup}
           comments={comments.filter((c) => !c.slideDeleted && c.slide === origin.current.get(units[index]?.key ?? ""))}
-          commentActions={commentActions} onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
+          commentActions={commentActions} onContext={({ el, x, y }) => contextAt({ x, y }, el)} onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
           numbers={nums} hoverId={hoverId} onHover={setHoverId} channel={live.channel}
           onComment={postComment} onMarker={(cid) => { setTab("comments"); const c = comments.find((x) => x.id === cid); if (c) jump(c); }} />
         </div>
@@ -580,6 +654,7 @@ export function Editor({ id }: { id: string }) {
         </CommandMenu>
       </CommandMenuDialog>
 
+      <ContextMenu menu={cm} />
       <Dialog open={help} onOpenChange={setHelp}>
         <DialogContent size="lg">
           <DialogTitle>Shortcuts</DialogTitle>

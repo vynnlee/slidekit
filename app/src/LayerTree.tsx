@@ -10,7 +10,8 @@ type Props = {
   slide: HTMLElement | null;
   sel: Element | null;
   more: Element[]; // 다중 선택의 나머지
-  onToggle(el: Element): void; // Shift+클릭: 선택에 더하거나 뺀다
+  onToggle(el: Element): void;
+  onContext(el: Element | null, at: { x: number; y: number }): void; // 우클릭(Slide 루트 행은 null) // Shift+클릭: 선택에 더하거나 뺀다
   slideName: string;
   onSelectSlide(): void;
   rev: unknown; // 슬라이드가 바뀔 때마다 달라져 트리를 다시 그린다
@@ -101,6 +102,7 @@ export function LayerTree(p: Props) {
           tabIndex={on ? 0 : -1}
           onKeyDown={(e) => { if (e.key === "Enter" && e.target === e.currentTarget && !e.metaKey && !e.ctrlKey) { e.preventDefault(); e.stopPropagation(); setRename(el); } }}
           onClick={(e) => { e.currentTarget.focus(); if (e.shiftKey) p.onToggle(el); else p.onSelect(el); }}
+          onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); p.onContext(el, { x: e.clientX, y: e.clientY }); }}
           onDoubleClick={() => setRename(el)}
           onMouseEnter={() => p.onHover(el)}
           onMouseLeave={() => p.onHover(null)}
@@ -162,7 +164,7 @@ export function LayerTree(p: Props) {
   return (
     <div role="tree" aria-label="Layers" className="flex flex-col gap-px p-2" onMouseLeave={() => p.onHover(null)}>
       <div role="treeitem" aria-selected={rootSel} aria-expanded={slideOpen}>
-        <div onClick={p.onSelectSlide} style={{ paddingLeft: 4 }}
+        <div onClick={p.onSelectSlide} onContextMenu={(e) => { e.preventDefault(); p.onContext(null, { x: e.clientX, y: e.clientY }); }} style={{ paddingLeft: 4 }}
           className={`flex h-7 cursor-default items-center gap-1 rounded-md pr-1 text-body ${rootSel ? "bg-hover text-foreground" : "text-muted-foreground hover:bg-hover"}`}>
           <span className="flex size-4 shrink-0 items-center justify-center">
             <button aria-label={slideOpen ? "Collapse slide" : "Expand slide"} className="flex size-4 items-center justify-center rounded hover:text-foreground"

@@ -91,6 +91,8 @@ export function Presenter({ id }: { id: string }) {
   const [win, setWin] = useState<boolean | null>(presentationOpen);
   const [check, setCheck] = useState<string[] | null>(null);
   const [help, setHelp] = useState(false), [palette, setPalette] = useState(false);
+  // 스크린 리더 안내(aria-live): 키로 바뀌는 상태(전체화면, 타이머, 가리기 해제)를 말해 준다. 가리기 켜짐은 눈에 보이는 상태 줄(role=status)이 읽는다.
+  const [announce, setAnnounce] = useState("");
   const [notesSize, setNotesSize] = useState(() => Math.min(NOTES_MAX, Math.max(NOTES_MIN, Number(localStorage.getItem(NOTES_KEY)) || 20)));
   const notesRef = useRef<HTMLDivElement>(null);
 
@@ -293,6 +295,19 @@ export function Presenter({ id }: { id: string }) {
   const curSlide = info?.slides[pos.slide - 1];
   const remote = useRemoteHost(deck?.folder, info ? { slide: pos.slide, total, title: curSlide?.title ?? curSlide?.kind ?? `Slide ${pos.slide}`, notes: curSlide?.notes ?? "", elapsed, running, blank, target } : null, runCmd);
   const [remoteErr, setRemoteErr] = useState("");
+  const prev = useRef({ running: false, elapsed: 0, blank: null as "black" | "white" | null });
+  useEffect(() => {
+    const p = prev.current;
+    if (elapsed === 0 && p.elapsed > 0) setAnnounce("Timer reset"); // 리셋은 멈춤과 함께 오므로 먼저 본다
+    else if (running !== p.running) setAnnounce(running ? "Timer started" : "Timer paused");
+    else if (!blank && p.blank) setAnnounce("Presentation screen shown again");
+    prev.current = { running, elapsed, blank };
+  }, [running, elapsed, blank]);
+  useEffect(() => {
+    const on = () => setAnnounce(document.fullscreenElement ? "Full screen on" : "Full screen off");
+    document.addEventListener("fullscreenchange", on);
+    return () => document.removeEventListener("fullscreenchange", on);
+  }, []);
   // 팔레트(Cmd+K): 슬라이드(번호, 제목, 노트 글자로 찾기), 장, 발표 동작. 키 충돌은 기존 입력 포커스 규칙이 그대로 막는다(입력 칸에 있으면 단축키는 동작하지 않는다).
   const setBlankMode = (mode: "black" | "white" | "off") => {
     if (win !== true) { toast("Open the presentation window first", { ms: TOAST.info }); return; }
@@ -352,6 +367,7 @@ export function Presenter({ id }: { id: string }) {
         <>
           <Tooltip content="All decks" side="bottom"><Button variant="ghost" size="icon-compact" aria-label="All decks" onClick={() => go("/")}><ArrowLeft /></Button></Tooltip>
           <span className="mr-auto truncate text-subtitle font-medium">{deck.title}</span>
+          <span role="status" aria-live="polite" className="sr-only">{announce}</span>
           {err && <span role="status" className="truncate text-caption text-muted-foreground">{err}</span>}
           {blank && win && <span role="status" className="rounded bg-hover px-1.5 text-caption text-foreground">Blanked ({blank})</span>}
           {win !== null && <span className="flex items-center gap-1.5 text-caption text-muted-foreground"><span className={`size-1.5 rounded-full ${win ? "bg-green-500" : "bg-red-500"}`} /><span className="max-[640px]:sr-only">{win ? "Presentation window open" : "Presentation window closed"}</span></span>}

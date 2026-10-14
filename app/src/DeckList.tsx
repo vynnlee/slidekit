@@ -31,8 +31,8 @@ type Sort = keyof typeof SORTS;
 const TEMPLATE_HINT: Record<string, string> = { talk: "Cover, chapters, content, two columns, end", blank: "A cover and one slide", workshop: "Chapters, steps, big numbers, notes on every slide" };
 // 단축키 안내('?')의 내용. 이 화면의 키만 담는다.
 const KEY_GROUPS: KeyGroup[] = [
-  ["Decks", [["Left, Right, Up, Down", "Move between decks"], ["Enter", "Open the deck"], ["Cmd+Enter", "Present the deck"], ["Shift+F10", "Deck menu (or right-click)"]]],
-  ["General", [["Cmd+K", "Search decks, slides, and actions"], ["?", "Show this list"], ["Esc", "Close a menu or dialog"]]],
+  ["Decks", [["Left, Right, Up, Down", "Move between decks"], ["Enter", "Open the deck"], ["Cmd+Enter", "Present the deck"], ["Shift+F10", "Deck menu (or right-click)"], ["N", "New deck"]]],
+  ["General", [["Cmd+K", "Search decks, slides, and actions"], ["/", "Search"], ["?", "Show this list"], ["Esc", "Close a menu or dialog"]]],
 ];
 const FILTERS = { all: "All", pinned: "Pinned", recent: "Recent", password: "Password" } as const;
 type Filter = keyof typeof FILTERS;
@@ -237,13 +237,16 @@ export function DeckList() {
   }, [decks, sort, recent, filter, pins]);
 
   const open = (d: DeckEntry) => go(`/edit/${encodeURIComponent(d.id)}`);
-  // '?'로 단축키 안내를 연다(입력 칸이나 다른 대화상자가 열려 있을 때는 쓰지 않는다).
+  // 한 글자 단축키: ? 단축키 안내, / 검색, N 새 덱(입력 칸이나 다른 대화상자가 열려 있을 때는 쓰지 않는다).
+  const keyActions = useRef({ search: () => {}, create: () => {} });
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key !== "?" || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
       const t = e.target as HTMLElement | null;
       if (t?.closest("input,textarea,select,[contenteditable]") || document.querySelector("[role=dialog]")) return;
-      e.preventDefault(); setHelp(true);
+      if (e.key === "?") { e.preventDefault(); setHelp(true); }
+      else if (e.key === "/") { e.preventDefault(); keyActions.current.search(); }
+      else if ((e.key === "n" || e.key === "N") && !e.shiftKey) { e.preventDefault(); keyActions.current.create(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -332,6 +335,7 @@ export function DeckList() {
 
   const mac = useIsMac();
   const startCreate = () => { setPalette(false); setErr(""); setNewTitle(""); setName(""); setNameTouched(false); setTemplate("talk"); setCreating(true); fetch("/api/templates").then((r) => r.json()).then((l) => Array.isArray(l) && l.length && setTemplates(l)).catch(() => {}); };
+  keyActions.current = { search: () => setPalette(true), create: startCreate };
 
   // 두 글자 이상 입력하면 모든 덱의 슬라이드 제목, 본문, 노트에서 찾는다(최대 30건). 결과를 고르면 그 슬라이드의 편집기로 간다.
   const slideHits = useMemo((): CommandMenuItemData[] => {
@@ -358,7 +362,7 @@ export function DeckList() {
   }, [q, index]);
 
   const items: CommandMenuItemData[] = useMemo(() => [
-    { value: "new", label: "New deck", icon: Plus, group: "Actions", onSelect: startCreate },
+    { value: "new", label: "New deck", icon: Plus, group: "Actions", shortcut: "n", onSelect: startCreate },
     { value: "view", label: view === "grid" ? "View as list" : "View as grid", icon: view === "grid" ? List : LayoutGrid, group: "Actions", onSelect: () => setView(view === "grid" ? "list" : "grid") },
     { value: "keys", label: "Keyboard shortcuts", icon: Keyboard, group: "Actions", keywords: ["help", "keys"], onSelect: () => setHelp(true) },
     { value: "sort", label: `Sort by ${SORTS[ORDER[(ORDER.indexOf(sort) + 1) % ORDER.length]]}`, icon: ArrowDownUp, group: "Actions", onSelect: cycleSort },

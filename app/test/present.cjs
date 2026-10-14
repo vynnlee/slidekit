@@ -164,10 +164,12 @@ const MOCKS = {
     await openPal('Start timer'); await pal.getByRole('option', { name: /^Start timer/ }).first().click();
     const timer = () => page.locator('[role=timer]').first().innerText();
     check('팔레트로 타이머를 시작한다', await until(async () => (await timer()) !== '00:00:00', 6000), await timer());
+    check('타이머 시작을 스크린 리더 안내(aria-live)가 말한다', await until(async () => (await page.locator('[role=status][aria-live=polite].sr-only').innerText()) === 'Timer started'));
     await openPal('Reset timer'); await pal.getByRole('option', { name: /^Reset timer/ }).first().click();
     check('팔레트 리셋도 한 번은 확인을 요구한다', (await page.getByText('Choose Reset timer again to confirm').count()) >= 1 && (await timer()) !== '00:00:00');
     await openPal('Reset timer'); await pal.getByRole('option', { name: /^Reset timer/ }).first().click();
     check('두 번째 선택에서 리셋된다', await until(async () => (await timer()) === '00:00:00'), await timer());
+    check('리셋도 안내한다', await until(async () => (await page.locator('[role=status][aria-live=polite].sr-only').innerText()) === 'Timer reset'));
     await openPal('Black screen'); await pal.getByRole('option', { name: /^Black screen/ }).first().click();
     check('발표 창이 없으면 가리기는 안내만 한다', await until(async () => (await page.getByText('Open the presentation window first').count()) >= 1));
     await page.mouse.click(640, 780);

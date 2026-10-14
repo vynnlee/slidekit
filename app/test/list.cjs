@@ -227,6 +227,22 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   check("'?'로 단축키 안내가 열린다", await until(async () => (await kh.count()) === 1 && (await kh.getByText('Search decks, slides, and actions').count()) === 1));
   await page.keyboard.press('Escape');
   check('Esc로 닫힌다(단축키 안내)', await until(async () => (await kh.count()) === 0));
+  // 키보드만으로: / 검색, N 새 덱, 화살표로 카드 이동(모든 카드에 포커스 링)
+  await page.locator('body').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('/');
+  const sp = page.getByRole('dialog', { name: 'Search' });
+  check("'/'로 검색이 열린다", await until(async () => (await sp.count()) === 1));
+  await page.keyboard.press('Escape');
+  await until(async () => (await sp.count()) === 0);
+  await page.keyboard.press('n');
+  check("'N'으로 새 덱 대화상자가 열린다", await until(async () => (await page.getByRole('dialog', { name: 'New deck' }).count()) === 1));
+  await page.getByRole('dialog', { name: 'New deck' }).getByLabel('Title').fill('n');
+  await page.keyboard.press('Escape');
+  check('Esc로 새 덱 대화상자가 닫힌다', await until(async () => (await page.getByRole('dialog').count()) === 0));
+  await page.getByRole('button', { name: 'zz-e2e-k1', exact: true }).focus();
+  const rings = [];
+  for (let i = 0; i < 3; i++) { rings.push(await page.evaluate(() => { const e = document.activeElement; const cs = e && getComputedStyle(e); return !!cs && (cs.boxShadow !== 'none' || (cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0)); })); await page.keyboard.press('ArrowRight'); }
+  check('화살표로 옮긴 카드마다 포커스 링이 보인다', rings.every(Boolean), rings);
   // 핀과 필터 칩: 메뉴의 Pin to top으로 맨 앞에 고정되고(정렬과 무관), 칩으로 줄이며, 새로고침해도 남는다
   await cardBtn('zz-e2e-k2').click({ button: 'right', position: { x: 40, y: 40 } });
   await page.getByRole('menuitem', { name: 'Pin to top' }).click();

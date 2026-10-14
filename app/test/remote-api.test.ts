@@ -1,0 +1,100 @@
+import { expect, test } from "bun:test";
+import { createHub, parseCmd, parseState, TTL_MS, type Sink } from "../remote-api";
+
+const sink = () => { const got: [string, any][] = []; let closed = false; return { got, get closed() { return closed; }, s: { send: (e, d) => { got.push([e, d]); }, close: () => { closed = true; } } as Sink }; };
+const setup = () => { let t = 1_000_000; const hub = createHub(() => t); return { hub, tick: (ms: number) => { t += ms; } }; };
+const code = (c: string) => c.replace("-", "");
+
+test("parseCmd: 허용한 명령만 통과", () => {
+  expect(parseCmd({ type: "next" })).toEqual({ type: "next" });
+  expect(parseCmd({ type: "goto", n: 12 })).toEqual({ type: "goto", n: 12 });
+  expect(parseCmd({ type: "blank", mode: "white" })).toEqual({ type: "blank", mode: "white" });
+  expect(parseCmd({ type: "timer", action: "reset" })).toEqual({ type: "timer", action: "reset" });
+  for (const b of [null, "next", {}, { type: "save" }, { type: "delete" }, { type: "goto", n: 0 }, { type: "goto", n: 1.5 }, { type: "goto", n: 10000 }, { type: "goto", n: "3" }, { type: "blank", mode: "red" }, { type: "timer", action: "x" }]) expect(parseCmd(b)).toBeNull();
+  expect(parseCmd({ type: "next", path: "/etc/passwd" })).toEqual({ type: "next" }); // 여분 필드는 버린다
+});
+
+test("parseState: 길이와 범위를 자르고 잘못된 값은 거절", () => {
+  expect(parseState({ slide: 0, total: 3 })).toBeNull();
+  expect(parseState({ slide: 1 })).toBeNull();
+  const s = parseState({ slide: 2, total: 5, title: "x".repeat(500), notes: "n".repeat(20000), elapsed: -3, running: "yes", blank: "red", target: 5 })!;
+  expect(s.title.length).toBe(200); expect(s.notes.length).toBe(8000);
+  expect(s.elapsed).toBe(0); expect(s.running).toBe(false); expect(s.blank).toBeNull(); expect(s.target).toBe(5);
+});
+
+test("페어링: 코드는 1회용이고 대소문자와 하이픈을 무시한다", () => {
+  const { hub } = setup();
+  const r = hub.start("d");
+  expect(r.code).toMatch(/^[A-Z2-7]{4}-[A-Z2-7]{4}$/);
+  const j = hub.join("d", code(r.code).toLowerCase());
+  expect("token" in j).toBe(true);
+  expect(hub.join("d", r.code)).toEqual({ error: "code" }); // 두 번째는 거절
+  expect(hub.join("nope", r.code)).toEqual({ error: "none" });
+});
+
+test("틀린 코드는 분당 5번까지, 그 뒤엔 맞는 코드도 잠기고 1분 뒤 풀린다", () => {
+  const { hub, tick } = setup();
+  const r = hub.start("d");
+  for (let i = 0; i < 5; i++) expect(hub.join("d", "AAAA-AAAA")).toEqual({ error: "code" });
+  expect(hub.join("d", r.code)).toEqual({ error: "limit" });
+  tick(61_000);
+  expect("token" in hub.join("d", r.code)).toBe(true);
+});
+
+test("명령: 토큰 검사, 발표자가 없으면 offline, 초당 10회 제한", () => {
+  const { hub, tick } = setup();
+  const r = hub.start("d");
+  const { token } = hub.join("d", r.code) as { token: string };
+  expect(hub.command("d", "bad", { type: "next" })).toBe("auth");
+  expect(hub.command("d", token, { type: "next" })).toBe("offline");
+  tick(1100); // 거절된 시도도 속도 제한에 센다
+  const h = sink();
+  hub.subscribeHost("d", r.host, h.s);
+  for (let i = 0; i < 10; i++) expect(hub.command("d", token, { type: "next" })).toBe("ok");
+  expect(hub.command("d", token, { type: "next" })).toBe("rate");
+  expect(h.got.filter(([e]) => e === "cmd").length).toBe(10);
+  tick(1100);
+  expect(hub.command("d", token, { type: "prev" })).toBe("ok");
+});
+
+test("상태: 발표자 키만 보낼 수 있고, 휴대폰은 붙자마자 마지막 상태와 접속 여부를 받는다", () => {
+  const { hub } = setup();
+  const r = hub.start("d");
+  const { token } = hub.join("d", r.code) as { token: string };
+  const st = parseState({ slide: 3, total: 9, title: "t", notes: "n", elapsed: 5, running: true, blank: null, target: 0 })!;
+  expect(hub.setState("d", "wrong", st)).toBe(false);
+  expect(hub.setState("d", r.host, st)).toBe(true);
+  const v = sink();
+  expect(hub.subscribeViewer("d", "bad", sink().s)).toBeNull();
+  hub.subscribeViewer("d", token, v.s);
+  expect(v.got).toEqual([["presence", { online: false }], ["state", st]]);
+  const h = sink();
+  const off = hub.subscribeHost("d", r.host, h.s)!;
+  expect(v.got.at(-1)).toEqual(["presence", { online: true }]);
+  off();
+  expect(v.got.at(-1)).toEqual(["presence", { online: false }]);
+  expect(hub.subscribeHost("d", "wrong", sink().s)).toBeNull();
+});
+
+test("종료: stop과 새 start와 2시간 만료가 세션과 토큰을 폐기하고 연결에 end를 보낸다", () => {
+  const { hub, tick } = setup();
+  let r = hub.start("d");
+  let { token } = hub.join("d", r.code) as { token: string };
+  const v = sink();
+  hub.subscribeViewer("d", token, v.s);
+  expect(hub.stop("d", "wrong")).toBe(false);
+  expect(hub.stop("d", r.host)).toBe(true);
+  expect(v.got.at(-1)![0]).toBe("end"); expect(v.closed).toBe(true);
+  expect(hub.command("d", token, { type: "next" })).toBe("auth");
+  // 새 start는 옛 세션 토큰을 무효로 한다
+  r = hub.start("d"); token = (hub.join("d", r.code) as { token: string }).token;
+  const r2 = hub.start("d");
+  expect(hub.command("d", token, { type: "next" })).toBe("auth");
+  // 만료
+  const j = hub.join("d", r2.code) as { token: string };
+  tick(TTL_MS - 1);
+  expect(hub.command("d", j.token, { type: "next" })).toBe("offline");
+  tick(2);
+  expect(hub.command("d", j.token, { type: "next" })).toBe("auth");
+  expect(hub.size()).toBe(0);
+});

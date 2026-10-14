@@ -7,6 +7,7 @@ import { routes as editorRoutes } from "./editor-api";
 import { routes as versionRoutes } from "./versions";
 import { routes as exportRoutes } from "./export-api";
 import { guardHost, guardRoutes } from "./guard";
+import { remoteRoutes } from "./remote-api";
 import { alreadyUp, openApp } from "./launch";
 import { createDeck, routes as deckRoutes } from "./decks-api";
 import { routes as searchRoutes } from "./search-api";
@@ -91,6 +92,7 @@ Bun.serve({
     "/": index,
     "/present/:id": index,
     "/edit/:id": index,
+    "/remote/:id": index,
     "/dev/inspector": index,
     "/dev/tokens": index,
     "/dev/export": index,
@@ -102,6 +104,7 @@ Bun.serve({
     ...editorRoutes,
     ...versionRoutes,
     ...exportRoutes,
+    ...remoteRoutes,
   }),
   async fetch(req) {
     const denied = guardHost(req); // 모든 메서드에 적용한다

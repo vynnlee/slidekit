@@ -208,9 +208,9 @@ JS 없이 슬라이드 안 요소를 단계마다 나타나게 한다(Keynote의
 - `data-step="1"`과 정수가 아닌 값은 경고 없이(1) 또는 경고하고(그 밖의 값) 무시하며 요소는 처음부터 보인다. `slidekit lint`는 이를 오류로 막고, `data-steps`를 쓰면 section `id`와 `SlideKit.stepper` 등록이 있어야 한다(`data-step`만 쓰는 슬라이드에는 해당 없다).
 - 같은 슬라이드에 `SlideKit.stepper`로 등록한 구현이 있으면 그쪽이 우선이고 `data-step`은 동작하지 않는다(요소는 숨겨진 채로 남는다).
 - 이동 규칙은 위 stepper와 같다. 앞으로는 단계가 먼저이고 끝나면 다음 슬라이드, 뒤로도 같으며 뒤에서 들어오면 마지막 단계다. 동기화, `info`의 `steps`, `state`의 `step`, embed의 `goto(slide, step)`도 같은 숫자를 쓴다. 해시 진입은 1단계다.
-- 숨김 상태는 `visibility:hidden`과 `opacity:0`이고 자리는 그대로 차지한다(레이아웃이 움직이지 않는다). 효과는 `data-step-effect`: `rise`(기본, 투명도와 20px 위로 올라오기), `fade`(투명도만), `none`(즉시). 시간은 `--sk-step-ms`(기본 360ms)이고 `prefers-reduced-motion: reduce`이면 전환이 없다. 이동(`enter`, `goto`, 해시, 동기화)으로 단계가 바뀔 때는 전환 없이 바로 바뀐다.
+- 숨김 상태는 `visibility:hidden`과 `opacity:0`이고 자리는 그대로 차지한다(레이아웃이 움직이지 않는다). 효과는 `data-step-effect`: `rise`(기본, 투명도와 20px 위로 올라오기), `fade`(투명도만), `left`(왼쪽 32px에서 밀려 들어오기), `scale`(92%에서 커지기), `blur`(흐림에서 선명해지기), `none`(즉시). 목록의 원천은 `engine/steps.ts`다. 모르는 값은 `rise`로 본다. 시간은 `--sk-step-ms`(기본 360ms)이고 `prefers-reduced-motion: reduce`이면 전환이 없다. 이동(`enter`, `goto`, 해시, 동기화)으로 단계가 바뀔 때는 전환 없이 바로 바뀐다.
 - 전체 보기 축소판은 1단계 모습이다. 인쇄(`@media print`)는 모든 단계를 보인다. 편집기 캔버스가 모든 단계를 한 번에 보여 주려면 `<html data-sk-show-steps>`를 붙인다.
-- 편집기 지원: Inspector의 Appearance에 "Appears at step" NumberField(min 1, 1이면 속성 삭제)와 effect Select(Rise, Fade, None)가 있다.
+- 편집기 지원: Inspector의 Appearance에 "Appears at step" NumberField(min 1, 1이면 속성 삭제)와 effect Select(`engine/steps.ts`의 목록: Rise, Fade, Slide, Scale, Blur, None)가 있다.
 
 - 슬라이드 상태 변화(진입과 이탈)를 알아야 하는 덱 코드는 슬라이드 요소의 `sk:enter`, `sk:leave` 이벤트(버블링)를 듣거나 `data-active` 속성을 읽는다.
 

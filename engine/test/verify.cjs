@@ -281,6 +281,7 @@ const settled = async (...ps) => { await Promise.all(ps.map(settledOne)); if (ps
     '<section data-slide="content"><h2 id="t">two</h2><p id="a" data-step="2">A</p><p id="b" data-step="3">B</p><p id="b2" data-step="3" data-step-effect="fade">B2</p><p id="n" data-step="2" data-step-effect="none">N</p></section>' +
     '<section data-slide="content"><h2>three</h2></section>';
   page('dstep', dsBody);
+  page('dstep-fx', '<section data-slide="content"><h2>fx</h2>' + ['rise', 'fade', 'left', 'scale', 'blur', 'none', 'bogus'].map((e) => '<p id="fx-' + e + '" data-step="2" data-step-effect="' + e + '">' + e + '</p>').join('') + '</section>');
   page('dstep-more', '<section data-slide="content" data-steps="4"><p id="a" data-step="2">A</p></section><section data-slide="content"><h2>x</h2></section>');
   page('dstep-custom', '<section data-slide="content" id="c"><p id="a" data-step="2">A</p><p id="z" data-step="3">Z</p></section><section data-slide="content"><h2>x</h2></section>',
     `<script>window.log = []; var s = 1; SlideKit.stepper(document.getElementById('c'), { enter: function () { s = 1; }, next: function () { log.push('next'); if (s >= 3) return false; s++; return true; }, prev: function () { if (s <= 1) return false; s--; return true; }, get: function () { return s; }, goto: function (n) { s = n; } });</script>`);
@@ -314,6 +315,18 @@ const settled = async (...ps) => { await Promise.all(ps.map(settledOne)); if (ps
     check('data-step: print shows every step', pv.length === 4 && pv.every((v) => v === 'visible1'), pv);
     await d.emulateMedia({ media: 'screen' });
     await d.close(); }
+  { const f = await ctx.newPage(); await f.goto(BASE + '/__t/dstep-fx#1'); await f.waitForSelector('#sk-stage'); await settled(f);
+    const st = await f.evaluate(() => Object.fromEntries([...document.querySelectorAll('#sk-stage [data-step]')].map((e) => { const c = getComputedStyle(e); return [e.id.slice(3), c.transform + '|' + c.filter + '|' + c.opacity]; })));
+    check('data-step effects: hidden poses (rise, left, scale, blur; fade and none only opacity; unknown falls back to rise)',
+      st.rise === 'matrix(1, 0, 0, 1, 0, 20)|none|0' && st.bogus === st.rise && st.left === 'matrix(1, 0, 0, 1, -32, 0)|none|0' && st.scale === 'matrix(0.92, 0, 0, 0.92, 0, 0)|none|0' &&
+      st.blur === 'none|blur(12px)|0' && st.fade === 'none|none|0' && st.none === 'none|none|0', st);
+    await f.keyboard.press('ArrowRight'); await settled(f);
+    const sh = await f.evaluate(() => [...document.querySelectorAll('#sk-stage [data-step]')].map((e) => { const c = getComputedStyle(e); return c.opacity + c.visibility + c.transform + c.filter; }));
+    check('data-step effects: every effect ends fully shown', sh.every((v) => v === '1visiblenonenone'), sh);
+    await f.emulateMedia({ media: 'print' }); await f.keyboard.press('ArrowLeft'); await settled(f);
+    const pr = await f.evaluate(() => [...document.querySelectorAll('#sk-stage [data-step]')].map((e) => { const c = getComputedStyle(e); return c.opacity + c.visibility + c.transform + c.filter; }));
+    check('data-step effects: print shows all with no blur or transform', pr.every((v) => v === '1visiblenonenone'), pr);
+    await f.close(); }
   { const A = await ctx.newPage(), B = await ctx.newPage();
     await A.goto(BASE + '/__t/dstep?sync=1#2'); await B.goto(BASE + '/__t/dstep?sync=1#2'); await A.waitForSelector('#sk-stage'); await B.waitForSelector('#sk-stage'); await settled(A, B);
     await A.keyboard.press('ArrowRight'); await A.keyboard.press('ArrowRight'); await settled(A, B);

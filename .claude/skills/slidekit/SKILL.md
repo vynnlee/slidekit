@@ -147,7 +147,7 @@ description: slidekit 덱(HTML 슬라이드)을 새로 만들거나 고칠 때 �
 
 - `data-step="N"`은 2 이상의 정수다. N단계부터 보이고, 속성이 없으면 처음부터 보인다. 단계 수는 가장 큰 N이다(`data-steps`와 등록은 필요 없다).
 - 단계 번호를 건너뛰지 않는다(2 다음에 4를 쓰면 3단계가 빈다. lint가 경고한다).
-- 효과 `data-step-effect`: `rise`(기본), `fade`, `none`. 시간은 토큰 `--sk-step-ms`.
+- 효과 `data-step-effect`: `rise`(기본), `fade`, `left`, `scale`, `blur`, `none`(목록 원천 `engine/steps.ts`). 시간은 토큰 `--sk-step-ms`.
 - 숨겨진 요소도 자리는 차지한다. 이동 규칙은 stepper와 같고 추가 코드는 없다.
 - 요소의 움직임이나 값 계산이 필요하면 4-2의 stepper를 쓴다. 같은 슬라이드에 둘을 섞지 않는다(등록한 stepper가 우선이고 `data-step`은 동작하지 않는다).
 

@@ -33,7 +33,7 @@
     .flow .node { background: var(--sk-panel); border: 1px solid var(--sk-line); border-radius: 14px; padding: 30px 34px; display: flex; flex-direction: column; gap: 16px; }
     .flow .node .t { font: 500 30px var(--sk-font-mono); color: var(--sk-fg); }
     .flow .node .d { word-break: keep-all; font-size: 28px; line-height: 1.45; color: var(--sk-muted); }
-    code { font-family: var(--sk-font-mono); font-size: 0.82em; color: var(--sk-fg); background: var(--sk-panel); border: 1px solid var(--sk-line); border-radius: 8px; padding: .08em .45em; margin: 0 .12em; }
+    code { font-family: var(--sk-font-mono); font-size: 0.82em; color: var(--sk-fg); background: var(--sk-panel); border: 1px solid var(--sk-line); border-radius: 8px; padding: .08em .45em; margin: 0 .12em; white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -88,6 +88,19 @@
 발표자 화면의 항목은 필요한 것만 켜 둔다. 외장 모니터는 Chrome 계열 브라우저에서 쓴다.</aside>
 </section>
 
+<section data-slide="content">
+  <h2>노트와 발표자 화면</h2>
+  <div class="flow">
+    <div class="node"><span class="t">노트</span><span class="d">슬라이드마다 aside에 마크다운으로 쓴다. 청중 화면에는 나오지 않는다</span></div>
+    <div class="node"><span class="t">발표자 화면</span><span class="d">현재와 다음 슬라이드, 노트, 타이머, 장 위치를 필요한 것만 켜 둔다</span></div>
+    <div class="node"><span class="t">리허설</span><span class="d">T로 타이머를 시작하면 슬라이드별 체류 시간이 쌓이고 목표 시간과 비교한다</span></div>
+  </div>
+  <p>발표 창을 닫았다가 다시 열어도 위치와 가리기 상태가 이어진다.</p>
+  <aside data-notes>노트는 **발표자만** 보는 글이다. 읽을 말, 시간 배분, 예상 질문을 적는다.
+
+리허설 요약은 가장 오래 머문 세 장을 보여 준다.</aside>
+</section>
+
 <section data-slide="chapter" data-title="만들기">
   <h1>만들기</h1>
   <aside data-notes>세 번째 장은 덱을 쓰는 규격이다.
@@ -106,6 +119,50 @@
   <aside data-notes>규격 문서는 `spec/SPEC.md`이고 AI에게는 **스킬**이 같은 내용을 요약해 준다.
 
 토큰은 `:root` 한 블록에 모으면 편집기가 원문 그대로 고친다.</aside>
+</section>
+
+<section data-slide="content">
+  <h2>모양은 레이아웃으로 고른다</h2>
+  <div class="grid2">
+    <div class="key"><span class="k">two-column</span><span class="d">비교, 전과 후, 글과 그림처럼 둘을 나란히 놓는다.</span></div>
+    <div class="key"><span class="k">big-number</span><span class="d">숫자 하나로 말한다.</span></div>
+    <div class="key"><span class="k">quote</span><span class="d">인용과 출처를 보여 준다.</span></div>
+    <div class="key"><span class="k">image-full</span><span class="d">이미지가 슬라이드를 채우고 글은 아래쪽에 겹친다.</span></div>
+  </div>
+  <p>본문 슬라이드에 <code>data-layout</code>을 달면 된다. 없으면 제목과 본문이다. 목록은 <code>slidekit layouts</code>로 본다.</p>
+  <aside data-notes>레이아웃은 슬라이드 **종류가 아니라 본문의 변형**이다. 종류 네 가지 규칙은 그대로이다.
+
+편집기에서는 슬라이드를 추가할 때 고르고 Inspector에서 바꾼다.</aside>
+</section>
+
+<section data-slide="content" data-layout="big-number">
+  <p data-big>5</p>
+  <p>레이아웃 프리셋은 다섯 가지이다. 이 슬라이드가 big-number이다.</p>
+  <aside data-notes>숫자 하나가 말하게 하는 레이아웃이다. 설명은 한 줄로 줄인다.</aside>
+</section>
+
+<section data-slide="content" data-layout="two-column">
+  <h2>두 열은 비교에 쓴다</h2>
+  <div data-col>
+    <h3>파일을 직접 고칠 때</h3>
+    <p>원본 HTML 한 파일을 연다. AI에게 맡기거나 직접 쓴다.</p>
+  </div>
+  <div data-col>
+    <h3>편집기를 쓸 때</h3>
+    <p>캔버스에서 고르고 속성 패널로 바꾼다. 저장은 자동이다.</p>
+  </div>
+  <aside data-notes>두 방법은 **같은 파일**을 고친다. 어느 쪽으로 시작해도 된다.</aside>
+</section>
+
+<section data-slide="content">
+  <h2>토큰으로 모양을 바꾼다</h2>
+  <div class="flow">
+    <div class="node"><span class="t">--sk-accent</span><span class="d">강조 색 하나로 덱 전체의 분위기가 바뀐다</span></div>
+    <div class="node"><span class="t">--sk-font</span><span class="d">글꼴은 번들 때 쓰는 글자만 남겨 파일에 담긴다</span></div>
+    <div class="node"><span class="t">--sk-pad-x</span><span class="d">여백과 글자 크기도 변수이고 토큰 패널에서 고친다</span></div>
+  </div>
+  <p>토큰은 <code>:root</code> 한 블록에 모으면 편집기가 원문 그대로 고친다.</p>
+  <aside data-notes>토큰만 바꾸면 슬라이드 본문은 건드리지 않는다. 바꾼 값에는 **Reset 점**이 생겨 기본값으로 되돌릴 수 있다.</aside>
 </section>
 
 <section data-slide="content">
@@ -152,6 +209,19 @@
   <aside data-notes>산출물은 **번들, PDF, 배포** 세 가지이다.
 
 명령은 `slidekit bundle`, `slidekit pdf`, `slidekit deploy`이고 Export 메뉴와 같은 기능을 쓴다.</aside>
+</section>
+
+<section data-slide="content">
+  <h2>배포 전에 점검한다</h2>
+  <div class="flow">
+    <div class="node"><span class="t">slidekit lint</span><span class="d">규격 위반과 남은 예제 문구를 알려 준다</span></div>
+    <div class="node"><span class="t">slidekit doctor</span><span class="d">Chrome, 토큰, 포트 같은 실행 환경을 한 화면에 점검한다</span></div>
+    <div class="node"><span class="t">비밀번호</span><span class="d">비밀번호 덱은 8자 이상이고 링크와 따로 전달한다</span></div>
+  </div>
+  <p>Export 메뉴의 Publish도 올리기 전에 같은 점검을 보여 준다.</p>
+  <aside data-notes>배포는 **공개 사이트에 올리는 일**이다. lint 경고를 모두 읽고 올린다.
+
+비밀번호는 덱 안에 넣지 않는다.</aside>
 </section>
 
 <section data-slide="end">

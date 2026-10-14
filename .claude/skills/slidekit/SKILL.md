@@ -269,6 +269,7 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
 - 비밀 값(비밀번호, 토큰)을 덱에 넣지 않는다.
 - 덱 스크립트에서 `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `/api/` 호출을 하지 않는다. 덱은 외부 호출 없이 동작해야 한다(lint가 경고한다).
 - 사용자가 요청하지 않으면 배포(`deploy`, 편집기 Publish)를 하지 않는다. 배포는 공개 사이트에 올리는 일이다.
+- 덱 스크립트에서 `contextmenu`(우클릭)를 가로채거나 우클릭 동작을 만들지 않는다. 발표 중 청중 화면의 우클릭 차단은 엔진이 하고, 앱의 메뉴와 커서 규칙은 `spec/INTERACTION.md`가 기준이다.
 
 ## 9. 만든 뒤 확인
 

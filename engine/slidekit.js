@@ -339,6 +339,11 @@
     document.addEventListener('mousedown', wake);
     wake();
 
+    /* presenting (a sync window or fullscreen): no browser context menu on the audience screen. Plain pages and embeds keep it. */
+    document.addEventListener('contextmenu', function (e) {
+      if (sync || document.fullscreenElement || document.webkitFullscreenElement) e.preventDefault();
+    });
+
     document.addEventListener('keydown', function (e) {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       var t = e.target, k = e.key, open = isOpen();

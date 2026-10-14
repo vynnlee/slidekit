@@ -315,6 +315,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await N.goto(BASE + '/__t/dstep?sync=1#1'); await N.waitForSelector('#sk-stage'); await sleep(500);
     check('blank: hello restores the state for a reconnecting window', JSON.stringify(await N.evaluate(() => window.__bm)) === '["black"]', await N.evaluate(() => window.__bm));
     await L.close(); await A.close(); await N.close(); }
+  /* the audience screen has no browser context menu while presenting (sync window); plain pages and embeds keep it */
+  { const cm = (url) => ctx.newPage().then(async (q) => { await q.goto(url); await q.waitForSelector('#sk-stage'); const r = await q.evaluate(() => { const ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true }); document.body.dispatchEvent(ev); return ev.defaultPrevented; }); await q.close(); return r; });
+    check('contextmenu: blocked in a sync (audience) window', (await cm(BASE + '/__t/dup?sync=1#1')) === true);
+    check('contextmenu: kept on a plain page', (await cm(BASE + '/__t/dup#1')) === false);
+    const e = await ctx.newPage(); await e.goto(BASE + '/__t/dup?embed=1#1'); await e.waitForSelector('#sk-stage');
+    check('contextmenu: kept in embed mode (editor and presenter previews)', (await e.evaluate(() => { const ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true }); document.body.dispatchEvent(ev); return ev.defaultPrevented; })) === false); await e.close();
+    const o = await ctx.newPage(); await o.goto(BASE + '/__t/dup#1'); await o.waitForSelector('#sk-stage'); await o.keyboard.press('o'); await sleep(300);
+    check('overview thumbnails use the pointer cursor', (await o.evaluate(() => getComputedStyle(document.querySelector('.sk-thumb')).cursor)) === 'pointer'); await o.close(); }
   /* data-step="1" and invalid values are ignored with the element visible from the start (6.3) */
   page('ds1', '<section data-slide="content"><p id="one" data-step="1">x</p><p id="bad" data-step="abc">y</p><p id="two" data-step="2">z</p></section>');
   { const q = await ctx.newPage(); await q.goto(BASE + '/__t/ds1#1'); await q.waitForSelector('#sk-stage'); await sleep(300);

@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
-// 전체 검증. 실행: bun run test [--only <이름 일부>...] [--list] [--bail] [--slow]
+// 전체 검증. 실행: bun run test [--only <이름 일부>...] [--changed [--base <ref>] [--dry-run]] [--list] [--bail] [--slow]
+// 평소에는 `bun run test:changed`(변경 파일에 해당하는 단계만)를 쓰고, 전체 게이트는 푸시 전에만 돌린다.
 // 무거운 작업이라 /tmp/slidekit-heavy.lock을 한 번 잡고 모든 단계를 순서대로 돈다.
 // 실제 덱은 읽기 전용이다. 덱을 고치는 테스트는 scripts/lib/test-deck.cjs의 사본(decks/_e2e-*/)만 쓴다.
 // 단계 전후로 실제 덱(decks/_* 제외)의 내용 해시를 비교해 달라졌으면 WARN으로 보고만 한다(복원하지 않고 실패로도 치지 않는다). 지문은 경로와 크기다..
@@ -59,8 +60,65 @@ const steps: Step[] = [
   { ...browser("bundler-fonts-e2e", "bundler/test/fonts.cjs", "static", STATIC), server: undefined, slow: true },
 ];
 
+// 어느 단계에도 없는 단위 테스트(*.test.ts)는 한 단계로 묶어 돈다. 새 테스트를 추가해도 게이트에서 빠지지 않는다.
+{
+  const used = steps.flatMap((st) => st.cmd);
+  const extra = globSync("{app,engine,bundler,channel,scripts,deploy}/**/*.test.ts", { cwd: root }).filter((f) => !f.includes("node_modules") && !used.includes(f) && !used.some((u) => f.startsWith(u + "/")));
+  if (extra.length) steps.splice(steps.findIndex((st) => st.name === "channel"), 0, { name: "unit-other", cmd: ["bun", "test", ...extra] });
+}
 if (flag("--list")) { console.log(steps.map((s) => s.name + (s.slow ? " (slow)" : "")).join("\n")); process.exit(0); }
-const picked = steps.filter((s) => (only.length ? only.some((o) => s.name.includes(o)) : !s.slow || flag("--slow")));
+// 변경 파일 -> 단계 매핑표(여기 한 곳). 규칙은 모두 적용해 단계를 합친다. 문서만 바뀌면 단계가 없다.
+const NOSTEP = /^(package\.json|bun\.lock|\.gitignore|\.githooks\/|tsconfig.*\.json)$/;
+const DOCS = /(^|\/)(HANDOFF|README|PLAN|SKILL|INTERACTION|SPEC)\.md$|^(spec|docs)\/|\.md$/;
+const BROWSER_APP = ["routes", "responsive", "list"]; // 앱 공통 화면 변경 때의 연기 검사
+const MAP: [RegExp, string[]][] = [
+  [/^engine\/(slidekit\.(js|css)|test\/(verify|moved)\.cjs)/, ["engine-verify", "engine-moved", "bundler-bundle"]],
+  [/^engine\/(lint\.ts|test\/lint\.test\.ts|doctor\.ts|new\.ts|template\/)/, ["lint", "tokens"]],
+  [/^bundler\//, ["bundler-bundle", "bundler-fonts"]],
+  [/^deploy\//, ["deploy-worker", "export-api"]],
+  [/^channel\//, ["channel"]],
+  [/^app\/(comments\.ts|src\/(Comment|lib\/(comment|use-comments))|test\/comments)/, ["comments", "channel", "comments-e2e"]],
+  [/^app\/(export-api\.ts|src\/ExportMenu)/, ["export-api", "export"]],
+  [/^app\/(editor-api\.ts|src\/lib\/(deck-source|move|selection|guides))/, ["roundtrip", "deck-source.fuzz", "editor-readonly", "editor", "inspector"]],
+  [/^app\/src\/(Editor|Canvas|LayerTree|Filmstrip|Notes)/, ["editor", "inspector"]],
+  [/^app\/src\/(Inspector|components\/inspector)/, ["inspector", "inspector-a11y", "editor"]],
+  [/^app\/src\/(TokensPanel|TokensDemo|lib\/deck-(tokens|fonts))|^app\/test\/deck-(tokens|fonts)/, ["deck-tokens", "deck-fonts", "tokens"]],
+  [/^app\/src\/(Presenter|lib\/present)/, ["present"]],
+  [/^app\/src\/(DeckList|TrashList|lib\/menu-model|components\/ui\/context-menu)/, ["list"]],
+  [/^app\/(server|guard|decks-api|folder|preview-proxy)\.ts/, ["routes", "list", "editor-readonly", "export-api"]],
+  [/^app\/src\//, BROWSER_APP],
+  [/^scripts\/(test\.ts|scan-secrets)/, ["scan-secrets"]],
+  [/\.test\.ts$/, ["unit-other"]],
+];
+function changedSteps(): { names: string[]; files: string[]; unknown: string[] } {
+  const base = args.includes("--base") ? args[args.indexOf("--base") + 1] : Bun.spawnSync(["git", "rev-parse", "--verify", "-q", "origin/main"], { cwd: root }).exitCode === 0 ? "origin/main" : "HEAD";
+  const git = (...a: string[]) => Bun.spawnSync(["git", ...a], { cwd: root }).stdout.toString().split("\n").filter(Boolean);
+  const files = [...new Set([...git("diff", "--name-only", base), ...git("ls-files", "-o", "--exclude-standard")])].filter((f) => !f.startsWith("decks/"));
+  const names = new Set<string>(), unknown: string[] = [];
+  for (const f of files) {
+    if (DOCS.test(f) || NOSTEP.test(f)) continue;
+    const hit = MAP.filter(([re]) => re.test(f));
+    hit.forEach(([, n]) => n.forEach((x) => names.add(x)));
+    // 테스트 파일 자체가 바뀌면 그 파일을 쓰는 단계도 돈다.
+    const own = steps.filter((st) => st.cmd.includes(f));
+    own.forEach((st) => names.add(st.name));
+    if (own.length) continue;
+    if (!hit.length) unknown.push(f);
+  }
+  if (unknown.length) BROWSER_APP.forEach((x) => names.add(x)); // 모르는 파일이 바뀌면 연기 검사만 돈다
+  return { names: [...names], files, unknown };
+}
+if (flag("--changed")) {
+  const c = changedSteps();
+  console.log(`변경 ${c.files.length}개 파일 기준`);
+  if (c.unknown.length) console.log(`매핑에 없는 파일(연기 검사만 추가, scripts/test.ts의 MAP 확인): ${c.unknown.join(", ")}`);
+  if (!c.names.length) { console.log("실행할 단계가 없습니다(문서만 바뀜). 푸시 전에는 bun run test로 전체 게이트를 돌립니다."); process.exit(0); }
+  only.push(...c.names.map((n) => "\u0000" + n)); // 정확히 일치하는 이름만
+  console.log("단계: " + c.names.join(", "));
+  if (flag("--dry-run")) process.exit(0); // 어떤 단계가 도는지만 본다
+}
+const nameOk = (s: Step, o: string) => (o.startsWith("\u0000") ? s.name === o.slice(1) : s.name.includes(o));
+const picked = steps.filter((s) => (only.length ? only.some((o) => nameOk(s, o)) : !s.slow || flag("--slow")));
 if (!picked.length) { console.error("맞는 단계가 없음. --list로 확인"); process.exit(2); }
 if (picked.some((s) => s.cmd[0] === "node") && (!PW || !CHROME)) { console.error("playwright-core 또는 headless shell을 찾지 못함"); process.exit(2); }
 
@@ -108,7 +166,13 @@ setInterval(() => console.log(`[잠금 ${Math.round((Date.now() - heldAt) / 6000
 const logDir = "/tmp/slidekit-test-logs";
 mkdirSync(logDir, { recursive: true });
 const STEP_TIMEOUT = Number(process.env.SLIDEKIT_STEP_TIMEOUT ?? 900) * 1000; // 단계 하나의 상한(초). 가장 긴 editor가 약 200초다.
-async function run(name: string, cmd: string[], env: Record<string, string> = {}) {
+async function run(name: string, cmd: string[], env: Record<string, string> = {}, trace = false) {
+  if (cmd[0] === "node") {
+    await ensurePw();
+    for (const f of globSync(join(logDir, `${name}-trace-*.zip`))) rmSync(f, { force: true }); // 단계당 최근 실행의 트레이스만 둔다
+    // 트레이스는 실행 시간을 20% 가까이 늘리므로 평소에는 끄고, 실패한 단계를 한 번 다시 돌릴 때(또는 --trace) 켠다.
+    env = { ...env, ...(trace ? { SLIDEKIT_TRACE_DIR: logDir, SLIDEKIT_TRACE_NAME: name } : {}), ...(pwWs ? { SLIDEKIT_PW_WS: pwWs } : {}) };
+  }
   const out = createWriteStream(join(logDir, `${name}.log`));
   const p = Bun.spawn(["taskpolicy", "-b", ...cmd], { cwd: root, env: { ...process.env, ...env }, stdout: "pipe", stderr: "pipe", detached: true }); running = p.pid;
   // 출력 사이가 3초 넘게 벌어지면 "[느림 +N초]" 줄을 넣는다. 고정 sleep과 긴 대기가 어느 검사 앞에 있는지 찾는 용도다.
@@ -136,6 +200,24 @@ const waitUp = async (url: string) => {
   throw new Error(`서버가 안 뜸: ${url}`);
 };
 
+// 브라우저 서버 하나를 모든 브라우저 단계가 공유한다(scripts/lib/pw.cjs가 SLIDEKIT_PW_WS로 연결). 처음 필요할 때 띄우고 끝에 그룹째 종료한다.
+let pwWs = "";
+async function ensurePw() {
+  if (pwWs || servers.has("pw") || !PW || !CHROME) return;
+  const p = Bun.spawn(["taskpolicy", "-b", "node", join(root, "scripts/lib/pw-server.cjs")], { cwd: root, env: { ...process.env, PW, CHROME }, stdout: "pipe", stderr: "inherit", detached: true });
+  servers.set("pw", () => killTree(p.pid));
+  const reader = p.stdout.getReader();
+  const t0 = Date.now();
+  let buf = "";
+  while (Date.now() - t0 < 30_000) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += new TextDecoder().decode(value);
+    const m = buf.match(/WS=(\S+)/);
+    if (m) { pwWs = m[1]; reader.releaseLock(); return; }
+  }
+  console.log("공용 브라우저 서버를 띄우지 못했습니다. 단계마다 직접 launch합니다.");
+}
 // 서버는 처음 필요할 때 띄우고 끝까지 둔다.
 async function ensure(kind: "app" | "dry" | "static") {
   if (kind !== "static") kind = "dry";
@@ -180,6 +262,7 @@ function fingerprint() {
 }
 
 const warned: string[] = [];
+const flaky: string[] = []; // 첫 실행은 실패했고 재실행은 통과한 단계
 const results: [string, boolean, number][] = [];
 try {
   for (const s of picked) {
@@ -190,7 +273,14 @@ try {
     let ok = false;
     try {
       if (s.server) await ensure(s.server);
-      ok = (await run(s.name, s.cmd, s.env)) === 0;
+      ok = (await run(s.name, s.cmd, s.env, flag("--trace"))) === 0;
+      // 브라우저 단계가 실패하면(90초 이하일 때) 트레이스를 켜고 한 번 더 돌린다. 재실행이 통과하면 불안정(flaky)으로 표시한다.
+      if (!ok && !flag("--trace") && s.cmd[0] === "node" && Date.now() - t0 <= 90_000) {
+        console.log(`-- ${s.name}: 실패. 트레이스를 켜고 한 번 다시 실행합니다`);
+        ok = (await run(s.name, s.cmd, s.env, true)) === 0;
+        if (ok) flaky.push(s.name);
+      }
+      if (ok) for (const f of globSync(join(logDir, `${s.name}-trace-*.zip`))) rmSync(f, { force: true }); // 성공하면 트레이스는 버린다
     } catch (e) { console.log(String(e)); }
     const after = fingerprint();
     // 사용자나 다른 팀원이 같은 시각에 편집했을 수 있어 실패로 치지 않고 경고만 한다. 복원하지 않는다.
@@ -210,8 +300,13 @@ const total = results.reduce((a, [, , t]) => a + t, 0);
 console.log(`\n합계 ${total.toFixed(0)}초. 오래 걸린 단계: ` + [...results].sort((a, b) => b[2] - a[2]).slice(0, 3).map(([n, , t]) => `${n} ${t.toFixed(0)}초`).join(", "));
 const failed = results.filter(([, ok]) => !ok).map(([n]) => n);
 if (warned.length) console.log(`\nWARN: 실제 덱이 바뀐 단계 ${warned.join(", ")}`);
+if (flaky.length) console.log(`\nWARN: 불안정(첫 실행 실패, 재실행 통과): ${flaky.join(", ")}. 로그 ${logDir}/<단계>.log는 재실행 기준이다`);
 if (failed.length) {
   console.log(`\nFAIL: ${failed.join(", ")}`);
+  for (const n of failed) {
+    const tr = globSync(join(logDir, `${n}-trace-*.zip`)).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs).slice(0, 2);
+    for (const f of tr) console.log(`  트레이스: node ${PW}/cli.js show-trace ${f}`);
+  }
   for (const n of failed) console.log(`  다시 실행: bun run test --only ${n}   로그: ${logDir}/${n}.log` + (n === "export" || n === "tokens" ? "   서버 로그: /tmp/sk-eng-srv.log" : ""));
 } else console.log("\n전체 통과");
 process.exit(failed.length ? 1 : 0);

@@ -10,6 +10,7 @@
     "bundle": "bun run bundler/bundle.ts",
     "deploy": "bun deploy/deploy.ts",
     "test": "bun scripts/test.ts",
+    "test:changed": "bun scripts/test.ts --changed",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

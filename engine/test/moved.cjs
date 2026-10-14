@@ -1,7 +1,7 @@
 /* 편집기에서 끌기와 크기 조절로 생기는 인라인 translate, width, height가 엔진 화면, 번들, 인쇄(PDF와 같은 print CSS)에서 같은 자리에 보이는지 본다.
    덱 decks/_mv-test를 만들고 끝나면 지운다. 사용: PW=<playwright-core> CHROME=<headless shell> node engine/test/moved.cjs
    기준 덱(translate만 없음, 크기는 같게 해서 흐름 배치가 같다)과 비교한 변위가 translate 값과 같아야 하고, 번들과 인쇄의 변위는 엔진 화면과 같아야 한다. */
-const { chromium } = require(process.env.PW || 'playwright-core');
+const { launch } = require('../../scripts/lib/pw.cjs');
 const fs = require('fs'), path = require('path'), cp = require('child_process');
 const ROOT = path.join(__dirname, '..', '..'), DIR = path.join(ROOT, 'decks', '_mv-test'), OUT = process.env.SHOTS;
 let fail = 0; const check = (n, ok, x) => { if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + n + (ok || x === undefined ? '' : '  ' + JSON.stringify(x))); };
@@ -22,7 +22,7 @@ const rects = (page) => page.evaluate(() => {
   return o;
 });
 (async () => {
-  const b = await chromium.launch({ executablePath: process.env.CHROME, args: ['--disable-gpu'] });
+  const b = await launch();
   const shoot = async (file, name, print) => {
     const ctx = await b.newContext({ viewport: { width: 1920, height: 1080 } });
     await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());

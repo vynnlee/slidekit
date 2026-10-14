@@ -1,6 +1,6 @@
 /* 발표 흐름 브라우저 검증: 발표자 화면, ?sync=1 발표 창, 키, 타이머, 동기화, 창 닫힘, 외장 모니터 없음 폴백.
    Usage: PW=<playwright-core> CHROME=<headless shell> BASE=http://127.0.0.1:3200 node present.cjs */
-const { chromium } = require(process.env.PW || 'playwright-core');
+const { launch, tick } = require('../../scripts/lib/pw.cjs');
 const BASE = process.env.BASE || 'http://127.0.0.1:3200';
 // 편집 테스트가 건드리지 않도록 전용 덱(30장)을 만들어 쓰고 끝에 지운다.
 const DECK = '_e2e-present', ID = 'e2e-present', TOTAL = 30;
@@ -27,7 +27,7 @@ const MOCKS = {
 };
 
 (async () => {
-  const browser = await chromium.launch({ executablePath: process.env.CHROME, args: ['--disable-gpu'] });
+  const browser = await launch();
   const errors = [];
   let first = true;
   for (const [name, mock] of Object.entries(MOCKS)) {
@@ -47,10 +47,11 @@ const MOCKS = {
       await page.keyboard.press('ArrowLeft');
       check('왼쪽 키로 되돌아감', await until(async () => (await counter()) === `2 / ${TOTAL}`));
       const timer = () => page.locator('[role=timer]').first().innerText();
-      await page.keyboard.press('t'); await sleep(2300); await page.keyboard.press('t');
+      await page.clock.install(); // 이후 시간은 tick으로 앞당긴다(실시간 대기 없음)
+      await page.keyboard.press('t'); await tick(page, 2300); await page.keyboard.press('t');
       const t1 = await timer();
       check('T로 타이머 시작과 정지', /^00:00:0[12]$/.test(t1), t1);
-      await sleep(1500);
+      await tick(page, 1500);
       check('정지하면 시간이 멈춘다', (await timer()) === t1);
       await page.keyboard.press('r');
       check('R 한 번은 리셋하지 않고 안내한다', (await timer()) === t1 && (await page.getByText('Press R again to reset the timer').count()) === 1, await timer());

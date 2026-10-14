@@ -602,7 +602,14 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     markers.current?.querySelectorAll<HTMLElement>("[data-path]").forEach((m) => {
       const t = sl ? byPath(sl, m.dataset.path!) : null;
       const mr = put(m, t);
-      if (mr) m.style.transform = `translate(${mr.right - 6 + Number(m.dataset.off ?? 0) * 22}px,${mr.top - 6}px)`;
+      if (mr) {
+        // 요소가 슬라이드 오른쪽 끝까지 닿거나 위쪽 끝에 붙어도 핀이 잘리지 않게 캔버스 안으로 밀어 넣는다.
+        // 같은 요소의 핀 개수만큼 줄 전체를 왼쪽으로 당겨 순서를 지킨 채 들어가게 한다.
+        const same = markers.current!.querySelectorAll(`[data-path="${CSS.escape(m.dataset.path!)}"]`).length;
+        const maxX = size.w * zoom - 24 - (same - 1) * 22;
+        const x = Math.max(0, Math.min(mr.right - 6, maxX)) + Number(m.dataset.off ?? 0) * 22;
+        m.style.transform = `translate(${x}px,${Math.max(0, mr.top - 6)}px)`;
+      }
     });
   }, [size.w, size.h, zoom, composing]);
   useEffect(() => { place(); const t = setInterval(place, 60); return () => clearInterval(t); });

@@ -321,6 +321,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.getByRole('menu').waitFor();
   const edge = await menuBox();
   check('화면 가장자리에서는 메뉴가 화면 안으로 뒤집힌다', edge && edge.x >= 0 && edge.y >= 0 && edge.x + edge.width <= 420 + 1 && edge.y + edge.height <= 380 + 1, edge);
+  check('우클릭을 뗄 때 포인터 아래 항목이 실행되지 않는다(덱이 그대로)', (await cardBtn('zz-e2e-k1').count()) === 1 && (await page.getByText('Moved zz-e2e-k1 to Trash').count()) === 0);
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 1280, height: 800 });
   // 휴지통 행 메뉴

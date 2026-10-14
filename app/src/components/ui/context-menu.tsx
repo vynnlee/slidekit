@@ -134,6 +134,10 @@ export function ContextMenu({ menu }: { menu: ContextMenuController }) {
     const onWheel = (e: WheelEvent) => { if (!inMenu(e.target)) close(); };
     // 교체로 열린 직후에는 옛 메뉴의 포커스 복귀가 늦게 도착할 수 있어(부하) 잠깐 무시한다.
     const openedAt = Date.now();
+    // 우클릭을 뗄 때(mouseup)는 포인터 아래에 막 열린 메뉴 항목이 있을 수 있다(화면 가장자리에서 메뉴가 밀려 올라올 때).
+    // 열린 직후 250ms 안에 메뉴 안으로 오는 포인터 해제와 클릭은 항목에 닿지 않게 막는다.
+    const swallow = (e: Event) => { if (Date.now() - openedAt < 250 && inMenu(e.target)) { e.stopPropagation(); e.preventDefault(); } };
+    for (const t of ["pointerup", "mouseup", "click"]) window.addEventListener(t, swallow, true);
     const onFocusIn = (e: FocusEvent) => { if (!inMenu(e.target) && Date.now() - openedAt > 400) close(); };
     const onKey = (e: globalThis.KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && /^[=+\-_0]$/.test(e.key)) close(); };
     window.addEventListener("scroll", onScroll, true);
@@ -143,6 +147,7 @@ export function ContextMenu({ menu }: { menu: ContextMenuController }) {
     window.addEventListener("resize", closeAll);
     window.addEventListener("blur", closeAll);
     return () => {
+      for (const t of ["pointerup", "mouseup", "click"]) window.removeEventListener(t, swallow, true);
       window.removeEventListener("scroll", onScroll, true); window.removeEventListener("wheel", onWheel, true); document.removeEventListener("focusin", onFocusIn, true);
       window.removeEventListener("keydown", onKey, true); window.removeEventListener("resize", closeAll); window.removeEventListener("blur", closeAll);
     };

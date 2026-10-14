@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Eye, EyeOff, Lock, LockOpen, Frame, Image as
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { textual } from "./Canvas";
+import { isLockedDeep } from "@/lib/selection";
 
 // 선택한 슬라이드의 요소 트리. 라이브 DOM을 읽기만 하고, 바꾸는 일은 모두 콜백으로 Editor에 맡긴다.
 type Props = {
@@ -78,6 +79,7 @@ export function LayerTree(p: Props) {
     const ch = kids(el), isOpen = open.has(el), I = iconOf(el);
     const hidden = (el as HTMLElement).style?.display === "none";
     const locked = el.hasAttribute("data-locked");
+    const byParent = !locked && isLockedDeep(el); // 조상이 잠겨 있어 함께 잠긴 요소
     const on = el === p.sel;
     return (
       <div key={[...(el.parentElement?.children ?? [])].indexOf(el)} role="treeitem" aria-selected={on} aria-expanded={ch.length ? isOpen : undefined}>
@@ -128,6 +130,11 @@ export function LayerTree(p: Props) {
             />
           ) : <span className="min-w-0 flex-1 truncate">{nameOf(el)}</span>}
           {el.hasAttribute("data-step") && <span title={`Appears at step ${el.getAttribute("data-step")}`} className="shrink-0 rounded bg-surface-2 px-1 text-micro tabular-nums text-muted-foreground">{el.getAttribute("data-step")}</span>}
+          {byParent ? (
+            <Tooltip content="Locked by a parent layer" side="left">
+              <span role="img" aria-label="Locked by parent" data-testid="parent-lock" className="inline-flex size-7 shrink-0 items-center justify-center text-muted-foreground opacity-60"><Lock className="size-3.5" /></span>
+            </Tooltip>
+          ) : (
           <Tooltip content={locked ? "Unlock (can be selected on the canvas again)" : "Lock (cannot be selected on the canvas)"} side="left">
             <Button aria-label={locked ? "Unlock layer" : "Lock layer"} aria-pressed={locked} variant="ghost" size="icon-compact"
               className={locked ? "" : "opacity-0 focus-visible:opacity-100 group-hover:opacity-100"}
@@ -135,6 +142,7 @@ export function LayerTree(p: Props) {
               {locked ? <Lock /> : <LockOpen />}
             </Button>
           </Tooltip>
+          )}
           <Tooltip content={hidden ? "Show (removes display: none)" : "Hide (sets display: none, saved with the deck)"} side="left">
             <Button aria-label={hidden ? "Show layer" : "Hide layer"} aria-pressed={hidden} variant="ghost" size="icon-compact"
               className={hidden ? "" : "opacity-0 focus-visible:opacity-100 group-hover:opacity-100"}

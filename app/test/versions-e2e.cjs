@@ -14,12 +14,12 @@ const J = { 'Content-Type': 'application/json' };
 (async () => {
   const t = makeTestDeck('versions');
   await sleep(900); // 사본을 만들며 id를 고친 쓰기가 감시기에 잡혀 첫 스냅샷이 생기는 시간(디바운스 250ms)을 기다린다
-  let browser;
+  let browser, page;
   try {
     browser = await launch();
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
-    const page = await ctx.newPage();
+    page = await ctx.newPage();
     const errors = [];
     page.on('pageerror', (e) => errors.push(String(e)));
     await page.goto(`${BASE}/edit/${t.id}`);
@@ -66,7 +66,7 @@ const J = { 'Content-Type': 'application/json' };
     await page.getByText(/Restored the version from/).first().waitFor({ timeout: 5000 });
     check('Restore가 파일을 옛 내용으로 되돌린다', fs.readFileSync(t.file, 'utf8') === original);
     check('복원 직전 내용이 restore 버전으로 남는다', (await versions()).some((v) => v.kind === 'restore'));
-    await page.getByRole('button', { name: 'Undo', exact: true }).last().click();
+    await page.getByRole('status').getByRole('button', { name: 'Undo', exact: true }).click();
     check('Undo 토스트가 복원을 취소한다', await (async () => { for (let i = 0; i < 50; i++) { if (fs.readFileSync(t.file, 'utf8').includes('Claude 수정 1')) return true; await sleep(100); } return false; })());
 
     // 4) 코멘트의 Revert Claude's edit
@@ -81,7 +81,7 @@ const J = { 'Content-Type': 'application/json' };
     await btn.click();
     check('Revert가 Claude 수정 전 내용으로 되돌린다', await (async () => { for (let i = 0; i < 50; i++) { if (fs.readFileSync(t.file, 'utf8') === original) return true; await sleep(100); } return false; })());
     await page.getByText("Reverted Claude's edit").first().waitFor({ timeout: 5000 }).then(() => check('되돌렸다는 토스트', true), () => check('되돌렸다는 토스트', false));
-    await page.getByRole('button', { name: 'Undo', exact: true }).last().click();
+    await page.getByRole('status').getByRole('button', { name: 'Undo', exact: true }).click();
     check('토스트의 Undo가 되돌리기를 취소한다', await (async () => { for (let i = 0; i < 50; i++) { if (fs.readFileSync(t.file, 'utf8').includes('Claude 수정 2')) return true; await sleep(100); } return false; })());
 
     // 5) 그 사이 덱이 더 바뀌면 되돌리기를 거절하고 버전 기록을 안내한다
@@ -94,6 +94,7 @@ const J = { 'Content-Type': 'application/json' };
     check('페이지 오류 없음', errors.length === 0, errors);
   } catch (e) {
     fail++; console.log('FAIL 예외 ' + e);
+    await (typeof page !== 'undefined' ? page : null)?.screenshot({ path: '/tmp/slidekit-test-logs/versions-e2e-fail.png' }).catch(() => {}); // 실패 화면을 남긴다
   } finally {
     if (browser) await browser.close();
     t.cleanup();

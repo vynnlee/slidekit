@@ -55,6 +55,7 @@ const steps: Step[] = [
   browser("inspector-a11y", "app/test/inspector-a11y.cjs", "app", APP),
   browser("editor", "app/test/editor.cjs", "app", APP),
   browser("comments-e2e", "app/test/comments-e2e.cjs", "app", APP),
+  browser("versions-e2e", "app/test/versions-e2e.cjs", "app", APP),
   browser("tokens", "app/test/tokens.cjs", "dry", DRY),
   browser("export", "app/test/export.cjs", "dry", DRY),
   // 인터넷과 uv가 필요해 --slow 또는 --only로만 돈다.
@@ -79,6 +80,7 @@ const MAP: [RegExp, string[]][] = [
   [/^deploy\//, ["deploy-worker", "export-api"]],
   [/^channel\//, ["channel"]],
   [/^app\/(comments\.ts|src\/(Comment|lib\/(comment|use-comments))|test\/comments)/, ["comments", "channel", "comments-e2e"]],
+  [/^app\/(versions\.ts|src\/(VersionHistory|ExportMenu)|test\/versions)/, ["versions", "versions-e2e"]],
   [/^app\/(export-api\.ts|src\/ExportMenu)/, ["export-api", "export"]],
   [/^app\/(editor-api\.ts|src\/lib\/(deck-source|move|selection|guides))/, ["roundtrip", "deck-source.fuzz", "editor-readonly", "editor", "inspector"]],
   [/^app\/src\/(Editor|Canvas|LayerTree|Filmstrip|Notes)/, ["editor", "inspector"]],

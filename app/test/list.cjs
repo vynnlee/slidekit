@@ -138,8 +138,13 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.getByRole('button', { name: 'New deck' }).click();
   await page.getByRole('dialog').getByLabel('Title').fill('zz e2e T');
   check('제목에서 zz-e2e-t 제안', (await page.getByRole('dialog').getByLabel('Folder').inputValue()) === 'zz-e2e-t');
+  check('템플릿 기본은 Talk', (await page.getByRole('dialog').getByRole('button', { name: 'Talk' }).getAttribute('aria-pressed')) === 'true');
+  await page.getByRole('dialog').getByRole('button', { name: 'Blank' }).click();
+  check('Blank를 고르면 힌트가 바뀐다', (await page.getByRole('dialog').getByText('A cover and one slide').count()) === 1);
   await page.getByRole('dialog').getByRole('button', { name: 'Create' }).click();
   check('만든 뒤 바로 편집기로', await until(async () => new URL(page.url()).pathname === '/edit/zz-e2e-t'), page.url());
+  check('Blank 템플릿은 슬라이드 2장', (fs.readFileSync(path.join(DECKS, 'zz-e2e-t', 'index.html'), 'utf8').match(/<section[^>]*data-slide=/g) || []).length === 2);
+  check('알 수 없는 템플릿은 400', (await page.evaluate(() => fetch('/api/decks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'zz-e2e-tpl', template: 'nope' }) }).then((r) => r.status))) === 400);
   check('제목이 덱에 들어간다', fs.readFileSync(path.join(DECKS, 'zz-e2e-t', 'index.html'), 'utf8').includes('<title>zz e2e T</title>') && fs.readFileSync(path.join(DECKS, 'zz-e2e-t', 'index.html'), 'utf8').includes('"title":"zz e2e T"'));
   // 전체 검색: 슬라이드 본문에서 찾아 그 슬라이드의 편집기로 간다
   check('색인 API', Array.isArray(await (await ctx.request.get(BASE + '/api/search-index')).json()));

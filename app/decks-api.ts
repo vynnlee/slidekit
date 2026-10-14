@@ -1,5 +1,6 @@
 import { join, sep } from "node:path";
 import { deckFolder, decksDir } from "./folder";
+import { TEMPLATES, TEMPLATE_IDS } from "../engine/templates";
 import { cp, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 
 const root = join(import.meta.dir, "..");
@@ -18,12 +19,13 @@ async function writeAtomic(file: string, text: string) {
 
 // 새 덱: engine/new.ts(slidekit new)를 그대로 실행해 규칙(이름 형식, 중복 거부)을 한 곳에 둔다.
 export async function createDeck(req: Request) {
-  const { name, title } = (await req.json().catch(() => ({}))) as { name?: unknown; title?: unknown };
+  const { name, title, template } = (await req.json().catch(() => ({}))) as { name?: unknown; title?: unknown; template?: unknown };
+  if (template !== undefined && (typeof template !== "string" || !TEMPLATE_IDS.includes(template))) return err("Unknown template", 400);
   if (typeof name !== "string" || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name)) return err("Use lowercase letters, digits and - only", 400);
   const t = cleanTitle(title);
   if (title !== undefined && t === null) return err("Title must be 1 to 120 characters on one line", 400);
   if (await exists(join(decks, name))) return err(`A deck named ${name} already exists`, 409);
-  const p = Bun.spawn(["bun", join(root, "engine", "new.ts"), name], { cwd: root, stdout: "pipe", stderr: "pipe" });
+  const p = Bun.spawn(["bun", join(root, "engine", "new.ts"), name, ...(template ? ["--template", template] : [])], { cwd: root, stdout: "pipe", stderr: "pipe" });
   if ((await p.exited) !== 0) return err("Could not create the deck", 500);
   if (t) await setTitle(name, t);
   return Response.json({ id: name }, { status: 201 });
@@ -176,6 +178,8 @@ export const routes = {
   "/api/decks/:folder/trash": { POST: trashDeck },
   "/api/decks/:folder/title": { POST: retitleDeck },
   "/api/trash": { GET: listTrash },
+  // 새 덱 템플릿 목록(id, label). 엔진 모듈은 node:fs를 써서 브라우저 번들에 넣을 수 없으므로 API로 받는다.
+  "/api/templates": { GET: () => Response.json(TEMPLATES.map(({ id, label }) => ({ id, label }))) },
   "/api/trash/:entry/restore": { POST: restoreDeck },
   "/api/trash/:entry/purge": { POST: purgeDeck },
 };

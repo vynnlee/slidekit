@@ -25,6 +25,8 @@ import { cn } from "@/lib/utils";
 const SORTS = { date: "Date", title: "Name", recent: "Recent" } as const;
 const ORDER = ["date", "title", "recent"] as const;
 type Sort = keyof typeof SORTS;
+// 템플릿 id와 라벨은 서버(/api/templates, 엔진 목록)에서 오고, 힌트는 UI가 영어로 따로 둔다.
+const TEMPLATE_HINT: Record<string, string> = { talk: "Cover, chapters, content, two columns, end", blank: "A cover and one slide", workshop: "Chapters, steps, big numbers, notes on every slide" };
 const FILTERS = { all: "All", pinned: "Pinned", recent: "Recent", password: "Password" } as const;
 type Filter = keyof typeof FILTERS;
 const PinMark = () => <Pin role="img" aria-label="Pinned" className="mr-1 inline size-3 -translate-y-px text-muted-foreground" />;
@@ -187,6 +189,8 @@ export function DeckList() {
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [name, setName] = useState("");
+  const [template, setTemplate] = useState("talk");
+  const [templates, setTemplates] = useState([{ id: "talk", label: "Talk" }]);
   const [nameTouched, setNameTouched] = useState(false); // 폴더를 직접 고치면 제목에서 자동 제안을 멈춘다
   const [err, setErr] = useState("");
 
@@ -242,7 +246,7 @@ export function DeckList() {
     if (busy) return;
     setBusy(true);
     try {
-      const j = await api("/api/decks", "POST", { name: name.trim(), title: newTitle.trim() || name.trim() });
+      const j = await api("/api/decks", "POST", { name: name.trim(), title: newTitle.trim() || name.trim(), template });
       setCreating(false); setNewTitle(""); setName(""); setNameTouched(false); setErr("");
       go(`/edit/${encodeURIComponent(j.id)}`);
     } catch (e) { setErr((e as Error).message); }
@@ -306,7 +310,7 @@ export function DeckList() {
   };
 
   const mac = useIsMac();
-  const startCreate = () => { setPalette(false); setErr(""); setNewTitle(""); setName(""); setNameTouched(false); setCreating(true); };
+  const startCreate = () => { setPalette(false); setErr(""); setNewTitle(""); setName(""); setNameTouched(false); setTemplate("talk"); setCreating(true); fetch("/api/templates").then((r) => r.json()).then((l) => Array.isArray(l) && l.length && setTemplates(l)).catch(() => {}); };
 
   // 두 글자 이상 입력하면 모든 덱의 슬라이드 제목, 본문, 노트에서 찾는다(최대 30건). 결과를 고르면 그 슬라이드의 편집기로 간다.
   const slideHits = useMemo((): CommandMenuItemData[] => {
@@ -466,6 +470,10 @@ export function DeckList() {
             <Field autoFocus aria-label="Title" placeholder="Title" maxLength={120} value={newTitle} onChange={(e) => onTitle(e.target.value)} />
             <Field aria-label="Folder" placeholder="folder-name" aria-invalid={!!newErr || undefined} value={name} onChange={(e) => { setName(e.target.value); setNameTouched(true); setErr(""); }} />
             <p role={newErr ? "alert" : undefined} className={newErr ? "text-caption text-destructive" : "text-caption text-muted-foreground"}>{newErr || (!nameTouched && /^deck-\d{4}(-\d+)?$/.test(name) ? "No Latin letters in the title, so the folder is named by date. You can edit it." : "Folder: lowercase letters and digits, separated by single hyphens")}</p>
+            <div role="group" aria-label="Template" className="flex gap-1 pt-1">
+              {templates.map((t) => <Button key={t.id} type="button" variant="ghost" size="compact" active={template === t.id} aria-pressed={template === t.id} onClick={() => setTemplate(t.id)}>{t.label}</Button>)}
+            </div>
+            <p className="text-caption text-muted-foreground">{TEMPLATE_HINT[template]}</p>
             <Button type="submit" variant="primary" size="compact" disabled={!name.trim() || !!newErr || busy} className="self-end">Create</Button>
           </form>
         </DialogContent>

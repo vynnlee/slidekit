@@ -84,7 +84,7 @@ try { dm = JSON.parse(metaJson ?? ""); } catch { console.error("deck-meta를 읽
 const visibility = dm.visibility ?? "public";
 if (visibility !== "public" && visibility !== "password") { console.error(`알 수 없는 visibility: ${visibility}`); process.exit(1); }
 
-const lang = dm.lang;
+const lang = typeof dm.lang === "string" ? dm.lang.split("-")[0] : undefined; // ko, en-US처럼 지역이 붙어도 Worker는 언어만 쓴다
 // 공개 덱은 제목을 올린다. 비밀번호 덱은 인증 전에 제목이 보이므로 deck-meta에 "lockTitle": true를 적은 경우에만 올린다.
 const title = visibility === "public" || dm.lockTitle === true ? dm.title : undefined;
 const meta: Record<string, string> = { visibility, ...(lang === "en" || lang === "ko" ? { lang } : {}), ...(typeof title === "string" && title ? { title: title.slice(0, 120) } : {}) };

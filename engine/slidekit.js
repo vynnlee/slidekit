@@ -114,7 +114,7 @@
     }
 
     /* screen reader announcements: a visually hidden polite live region (nothing is drawn) */
-    var live = null, lastSlide = -1, lastStep = 0, en = meta.lang === 'en';
+    var live = null, lastSlide = -1, lastStep = 0, en = /^en(-|$)/.test(String(meta.lang));
     if (!embed) {
       live = make('div', 'sk-live');
       live.setAttribute('role', 'status'); live.setAttribute('aria-live', 'polite'); live.setAttribute('aria-atomic', 'true');

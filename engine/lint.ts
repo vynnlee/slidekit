@@ -1,6 +1,7 @@
 /* slidekit lint <덱>: SPEC 위반을 규칙별로 한 줄씩 출력한다. error가 있으면 종료 코드 1. */
 import { join } from "node:path";
 import { LAYOUT_IDS } from "./layouts";
+import { validateMeta } from "./deck-meta";
 
 export type Issue = { level: "error" | "warn"; rule: string; msg: string };
 
@@ -26,10 +27,17 @@ export function lint(html: string): Issue[] {
   else {
     try {
       const m = JSON.parse(metaS.body);
-      if (typeof m.title !== "string" || !m.title) add("error", "deck-meta", 'deck-meta에 title이 없다. "title": "덱 제목"을 적는다');
-      if (m.date != null && !/^\d{4}-\d{2}-\d{2}$/.test(m.date)) add("error", "deck-meta", "deck-meta의 date 형식이 틀렸다. 2026-10-14처럼 적는다");
-      if (m.visibility != null && !["public", "password"].includes(m.visibility)) add("error", "deck-meta", 'deck-meta의 visibility는 "public" 또는 "password"여야 한다');
-      if (m.id != null && !/^[a-z0-9-]+$/.test(m.id)) add("error", "deck-meta", "deck-meta의 id는 영문 소문자, 숫자, -만 쓴다(예: my-talk)");
+      // 필드 규칙은 engine/deck-meta.ts 한 곳이다. 오류 메시지는 예전 한국어를 그대로 쓰고, 새로 생긴 규칙은 경고로 낸다.
+      const KO: Record<string, string> = {
+        "title-missing": 'deck-meta에 title이 없다. "title": "덱 제목"을 적는다',
+        "date-format": "deck-meta의 date 형식이 틀렸다. 2026-10-14처럼 적는다",
+        visibility: 'deck-meta의 visibility는 "public" 또는 "password"여야 한다',
+        "id-format": "deck-meta의 id는 영문 소문자, 숫자, -만 쓴다(예: my-talk)",
+      };
+      for (const i of validateMeta(m)) {
+        if (KO[i.code]) add("error", "deck-meta", KO[i.code]);
+        else add("warn", "deck-meta", `deck-meta의 ${i.field || "내용"}: ${i.msg}`);
+      }
     } catch { add("error", "deck-meta", "deck-meta JSON을 읽지 못했다. 쉼표와 따옴표를 확인한다"); }
   }
   if (!/slidekit\.css/.test(rest)) add("error", "engine", 'head에 <link rel="stylesheet" href="../../engine/slidekit.css">를 넣는다');

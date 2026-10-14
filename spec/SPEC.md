@@ -126,11 +126,13 @@
 | `subtitle` | string | 없음 | 부제 |
 | `author` | string | 없음 | 발표자 |
 | `date` | string `YYYY-MM-DD` | 없음 | 강의일 |
-| `lang` | string | `ko` | 언어 코드 |
+| `lang` | string `^[a-z]{2}(-[A-Z]{2})?$` | `ko` | 언어 코드(예: `ko`, `en`, `en-US`). 엔진은 `en`으로 시작하면 안내 문구(접근성 안내 영역 등)를 영어로, 그 밖은 한국어로 낸다. 배포 페이지는 앞의 언어 부분만 쓴다 |
 | `visibility` | `"public"` 또는 `"password"` | `"public"` | 공개 범위. 비밀번호는 덱에 넣지 않는다 |
 | `pageNumber` | boolean | `false` | 페이지 번호 표시 |
 | `progress` | boolean | `false` | 진행률 막대 표시 |
 | `id` | string(영문 소문자, 숫자, `-`) | 폴더 이름 | 동기화 채널 구분용 덱 식별자 |
+
+필드 규칙(`engine/deck-meta.ts`가 원천이고 lint, 서버, 편집기가 같은 모듈을 쓴다): `title` 1~120자 한 줄, `subtitle` 200자 이하 한 줄, `author` 120자 이하 한 줄, `date`는 실제 달력 날짜, `visibility`는 `public`이나 `password`, `pageNumber`와 `progress`는 boolean(엔진이 `true`일 때만 켠다), `id`는 읽기 전용이다. 알 수 없는 키는 엔진이 그대로 통과시킨다. 편집기가 보내는 변경분은 알 수 없는 키, `id`, 비밀번호 계열 키(이름에 `pass`, `secret`, `token`이 들어간 것)를 거부하고, `subtitle`, `author`, `date`, `lang`, `visibility`, `pageNumber`, `progress`는 `null`이나 빈 문자열이면 키를 지운다(`title`은 지울 수 없다).
 
 `pageNumber`, `progress`는 `cover`와 `end`에서는 숨긴다. 번호는 `현재 / 전체` 형식으로 무대 아래쪽, 슬라이드 오른쪽 여백(`--sk-pad-x`)에 맞춰 `--sk-faint` 색으로 그린다. 진행률은 맨 아래 2px 선이다.
 

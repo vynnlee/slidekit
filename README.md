@@ -29,7 +29,7 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 - `bun run slidekit image <덱> <파일> [--max 2400]`: 이미지를 덱의 `assets/`에 안전하게 저장하고 상대 경로를 출력한다(이름 정리, svg 스크립트 거부, GPS 정보 제거, 큰 이미지 축소는 macOS `sips`).
 - `bun run slidekit lint <덱>`: 덱이 SPEC을 지키는지 규칙별로 점검한다(오류가 있으면 종료 코드 1).
 - `bun run slidekit pdf <덱> [--notes | --handout [2|3|4|6]]`: 번들한 덱을 `dist/<덱>.pdf`로 인쇄한다(슬라이드당 한 페이지, 16:9). `--notes`는 A4 세로 쪽마다 슬라이드 한 장과 노트, `--handout`은 쪽마다 슬라이드 여러 장의 유인물이다. PDF는 텍스트를 선택하고 검색할 수 있고, 슬라이드의 `<a>` 링크가 클릭되며, 제목(`h1`, `h2`)이 책갈피(outline)로 들어간다. 글꼴은 Chrome이 Type3로 임베드한다.
-- `bun run slidekit doctor`: bun, Chrome, 키체인 토큰, 포트, Host 가드, 덱 lint를 한 화면에 점검한다. `doctor <덱>`은 그 덱의 lint, 크기, 큰 이미지, 노트 현황, 색 대비(WCAG)를 요약한다(게시 전 점검과 같은 근거).
+- `bun run slidekit doctor`: bun, Chrome, 키체인 토큰, 포트, Host 가드, 덱 lint를 한 화면에 점검한다. `doctor <덱>`은 그 덱의 lint, 크기, 큰 이미지, 노트 현황, 색 대비(WCAG)를 요약한다(게시 전 점검과 같은 근거). `--layout`을 붙이면 헤드리스 Chrome으로 슬라이드 밖으로 넘치거나 잘리는 요소도 잰다(편집기의 넘침 표시와 같은 기준, 약 2초).
 - `bun run slidekit bundle <덱>`: 엔진, 이미지, 글꼴 서브셋을 담은 `dist/<덱>.html` 하나로 묶는다.
 - `bun run slidekit deploy <덱>`: Cloudflare로 올려 static.vynnlee.com/<덱>으로 연다. 준비는 `deploy/README.md`.
 - `bun run slidekit unpublish <덱> [--yes]`: 배포한 덱을 지운다. `--yes`가 없으면 지울 목록만 보이고 종료 코드 2다(`deploy/README.md` 마지막 절).

@@ -1,8 +1,8 @@
 /* slidekit pdf <덱> [--notes | --handout [2|3|4|6]]: 번들한 덱을 헤드리스 Chrome으로 인쇄해 dist/<덱>.pdf를 만든다.
    --notes는 A4 세로 쪽마다 슬라이드 한 장과 마크다운으로 렌더한 노트(dist/<덱>.notes.pdf), --handout은 쪽마다 슬라이드 2, 3, 4, 6장 격자(dist/<덱>.handout.pdf, 기본 3).
    Chrome: SLIDEKIT_CHROME, 없으면 ~/Library/Caches/ms-playwright 의 chrome-headless-shell. 다운로드하지 않는다. */
-import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { findChrome } from "./chrome";
 import { join } from "node:path";
 
 const root = join(import.meta.dir, "..");
@@ -17,21 +17,6 @@ if (!name) { console.error(USAGE); process.exit(1); }
 if (notes && handout) { console.error(`--notes와 --handout은 함께 쓸 수 없다. ${USAGE}`); process.exit(1); }
 if (![2, 3, 4, 6].includes(per)) { console.error(`--handout은 쪽당 2, 3, 4, 6장만 된다(받은 값 ${per}). ${USAGE}`); process.exit(1); }
 const mode = notes ? "notes" : handout ? "handout" : "slides";
-
-const SYSTEM_CHROMES = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Chromium.app/Contents/MacOS/Chromium", "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"];
-function findChrome(): string | null {
-  const env = process.env.SLIDEKIT_CHROME;
-  if (env) return existsSync(env) ? env : null;
-  const base = join(homedir(), "Library", "Caches", "ms-playwright");
-  if (!existsSync(base)) return null;
-  const dirs = readdirSync(base).filter((d) => d.startsWith("chromium_headless_shell-")).sort().reverse();
-  for (const d of dirs) for (const sub of readdirSync(join(base, d))) {
-    const exe = join(base, d, sub, "chrome-headless-shell");
-    if (existsSync(exe)) return exe;
-  }
-  // Playwright의 headless shell이 없으면 설치된 Chrome 계열을 쓴다(mac-local처럼 개발용 브라우저를 따로 받지 않은 기계)
-  return SYSTEM_CHROMES.find(existsSync) ?? null;
-}
 
 const chrome = findChrome();
 if (!chrome) {

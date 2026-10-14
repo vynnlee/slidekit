@@ -6,7 +6,7 @@ import { lint } from "./lint";
 
 const root = join(import.meta.dir, "..");
 // 덱 하나의 점검: slidekit doctor <덱>. 같은 근거를 앱의 게시 전 점검도 쓴다(engine/deck-check.ts).
-const deckArg = process.argv[2];
+const deckArg = process.argv.slice(2).find((a) => !a.startsWith("--"));
 if (deckArg) {
   const dir = join(root, "decks", deckArg);
   if (!/^[\w-]+$/.test(deckArg) || !existsSync(join(dir, "index.html"))) {
@@ -17,6 +17,10 @@ if (deckArg) {
   const { deckCheck, formatCheck } = await import("./deck-check");
   const c = deckCheck(dir, deckArg);
   const lines = formatCheck(c);
+  if (process.argv.includes("--layout")) { // 헤드리스 Chrome으로 넘침을 잰다(선택, 약 2초)
+    const { formatLayout, layoutCheck } = await import("./layout-check");
+    lines.push(...formatLayout(layoutCheck(dir)));
+  } else lines.push("(슬라이드 밖으로 넘치는 요소는 --layout으로 잰다)");
   console.log(lines.join("\n"));
   const w = lines.filter((l) => l.startsWith("WARN")).length;
   console.log(w ? `\n${w}건 확인 필요` : "\n모두 정상");

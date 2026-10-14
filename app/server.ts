@@ -26,7 +26,7 @@ const USAGE = `사용법: slidekit [명령]
   bundle <덱>      단독 HTML 한 파일로 묶는다
   pdf <덱>         슬라이드당 한 페이지의 PDF로 내보낸다
   deploy <덱>      static.vynnlee.com에 올린다
-  doctor [<덱>]    환경을 점검한다. 덱 이름을 주면 그 덱의 lint, 크기, 이미지, 노트, 색 대비를 한 화면에 요약한다`;
+  doctor [<덱>]    환경을 점검한다. 덱 이름을 주면 그 덱의 lint, 크기, 이미지, 노트, 색 대비를 한 화면에 요약한다(--layout은 넘침도 잰다)`;
 const dist = (a: string, b: string) => { const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]); for (let j = 1; j <= b.length; j++) d[0][j] = j; for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); return d[a.length][b.length]; };
 if (sub === "help" || sub === "--help" || sub === "-h") { console.log(USAGE); process.exit(0); }
 if (sub && !(sub in SUBS)) {

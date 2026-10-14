@@ -1,6 +1,9 @@
 import { deckFolder } from "./folder";
 import { join } from "node:path";
-import { copyFileSync, existsSync, readFileSync, renameSync, statSync, watch, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, watch, writeFileSync } from "node:fs";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { homedir } from "node:os";
+import { dirname } from "node:path";
 
 const decksDir = process.env.SLIDEKIT_DECKS ?? join(import.meta.dir, "..", "decks");
 
@@ -16,9 +19,34 @@ export type Comment = {
   repliedAt?: string;
   slideDeleted?: boolean; // 저장 때 슬라이드가 지워진 코멘트. 지우지 않고 표시만 한다
   deliveredAt?: string; // 채널이 Claude 세션에 전달한 시각
+  ackAt?: string; // Claude가 작업을 시작했다고 알린 시각
+  sig?: string; // 이 기기의 키로 만든 서명(작성 때 채워진다). 없거나 틀리면 검증 안 됨
+  trusted?: boolean; // 읽을 때 계산한다(저장하지 않는다)
   resolved?: boolean; // 사용자가 해결로 표시
   resolvedAt?: string;
 };
+
+// 코멘트 서명: comments.json은 덱과 함께 남에게서 올 수 있어서, 이 기기의 키로 서명된 코멘트만 Claude에 보낸다.
+// 키는 저장소 밖(~/.config/slidekit/comments.key, 0600)에 둔다. 서명 대상은 작성 때 정해지는 값(덱, id, 슬라이드, 경로, 요소 글자, 본문, 작성 시각)이다.
+const keyFile = process.env.SLIDEKIT_KEY_FILE ?? join(homedir(), ".config", "slidekit", "comments.key");
+let keyCache: Buffer | null = null;
+function key(): Buffer {
+  if (keyCache) return keyCache;
+  try {
+    const k = Buffer.from(readFileSync(keyFile, "utf8").trim(), "hex");
+    if (k.length >= 32) return (keyCache = k);
+  } catch { /* 없으면 만든다 */ }
+  mkdirSync(dirname(keyFile), { recursive: true, mode: 0o700 });
+  keyCache = randomBytes(32);
+  writeFileSync(keyFile, keyCache.toString("hex") + "\n", { mode: 0o600 });
+  return keyCache;
+}
+const canon = (deck: string, c: Comment) => JSON.stringify([deck, c.id, c.slide, c.path, c.excerpt, c.text, c.createdAt]);
+export const sign = (deck: string, c: Comment) => createHmac("sha256", key()).update(canon(deck, c)).digest("hex");
+export function verify(deck: string, c: Comment): boolean {
+  if (typeof c.sig !== "string" || !/^[0-9a-f]{64}$/.test(c.sig)) return false;
+  return timingSafeEqual(Buffer.from(c.sig, "hex"), Buffer.from(sign(deck, c), "hex"));
+}
 
 // SSE 구독자. 이벤트는 comment(새 코멘트), reply(코멘트가 갱신됨: 답, 전달됨, 해결), deck-changed, channel({connected}).
 // 채널 MCP 서버는 /api/events?client=channel 로 연결하므로 그 연결이 있으면 Claude 세션이 열려 있는 것이다.
@@ -52,7 +80,8 @@ export function sanitize(list: unknown[]): Comment[] {
       text: c.text.slice(0, 2000), status: c.status, createdAt: c.createdAt,
     };
     const reply = str(c.reply, 2000); if (reply !== undefined) s.reply = reply;
-    for (const k of ["repliedAt", "deliveredAt", "resolvedAt"] as const) { const v = str(c[k], 40); if (v && !Number.isNaN(Date.parse(v))) s[k] = v; }
+    if (typeof c.sig === "string" && /^[0-9a-f]{64}$/.test(c.sig)) s.sig = c.sig;
+    for (const k of ["repliedAt", "deliveredAt", "resolvedAt", "ackAt"] as const) { const v = str(c[k], 40); if (v && !Number.isNaN(Date.parse(v))) s[k] = v; }
     if (c.resolved === true) s.resolved = true;
     if (c.slideDeleted === true) s.slideDeleted = true;
     out.push(s);
@@ -70,7 +99,7 @@ export const load = (deck: string): Comment[] => {
   try {
     const list = JSON.parse(text);
     if (!Array.isArray(list)) throw new Error("not an array");
-    return sanitize(list);
+    return sanitize(list).map((c) => ({ ...c, trusted: verify(deck, c) }));
   } catch {
     const keep = join(decksDir, deck, `.comments.json.corrupt-${Math.floor(statSync(file(deck)).mtimeMs)}`);
     copyFileSync(file(deck), keep);
@@ -80,7 +109,7 @@ export const load = (deck: string): Comment[] => {
 // 임시 파일에 쓴 뒤 rename한다. 쓰다 끊겨도 기존 파일은 온전하다.
 export const save = (deck: string, list: Comment[]) => {
   const tmp = join(decksDir, deck, `.comments.json.tmp-${process.pid}`);
-  writeFileSync(tmp, JSON.stringify(list, null, 2) + "\n");
+  writeFileSync(tmp, JSON.stringify(list.map(({ trusted: _t, ...c }) => c), null, 2) + "\n"); // trusted는 읽을 때 계산하는 값이라 저장하지 않는다
   renameSync(tmp, file(deck));
 };
 
@@ -122,8 +151,9 @@ export const routes = {
         status: "open",
         createdAt: new Date().toISOString(),
       };
+      comment.sig = sign(b.deck, comment);
       save(b.deck, [...load(b.deck), comment]);
-      emit("comment", { deck: b.deck, comment });
+      emit("comment", { deck: b.deck, comment: { ...comment, trusted: true } });
       return Response.json({ id: comment.id });
     },
   },
@@ -139,6 +169,36 @@ export const routes = {
       Object.assign(comment, { status: "done", reply: b.reply, repliedAt: new Date().toISOString() });
       save(b.deck, list);
       emit("reply", { deck: b.deck, comment });
+      return Response.json({ ok: true });
+    },
+  },
+  // 사용자가 검증 안 된 코멘트를 믿기로 한다(이 기기의 키로 다시 서명한다). 아직 전달 전인 열린 코멘트는 채널이 받도록 comment 이벤트로 알린다.
+  "/api/comments/:id/trust": {
+    POST: async (req: Request & { params: { id: string } }) => {
+      const b = await body(req);
+      if (!b || !validDeck(b.deck)) return bad("deck");
+      const list = load(b.deck);
+      const comment = list.find((c) => c.id === req.params.id);
+      if (!comment) return bad("not found", 404);
+      comment.sig = sign(b.deck, comment); comment.trusted = true;
+      save(b.deck, list);
+      emit(comment.status === "open" && !comment.deliveredAt ? "comment" : "reply", { deck: b.deck, comment });
+      return Response.json({ ok: true });
+    },
+  },
+  // Claude가 작업을 시작했다고 알린다("처리 중" 표시). 열린 코멘트에만 적용한다.
+  "/api/comments/:id/ack": {
+    POST: async (req: Request & { params: { id: string } }) => {
+      const b = await body(req);
+      if (!b || !validDeck(b.deck)) return bad("deck");
+      const list = load(b.deck);
+      const comment = list.find((c) => c.id === req.params.id);
+      if (!comment) return bad("not found", 404);
+      if (comment.status === "open" && !comment.ackAt) {
+        comment.ackAt = new Date().toISOString();
+        save(b.deck, list);
+        emit("reply", { deck: b.deck, comment });
+      }
       return Response.json({ ok: true });
     },
   },

@@ -12,11 +12,12 @@ const deck = readdirSync(join(root, "decks")).find((d) => existsSync(join(root, 
 const commentsFile = join(root, "decks", deck, "comments.json");
 const had = existsSync(commentsFile);
 
-const app = Bun.spawn(["bun", "run", join(root, "app/server.ts")], { env: { ...process.env, PORT: port }, stdout: "ignore", stderr: "inherit" });
+let client: Client | undefined; // 실패해도 finally에서 닫는다(채널 자식 프로세스가 남아 러너가 멈추지 않게)
+const app = Bun.spawn(["bun", "run", join(root, "app/server.ts")], { env: { ...process.env, PORT: port, SLIDEKIT_KEY_FILE: "/tmp/slidekit-chan-test.key" }, stdout: "ignore", stderr: "inherit" });
 try {
   for (let i = 0; i < 50 && !(await fetch(`${url}/api/decks`).then((r) => r.ok).catch(() => false)); i++) await Bun.sleep(200);
 
-  const client = new Client({ name: "test", version: "0" });
+  client = new Client({ name: "test", version: "0" });
   const got: any[] = [];
   client.fallbackNotificationHandler = async (n) => { got.push(n); };
   await client.connect(new StdioClientTransport({ command: "bun", args: [join(import.meta.dir, "index.ts")], env: { ...process.env as any, SLIDEKIT_URL: url } }));
@@ -24,7 +25,7 @@ try {
   const caps = client.getServerCapabilities() as any;
   assert(caps.experimental["claude/channel"], "channel capability");
   const names = (await client.listTools()).tools.map((t) => t.name).sort().join();
-  assert(names === "get_pending,reply", names);
+  assert(names === "ack,get_pending,reply", names);
   await Bun.sleep(500); // SSE 구독 대기
   assert(((await (await fetch(`${url}/api/channel`)).json()) as any).connected === true, "channel presence true");
 
@@ -37,6 +38,9 @@ try {
 
   const pend = JSON.parse(((await client.callTool({ name: "get_pending", arguments: {} })) as any).content[0].text);
   assert(pend.some((c: any) => c.id === id), "pending");
+  // ack: 작업 시작이 앱에 ackAt으로 반영된다(reply 전에 호출)
+  await client.callTool({ name: "ack", arguments: { id } });
+  assert(!!((await (await fetch(`${url}/api/comments?deck=${deck}`)).json()) as any[]).find((c) => c.id === id)?.ackAt, "ackAt set after ack");
   await client.callTool({ name: "reply", arguments: { id, text: "완료" } });
   const list = await (await fetch(`${url}/api/comments?deck=${deck}`)).json() as any[];
   assert(list.find((c) => c.id === id)?.status === "done", "done");
@@ -60,6 +64,7 @@ try {
   assert(((await (await fetch(`${url}/api/channel`)).json()) as any).connected === false, "channel presence false after close");
   console.log("channel test ok");
 } finally {
+  await client?.close().catch(() => {});
   app.kill();
   if (!had) rmSync(commentsFile, { force: true });
 }

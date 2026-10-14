@@ -14,5 +14,5 @@ export type Comment = {
   id: string; slide: number; path: string; excerpt: string; text: string;
   status: "open" | "done"; reply?: string; createdAt: string; repliedAt?: string;
   slideDeleted?: boolean;
-  deliveredAt?: string; resolved?: boolean; resolvedAt?: string;
+  deliveredAt?: string; ackAt?: string; resolved?: boolean; resolvedAt?: string; trusted?: boolean;
 };

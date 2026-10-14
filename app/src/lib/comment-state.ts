@@ -1,14 +1,17 @@
 import type { Comment } from "@/lib/deck";
 
-// 코멘트의 흐름: 저장됨(waiting) -> Claude 세션에 전달됨(sent) -> 답변됨(replied) -> 해결(resolved)
-export type CommentState = "waiting" | "sent" | "replied" | "resolved";
+// 코멘트의 흐름: 저장됨(waiting) -> Claude 세션에 전달됨(sent) -> 작업 시작(working) -> 답변됨(replied) -> 해결(resolved)
+// 이 기기의 서명이 없거나 틀린 코멘트(trusted가 false)는 사용자가 Trust 하기 전까지 unverified이고 Claude에 전달되지 않는다.
+export type CommentState = "waiting" | "sent" | "working" | "replied" | "resolved" | "unverified";
 
 export const stateOf = (c: Comment): CommentState =>
-  c.resolved ? "resolved" : c.status === "done" ? "replied" : c.deliveredAt ? "sent" : "waiting";
+  c.resolved ? "resolved" : c.status === "done" ? "replied" : c.trusted === false ? "unverified" : c.ackAt ? "working" : c.deliveredAt ? "sent" : "waiting";
 
 export const STATE_LABEL: Record<CommentState, string> = {
   waiting: "Waiting",
   sent: "Sent to Claude",
+  working: "Claude is working",
+  unverified: "Unverified",
   replied: "Replied",
   resolved: "Resolved",
 };

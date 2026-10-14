@@ -1,4 +1,4 @@
-import { Check } from "lucide-react";
+import { Check, ShieldAlert } from "lucide-react";
 import type { Comment } from "@/lib/deck";
 import { STATE_LABEL, stateOf, type CommentState } from "@/lib/comment-state";
 
@@ -6,12 +6,16 @@ import { STATE_LABEL, stateOf, type CommentState } from "@/lib/comment-state";
 const FILL: Record<CommentState, string> = {
   waiting: "bg-black text-foreground",
   sent: "bg-focus-ring text-white",
+  working: "bg-focus-ring text-white",
+  unverified: "bg-black text-foreground",
   replied: "bg-emerald-500 text-black",
   resolved: "bg-black/70 text-muted-foreground",
 };
 const OUTLINE: Record<CommentState, string> = {
   waiting: "ring-muted-foreground/70",
   sent: "ring-black",
+  working: "ring-black",
+  unverified: "ring-muted-foreground/70",
   replied: "ring-black",
   resolved: "ring-muted-foreground/40",
 };
@@ -41,7 +45,7 @@ export function CommentPin({ comment, number, highlighted, onClick, onHover }: C
       // cn은 text-micro를 글자색으로 보고 지우므로 클래스를 일반 문자열로 잇고, 링 색은 한 곳에서만 정한다.
       className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-micro tabular-nums ring-2 outline-none transition-transform focus-visible:ring-focus-ring ${FILL[st]} ${highlighted ? "scale-125 ring-focus-ring" : OUTLINE[st]}`}
     >
-      {st === "resolved" ? <Check className="h-3 w-3" aria-hidden="true" /> : number}
+      {st === "resolved" ? <Check className="h-3 w-3" aria-hidden="true" /> : st === "unverified" ? <ShieldAlert className="h-3 w-3" aria-hidden="true" /> : number}
     </button>
   );
 }

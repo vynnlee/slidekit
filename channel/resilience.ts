@@ -13,7 +13,7 @@ const port = process.env.TEST_PORT ?? "3247";
 const url = `http://127.0.0.1:${port}`;
 const json = { "Content-Type": "application/json" };
 const t = makeTestDeck("chan-res");
-const spawnApp = () => Bun.spawn(["bun", "run", join(root, "app/server.ts")], { env: { ...process.env, PORT: port }, stdout: "ignore", stderr: "inherit" });
+const spawnApp = () => Bun.spawn(["bun", "run", join(root, "app/server.ts")], { env: { ...process.env, PORT: port, SLIDEKIT_KEY_FILE: "/tmp/slidekit-chan-test.key" }, stdout: "ignore", stderr: "inherit" });
 const up = async () => { for (let i = 0; i < 60; i++) { if (await fetch(`${url}/api/decks`).then((r) => r.ok).catch(() => false)) return; await Bun.sleep(200); } throw new Error("서버가 안 뜸"); };
 const connected = async () => ((await (await fetch(`${url}/api/channel`)).json()) as any).connected;
 const comments = async () => (await (await fetch(`${url}/api/comments?deck=${t.folder}`)).json()) as any[];

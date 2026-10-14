@@ -41,5 +41,13 @@ export function useCommentsLive(folder: string | null) {
     } catch { upsert(prev); setError("Could not update the comment"); }
   }, [folder, upsert]);
 
-  return { comments, setComments, channel, error, upsert, resolve };
+  /** 검증 안 된 코멘트를 믿기로 한다(서버가 이 기기의 키로 다시 서명하고 갱신 이벤트를 보낸다). */
+  const trust = useCallback(async (c: Comment) => {
+    try {
+      const r = await fetch(`/api/comments/${c.id}/trust`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deck: folder }) });
+      if (!r.ok) throw new Error(String(r.status));
+    } catch { setError("Could not trust the comment"); }
+  }, [folder]);
+
+  return { comments, setComments, channel, error, upsert, resolve, trust };
 }

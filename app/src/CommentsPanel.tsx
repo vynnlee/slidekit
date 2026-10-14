@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Check, CheckCheck, Clock, Copy, MessageSquare, RotateCcw, Send } from "lucide-react";
+import { Check, CheckCheck, Clock, Copy, Loader2, MessageSquare, RotateCcw, Send, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Comment } from "@/lib/deck";
@@ -9,16 +9,18 @@ const CMD = "claude --dangerously-load-development-channels server:slidekit";
 type Filter = "all" | "open" | "replied" | "resolved";
 const FILTERS: { id: Filter; label: string; match: (s: CommentState) => boolean }[] = [
   { id: "all", label: "All", match: () => true },
-  { id: "open", label: "Open", match: (s) => s === "waiting" || s === "sent" },
+  { id: "open", label: "Open", match: (s) => s === "waiting" || s === "sent" || s === "working" || s === "unverified" },
   { id: "replied", label: "Replied", match: (s) => s === "replied" },
   { id: "resolved", label: "Resolved", match: (s) => s === "resolved" },
 ];
 
-const ICON = { waiting: Clock, sent: Send, replied: MessageSquare, resolved: CheckCheck } as const;
+const ICON = { waiting: Clock, sent: Send, working: Loader2, replied: MessageSquare, resolved: CheckCheck, unverified: ShieldAlert } as const;
 // 색만으로 구분하지 않도록 아이콘과 글자를 함께 쓴다.
 const TONE: Record<CommentState, string> = {
   waiting: "text-muted-foreground",
   sent: "text-focus-ring",
+  working: "text-focus-ring",
+  unverified: "text-foreground",
   replied: "text-emerald-400",
   resolved: "text-muted-foreground",
 };
@@ -29,7 +31,7 @@ export function StateBadge({ state, className }: { state: CommentState; classNam
   return (
     // cn은 text-micro(글자 크기)를 글자색으로 보고 지우므로 일반 문자열로 잇는다.
     <span className={`inline-flex items-center gap-1 text-micro ${TONE[state]} ${className ?? ""}`}>
-      <Icon className="h-3 w-3" aria-hidden="true" />{STATE_LABEL[state]}
+      <Icon className={`h-3 w-3 ${state === "working" ? "animate-spin" : ""}`} aria-hidden="true" />{STATE_LABEL[state]}
     </span>
   );
 }
@@ -69,12 +71,14 @@ interface CommentsPanelProps {
   channel: boolean | null;
   onJump(c: Comment): void;
   onResolve(c: Comment, resolved: boolean): void;
+  /** 검증 안 된 코멘트를 사용자가 믿기로 한다(이 기기의 키로 다시 서명). 없으면 Trust 버튼을 보이지 않는다. */
+  onTrust?(c: Comment): void;
   /** 캔버스 핀과 목록이 서로를 강조하도록 마우스나 포커스가 올라간 코멘트 id를 맞춘다. */
   hoverId?: string | null;
   onHover?(id: string | null): void;
 }
 
-export function CommentsPanel({ comments, channel, onJump, onResolve, hoverId, onHover }: CommentsPanelProps) {
+export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, hoverId, onHover }: CommentsPanelProps) {
   const [filter, setFilter] = useState<Filter>("all");
   const [open, setOpen] = useState<Set<string>>(new Set()); // 길어서 펼친 코멘트
   const root = useRef<HTMLDivElement>(null);
@@ -164,7 +168,13 @@ export function CommentsPanel({ comments, channel, onJump, onResolve, hoverId, o
                       <span className="whitespace-pre-wrap break-words text-body text-muted-foreground">{c.reply}</span>
                     </div>
                   )}
-                  <div className="flex justify-end">
+                  {st === "unverified" && (
+                    <p className="border-l-2 border-border pl-2 text-micro text-muted-foreground" data-testid="unverified-note">
+                      This comment was not created on this computer, so it is not sent to Claude. Trust it only if you know where it came from.
+                    </p>
+                  )}
+                  <div className="flex justify-end gap-1">
+                    {st === "unverified" && onTrust && <Button size="compact" variant="secondary" onClick={() => onTrust(c)} aria-label={`Trust comment ${nums.get(c.id)}`} leadingIcon={ShieldAlert}>Trust</Button>}
                     {st === "resolved"
                       ? <Button size="compact" variant="ghost" onClick={() => onResolve(c, false)} aria-label={`Reopen comment ${nums.get(c.id)}`} leadingIcon={RotateCcw}>Reopen</Button>
                       : <Button size="compact" variant="ghost" onClick={() => onResolve(c, true)} aria-label={`Resolve comment ${nums.get(c.id)}`} leadingIcon={Check}>Resolve</Button>}

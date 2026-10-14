@@ -7,14 +7,15 @@ import { join } from "node:path";
 const dir = mkdtempSync(join(tmpdir(), "sk-comments-"));
 mkdirSync(join(dir, "d"));
 process.env.SLIDEKIT_DECKS = dir;
-const { load, save, remap, sanitize } = await import("../comments");
+process.env.SLIDEKIT_KEY_FILE = join(dir, "test.key"); // 실제 ~/.config 키를 건드리지 않는다
+const { load, save, remap, sanitize, sign, verify } = await import("../comments");
 const file = join(dir, "d", "comments.json");
 
 test("파일이 없으면 빈 목록, 저장 후 다시 읽힘", () => {
   expect(load("d")).toEqual([]);
   const c = { id: "a", slide: 1, path: "", excerpt: "", text: "t", status: "open" as const, createdAt: "2026-10-14T00:00:00Z" };
   save("d", [c]);
-  expect(load("d")).toEqual([c]);
+  expect(load("d")).toMatchObject([c]); // trusted는 읽을 때 계산한다(서명이 없으면 false)
   expect(readdirSync(join(dir, "d")).some((n) => n.includes(".tmp-"))).toBe(false);
 });
 
@@ -53,4 +54,22 @@ test("remap은 정수가 아닌 값을 슬라이드 번호로 받지 않는다",
   expect(l.find((x) => x.id === "m1")).toMatchObject({ slide: 1, slideDeleted: true });
   expect(l.find((x) => x.id === "m2")?.slide).toBe(5);
   expect(l.find((x) => x.id === "m3")).toMatchObject({ slide: 3, slideDeleted: true });
+});
+
+test("서명: 만든 코멘트는 검증되고, 본문이나 덱이 바뀌거나 서명이 없으면 검증 안 됨", () => {
+  const base = { id: "s1", slide: 2, path: "h1", excerpt: "x", text: "원문", status: "open" as const, createdAt: "2026-10-14T00:00:00Z" };
+  const signed = { ...base, sig: sign("d", base) };
+  expect(verify("d", signed)).toBe(true);
+  expect(verify("d", { ...signed, text: "바뀐 본문" })).toBe(false);
+  expect(verify("d", { ...signed, slide: 3 })).toBe(false);
+  expect(verify("other", signed)).toBe(false); // 다른 덱으로 옮기면 무효
+  expect(verify("d", base)).toBe(false);
+  expect(verify("d", { ...signed, sig: "zz" })).toBe(false);
+  expect(verify("d", { ...signed, sig: "0".repeat(64) })).toBe(false);
+  save("d", [signed, { ...signed, id: "s2", text: "조작", sig: signed.sig }, { ...base, id: "s3" }]);
+  const l = load("d");
+  expect(l.map((c) => [c.id, c.trusted])).toEqual([["s1", true], ["s2", false], ["s3", false]]);
+  expect(readFileSync(file, "utf8")).not.toContain('"trusted"'); // 저장하지 않는다
+  const { statSync } = require("node:fs");
+  expect(statSync(join(dir, "test.key")).mode & 0o777).toBe(0o600); // 키 파일 권한
 });

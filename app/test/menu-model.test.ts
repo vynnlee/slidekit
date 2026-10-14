@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { deckMenu, tidy, trashMenu, type MenuItem } from "../src/lib/menu-model";
+import { commentMenu, deckMenu, tidy, trashMenu, type MenuItem } from "../src/lib/menu-model";
 
 const noop = () => {};
 const acts = { open: noop, present: noop, rename: noop, duplicate: noop, trash: noop };
@@ -40,4 +40,25 @@ test("tidy: 맨 앞뒤와 연속 구분선과 빈 서브메뉴를 정리한다",
   expect(labels(tidy([sep, it("a"), sep, sep, it("b"), sep]))).toEqual(["a", "-", "b"]);
   expect(labels(tidy([it("a"), false, null, { type: "sub", id: "s", label: "S", items: [sep] }]))).toEqual(["a"]);
   expect(labels(tidy([{ type: "sub", id: "s", label: "S", items: [it("x")] }]))).toEqual(["S"]);
+});
+
+const cacts = { resolved: false, unverified: false, resolve: noop, copyText: noop, remove: noop };
+
+test("코멘트 메뉴: 패널 항목은 Open in panel 없이 Resolve, Copy, 구분선, 빨강 Delete 순서", () => {
+  const m = commentMenu(cacts);
+  expect(labels(m)).toEqual(["Resolve", "Copy text", "-", "Delete"]);
+  const last = m[m.length - 1];
+  expect(last.type === "item" && last.destructive && last.shortcut).toBe("delete");
+  const resolve = m[0];
+  expect(resolve.type === "item" && resolve.shortcut).toBe("e");
+});
+
+test("코멘트 메뉴: 핀은 Open in panel이 맨 위, 해결됨이면 Reopen, 서명 없음일 때만 Trust", () => {
+  expect(labels(commentMenu({ ...cacts, openInPanel: noop }))[0]).toBe("Open in panel");
+  expect(labels(commentMenu({ ...cacts, resolved: true }))).toContain("Reopen");
+  expect(labels(commentMenu({ ...cacts, resolved: true }))).not.toContain("Resolve");
+  expect(labels(commentMenu({ ...cacts, unverified: true, trust: noop }))).toContain("Trust");
+  expect(labels(commentMenu({ ...cacts, unverified: true }))).not.toContain("Trust"); // trust 연결이 없으면 뺀다
+  expect(labels(commentMenu({ ...cacts, trust: noop }))).not.toContain("Trust"); // 서명이 있으면 뺀다
+  expect(commentMenu({ ...cacts, openInPanel: noop, unverified: true, trust: noop }).filter((x) => x.type !== "separator").length).toBeLessThanOrEqual(12);
 });

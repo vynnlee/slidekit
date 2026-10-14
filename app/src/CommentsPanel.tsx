@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Check, CheckCheck, Clock, Copy, Loader2, MessageSquare, RotateCcw, Send, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ContextMenu, useContextMenu } from "@/components/ui/context-menu";
+import { commentMenu } from "@/lib/comment-actions";
 import { cn } from "@/lib/utils";
 import type { Comment } from "@/lib/deck";
 import { STATE_LABEL, ago, numbering, stateOf, type CommentState } from "@/lib/comment-state";
@@ -84,6 +86,9 @@ export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, o
   const [filter, setFilter] = useState<Filter>("all");
   const [open, setOpen] = useState<Set<string>>(new Set()); // 길어서 펼친 코멘트
   const root = useRef<HTMLDivElement>(null);
+  const cm = useContextMenu();
+  // 우클릭 메뉴(INTERACTION 2.5): 삭제 연결이 있을 때만 연다. 핀 전용 항목(Open in panel)은 없다.
+  const actions = onRemove ? { resolve: onResolve, trust: onTrust, remove: onRemove } : null;
   const nums = useMemo(() => numbering(comments), [comments]);
   const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, comments.filter((c) => f.match(stateOf(c))).length])) as Record<Filter, number>, [comments]);
   const shown = comments.filter((c) => FILTERS.find((f) => f.id === filter)!.match(stateOf(c)));
@@ -147,6 +152,7 @@ export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, o
                   key={c.id}
                   data-comment-id={c.id}
                   data-state={st}
+                  {...(actions ? cm.bind(() => commentMenu(c, actions, "panel")) : {})}
                   onMouseEnter={() => onHover?.(c.id)}
                   onMouseLeave={() => onHover?.(null)}
                   onFocus={() => onHover?.(c.id)}
@@ -195,6 +201,7 @@ export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, o
           </ul>
         </section>
       ))}
+      {actions && <ContextMenu menu={cm} />}
     </div>
   );
 }

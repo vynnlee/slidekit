@@ -78,7 +78,7 @@ const json = { 'Content-Type': 'application/json' };
         let i;
         while ((i = buf.indexOf('\n\n')) >= 0) {
           const block = buf.slice(0, i); buf = buf.slice(i + 2);
-          if (!block.includes('event: comment')) continue;
+          if (block.split('\n').find((l) => l.startsWith('event: ')) !== 'event: comment') continue; // comments(전체 교체) 이벤트와 구분한다
           const { deck, comment } = JSON.parse(block.split('\n').find((l) => l.startsWith('data: ')).slice(6));
           handle(deck, comment);
         }
@@ -129,6 +129,36 @@ const json = { 'Content-Type': 'application/json' };
     check('E로 해결', await page.waitForFunction(() => document.querySelectorAll('[data-testid=comments-panel] li[data-state="resolved"]').length === 1, null, { timeout: 5000 }).then(() => true, () => false));
     await page.keyboard.press('e');
     check('E를 다시 누르면 해결 취소', await page.waitForFunction(() => document.querySelectorAll('[data-testid=comments-panel] li[data-state="resolved"]').length === 0, null, { timeout: 5000 }).then(() => true, () => false));
+
+    // Delete 키: 지우고 Undo 토스트로 되살린다
+    await mains.nth(1).focus();
+    await page.keyboard.press('Delete');
+    check('Delete로 코멘트가 지워진다', await page.waitForFunction(() => document.querySelectorAll('[data-testid=comments-panel] li[data-comment-id]').length === 1, null, { timeout: 5000 }).then(() => true, () => false));
+    check('지운 뒤 포커스가 남은 코멘트로 간다', await focused(0));
+    await page.getByRole('button', { name: 'Undo' }).click();
+    check('Undo로 되살아난다', await page.waitForFunction(() => document.querySelectorAll('[data-testid=comments-panel] li[data-comment-id]').length === 2, null, { timeout: 5000 }).then(() => true, () => false));
+
+    // 우클릭 메뉴(패널 항목과 핀): INTERACTION 2.5
+    await items.first().click({ button: 'right' });
+    const menu = page.getByRole('menu');
+    await menu.waitFor({ timeout: 3000 }).then(() => check('패널 항목 우클릭이 메뉴를 연다', true), () => check('패널 항목 우클릭이 메뉴를 연다', false));
+    const names = await menu.getByRole('menuitem').allTextContents();
+    check('패널 메뉴 항목과 순서: Resolve, Copy text, Delete(Open in panel 없음)', /^Resolve/.test(names[0] ?? '') && names.some((n) => /^Copy text/.test(n)) && /^Delete/.test(names.at(-1) ?? '') && !names.some((n) => /Open in panel/.test(n)), names);
+    await page.keyboard.press('Escape');
+    await pin.first().click({ button: 'right' });
+    await menu.waitFor({ timeout: 3000 }).catch(() => {});
+    const pinNames = await menu.getByRole('menuitem').allTextContents();
+    check('핀 메뉴 맨 위가 Open in panel', /^Open in panel/.test(pinNames[0] ?? ''), pinNames);
+    await menu.getByRole('menuitem', { name: /^Resolve/ }).click();
+    check('핀 메뉴의 Resolve가 해결 처리한다', await page.waitForFunction(() => document.querySelectorAll('[data-testid=comments-panel] li[data-state="resolved"]').length === 1, null, { timeout: 5000 }).then(() => true, () => false));
+    await items.first().click({ button: 'right' });
+    await menu.getByRole('menuitem', { name: /^Reopen/ }).click();
+    check('패널 메뉴의 Reopen이 되돌린다', await page.waitForFunction(() => document.querySelectorAll('[data-testid=comments-panel] li[data-state="resolved"]').length === 0, null, { timeout: 5000 }).then(() => true, () => false));
+    await items.first().click({ button: 'right' });
+    await menu.getByRole('menuitem', { name: /^Delete/ }).click();
+    check('패널 메뉴의 Delete가 지우고 Undo로 되살아난다', await page.waitForFunction(() => document.querySelectorAll('[data-testid=comments-panel] li[data-comment-id]').length === 1, null, { timeout: 5000 }).then(() => true, () => false));
+    await page.getByRole('button', { name: 'Undo' }).last().click();
+    check('Undo 뒤 코멘트가 둘이다', await page.waitForFunction(() => document.querySelectorAll('[data-testid=comments-panel] li[data-comment-id]').length === 2, null, { timeout: 5000 }).then(() => true, () => false));
 
     // 파일 변경 -> 캔버스 새로고침
     const src = fs.readFileSync(t.file, 'utf8');

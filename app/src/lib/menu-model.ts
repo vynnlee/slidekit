@@ -65,3 +65,27 @@ export function trashMenu(a: TrashMenuActions, icons: { restore?: IconComponent;
     item("purge", "Delete forever", a.purge, { destructive: true, icon: icons.purge }),
   ]);
 }
+
+// ---- 코멘트 핀과 코멘트 패널 항목 (2.5) ----
+export type CommentMenuActions = {
+  /** 해결된 코멘트면 Resolve 대신 Reopen을 보인다. */
+  resolved: boolean;
+  /** 서명이 없는(Unverified) 코멘트만 Trust 항목이 있다. */
+  unverified: boolean;
+  /** 핀에서만 준다. 없으면 항목이 빠진다. */
+  openInPanel?(): void;
+  resolve(): void;
+  trust?(): void;
+  copyText(): void;
+  remove(): void;
+};
+export function commentMenu(a: CommentMenuActions, icons: { open?: IconComponent; resolve?: IconComponent; reopen?: IconComponent; trust?: IconComponent; copy?: IconComponent; trash?: IconComponent } = {}): MenuItem[] {
+  return tidy([
+    a.openInPanel && item("open", "Open in panel", a.openInPanel, { icon: icons.open }),
+    a.resolved ? item("reopen", "Reopen", a.resolve, { shortcut: "e", icon: icons.reopen }) : item("resolve", "Resolve", a.resolve, { shortcut: "e", icon: icons.resolve }),
+    a.unverified && a.trust && item("trust", "Trust", a.trust, { icon: icons.trust }),
+    item("copy", "Copy text", a.copyText, { icon: icons.copy }),
+    separator,
+    item("delete", "Delete", a.remove, { shortcut: "delete", destructive: true, icon: icons.trash }),
+  ]);
+}

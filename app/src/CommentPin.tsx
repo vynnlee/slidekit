@@ -1,6 +1,8 @@
+import { createPortal } from "react-dom";
 import { Check, ShieldAlert } from "lucide-react";
 import type { Comment } from "@/lib/deck";
-import type { CommentActions } from "@/lib/comment-actions";
+import { commentMenu, type CommentActions } from "@/lib/comment-actions";
+import { ContextMenu, useContextMenu } from "@/components/ui/context-menu";
 import { STATE_LABEL, stateOf, type CommentState } from "@/lib/comment-state";
 
 // 캔버스 위 코멘트 핀. 번호는 목록과 같고(lib/comment-state numbering), 상태는 색과 모양으로 함께 구분한다.
@@ -28,20 +30,25 @@ interface CommentPinProps {
   highlighted?: boolean;
   onClick(): void;
   onHover?(on: boolean): void;
-  /** 있으면 핀에 포커스가 있을 때 E(해결)와 Delete(삭제)가 동작한다. */
-  actions?: Pick<CommentActions, "resolve" | "remove">;
+  /** 있으면 우클릭과 ContextMenu 키로 메뉴(INTERACTION 2.5)가 열리고, 핀에 포커스가 있을 때 E(해결)와 Delete(삭제)가 동작한다. */
+  actions?: CommentActions;
 }
 
 export function CommentPin({ comment, number, highlighted, onClick, onHover, actions }: CommentPinProps) {
   const st = stateOf(comment);
+  const cm = useContextMenu();
+  const menu = actions ? cm.bind(() => commentMenu(comment, actions, "pin")) : null;
   return (
+    <>
     <button
       type="button"
       data-comment-pin={comment.id}
       data-state={st}
       aria-label={`Comment ${number}, ${STATE_LABEL[st]}: ${comment.text.slice(0, 60)}`}
       onClick={onClick}
+      onContextMenu={menu?.onContextMenu}
       onKeyDown={(e) => {
+        menu?.onKeyDown(e); // ContextMenu 키와 Shift+F10
         if (!actions || e.metaKey || e.ctrlKey || e.altKey) return;
         if (e.key.toLowerCase() === "e") { e.preventDefault(); e.stopPropagation(); actions.resolve(comment, st !== "resolved"); }
         else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); e.stopPropagation(); actions.remove(comment); }
@@ -55,6 +62,9 @@ export function CommentPin({ comment, number, highlighted, onClick, onHover, act
     >
       {st === "resolved" ? <Check className="h-3 w-3" aria-hidden="true" /> : st === "unverified" ? <ShieldAlert className="h-3 w-3" aria-hidden="true" /> : number}
     </button>
+    {/* 핀은 transform이 걸린 오버레이 안에 있어 fixed 앵커가 어긋나므로 메뉴를 body로 포털한다 */}
+    {actions && createPortal(<ContextMenu menu={cm} />, document.body)}
+    </>
   );
 }
 export type { CommentPinProps };

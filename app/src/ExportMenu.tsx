@@ -25,7 +25,7 @@ type Mode = "idle" | "html" | "pdf" | "publish";
 type PubEntry = { url: string; at: string; visibility: "public" | "password"; bytes: number; unpublishedAt?: string };
 type Published = { published: false } | { published: true; name: string; url: string; at: string; visibility: "public" | "password"; bytes: number; changed: boolean; history: PubEntry[] };
 type Stage = "idle" | "saving" | "bundling" | "publishing" | "done";
-type Check = { errors: number; warnings: number; issues: { level: string; rule: string; msg: string }[]; largeImages: { file: string; bytes: number }[]; visibility: "public" | "password" | "unknown"; estimatedBytes: number; lastBundleBytes: number | null };
+type Check = { errors: number; warnings: number; issues: { level: string; rule: string; msg: string }[]; largeImages: { file: string; bytes: number }[]; visibility: "public" | "password" | "unknown"; estimatedBytes: number; lastBundleBytes: number | null; notesMissing?: number; slides?: number; lowContrast?: { name: string; ratio: number; need: number }[] };
 const fmt = (b: number) => (b >= 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 const PUBLISHED_KEY = (folder: string) => `slidekit.published.${folder}`;
 const STEPS: { id: Exclude<Stage, "idle" | "done">; label: string }[] = [
@@ -249,6 +249,8 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
                       <CheckRow ok={check.visibility !== "unknown"} warn={check.visibility === "unknown"}>
                         {check.visibility === "password" ? "Password protected: you will set the password below" : check.visibility === "public" ? "Public: anyone with the link can view it" : "Visibility could not be read from the deck"}
                       </CheckRow>
+                      {!!check.notesMissing && <CheckRow ok={false} warn>{`No speaker notes on ${check.notesMissing} ${check.notesMissing === 1 ? "slide" : "slides"}`}</CheckRow>}
+                      {check.lowContrast?.map((c) => <CheckRow key={c.name} ok={false} warn>{`Low contrast: ${c.name} ${c.ratio.toFixed(1)}:1 (needs ${c.need}:1)`}</CheckRow>)}
                       <CheckRow ok>{`About ${fmt(check.estimatedBytes)} before fonts${check.lastBundleBytes ? `. Last bundle ${fmt(check.lastBundleBytes)}` : ""}`}</CheckRow>
                     </ul>
                   )}

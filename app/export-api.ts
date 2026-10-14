@@ -3,8 +3,8 @@
 // 비밀번호는 자식 프로세스 환경 변수로만 넘기고, 로그와 응답에서는 지운다.
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { lint } from "../engine/lint";
-import { deckFingerprint, localImageRefs, readPublish, recordUnpublish } from "../engine/publish-record";
+import { deckFingerprint, readPublish, recordUnpublish } from "../engine/publish-record";
+import { deckCheck } from "../engine/deck-check";
 
 const root = join(import.meta.dir, "..");
 const ID = /^[a-z0-9][a-z0-9-]*$/;
@@ -123,22 +123,18 @@ export function makeRoutes(run: Run = spawnRun) {
     const id = deckId(req);
     if (!id) return bad("deck", 404);
     const dir = join(root, "decks", id);
-    const html = readFileSync(join(dir, "index.html"), "utf8");
-    const issues = lint(html);
-    const images: { file: string; bytes: number }[] = [];
-    let assets = 0;
-    for (const r of localImageRefs(html, dir)) { assets += r.size; if (r.size > 400 * 1024) images.push({ file: r.rel, bytes: r.size }); } // 400KB 넘는 이미지(번들러 경고 기준과 같다)
-    images.sort((a, b) => b.bytes - a.bytes);
-    const visibility = meta(id)?.visibility === "password" ? "password" : meta(id) ? "public" : "unknown";
-    const built = existsSync(dist(id, "html")) && statSync(dist(id, "html")).mtimeMs > statSync(join(dir, "index.html")).mtimeMs ? statSync(dist(id, "html")).size : null;
+    const c = deckCheck(dir, id);
     return Response.json({
-      errors: issues.filter((i) => i.level === "error").length,
-      warnings: issues.filter((i) => i.level === "warn").length,
-      issues: issues.slice(0, 5).map((i) => ({ level: i.level, rule: i.rule, msg: i.msg.slice(0, 200) })),
-      largeImages: images.slice(0, 3), // 400KB 넘는 이미지(번들러 경고 기준과 같다)
-      visibility,
-      estimatedBytes: Buffer.byteLength(html) + assets, // 글꼴 서브셋은 번들 때 더해진다
-      lastBundleBytes: built, // 덱보다 새로 만든 번들이 있을 때만
+      errors: c.lint.errors,
+      warnings: c.lint.warnings,
+      issues: c.lint.issues.slice(0, 5).map((i) => ({ level: i.level, rule: i.rule, msg: i.msg.slice(0, 200) })),
+      largeImages: [...c.largeImages].sort((a, b) => b.size - a.size).slice(0, 3).map((r) => ({ file: r.rel, bytes: r.size })),
+      visibility: c.visibility,
+      estimatedBytes: c.size.estimatedBytes, // 글꼴 서브셋은 번들 때 더해진다
+      lastBundleBytes: c.size.lastBundleBytes, // 덱보다 새로 만든 번들이 있을 때만
+      notesMissing: c.notes.missing.length,
+      slides: c.slides,
+      lowContrast: c.contrast.filter((r) => r.level === "fail" && r.ratio !== null).slice(0, 2).map((r) => ({ name: r.name, ratio: r.ratio, need: r.need })),
     });
   };
   return {

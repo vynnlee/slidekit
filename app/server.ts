@@ -84,7 +84,7 @@ async function serveStatic(pathname: string) {
 Bun.serve({
   hostname: "127.0.0.1", // 0.0.0.0은 LAN 전체에 열린다
   port,
-  maxRequestBodySize: 8 << 20, // 덱 원문(이미지 포함 가능)보다 넉넉하게
+  maxRequestBodySize: 21 << 20, // 이미지 업로드 상한(20MB)보다 크게. 덱 원문 저장도 같은 한도를 쓴다
   // 테스트 서버는 SLIDEKIT_STABLE=1로 띄운다: HMR을 꺼서 팀원이 파일을 저장해도 열린 페이지가 다시 로드되지 않는다.
   ...(process.env.SLIDEKIT_STABLE ? { development: { hmr: false, console: false } } : {}),
   // 알려진 한계: Bun의 HTML 번들 라우트("/", "/edit/:id" 등)와 /_bun/*는 핸들러로 감쌀 수 없어 Host 검사가 /api/와 정적 파일에만 걸린다.

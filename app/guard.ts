@@ -17,7 +17,12 @@ export function guardReq(req: Request): Response | null {
   if (origin) { try { originHost = new URL(origin).host; } catch { return new Response("origin", { status: 403 }); } }
   if (origin && originHost !== host) return new Response("origin", { status: 403 });
   if (req.headers.get("sec-fetch-site") === "cross-site") return new Response("origin", { status: 403 });
-  if (req.method !== "GET" && !req.headers.get("content-type")?.startsWith("application/json")) return new Response("type", { status: 415 });
+  if (req.method !== "GET") {
+    const type = req.headers.get("content-type") ?? "";
+    // 이미지 업로드만 바이너리 본문을 받는다(그래도 단순 폼 전송은 못 쓰는 image/* 또는 octet-stream만).
+    const upload = /^\/api\/decks\/[^/]+\/assets$/.test(new URL(req.url).pathname) && /^(image\/|application\/octet-stream)/.test(type);
+    if (!type.startsWith("application/json") && !upload) return new Response("type", { status: 415 });
+  }
   return null;
 }
 

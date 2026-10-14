@@ -1,6 +1,8 @@
 import { join, relative, sep } from "node:path";
 import { deckFolder, decksDir } from "./folder";
 import { TEMPLATES, TEMPLATE_IDS } from "../engine/templates";
+import { readMeta, safeJson, setMeta } from "./src/lib/deck-meta";
+import { AssetError, MAX_BYTES, saveAsset } from "../engine/assets";
 import { cp, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 
 const root = join(import.meta.dir, "..");
@@ -56,8 +58,8 @@ export async function retitleDeck(req: Request & { params: { folder: string } })
 }
 
 // #deck-meta JSON을 고쳐 다시 쓴다. 메타가 없으면 그대로 둔다(id는 폴더 이름이 된다).
-// <script> 안에 JSON을 넣을 때 </script>로 빠져나가거나 줄 구분자로 깨지지 않게 <, U+2028, U+2029를 이스케이프한다(JSON.parse는 그대로 복원한다).
-export const safeJson = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+// safeJson은 src/lib/deck-meta.ts에 있다(편집기와 같은 구현). 다른 모듈이 여기서 가져다 쓰므로 다시 내보낸다.
+export { safeJson };
 
 // 문서의 #deck-meta를 고친 새 문서를 돌려준다. 메타가 없거나 JSON이 깨졌으면 그대로 둔다.
 export function withMeta(html: string, fn: (m: Record<string, unknown>) => void): string {
@@ -68,6 +70,48 @@ export function withMeta(html: string, fn: (m: Record<string, unknown>) => void)
   try { meta = JSON.parse(m[2]); } catch { return html; }
   fn(meta);
   return html.replace(re, (_, a, _b, c) => `${a}\n    ${safeJson(meta)}\n  ${c}`);
+}
+
+// 이미지 업로드: 본문은 이미지 바이트 그대로. 파일명은 x-filename 헤더(퍼센트 인코딩) 또는 ?name=, 선택 ?max=(긴 변 최대 픽셀).
+export async function uploadAsset(req: Request & { params: { folder: string } }) {
+  const dir = deckFolder(req.params.folder);
+  if (!dir) return err("Deck not found", 404);
+  const len = Number(req.headers.get("content-length") ?? NaN);
+  if (!Number.isFinite(len)) return err("Content-Length is required", 411);
+  if (len > MAX_BYTES) return err("The image is larger than 20 MB", 413);
+  const u = new URL(req.url);
+  let name = u.searchParams.get("name") ?? req.headers.get("x-filename") ?? "";
+  try { name = decodeURIComponent(name); } catch { /* 퍼센트 인코딩이 아니면 그대로 */ }
+  const max = u.searchParams.has("max") ? Number(u.searchParams.get("max")) : undefined;
+  if (max !== undefined && !(Number.isInteger(max) && max >= 200 && max <= 8000)) return err("max must be 200 to 8000", 400);
+  const bytes = new Uint8Array(await req.arrayBuffer());
+  if (bytes.length > MAX_BYTES) return err("The image is larger than 20 MB", 413);
+  try { return Response.json(saveAsset(dir, name, bytes, max ? { max } : {}), { status: 201 }); }
+  catch (e) {
+    if (e instanceof AssetError) return Response.json({ error: "This image cannot be added. Use a PNG, JPEG, GIF, WebP or SVG file.", detail: e.message }, { status: 400 });
+    return err("Could not save the image", 500);
+  }
+}
+
+// 덱 설정: 읽을 때 받은 mtime(base)과 같을 때만 쓴다. 편집기 자동 저장이나 밖의 수정이 먼저 일어났으면 409로 거절한다.
+export async function getMeta(req: Request & { params: { folder: string } }) {
+  if (!(await source(req.params.folder))) return err("Deck not found", 404);
+  const file = join(decks, req.params.folder, "index.html");
+  const meta = readMeta(await Bun.file(file).text());
+  if (!meta) return err("This deck has no readable deck-meta block.", 422);
+  return Response.json({ meta, mtime: (await stat(file)).mtimeMs });
+}
+export async function patchDeckMeta(req: Request & { params: { folder: string } }) {
+  const { folder } = req.params;
+  const b = (await req.json().catch(() => null)) as { patch?: unknown; base?: unknown } | null;
+  if (!b || typeof b.base !== "number") return err("Missing base", 400);
+  if (!(await source(folder))) return err("Deck not found", 404);
+  const file = join(decks, folder, "index.html");
+  if ((await stat(file)).mtimeMs !== b.base) return err("changed", 409);
+  const r = setMeta(await Bun.file(file).text(), b.patch);
+  if (!r.ok) return Response.json({ error: r.issues[0].msg, issues: r.issues }, { status: 400 });
+  await writeAtomic(file, r.html);
+  return Response.json({ meta: r.meta, mtime: (await stat(file)).mtimeMs });
 }
 
 async function patchMeta(folder: string, fn: (m: Record<string, unknown>) => void) {
@@ -178,6 +222,8 @@ export const routes = {
   // "/api/decks/:folder"는 편집기의 저장(PUT)이 쓰므로 휴지통은 별도 경로로 둔다.
   "/api/decks/:folder/trash": { POST: trashDeck },
   "/api/decks/:folder/title": { POST: retitleDeck },
+  "/api/decks/:folder/meta": { GET: getMeta, PATCH: patchDeckMeta },
+  "/api/decks/:folder/assets": { POST: uploadAsset },
   "/api/trash": { GET: listTrash },
   // 새 덱 템플릿 목록(id, label). 엔진 모듈은 node:fs를 써서 브라우저 번들에 넣을 수 없으므로 API로 받는다.
   "/api/templates": { GET: () => Response.json(TEMPLATES.map(({ id, label }) => ({ id, label }))) },

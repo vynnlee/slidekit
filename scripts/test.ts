@@ -210,14 +210,17 @@ setInterval(() => console.log(`[잠금 ${Math.round((Date.now() - heldAt) / 6000
 const logDir = "/tmp/slidekit-test-logs";
 mkdirSync(logDir, { recursive: true });
 const STEP_TIMEOUT = Number(process.env.SLIDEKIT_STEP_TIMEOUT ?? 900) * 1000; // 단계 하나의 상한(초). 가장 긴 editor가 약 200초다.
-async function run(name: string, cmd: string[], env: Record<string, string> = {}, trace = false) {
+async function run(name: string, cmd: string[], env: Record<string, string> = {}, trace = false, keepFirst = false) {
   if (cmd[0] === "node") {
     await ensurePw();
     for (const f of globSync(join(logDir, `${name}-trace-*.zip`))) rmSync(f, { force: true }); // 단계당 최근 실행의 트레이스만 둔다
     // 트레이스는 실행 시간을 20% 가까이 늘리므로 평소에는 끄고, 실패한 단계를 한 번 다시 돌릴 때(또는 --trace) 켠다.
     env = { ...env, ...(trace ? { SLIDEKIT_TRACE_DIR: logDir, SLIDEKIT_TRACE_NAME: name } : {}), ...(pwWs ? { SLIDEKIT_PW_WS: pwWs } : {}) };
   }
-  const out = createWriteStream(join(logDir, `${name}.log`));
+  // 재시도가 로그를 덮어써 첫 실패의 원인을 못 보는 일이 없게, 재시도 전에 첫 시도 로그를 <단계>.attempt1.log로 옮겨 둔다. 처음부터 도는 실행은 지난번 것을 지운다.
+  const logPath = join(logDir, `${name}.log`), firstPath = join(logDir, `${name}.attempt1.log`);
+  if (keepFirst) { try { renameSync(logPath, firstPath); } catch { /* 첫 로그가 없으면 그대로 */ } } else rmSync(firstPath, { force: true });
+  const out = createWriteStream(logPath);
   const p = Bun.spawn(["taskpolicy", "-b", ...cmd], { cwd: root, env: { ...process.env, ...env }, stdout: "pipe", stderr: "pipe", detached: true }); running = p.pid;
   // 출력 사이가 3초 넘게 벌어지면 "[느림 +N초]" 줄을 넣는다. 고정 sleep과 긴 대기가 어느 검사 앞에 있는지 찾는 용도다.
   let prev = Date.now();
@@ -322,8 +325,8 @@ const skipped: string[] = []; // 필요한 도구가 없어 건너뛴 단계
       ok = (await run(s.name, s.cmd, s.env, flag("--trace"))) === 0;
       // 브라우저 단계가 실패하면(90초 이하일 때) 트레이스를 켜고 한 번 더 돌린다. 재실행이 통과하면 불안정(flaky)으로 표시한다.
       if (!ok && !flag("--trace") && s.cmd[0] === "node" && Date.now() - t0 <= 90_000) {
-        console.log(`-- ${s.name}: 실패. 트레이스를 켜고 한 번 다시 실행합니다`);
-        ok = (await run(s.name, s.cmd, s.env, true)) === 0;
+        console.log(`-- ${s.name}: 실패. 트레이스를 켜고 한 번 다시 실행합니다(첫 시도 로그: ${join(logDir, `${s.name}.attempt1.log`)})`);
+        ok = (await run(s.name, s.cmd, s.env, true, true)) === 0;
         if (ok) flaky.push(s.name);
       }
       if (ok) for (const f of globSync(join(logDir, `${s.name}-trace-*.zip`))) rmSync(f, { force: true }); // 성공하면 트레이스는 버린다

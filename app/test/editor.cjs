@@ -350,6 +350,8 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   await focusBody(); await page.keyboard.press('Meta+z'); await sleep(600);
   check('추가 실행 취소', (await layers.count()) === total);
 
+  // 노트 pane은 접지 않는다
+  check('노트 pane에 접기 버튼이 없고 입력창이 항상 보임', (await page.getByRole('button', { name: /notes/i }).count()) === 0 && (await page.getByPlaceholder('Speaker notes (Markdown)').isVisible()));
   // 자동 저장: Cmd+S 없이 1.5초 뒤 저장된다
   await page.keyboard.press('Escape'); await focusBody(); await page.keyboard.press('Tab'); await sleep(300);
   const op2 = page.getByLabel('Opacity', { exact: true }); await op2.fill('37'); await op2.press('Enter'); await sleep(400);

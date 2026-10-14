@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronDown, ChevronUp, MonitorPlay } from "lucide-react";
+import { ArrowLeft, MonitorPlay } from "lucide-react";
 import { TextArea } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -18,7 +18,7 @@ import type { Comment, DeckEntry } from "@/lib/deck";
 
 const KEYS: [string, string][] = [
   ["Cmd+S", "Save"], ["Cmd+Z", "Undo"], ["Shift+Cmd+Z", "Redo"], ["Delete", "Delete selection"], ["Cmd+D", "Duplicate"],
-  ["Up, Down", "Go to slide"], ["Double-click", "Edit text"], ["Enter", "Finish editing"], ["Esc", "Deselect"], ["Tab", "Select next element"], ["Cmd+Scroll, Cmd+0", "Zoom, fit"], ["Cmd+Enter", "Present from this slide"], ["Shift+Cmd+Enter", "Present from the start"], ["Cmd+\\", "Toggle panels"], ["Shift+Cmd+\\", "Toggle filmstrip"], ["Cmd+E", "Toggle notes"], ["Cmd+/", "Shortcuts"],
+  ["Up, Down", "Go to slide"], ["Double-click", "Edit text"], ["Enter", "Finish editing"], ["Esc", "Deselect"], ["Tab", "Select next element"], ["Cmd+Scroll, Cmd+0", "Zoom, fit"], ["Cmd+Enter", "Present from this slide"], ["Shift+Cmd+Enter", "Present from the start"], ["Cmd+\\", "Toggle panels"], ["Shift+Cmd+\\", "Toggle filmstrip"], ["Cmd+/", "Shortcuts"],
 ];
 // 슬라이드 원문에서 노트(aside[data-notes])의 글자만 꺼낸다. 앞뒤 공백은 보기용으로만 뗀다.
 const noteOf = (html: string) => {
@@ -43,9 +43,7 @@ export function Editor({ id }: { id: string }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ key: string; text: string } | null>(null);
-  const [notesOpen, setNotesOpen] = useState(() => localStorage.getItem("slidekit:notesOpen") !== "0");
   const [notesH, setNotesH] = useState(() => Number(localStorage.getItem("slidekit:notesH")) || 140);
-  useEffect(() => { localStorage.setItem("slidekit:notesOpen", notesOpen ? "1" : "0"); }, [notesOpen]);
   useEffect(() => { localStorage.setItem("slidekit:notesH", String(notesH)); }, [notesH]);
   useEffect(() => { setDraft(null); }, [index, selId]);
 
@@ -363,7 +361,6 @@ export function Editor({ id }: { id: string }) {
       e.preventDefault();
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "\\", metaKey: e.metaKey, ctrlKey: e.ctrlKey, cancelable: true }));
     } else if (mod && k === "s") { e.preventDefault(); save(); }
-    else if (mod && k === "e") { e.preventDefault(); setNotesOpen((v) => !v); }
     else if (mod && e.shiftKey && (k === "|" || k === "\\")) { e.preventDefault(); toggleFilm(); }
     else if (mod && k === "/") { e.preventDefault(); setHelp((v) => !v); }
     else if (mod && e.key === "Enter") { e.preventDefault(); present(e.shiftKey); }
@@ -449,35 +446,27 @@ export function Editor({ id }: { id: string }) {
           onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
           onComment={postComment} onMarker={(cid) => { setTab("comments"); const c = comments.find((x) => x.id === cid); if (c) jump(c); }} />
         </div>
-        <div className="shrink-0 border-t border-border" style={{ height: notesOpen ? notesH : undefined }}>
-          {notesOpen && (
-            <div
-              className="-mt-1 h-2 cursor-row-resize"
-              onPointerDown={(e) => {
-                const y0 = e.clientY, h0 = notesH;
-                const mv = (m: PointerEvent) => setNotesH(Math.max(64, Math.min(window.innerHeight * 0.6, h0 + y0 - m.clientY)));
-                const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
-                window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
-              }}
-            />
-          )}
-          <div className="flex h-7 items-center gap-1 px-3">
+        <div className="shrink-0 border-t border-border" style={{ height: notesH }}>
+          <div
+            className="-mt-1 h-2 cursor-row-resize"
+            onPointerDown={(e) => {
+              const y0 = e.clientY, h0 = notesH;
+              const mv = (m: PointerEvent) => setNotesH(Math.max(64, Math.min(window.innerHeight * 0.6, h0 + y0 - m.clientY)));
+              const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); };
+              window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+            }}
+          />
+          <div className="flex h-7 items-center px-3">
             <span className="text-caption text-muted-foreground">Notes</span>
-            <span className="ml-auto" />
-            <Tooltip content="Toggle notes Cmd+E" side="top">
-              <Button aria-label="Toggle notes" variant="ghost" size="icon-compact" onClick={() => setNotesOpen((v) => !v)}>{notesOpen ? <ChevronDown /> : <ChevronUp />}</Button>
-            </Tooltip>
           </div>
-          {notesOpen && (
-            <div className="px-2 pb-2" style={{ height: notesH - 36 }}>
-              <TextArea
-                className="h-full"
-                placeholder="Speaker notes (Markdown)"
-                value={draft?.key === units[index]?.key ? draft.text : noteOf(units[index]?.html ?? "")}
-                onChange={(e) => { setDraft({ key: units[index].key, text: e.target.value }); notes(e.target.value); }}
-              />
-            </div>
-          )}
+          <div className="px-2 pb-2" style={{ height: notesH - 36 }}>
+            <TextArea
+              className="h-full"
+              placeholder="Speaker notes (Markdown)"
+              value={draft?.key === units[index]?.key ? draft.text : noteOf(units[index]?.html ?? "")}
+              onChange={(e) => { setDraft({ key: units[index].key, text: e.target.value }); notes(e.target.value); }}
+            />
+          </div>
         </div>
         </div>
       </Shell>

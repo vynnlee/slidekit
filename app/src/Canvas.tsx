@@ -5,7 +5,7 @@ import { TextArea } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
 import { byPath, previewHtml, serializeSlide, type Unit } from "@/lib/deck-source";
 import { childToward, isLeaf, isLockedDeep, pick as pickEl, siblings } from "@/lib/selection";
-import { canMove, canResize, fixSize, localScale, moveBy, readTranslate, writeTranslate } from "@/lib/move";
+import { canMove, canResize, fixSize, moveBy, readTranslate, toLocal, writeTranslate } from "@/lib/move";
 import { lockAxis, snapMove, snapResize, toSlide, type Gap, type Guide, type Rect } from "@/lib/guides";
 import { CommentPin } from "./CommentPin";
 import { CommentComposer } from "./CommentComposer";
@@ -272,7 +272,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     const start = toSlide(el.getBoundingClientRect(), sr, ks);
     const cands = siblings<Element>(sl, el).filter((n) => n !== el && n.getBoundingClientRect().width > 0 && getComputedStyle(n).display !== "none").map((n) => toSlide(n.getBoundingClientRect(), sr, ks));
     const x0 = e.clientX, y0 = e.clientY;
-    const ls = localScale(el) / ks || 1;
+    const [k] = toLocal(el, 1, 0); // 슬라이드 1px당 로컬 px(조상 배율)
     fixSize(el);
     let moved = false;
     const move = (m: PointerEvent) => {
@@ -289,14 +289,14 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       const rect: Rect = { x: edges.l ? start.x + start.w - nw : m.altKey ? start.x + (start.w - nw) / 2 : start.x, y: edges.t ? start.y + start.h - nh : m.altKey ? start.y + (start.h - nh) / 2 : start.y, w: nw, h: nh };
       const snap = snapResize(rect, edges, cands, 6 / ks, { ratio });
       const fw = snap.rect.w, fh = snap.rect.h;
-      if (edges.l || edges.r) el.style.width = `${Math.max(1, w0 + (fw - start.w) / ls)}px`;
-      if (!textOnly && (edges.t || edges.b)) el.style.height = `${Math.max(1, h0 + (fh - start.h) / ls)}px`;
+      if (edges.l || edges.r) el.style.width = `${Math.max(1, w0 + (fw - start.w) * k)}px`;
+      if (!textOnly && (edges.t || edges.b)) el.style.height = `${Math.max(1, h0 + (fh - start.h) * k)}px`;
       // 고정할 변이 움직이지 않도록 측정해서 translate를 보정한다
       writeTranslate(el, t0[0], t0[1]);
       const now = toSlide(el.getBoundingClientRect(), sr, ks);
       const wantX = edges.l ? start.x + start.w - now.w : m.altKey ? start.x + start.w / 2 - now.w / 2 : start.x;
       const wantY = edges.t ? start.y + start.h - now.h : m.altKey ? start.y + start.h / 2 - now.h / 2 : start.y;
-      writeTranslate(el, t0[0] + (wantX - now.x) / ls, t0[1] + (wantY - now.y) / ls);
+      writeTranslate(el, t0[0] + (wantX - now.x) * k, t0[1] + (wantY - now.y) * k);
       drawGuides(sr, ks, snap.guides, snap.gaps);
     };
     const finish = (cancel: boolean) => {
@@ -341,8 +341,8 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       const sl = cur()!, sr = sl.getBoundingClientRect();
       const mv: Rect = { ...g.start, x: g.start.x + dx / g.ks, y: g.start.y + dy / g.ks };
       const snap = snapMove(mv, g.cands, 6 / g.ks, { lock: lock?.axis, frame: { x: 0, y: 0, w: 1920, h: 1080 } });
-      const ls = localScale(g.el) / g.ks || 1; // 화면 배율과 로컬 배율의 비(보통 1)
-      writeTranslate(g.el, g.t0[0] + (dx / g.ks + snap.dx) / ls, g.t0[1] + (dy / g.ks + snap.dy) / ls);
+      const [lx, ly] = toLocal(g.el, dx / g.ks + snap.dx, dy / g.ks + snap.dy); // 회전한 조상도 거꾸로 돌려 준다
+      writeTranslate(g.el, g.t0[0] + lx, g.t0[1] + ly);
       drawGuides(sr, g.ks, snap.guides, snap.gaps);
       e.preventDefault();
     }, true);

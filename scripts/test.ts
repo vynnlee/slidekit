@@ -79,6 +79,9 @@ const steps: Step[] = [
   browser("export", "app/test/export.cjs", "dry", DRY),
   // 인터넷과 uv가 필요해 --slow 또는 --only로만 돈다.
   // 코멘트 화면 스크린샷(눈으로 보는 용도, 통과 기준 없음). --only ux-shots로 돌리면 /tmp/slidekit-ux-shots/<폭>/에 저장된다.
+  // 큰 덱(80장, Layers 1000행)에서 편집기 응답 시간. 수치를 찍는다. --slow 또는 --only로만 돈다.
+  { ...browser("editor-save-shots", "scripts/ux-shots-save-failure.cjs", "app", APP, { OUT: "/tmp/slidekit-ux-shots/save-failure" }), slow: true }, // 저장 실패 화면 캡처(1440, 390)
+  { ...browser("editor-perf", "app/test/editor-perf.cjs", "app", APP), slow: true },
   { ...browser("ux-shots-1440", "scripts/ux-shots-comments2.cjs", "app", APP, { VIEWPORT: "1440x900", OUT: "/tmp/slidekit-ux-shots/1440" }), slow: true },
   { ...browser("ux-shots-390", "scripts/ux-shots-comments2.cjs", "app", APP, { VIEWPORT: "390x844", OUT: "/tmp/slidekit-ux-shots/390" }), slow: true },
   // 덱 30개 목록의 부하 한도 검사(동시에 올라 있는 썸네일 수와 브라우저 메모리). 측정이 길어 --slow 또는 --only로만 돈다.

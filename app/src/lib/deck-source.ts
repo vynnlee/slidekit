@@ -113,12 +113,20 @@ export function duplicateHtml(html: string) {
 }
 
 // 요소 경로: 슬라이드 아래에서 `tag:nth-of-type(n)`을 ` > `로 잇는다.
-export function pathOf(slide: Element, el: Element) {
+// memo를 주면 같은 부모의 형제를 한 번만 센다(바뀌지 않는 DOM에서 요소 수천 개의 경로를 구할 때: 찾기, 넘침 검사).
+export type PathMemo = Map<Element, { n: number; of: number }>;
+export function pathOf(slide: Element, el: Element, memo?: PathMemo) {
   const parts: string[] = [];
   for (let e: Element | null = el; e && e !== slide; e = e.parentElement) {
     const tag = e.tagName.toLowerCase();
-    const same = [...(e.parentElement?.children ?? [])].filter((x) => x.tagName === e!.tagName);
-    parts.unshift(same.length > 1 ? `${tag}:nth-of-type(${same.indexOf(e) + 1})` : tag);
+    let v = memo?.get(e);
+    if (!v) {
+      const seen = new Map<string, number>(), sibs = [...(e.parentElement?.children ?? [])];
+      for (const x of sibs) { const c = (seen.get(x.tagName) ?? 0) + 1; seen.set(x.tagName, c); if (memo) memo.set(x, { n: c, of: 0 }); else if (x === e) v = { n: c, of: 0 }; }
+      if (memo) { for (const x of sibs) memo.get(x)!.of = seen.get(x.tagName)!; v = memo.get(e); } else if (v) v.of = seen.get(e.tagName)!;
+      v ??= { n: 1, of: 1 }; // 부모가 없는 요소(떼어 낸 것)
+    }
+    parts.unshift(v.of > 1 ? `${tag}:nth-of-type(${v.n})` : tag);
   }
   return parts.join(" > ");
 }

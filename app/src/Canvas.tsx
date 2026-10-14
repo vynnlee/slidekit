@@ -259,15 +259,18 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
 
   // 넘친 요소 검사: 0.6초마다 현재 슬라이드를 훑고, 결과가 달라졌을 때만 알린다(상자 위치는 place가 매 프레임 따라간다).
   useEffect(() => {
-    let sig = "";
-    const t = setInterval(() => {
+    let sig = "", t: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      const t0 = performance.now();
       const sl = cur();
       const list = sl && !drag.current && !editing.current ? findOverflow(sl) : overflowList.current;
       overflowList.current = list;
       const s = list.map((o) => o.kind + (o.el.id || o.el.tagName) + Math.round(o.el.getBoundingClientRect().width)).join("|") + ":" + P.current.index;
       if (s !== sig) { sig = s; P.current.onOverflow(list); }
-    }, 600);
-    return () => clearInterval(t);
+      t = setTimeout(tick, Math.max(600, (performance.now() - t0) * 10)); // 훑는 데 오래 걸리는 큰 슬라이드에서는 간격을 늘려 CPU를 10% 안쪽으로 둔다
+    };
+    t = setTimeout(tick, 600);
+    return () => clearTimeout(t);
   }, []);
 
   const goto = useCallback(() => {

@@ -1,7 +1,7 @@
 // 덱 전체 찾기와 바꾸기(Cmd+F). 슬라이드 글자(units의 html)를 DOM으로 읽어 텍스트 노드에서만 찾고 바꾸므로 태그와 속성은 건드리지 않는다.
 // 바꾸면 텍스트 노드의 글자만 바뀌어 인라인 서식(strong, em 등)이 보존된다. 일치는 텍스트 노드 하나 안에서만 잡는다(서식 경계를 넘는 글은 찾지 않는다).
 import type { Unit } from "@/lib/deck-source";
-import { pathOf } from "@/lib/deck-source";
+import { pathOf, type PathMemo } from "@/lib/deck-source";
 
 export type FindOpts = { matchCase?: boolean; notes?: boolean };
 export type Match = {
@@ -46,11 +46,12 @@ export function findInUnits(units: Unit[], query: string, o: FindOpts = {}): Mat
   units.forEach((u, slide) => {
     const root = parse(u.html);
     if (!root) return;
+    const memo: PathMemo = new Map();
     for (const { n, el, k, notes } of textNodes(root, o)) {
       const text = n.data;
       for (const m of text.matchAll(rx(query, o))) {
         const at = m.index!;
-        out.push({ slide, path: pathOf(root, el), node: k, at, inNotes: notes, context: text.slice(Math.max(0, at - 12), at + query.length + 12).replace(/\s+/g, " ") });
+        out.push({ slide, path: pathOf(root, el, memo), node: k, at, inNotes: notes, context: text.slice(Math.max(0, at - 12), at + query.length + 12).replace(/\s+/g, " ") });
       }
     }
   });

@@ -22,15 +22,27 @@ export function findOverflow(slide: Element): Overflow[] {
   const sr = slide.getBoundingClientRect();
   if (!sr.width) return out;
   const TOL = 2, k = 1920 / sr.width;
+  // 형제가 많아도 부모마다 한 번만 센다(요소 1000개가 모두 넘칠 때 제곱으로 느려지지 않게). 자기 완결형이어야 해서 deck-source의 pathOf를 쓰지 않는다.
+  const nth = new Map<Element, { n: number; of: number }>();
+  const nthOf = (e: Element) => {
+    let v = nth.get(e);
+    if (!v) {
+      const seen = new Map<string, number>(), sibs = [...(e.parentElement?.children ?? [])];
+      for (const x of sibs) { const c = (seen.get(x.tagName) ?? 0) + 1; seen.set(x.tagName, c); nth.set(x, { n: c, of: 0 }); }
+      for (const x of sibs) nth.get(x)!.of = seen.get(x.tagName)!;
+      v = nth.get(e)!;
+    }
+    return v;
+  };
   const pathOf = (el: Element) => {
     const parts: string[] = [];
     for (let e: Element | null = el; e && e !== slide; e = e.parentElement) {
-      const tag = e.tagName.toLowerCase();
-      const same = [...(e.parentElement?.children ?? [])].filter((x) => x.tagName === e!.tagName);
-      parts.unshift(same.length > 1 ? `${tag}:nth-of-type(${same.indexOf(e) + 1})` : tag);
+      const tag = e.tagName.toLowerCase(), v = nthOf(e);
+      parts.unshift(v.of > 1 ? `${tag}:nth-of-type(${v.n})` : tag);
     }
     return parts.join(" > ");
   };
+  const textOf = (el: Element) => (el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 40);
   const over = (r: DOMRect) => {
     const dx = r.left < sr.left - TOL ? r.left - sr.left : r.right > sr.right + TOL ? r.right - sr.right : 0;
     const dy = r.top < sr.top - TOL ? r.top - sr.top : r.bottom > sr.bottom + TOL ? r.bottom - sr.bottom : 0;
@@ -44,11 +56,10 @@ export function findOverflow(slide: Element): Overflow[] {
       const r = el.getBoundingClientRect();
       if (!r.width && !r.height) { walk(el, parentOut); continue; }
       const o = over(r);
-      const text = (el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 40);
-      if (o.out && !parentOut) out.push({ el, kind: "outside", dx: o.dx, dy: o.dy, path: pathOf(el), text });
+      if (o.out && !parentOut) out.push({ el, kind: "outside", dx: o.dx, dy: o.dy, path: pathOf(el), text: textOf(el) });
       else if (!o.out && (/^(hidden|clip)$/.test(cs.overflowX) || /^(hidden|clip)$/.test(cs.overflowY))) {
         const he = el as HTMLElement;
-        if (he.scrollWidth > he.clientWidth + TOL || he.scrollHeight > he.clientHeight + TOL) out.push({ el, kind: "clipped", dx: Math.round((he.scrollWidth - he.clientWidth) * k), dy: Math.round((he.scrollHeight - he.clientHeight) * k), path: pathOf(el), text });
+        if (he.scrollWidth > he.clientWidth + TOL || he.scrollHeight > he.clientHeight + TOL) out.push({ el, kind: "clipped", dx: Math.round((he.scrollWidth - he.clientWidth) * k), dy: Math.round((he.scrollHeight - he.clientHeight) * k), path: pathOf(el), text: textOf(el) });
       }
       walk(el, parentOut || o.out);
     }

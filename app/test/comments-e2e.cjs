@@ -41,7 +41,7 @@ const json = { 'Content-Type': 'application/json' };
 
     // C 키로 작성창을 열고 Cmd+Enter로 전송
     await fr().locator('[data-active] h1, [data-active] h2').first().click({ modifiers: ['Meta'] });
-    await page.getByRole('button', { name: 'Show in layers' }).waitFor({ timeout: 5000 }).catch(() => {}); // 선택 헤더가 보이면 선택 완료
+    await page.locator('.border-2.border-focus-ring').first().waitFor({ state: 'visible', timeout: 3000 }).catch(() => {}); // 선택 윤곽이 보이면 선택 완료
     await page.keyboard.press('c');
     let box = page.getByRole('textbox', { name: 'Comment' });
     await box.waitFor({ timeout: 1500 }).catch(() => {});
@@ -93,8 +93,8 @@ const json = { 'Content-Type': 'application/json' };
     // 답: 패널, 핀, 알림
     check('답이 도착하면 Replied 상태', await stateIs('replied'));
     check('답변 본문이 코멘트 아래에 보인다', /E2E 답변입니다/.test(await items.first().textContent()));
-    await page.getByTestId('reply-toast').waitFor({ timeout: 5000 }).then(() => check('답변 도착 알림(토스트)이 뜬다', true), () => check('답변 도착 알림(토스트)이 뜬다', false));
-    check('토스트에 슬라이드 번호', /Claude replied on slide \d+/.test((await page.getByTestId('reply-toast').first().textContent().catch(() => '')) ?? ''));
+    const toastText = page.getByText(/Claude replied on slide \d+/);
+    await toastText.first().waitFor({ timeout: 5000 }).then(() => check('답변 도착 알림(토스트)이 뜨고 슬라이드 번호가 있다', true), () => check('답변 도착 알림(토스트)이 뜨고 슬라이드 번호가 있다', false));
     const saved = JSON.parse(fs.readFileSync(t.commentsFile, 'utf8'));
     check('comments.json에 deliveredAt, done, reply', saved.length === 1 && !!saved[0].deliveredAt && saved[0].status === 'done' && saved[0].reply === 'E2E 답변입니다', saved);
 

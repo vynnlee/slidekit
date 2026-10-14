@@ -23,6 +23,7 @@ import { Card, CardGroup, CardHeader, CardTitle, CardDescription } from "@/compo
 import { textual } from "./Canvas";
 import { iconOf, nameOf } from "./LayerTree";
 import { TokensPanel } from "./TokensPanel";
+import { CommentsPanel } from "./CommentsPanel";
 import type { Comment } from "@/lib/deck";
 
 type Items = readonly (readonly [string, string])[];
@@ -89,6 +90,10 @@ type Props = {
   onTab(t: string): void;
   comments: Comment[];
   onJump(c: Comment): void;
+  channel: boolean | null;
+  onResolve(c: Comment, resolved: boolean): void;
+  hoverId: string | null;
+  onHover(id: string | null): void;
   onStyle(prop: string, value: string): void;
   onAttr(name: string, value: string | null): void;
   onElAttr(name: string, value: string | null): void;
@@ -225,6 +230,7 @@ export function Inspector(p: Props) {
   const bgBlur = /blur\(([\d.]+)px\)/.exec(val("backdrop-filter"))?.[1];
 
   const kind = p.slide?.getAttribute("data-slide") ?? "content";
+  const openCount = p.comments.filter((c) => !c.resolved && c.status === "open").length;
   const steps = p.slide?.getAttribute("data-steps") ?? "";
   const bgNone = !p.slide?.style.getPropertyValue("background-color");
   const autoSteps = Math.max(1, ...[...(p.slide?.querySelectorAll("[data-step]") ?? [])].map((e) => parseInt(e.getAttribute("data-step") ?? "1", 10) || 1));
@@ -233,7 +239,7 @@ export function Inspector(p: Props) {
     <Tabs value={p.tab} onValueChange={p.onTab}>
       <TabsList>
         <TabItem value="props" label="Design" />
-        <TabItem value="comments" label={`Comments${p.comments.length ? " " + p.comments.length : ""}`} />
+        <TabItem value="comments" label={`Comments${openCount ? " " + openCount : ""}`} />
       </TabsList>
       <TabPanel value="props">
         {!el ? (
@@ -508,22 +514,7 @@ export function Inspector(p: Props) {
         )}
       </TabPanel>
       <TabPanel value="comments">
-        <div className="flex flex-col gap-2 pt-3">
-          {p.comments.length === 0 && <p className="text-caption text-muted-foreground">Select an element and leave a comment</p>}
-          <CardGroup columns={1} separated>
-            {p.comments.map((c) => (
-              <Card key={c.id} onClick={() => p.onJump(c)} label={c.text}>
-                <CardHeader>
-                  <CardTitle className="whitespace-pre-wrap">{c.text}</CardTitle>
-                  <CardDescription className="whitespace-pre-wrap">
-                    {c.slideDeleted ? "Slide deleted" : `Slide ${c.slide}`} {c.excerpt}
-                    {c.reply ? `\n${c.reply}` : c.status === "open" ? "\nWaiting for a reply" : ""}
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-            ))}
-          </CardGroup>
-        </div>
+        <CommentsPanel comments={p.comments} channel={p.channel} onJump={p.onJump} onResolve={p.onResolve} hoverId={p.hoverId} onHover={p.onHover} />
       </TabPanel>
     </Tabs>
   );

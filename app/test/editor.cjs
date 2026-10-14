@@ -366,6 +366,14 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('단축키 안내가 그룹으로 보임', (await page.getByText('Select', { exact: true }).count()) >= 1 && (await page.locator('kbd').count()) > 10);
   await page.keyboard.press('Escape'); await sleep(300);
 
+  // 코멘트: 선택 요소에서 C 키로 작성창이 열리고 Esc로 닫힌다
+  await focusBody(); await page.keyboard.press('Escape'); await page.keyboard.press('Tab'); await sleep(400);
+  await focusBody(); await page.keyboard.press('c'); await sleep(400);
+  check('C 키로 코멘트 작성창 열림', (await page.getByRole('group', { name: 'New comment' }).count()) === 1);
+  await page.getByPlaceholder('Tell Claude what to change').press('Escape'); await sleep(300);
+  check('Esc로 작성창 닫힘', (await page.getByRole('group', { name: 'New comment' }).count()) === 0);
+  await focusBody(); await page.keyboard.press('Escape');
+
   // 노트 pane은 접지 않는다
   check('노트 pane에 접기 버튼이 없고 입력창이 항상 보임', (await page.getByRole('button', { name: /notes/i }).count()) === 0 && (await page.getByPlaceholder('Speaker notes (Markdown)').isVisible()));
   // 자동 저장: Cmd+S 없이 1.5초 뒤 저장된다

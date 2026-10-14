@@ -13,6 +13,10 @@ import { Inspector } from "./Inspector";
 import { go } from "./App";
 import { byPath, compose, duplicateHtml, newKey, newSlideHtml, pathOf, splitDeck, type Unit } from "@/lib/deck-source";
 import { ExportMenu } from "./ExportMenu";
+import { ChannelBadge } from "./CommentsPanel";
+import { ReplyToasts } from "./ReplyToasts";
+import { useCommentsLive } from "@/lib/use-comments-live";
+import { numbering } from "@/lib/comment-state";
 import { firstChild, isLeaf, parentOf, siblings } from "@/lib/selection";
 import { startPresentation } from "@/lib/present";
 import type { Comment, DeckEntry } from "@/lib/deck";
@@ -63,7 +67,6 @@ export function Editor({ id }: { id: string }) {
   const [changed, setChanged] = useState(false); // 열어 둔 사이 파일이 밖에서 바뀜
   const [help, setHelp] = useState(false);
   const [palette, setPalette] = useState(false);
-  const [comments, setComments] = useState<Comment[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ key: string; text: string } | null>(null);
   const [notesH, setNotesH] = useState(() => Number(localStorage.getItem("slidekit:notesH")) || 140);
@@ -81,6 +84,10 @@ export function Editor({ id }: { id: string }) {
   unitsRef.current = units; indexRef.current = index; shellRef.current = shell;
 
   const folder = deck?.folder ?? "";
+  const live = useCommentsLive(folder || null);
+  const comments = live.comments;
+  const nums = useMemo(() => numbering(comments), [comments]);
+  const [hoverId, setHoverId] = useState<string | null>(null);
   const text = useMemo(() => (shell ? compose({ ...shell, units }) : ""), [shell, units]);
   const dirty = !!shell && text !== saved;
   const dirtyRef = useRef(dirty);
@@ -115,7 +122,6 @@ export function Editor({ id }: { id: string }) {
       setDeck(d);
       if (d) {
         load(d.folder).catch((e) => setErr(String(e)));
-        fetch(`/api/comments?deck=${d.folder}`).then((r) => { if (!r.ok) throw new Error(`Could not load comments (${r.status})`); return r.json(); }).then(setComments).catch((e) => setErr(String(e.message ?? e)));
       }
     }).catch((e) => setErr(String(e.message ?? e)));
   }, [id, load]);
@@ -127,10 +133,6 @@ export function Editor({ id }: { id: string }) {
     const on = (type: string, fn: (d: any) => void) => es.addEventListener(type, (e) => {
       try { const d = JSON.parse((e as MessageEvent).data); if (d.deck === folder) fn(d); } catch {}
     });
-    const upsert = (c: Comment) => setComments((l) => (l.some((x) => x.id === c.id) ? l.map((x) => (x.id === c.id ? c : x)) : [...l, c]));
-    on("comment", (d) => upsert(d.comment));
-    on("reply", (d) => upsert(d.comment));
-    on("comments", (d) => setComments(d.comments));
     on("deck-changed", async () => {
       try {
         const res = await fetch(`/api/decks/${folder}/source`);
@@ -363,9 +365,9 @@ export function Editor({ id }: { id: string }) {
     if (!s) return;
     const body = { deck: deck.folder, slide: indexRef.current + 1, path: pathOf(s, sel), excerpt: (sel.textContent ?? "").trim().slice(0, 80), text: t };
     const r = await fetch("/api/comments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    if (!r.ok) return setErr("Could not send the comment");
+    if (!r.ok) throw new Error(`Could not send the comment (${r.status})`); // 작성창이 글을 남기고 다시 시도하게 한다
     const { id } = await r.json();
-    setComments((l) => (l.some((c) => c.id === id) ? l : [...l, { id, slide: body.slide, path: body.path, excerpt: body.excerpt, text: t, status: "open", createdAt: new Date().toISOString() }]));
+    live.upsert({ id, slide: body.slide, path: body.path, excerpt: body.excerpt, text: t, status: "open", createdAt: new Date().toISOString() });
     setTab("comments");
   };
   const slideOf = (n: number) => unitsRef.current.findIndex((u) => origin.current.get(u.key) === n);
@@ -397,6 +399,7 @@ export function Editor({ id }: { id: string }) {
     else if (mod && (k === "=" || k === "+")) { e.preventDefault(); canvas.current?.zoom(1); }
     else if (mod && k === "-") { e.preventDefault(); canvas.current?.zoom(-1); }
     else if (!mod && e.key === "Tab") { if (e.view === window && t !== document.body) return; e.preventDefault(); cycle(e.shiftKey ? -1 : 1); } // 패널 안에서는 브라우저의 Tab 이동을 지킨다
+    else if (!mod && !e.shiftKey && k === "c" && sel && (t === document.body || e.view !== window)) { e.preventDefault(); canvas.current?.compose(); }
     else if (mod && k === "z") { e.preventDefault(); e.shiftKey ? restore(future.current, past.current) : restore(past.current, future.current); }
     else if (mod && k === "d") { e.preventDefault(); dupSelected(); }
     else if (!mod && (e.key === "Delete" || e.key === "Backspace")) { if (!sel) return; e.preventDefault(); delSelected(); }
@@ -447,6 +450,7 @@ export function Editor({ id }: { id: string }) {
             {status === "error"
               ? <Button variant="ghost" size="compact" onClick={() => save()}>Save failed. Retry</Button>
               : <span className="text-caption text-muted-foreground">{label}</span>}
+            <ChannelBadge connected={live.channel} />
             {changed && (
               <>
                 <span className="text-caption text-muted-foreground">File changed outside the editor</span>
@@ -472,7 +476,7 @@ export function Editor({ id }: { id: string }) {
         }
         right={
           <Inspector sel={sel} slide={canvas.current?.slide(index) ?? null} selId={selId} tab={tab} onTab={setTab}
-            comments={comments} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
+            comments={comments} channel={live.channel} onResolve={live.resolve} hoverId={hoverId} onHover={setHoverId} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
         }
       >
         <div className="flex h-full flex-col">
@@ -484,6 +488,7 @@ export function Editor({ id }: { id: string }) {
         <Canvas ref={canvas} shell={shell} folder={folder} units={units} index={index} sel={sel}
           comments={comments.filter((c) => !c.slideDeleted && c.slide === origin.current.get(units[index]?.key ?? ""))}
           onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
+          numbers={nums} hoverId={hoverId} onHover={setHoverId} channel={live.channel}
           onComment={postComment} onMarker={(cid) => { setTab("comments"); const c = comments.find((x) => x.id === cid); if (c) jump(c); }} />
         </div>
         <div className="shrink-0 border-t border-border" style={{ height: notesH }}>
@@ -510,6 +515,7 @@ export function Editor({ id }: { id: string }) {
         </div>
         </div>
       </Shell>
+      <ReplyToasts comments={comments} onView={jump} />
       <CommandMenuDialog open={palette} onOpenChange={setPalette} title="Command palette" description="Go to a slide or run an action">
         <CommandMenu items={paletteItems}>
           <CommandMenuInput placeholder="Slide number, title or action" />

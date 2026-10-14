@@ -5,6 +5,9 @@ import { TextArea } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
 import { byPath, previewHtml, serializeSlide, type Unit } from "@/lib/deck-source";
 import { childToward, isLeaf, pick as pickEl } from "@/lib/selection";
+import { CommentPin } from "./CommentPin";
+import { CommentComposer } from "./CommentComposer";
+import { nameOf } from "./LayerTree";
 import type { Comment } from "@/lib/deck";
 
 export type CanvasApi = {
@@ -15,6 +18,7 @@ export type CanvasApi = {
   edit(el: Element): void;
   select(el: Element | null): void;
   zoom(dir: 1 | -1 | 0): void; // 0은 맞춤
+  compose(): void; // 선택한 요소에 코멘트 작성창을 연다
   reload(): void; // 덱 head(prefix)가 바뀐 뒤 현재 모델로 캔버스를 다시 만든다
   document(): Document | null;
   hover(el: Element | null): void; // 레이어 목록에서 가리킨 요소를 캔버스에 외곽선으로 보인다
@@ -28,6 +32,10 @@ type Props = {
   index: number;
   sel: Element | null;
   comments: Comment[];
+  numbers: Map<string, number>; // 목록과 같은 코멘트 번호
+  hoverId: string | null;
+  onHover(id: string | null): void;
+  channel: boolean | null;
   onSel(el: Element | null): void;
   onCommit(coalesce?: string): void;
   onKey(e: KeyboardEvent): void;
@@ -53,7 +61,6 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   const [url, setUrl] = useState("");
   const urlRef = useRef("");
   const [composing, setComposing] = useState(false);
-  const [text, setText] = useState("");
   const shown = useRef<{ keys: string[]; html: Map<string, string> }>({ keys: [], html: new Map() });
   const editing = useRef<HTMLElement | null>(null);
   const hover = useRef<Element | null>(null);
@@ -103,6 +110,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     edit: (el) => startEdit(el as HTMLElement),
     select: (el) => P.current.onSel(el),
     zoom: (d) => zoomBy(d),
+    compose: () => setComposing(true),
     reload: () => build(P.current.units),
     document: () => doc(),
     hover: (el) => { hover.current = el; },
@@ -257,7 +265,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     markers.current?.querySelectorAll<HTMLElement>("[data-path]").forEach((m) => {
       const t = sl ? byPath(sl, m.dataset.path!) : null;
       const mr = put(m, t);
-      if (mr) m.style.transform = `translate(${mr.right - 6}px,${mr.top - 6}px)`;
+      if (mr) m.style.transform = `translate(${mr.right - 6 + Number(m.dataset.off ?? 0) * 22}px,${mr.top - 6}px)`;
     });
   }, [size.w, size.h, zoom, composing]);
   useEffect(() => { place(); const t = setInterval(place, 60); return () => clearInterval(t); });
@@ -275,13 +283,10 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
           <div ref={selBox} className="absolute left-0 top-0 hidden border-2 border-focus-ring" />
           <div ref={sizeTag} aria-hidden="true" className="absolute left-0 top-0 hidden whitespace-nowrap rounded bg-focus-ring px-1.5 py-0.5 text-micro tabular-nums text-white" />
           <div ref={markers}>
-            {here.map((c) => (
-              <div key={c.id} data-path={c.path} className="pointer-events-auto absolute left-0 top-0 hidden">
-                <button
-                  aria-label="Comment"
-                  onClick={() => p.onMarker(c.id)}
-                  className={`block h-3 w-3 rounded-full ring-2 ring-black ${c.status === "done" ? "bg-muted-foreground" : "bg-focus-ring"}`}
-                />
+            {here.map((c, ci) => (
+              <div key={c.id} data-path={c.path} data-off={here.slice(0, ci).filter((o) => o.path === c.path).length} className="pointer-events-auto absolute left-0 top-0 hidden">
+                <CommentPin comment={c} number={p.numbers.get(c.id) ?? ci + 1} highlighted={p.hoverId === c.id}
+                  onClick={() => p.onMarker(c.id)} onHover={(on) => p.onHover(on ? c.id : null)} />
               </div>
             ))}
           </div>
@@ -293,14 +298,9 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
             <Tooltip content="Delete" side="top"><Button aria-label="Delete" variant="ghost" size="icon-compact" onClick={p.onDelete}><Trash2 /></Button></Tooltip>
           </div>
           {composing && p.sel && (
-            <div ref={pop} className="pointer-events-auto absolute left-0 top-0 flex w-64 flex-col gap-1 rounded-lg bg-surface-3 p-1.5 shadow-surface-3">
-              <TextArea autoFocus rows={3} value={text} placeholder="Comment" onChange={(e) => setText(e.target.value)}
-                onKeyDown={(e) => {
-                  e.stopPropagation();
-                  if (e.key === "Escape") setComposing(false);
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && text.trim()) send();
-                }} />
-              <Button variant="primary" size="compact" disabled={!text.trim()} onClick={send}>Send</Button>
+            <div ref={pop} className="pointer-events-auto absolute left-0 top-0 w-64">
+              <CommentComposer channel={p.channel} target={nameOf(p.sel)} onCancel={() => setComposing(false)}
+                onSend={async (t) => { await p.onComment(t); setComposing(false); }} />
             </div>
           )}
         </div>
@@ -314,9 +314,4 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     </div>
   );
 
-  async function send() {
-    await p.onComment(text.trim());
-    setText("");
-    setComposing(false);
-  }
 });

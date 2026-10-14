@@ -131,6 +131,15 @@ export function Editor({ id }: { id: string }) {
     return () => clearTimeout(t);
   }, [text, dirty, changed, status]); // eslint-disable-line
 
+  // 저장이 실패한 동안은 10초마다, 그리고 네트워크가 돌아오는 즉시 다시 시도한다(편집 내용은 편집기에 그대로 남아 있다).
+  useEffect(() => {
+    if (status !== "error" || !dirty) return;
+    const t = setTimeout(() => { save(); }, 10000);
+    const on = () => { save(); };
+    window.addEventListener("online", on);
+    return () => { clearTimeout(t); window.removeEventListener("online", on); };
+  }, [status, dirty]); // eslint-disable-line
+
   // 불러오기
   const load = useCallback(async (folder: string, keepIndex = 0) => {
     const res = await fetch(`/api/decks/${folder}/source`);
@@ -531,6 +540,7 @@ export function Editor({ id }: { id: string }) {
   // 저장: 임시 파일에 쓰고 rename은 서버가 한다. 읽은 뒤 파일이 바뀌었으면 409.
   // 저장 요청은 한 번에 하나만 보낸다(자동 저장과 Cmd+S가 겹치면 낡은 base로 409가 나기 때문).
   const inflight = useRef<Promise<boolean> | null>(null);
+  const failToast = useRef(false); // 실패 알림은 연속 실패 중 한 번만
   const save = async (force = false): Promise<boolean> => {
     while (inflight.current) await inflight.current;
     const p = doSave(force);
@@ -556,10 +566,11 @@ export function Editor({ id }: { id: string }) {
       if (!r.ok) throw new Error(String(r.status));
       mtime.current = (await r.json()).mtime;
       origin.current = new Map(us.map((u, i) => [u.key, i + 1]));
-      setSaved(body); setChanged(false); setStatus("idle");
+      setSaved(body); setChanged(false); setStatus("idle"); failToast.current = false;
       return true;
     } catch {
       savedRef.current = prev; setStatus("error");
+      if (!failToast.current) { failToast.current = true; toast("Could not save. Your edits are kept here. Retrying automatically.", { ms: 7000 }); }
       return false;
     }
   };

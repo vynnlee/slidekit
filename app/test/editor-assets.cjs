@@ -87,6 +87,32 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   await focusBody(); for (let i = 0; i < 2; i++) { await page.keyboard.press('Meta+z'); await settle(); }
   check('이미지 추가와 교체 실행 취소', (await inDoc((s) => s.querySelectorAll('img').length)) === imgBefore);
 
+  // 저장 실패: PUT이 500이어도 편집 내용이 남고(Unsaved 유지, 이탈 경고), 알림이 뜨고, 네트워크가 돌아오면 저절로 저장된다. 수동 Retry도 된다.
+  let failPut = true, putCount = 0;
+  await page.route(/\/api\/decks\/[^/]+$/, (route) => { if (route.request().method() === 'PUT') { putCount++; return failPut ? route.fulfill({ status: 500, body: '{}' }) : route.fallback(); } return route.fallback(); });
+  await page.getByPlaceholder('Speaker notes (Markdown)').fill('저장 실패 시험 노트');
+  check('저장 실패 시 Save failed. Retry 단추', await page.getByRole('button', { name: 'Save failed. Retry' }).waitFor({ timeout: 8000 }).then(() => true).catch(() => false));
+  check('저장 실패 알림(영어, 편집 유지, 자동 재시도)', await page.getByText('Could not save. Your edits are kept here. Retrying automatically.').first().waitFor({ timeout: 4000 }).then(() => true).catch(() => false));
+  check('실패 중 이탈 경고(beforeunload)가 켜짐', await page.evaluate(() => { const e = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; }));
+  check('실패 중 노트 내용이 그대로', (await page.getByPlaceholder('Speaker notes (Markdown)').inputValue()) === '저장 실패 시험 노트');
+  check('실패 중 파일은 그대로', !fs.readFileSync(FILE, 'utf8').includes('저장 실패 시험 노트'));
+  failPut = false; await page.evaluate(() => window.dispatchEvent(new Event('online'))); // 네트워크 복구
+  await saveDone();
+  check('복구되면 자동으로 저장됨', fs.readFileSync(FILE, 'utf8').includes('저장 실패 시험 노트') && (await page.getByText('Saved', { exact: true }).count()) > 0);
+  failPut = true; await page.getByPlaceholder('Speaker notes (Markdown)').fill('수동 재시도 노트');
+  await page.getByRole('button', { name: 'Save failed. Retry' }).waitFor({ timeout: 8000 }).catch(() => {});
+  failPut = false; await page.getByRole('button', { name: 'Save failed. Retry' }).click(); await saveDone();
+  check('수동 Retry로 저장됨', fs.readFileSync(FILE, 'utf8').includes('수동 재시도 노트'));
+  // 충돌(409): 편집은 남고 Reload/Overwrite를 고르게 하며, Overwrite하면 저장된다
+  let conflict = true;
+  await page.route(/\/api\/decks\/[^/]+$/, (route) => (route.request().method() === 'PUT' && conflict && !JSON.parse(route.request().postData() || '{}').force ? route.fulfill({ status: 409, body: '{}' }) : route.fallback()));
+  await page.getByPlaceholder('Speaker notes (Markdown)').fill('충돌 시험 노트');
+  check('409면 파일이 바뀌었다는 안내와 Overwrite', await page.getByRole('button', { name: 'Overwrite' }).waitFor({ timeout: 8000 }).then(() => true).catch(() => false));
+  check('409여도 노트 내용이 그대로, Unsaved 유지', (await page.getByPlaceholder('Speaker notes (Markdown)').inputValue()) === '충돌 시험 노트' && !fs.readFileSync(FILE, 'utf8').includes('충돌 시험 노트'));
+  await page.getByRole('button', { name: 'Overwrite' }).click(); await saveDone();
+  check('Overwrite로 저장됨', fs.readFileSync(FILE, 'utf8').includes('충돌 시험 노트'));
+  await page.unroute(/\/api\/decks\/[^/]+$/);
+
   // 슬라이드가 0장인 덱: 오류가 아니라 시작 안내(영어), 없는 덱이 아니므로 Retry는 있다
   const { BASE } = H;
   fs.writeFileSync(FILE, fs.readFileSync(FILE, 'utf8').replace(/\sdata-slide(?==|\s|>)(=("[^"]*"|'[^']*'|[^\s>]*))?/g, '')); // 슬라이드 표시를 모두 떼어 0장으로 만든다(deck-meta는 그대로)

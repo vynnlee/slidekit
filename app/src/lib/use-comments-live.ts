@@ -47,8 +47,8 @@ export function useCommentsLive(folder: string | null) {
     try {
       const r = await fetch("/api/comments/send-all", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deck: folder }) });
       if (!r.ok) throw new Error(String(r.status));
-      const { count } = (await r.json()) as { count: number };
-      toast(count ? `Sent ${count} ${count === 1 ? "comment" : "comments"} to Claude` : "Nothing to send", { ms: TOAST.info });
+      const { count, remaining = 0 } = (await r.json()) as { count: number; remaining?: number };
+      toast(count ? `Sent ${count} ${count === 1 ? "comment" : "comments"} to Claude${remaining ? `, ${remaining} more waiting, press Send all again` : ""}` : "Nothing to send", { ms: remaining ? TOAST.long : TOAST.info });
     } catch { setError("Could not send the comments"); }
   }, [folder]);
 

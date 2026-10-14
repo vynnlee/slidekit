@@ -60,6 +60,20 @@ try {
   const after = (await (await fetch(`${url}/api/comments?deck=${deck}`)).json()) as any[];
   assert(after.filter((c) => c.id === h1 || c.id === h2).every((c) => !c.held && !!c.deliveredAt), "batch marks delivered and clears hold");
   assert(((await (await fetch(`${url}/api/comments/send-all`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deck }) })).json()) as any).count === 0, "second send-all sends nothing");
+  // 상한: 보류가 12개여도 한 번에 10개까지만 가고(알림 하나), 나머지는 다시 누르면 간다
+  const many: string[] = [];
+  for (let i = 0; i < 12; i++) many.push(await mk(`상한 ${String(i).padStart(2, "0")}`, true));
+  const sendAll = async () => (await (await fetch(`${url}/api/comments/send-all`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deck }) })).json()) as any;
+  const batchesBefore = got.filter((g) => g.params?.meta?.kind === "batch").length;
+  const s1 = await sendAll();
+  assert(s1.count === 10 && s1.remaining === 2, `cap ${JSON.stringify(s1)}`);
+  await Bun.sleep(800);
+  const nb = got.filter((g) => g.params?.meta?.kind === "batch");
+  assert(nb.length === batchesBefore + 1 && nb.at(-1).params.meta.count === "10", "exactly one batch notification of 10");
+  const afterCap = (await (await fetch(`${url}/api/comments?deck=${deck}`)).json()) as any[];
+  assert(afterCap.filter((c) => many.includes(c.id) && c.held).length === 2, "the 2 over the cap stay held");
+  const s2 = await sendAll();
+  assert(s2.count === 2 && s2.remaining === 0, `second ${JSON.stringify(s2)}`);
   // 삭제와 되돌리기: restore는 서버가 보관한 코멘트만 되살린다(없는 id는 404)
   const delPost = (path: string, body: unknown) => fetch(`${url}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const before = ((await (await fetch(`${url}/api/comments?deck=${deck}`)).json()) as any[]).length;

@@ -1,6 +1,6 @@
 import { deckFolder } from "./folder";
 import { join } from "node:path";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, watch, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, watch, writeFileSync } from "node:fs";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
@@ -40,24 +40,36 @@ const keyFile = process.env.SLIDEKIT_KEY_FILE ?? join(homedir(), ".config", "sli
 let keyCache: Buffer | null = null;
 /** 서명 키를 쓸 수 없을 때(읽기 불가, 내용 손상). 파일을 덮어쓰지 않고 사람이 읽는 안내를 낸다. */
 export class KeyError extends Error {}
-function key(): Buffer {
-  if (keyCache) return keyCache;
-  let text: string | null = null;
+/** 키 파일을 읽는다. 없으면 null, 읽을 수 없거나 손상됐으면 KeyError. */
+function readKey(): Buffer | null {
+  let text: string;
   try { text = readFileSync(keyFile, "utf8"); }
   catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
-    if (code !== "ENOENT") throw new KeyError(`Cannot read the comment signing key ${keyFile} (${code ?? "error"}). Fix its permissions, or delete it to create a new key. Existing comments will then need Trust.`);
+    if (code === "ENOENT") return null;
+    throw new KeyError(`Cannot read the comment signing key ${keyFile} (${code ?? "error"}). Fix its permissions, or delete it to create a new key. Existing comments will then need Trust.`);
   }
-  if (text !== null) {
-    const k = Buffer.from(text.trim(), "hex");
-    if (k.length < 32) throw new KeyError(`The comment signing key ${keyFile} is damaged. Delete it to create a new key. Existing comments will then need Trust.`);
-    try { if (statSync(keyFile).mode & 0o077) chmodSync(keyFile, 0o600); } catch { /* 소유자가 아니면 그대로 둔다 */ }
-    return (keyCache = k);
-  }
+  const k = Buffer.from(text.trim(), "hex");
+  if (k.length < 32) throw new KeyError(`The comment signing key ${keyFile} is damaged. Delete it to create a new key. Existing comments will then need Trust.`);
+  try { if (statSync(keyFile).mode & 0o077) chmodSync(keyFile, 0o600); } catch { /* 소유자가 아니면 그대로 둔다 */ }
+  return k;
+}
+function key(): Buffer {
+  if (keyCache) return keyCache;
+  const have = readKey();
+  if (have) return (keyCache = have);
+  // 두 프로세스가 동시에 처음 쓰더라도 키가 하나만 남도록, 임시 파일에 다 쓴 뒤 link로 건다(이미 있으면 EEXIST라 먼저 만든 쪽의 키를 읽는다).
+  // 읽는 쪽이 쓰다 만 파일을 보는 일도 없다.
   mkdirSync(dirname(keyFile), { recursive: true, mode: 0o700 });
-  keyCache = randomBytes(32);
-  writeFileSync(keyFile, keyCache.toString("hex") + "\n", { mode: 0o600 });
-  return keyCache;
+  const tmp = `${keyFile}.tmp-${process.pid}-${randomBytes(4).toString("hex")}`;
+  const fresh = randomBytes(32);
+  writeFileSync(tmp, fresh.toString("hex") + "\n", { mode: 0o600 });
+  try { linkSync(tmp, keyFile); keyCache = fresh; }
+  catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+    keyCache = readKey() ?? fresh;
+  } finally { rmSync(tmp, { force: true }); }
+  return keyCache!;
 }
 const canon = (deck: string, c: Comment) => JSON.stringify([deck, c.id, c.slide, c.path, c.excerpt, c.text, c.createdAt]);
 export const sign = (deck: string, c: Comment) => createHmac("sha256", key()).update(canon(deck, c)).digest("hex");
@@ -306,13 +318,15 @@ export const routes = {
       const b = await body(req);
       if (!b || !validDeck(b.deck)) return bad("deck");
       const list = load(b.deck);
-      const todo = list.filter((c) => c.status === "open" && !c.resolved && !c.slideDeleted && !c.deliveredAt && c.trusted === true).sort((a, c) => a.createdAt.localeCompare(c.createdAt));
-      if (!todo.length) return Response.json({ count: 0 });
+      const all = list.filter((c) => c.status === "open" && !c.resolved && !c.slideDeleted && !c.deliveredAt && c.trusted === true).sort((a, c) => a.createdAt.localeCompare(c.createdAt));
+      // 한 번에 SEND_BATCH개까지만 보낸다(토큰 폭증과 한꺼번에 쏟아지는 알림을 막는다). 나머지는 그대로 두고 다시 누르면 다음 묶음이 간다.
+      const todo = all.slice(0, SEND_BATCH);
+      if (!todo.length) return Response.json({ count: 0, remaining: 0 });
       for (const c of todo) delete c.held;
       save(b.deck, list);
       emit("comments", { deck: b.deck, comments: load(b.deck) });
-      if (channelClients.size) for (let i = 0; i < todo.length; i += SEND_BATCH) emit("batch", { deck: b.deck, comments: todo.slice(i, i + SEND_BATCH).map((c) => ({ ...c, trusted: true })) });
-      return Response.json({ count: todo.length });
+      if (channelClients.size) emit("batch", { deck: b.deck, comments: todo.map((c) => ({ ...c, trusted: true })) });
+      return Response.json({ count: todo.length, remaining: all.length - todo.length });
     },
   },
   "/api/channel": { GET: () => Response.json({ connected: channelClients.size > 0 }) },

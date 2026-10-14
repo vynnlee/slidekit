@@ -1,6 +1,6 @@
 // 코멘트 서명 키 파일: 없으면 0600으로 만들고, 넓은 권한은 0600으로 줄이며, 읽을 수 없거나 손상됐으면 덮어쓰지 않고 안내한다.
 import { expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -61,3 +61,18 @@ test("API: 키를 쓸 수 없으면 코멘트 작성이 500과 안내 문구로 
   expect(res.status).toBe(500);
   expect(((await res.json()) as { error: string }).error).toContain("damaged");
 });
+
+test("처음 만들 때 프로세스 여럿이 동시에 와도 키는 하나만 남고 모두 같은 서명을 낸다", async () => {
+  const file = join(dir, "race", "comments.key");
+  const script = `process.env.SLIDEKIT_KEY_FILE=${JSON.stringify(file)}; process.env.SLIDEKIT_DECKS=${JSON.stringify(dir)}; const C = await import(${JSON.stringify(join(import.meta.dir, "..", "comments"))}); console.log(C.sign("d", ${JSON.stringify(c)})); process.exit(0);`; // comments.ts의 파일 감시가 프로세스를 붙잡으므로 직접 끝낸다
+  const run = () => Bun.spawn(["bun", "-e", script], { stdout: "pipe", stderr: "pipe" });
+  const procs = Array.from({ length: 4 }, run);
+  const outs = await Promise.all(procs.map(async (p) => (await new Response(p.stdout).text()).trim()));
+  expect(new Set(outs).size).toBe(1); // 서로 다른 키로 서명한 프로세스가 없다
+  expect(outs[0]).toMatch(/^[0-9a-f]{64}$/);
+  const left = readdirSync(join(dir, "race"));
+  expect(left).toEqual(["comments.key"]); // 임시 파일이 남지 않는다
+  expect(statSync(file).mode & 0o777).toBe(0o600);
+  const C = await fresh(file);
+  expect(C.sign("d", c)).toBe(outs[0]); // 파일의 키와도 같다
+}, 30_000);

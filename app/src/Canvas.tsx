@@ -7,10 +7,12 @@ import { byPath, previewHtml, serializeSlide, type Unit } from "@/lib/deck-sourc
 import { childToward, isLeaf, isLockedDeep, pick as pickEl, siblings } from "@/lib/selection";
 import { canMove, canResize, fixSize, moveBy, readTranslate, toLocal, writeTranslate } from "@/lib/move";
 import { lockAxis, snapMove, snapResize, toSlide, unionRect, type Gap, type Guide, type Rect } from "@/lib/guides";
+import { cursorOf, HANDLE_CURSOR, type CursorName } from "@/lib/cursors";
 import { CommentPin } from "./CommentPin";
 import { CommentComposer } from "./CommentComposer";
 import { nameOf } from "./LayerTree";
 import type { Comment } from "@/lib/deck";
+import type { CommentActions } from "@/lib/comment-actions";
 
 export type CanvasApi = {
   apply(units: Unit[]): void; // 순서가 같으면 바뀐 슬라이드만 제자리 교체, 다르면 다시 만든다
@@ -48,6 +50,7 @@ type Props = {
   onDelete(): void;
   onComment(text: string): Promise<void>;
   onMarker(id: string): void;
+  commentActions: CommentActions;
   onReady(): void;
 };
 
@@ -56,10 +59,10 @@ export const textual = (el: Element) =>
   !(el instanceof SVGElement) && !!el.textContent?.trim() && [...el.children].every((c) => INLINE.test(c.tagName));
 
 // 이 CSS는 편집용 iframe 문서의 head에만 들어간다. 저장 글자에는 슬라이드만 쓰이므로 새지 않는다.
-const EDIT_CSS = `*{user-select:none;-webkit-user-select:none}[contenteditable]{user-select:text;-webkit-user-select:text;outline:none}`;
+const EDIT_CSS = `html{cursor:default}*:not(html){cursor:inherit!important}*{user-select:none;-webkit-user-select:none}[contenteditable]{user-select:text;-webkit-user-select:text;outline:none}`;
 
 // 8방향 리사이즈 핸들: id의 n, s, e, w가 움직이는 변이다.
-const HANDLES: [string, string][] = [["nw", "nwse-resize"], ["n", "ns-resize"], ["ne", "nesw-resize"], ["e", "ew-resize"], ["se", "nwse-resize"], ["s", "ns-resize"], ["sw", "nesw-resize"], ["w", "ew-resize"]];
+const HANDLES = ["nw", "n", "ne", "e", "se", "s", "sw", "w"] as const;
 
 export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   const box = useRef<HTMLDivElement>(null);
@@ -95,6 +98,8 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   // 끌어서 이동: 시작 상태. moved는 3px 넘게 움직인 뒤에만 참이다.
   const drag = useRef<{ els: HTMLElement[]; x0: number; y0: number; t0: [number, number][]; ks: number; moved: boolean; start: Rect; cands: Rect[]; orig: string[]; primary: HTMLElement } | null>(null);
   const swallowClick = useRef(false);
+  // 끌기 중 커서를 고정하는 투명 방패(iframe 위에서 커서가 바뀌지 않게). 포인터 캡처가 이벤트를 계속 받는다.
+  const [shield, setShield] = useState<CursorName | null>(null);
   const marquee = useRef<{ x0: number; y0: number; moved: boolean; add: Element[] } | null>(null);
   const marqueeBox = useRef<HTMLDivElement>(null);
   const hoverBox = useRef<HTMLDivElement>(null), selBox = useRef<HTMLDivElement>(null), bar = useRef<HTMLDivElement>(null), pop = useRef<HTMLDivElement>(null);
@@ -270,6 +275,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     const el = P.current.sel as HTMLElement | null, sl = cur();
     if (!el || !sl || e.button !== 0) return;
     e.preventDefault(); e.stopPropagation();
+    setShield(HANDLE_CURSOR[id]);
     e.currentTarget.setPointerCapture(e.pointerId); // 포인터가 iframe 위로 나가도 이벤트를 계속 받는다
     const sr = sl.getBoundingClientRect(), ks = sr.width / 1920 || 1;
     const edges = { l: id.includes("w"), r: id.includes("e"), t: id.includes("n"), b: id.includes("s") };
@@ -307,7 +313,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     };
     const finish = (cancel: boolean) => {
       window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("keydown", key, true);
-      clearGuides();
+      clearGuides(); setShield(null);
       if (cancel || !moved) { if (orig === null) el.removeAttribute("style"); else el.setAttribute("style", orig); return; }
       P.current.onCommit();
     };
@@ -337,6 +343,12 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       (e.target as Element).setPointerCapture?.(e.pointerId);
     }, true);
     d.addEventListener("pointermove", (e) => {
+      if (!drag.current && !marquee.current) { // 커서: 편집 중인 글자 안은 text, 선택된 요소 몸통 위는 move, 그 밖은 default
+        const t = e.target as Node, ed = editing.current;
+        const group = [selRef.current, ...P.current.more].filter(Boolean) as HTMLElement[];
+        const onSel = group.some((n) => n.contains(t) && !isLockedDeep(n) && canMove(n));
+        d.documentElement.style.cursor = cursorOf(ed && ed.contains(t) ? "text" : onSel ? "move" : "default");
+      }
       const m = marquee.current;
       if (m) {
         if (!m.moved && Math.hypot(e.clientX - m.x0, e.clientY - m.y0) < 4) return;
@@ -351,7 +363,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       let dx = e.clientX - g.x0, dy = e.clientY - g.y0;
       if (!g.moved) {
         if (Math.hypot(dx, dy) < 3) return;
-        g.moved = true;
+        g.moved = true; setShield("move"); d.documentElement.style.cursor = cursorOf("move");
         if (g.els.length === 1 && selRef.current !== g.primary) { selRef.current = g.primary; P.current.onSel(g.primary); }
         hover.current = null;
       }
@@ -370,7 +382,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     const endDrag = (cancel: boolean) => {
       const g = drag.current;
       drag.current = null;
-      clearGuides();
+      clearGuides(); setShield(null);
       if (!g || !g.moved) return;
       swallowClick.current = true; // 끌고 난 뒤의 click이 선택을 바꾸지 않게 한다
       setTimeout(() => { swallowClick.current = false; }, 0);
@@ -511,14 +523,15 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     <div ref={box} className="flex h-full w-full overflow-auto">
       <div className="relative m-auto shrink-0 overflow-hidden rounded-lg bg-black shadow-surface-3 ring-1 ring-white/[0.06]" style={{ width: size.w * zoom, height: size.h * zoom }}>
         {url && <iframe ref={frame} src={url} onLoad={attach} title="Canvas" className="absolute inset-0 h-full w-full border-0" />}
+        {shield && <div data-testid="cursor-shield" aria-hidden="true" className="fixed inset-0 z-[100]" style={{ cursor: cursorOf(shield) }} />}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div ref={hoverBox} className="absolute left-0 top-0 hidden border border-focus-ring/60" />
           <div ref={selBox} className="absolute left-0 top-0 hidden border-2 border-focus-ring" />
           <div ref={marqueeBox} className="absolute left-0 top-0 hidden border border-focus-ring bg-focus-ring/10" />
           <div ref={extraBoxes} />
           <div ref={handles}>
-            {HANDLES.map(([id, cursor]) => (
-              <div key={id} data-handle={id} aria-hidden="true" style={{ cursor }} onPointerDown={(e) => startResize(id, e)}
+            {HANDLES.map((id) => (
+              <div key={id} data-handle={id} aria-hidden="true" style={{ cursor: cursorOf(HANDLE_CURSOR[id]) }} onPointerDown={(e) => startResize(id, e)}
                 className="pointer-events-auto absolute left-0 top-0 hidden size-2 rounded-[2px] border border-focus-ring bg-white" />
             ))}
           </div>
@@ -528,7 +541,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
             {here.map((c, ci) => (
               <div key={c.id} data-path={c.path} data-off={here.slice(0, ci).filter((o) => o.path === c.path).length} className="pointer-events-auto absolute left-0 top-0 hidden">
                 <CommentPin comment={c} number={p.numbers.get(c.id) ?? ci + 1} highlighted={p.hoverId === c.id}
-                  onClick={() => p.onMarker(c.id)} onHover={(on) => p.onHover(on ? c.id : null)} />
+                  onClick={() => p.onMarker(c.id)} onHover={(on) => p.onHover(on ? c.id : null)} actions={p.commentActions} />
               </div>
             ))}
           </div>
@@ -550,12 +563,13 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     </div>
     {panning && (
       <div
-        data-testid="pan-overlay" className="absolute inset-0 z-20 cursor-grab active:cursor-grabbing"
+        data-testid="pan-overlay" className="absolute inset-0 z-20" style={{ cursor: cursorOf(shield === "grabbing" ? "grabbing" : "grab") }}
         onPointerDown={(e) => {
           const b = box.current!, x0 = e.clientX, y0 = e.clientY, sl = b.scrollLeft, st = b.scrollTop;
           e.currentTarget.setPointerCapture(e.pointerId);
+          setShield("grabbing");
           const move = (m: PointerEvent) => { b.scrollLeft = sl - (m.clientX - x0); b.scrollTop = st - (m.clientY - y0); };
-          const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+          const up = () => { setShield(null); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
           window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
         }}
       />

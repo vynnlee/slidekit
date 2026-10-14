@@ -96,6 +96,7 @@ type Props = {
   onAlignGroup(axis: "h" | "v", where: "start" | "center" | "end"): void; // 묶음 전체의 상자를 기준으로 정렬
   onResolve(c: Comment, resolved: boolean): void;
   onTrust?(c: Comment): void;
+  onRemove?(c: Comment): void;
   hoverId: string | null;
   onHover(id: string | null): void;
   onStyle(prop: string, value: string): void;
@@ -534,7 +535,7 @@ export function Inspector(p: Props) {
         )}
       </TabPanel>
       <TabPanel value="comments">
-        <CommentsPanel comments={p.comments} channel={p.channel} onJump={p.onJump} onResolve={p.onResolve} onTrust={p.onTrust} hoverId={p.hoverId} onHover={p.onHover} />
+        <CommentsPanel comments={p.comments} channel={p.channel} onJump={p.onJump} onResolve={p.onResolve} onTrust={p.onTrust} onRemove={p.onRemove} hoverId={p.hoverId} onHover={p.onHover} />
       </TabPanel>
     </Tabs>
   );

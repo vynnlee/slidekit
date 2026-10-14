@@ -102,7 +102,7 @@ function SegmentedControl({ value, onChange, options, "aria-label": ariaLabel, m
               }}
               onClick={press}
               className={cn(
-                "relative z-10 flex h-full items-center justify-center outline-none cursor-pointer select-none transition-colors duration-80 [&_svg]:size-3.5 disabled:cursor-not-allowed disabled:opacity-50",
+                "relative z-10 flex h-full items-center justify-center outline-none cursor-default select-none transition-colors duration-80 [&_svg]:size-3.5 disabled:cursor-default disabled:opacity-50",
                 controlFocus,
                 shape.input,
                 !radio && on && "bg-surface-5",

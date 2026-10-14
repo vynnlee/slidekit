@@ -180,7 +180,7 @@ const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
           aria-hidden="true"
           className={cn(
             "flex h-full shrink-0 items-center justify-center select-none touch-none text-muted-foreground [&_svg]:h-3.5 [&_svg]:w-3.5",
-            disabled ? "cursor-not-allowed" : "cursor-ew-resize",
+            disabled ? "cursor-default" : "cursor-ew-resize",
             size.text,
             size.itemPx
           )}
@@ -201,7 +201,7 @@ const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
           aria-invalid={error || undefined}
           disabled={disabled}
           className={cn(
-            "h-full w-full min-w-0 flex-1 bg-transparent outline-none tabular-nums placeholder:text-muted-foreground disabled:cursor-not-allowed",
+            "h-full w-full min-w-0 flex-1 bg-transparent outline-none tabular-nums placeholder:text-muted-foreground disabled:cursor-default",
             size.field,
             size.itemPx,
             "pl-0",

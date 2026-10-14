@@ -17,6 +17,7 @@ import { ChannelBadge } from "./CommentsPanel";
 import { ReplyToasts } from "./ReplyToasts";
 import { useCommentsLive } from "@/lib/use-comments-live";
 import { canMove, readTranslate, toLocal, writeTranslate } from "@/lib/move";
+import type { CommentActions } from "@/lib/comment-actions";
 import { numbering } from "@/lib/comment-state";
 import { firstChild, isLeaf, isLockedDeep, parentOf, siblings } from "@/lib/selection";
 import { startPresentation } from "@/lib/present";
@@ -335,6 +336,7 @@ export function Editor({ id }: { id: string }) {
   };
   const style = (prop: string, v: string) => { const els = [sel, ...more].filter(Boolean) as HTMLElement[]; if (!els.length) return; for (const el of els) { if (v) el.style.setProperty(prop, v); else el.style.removeProperty(prop); } commit("style:" + prop); };
   // 묶음 정렬: 모두를 감싸는 상자의 왼쪽, 가운데, 오른쪽(위, 가운데, 아래)에 맞춘다. translate만 바꾼다(SPEC 9.5).
+  const commentActions: CommentActions = { resolve: live.resolve, trust: live.trust, remove: live.remove, openInPanel: (c) => { setTab("comments"); jump(c); } };
   const alignGroup = (axis: "h" | "v", where: "start" | "center" | "end") => {
     const s = canvas.current?.slide(indexRef.current);
     const els = ([sel, ...more].filter(Boolean) as HTMLElement[]).filter((e) => !isLockedDeep(e) && canMove(e));
@@ -529,7 +531,7 @@ export function Editor({ id }: { id: string }) {
         }
         right={
           <Inspector sel={sel} slide={canvas.current?.slide(index) ?? null} more={more} onAlignGroup={alignGroup} selId={selId} tab={tab} onTab={setTab}
-            comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} hoverId={hoverId} onHover={setHoverId} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
+            comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} onRemove={live.remove} hoverId={hoverId} onHover={setHoverId} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
         }
       >
         <div className="flex h-full flex-col">
@@ -540,13 +542,13 @@ export function Editor({ id }: { id: string }) {
         <div className="min-h-0 flex-1 bg-[var(--canvas-bg)]">
         <Canvas ref={canvas} shell={shell} folder={folder} units={units} index={index} sel={sel} more={more} onMulti={toggleSel} onGroup={pickGroup}
           comments={comments.filter((c) => !c.slideDeleted && c.slide === origin.current.get(units[index]?.key ?? ""))}
-          onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
+          commentActions={commentActions} onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
           numbers={nums} hoverId={hoverId} onHover={setHoverId} channel={live.channel}
           onComment={postComment} onMarker={(cid) => { setTab("comments"); const c = comments.find((x) => x.id === cid); if (c) jump(c); }} />
         </div>
         <div className="shrink-0 border-t border-border" style={{ height: notesH }}>
           <div
-            className="-mt-1 h-2 cursor-row-resize"
+            className="-mt-1 h-2 cursor-ns-resize"
             onPointerDown={(e) => {
               const y0 = e.clientY, h0 = notesH;
               const mv = (m: PointerEvent) => setNotesH(Math.max(64, Math.min(window.innerHeight * 0.6, h0 + y0 - m.clientY)));

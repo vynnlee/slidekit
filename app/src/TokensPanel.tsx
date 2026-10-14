@@ -51,7 +51,7 @@ function ResetDot({ changed, label, onReset }: { changed: boolean; label: string
   return (
     <Tooltip content="Reset to default" side="top">
       <button type="button" aria-label={`Reset ${label} to default`} onClick={onReset}
-        className="absolute right-0 top-1/2 flex h-4 w-3 -translate-y-1/2 cursor-pointer items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-focus-ring">
+        className="absolute right-0 top-1/2 flex h-4 w-3 -translate-y-1/2 cursor-default items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-focus-ring">
         <span className="h-1.5 w-1.5 rounded-full bg-focus-ring" />
       </button>
     </Tooltip>

@@ -527,7 +527,7 @@ const TabItem = forwardRef<HTMLButtonElement, TabItemProps>(
           // outline-none: the list draws one shared focus ring instead.
           // Fixed height (not py) so the text-box trim below doesn't shrink
           // the tab — browsers without text-box support render identically.
-          "relative z-10 flex items-center px-3 cursor-pointer bg-transparent border-none outline-none",
+          "relative z-10 flex items-center px-3 cursor-default bg-transparent border-none outline-none",
           sizeClasses.segmentItem,
           sizeClasses.gap,
           className

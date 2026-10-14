@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { DropdownMenu, DropdownTrigger, DropdownContent } from "@/components/ui/dropdown";
 import { MenuItem } from "@/components/ui/menu-item";
 import { previewHtml, type Unit } from "@/lib/deck-source";
+import { CURSOR_CLASS } from "@/lib/cursors";
 import { acquireThumb } from "@/lib/thumb-queue";
 
 // 스크립트 없는 정적 사본을 줄여 보여 준다. 화면 근처(좌우 120px)에서 대기열(동시 3개)을 거쳐 올리고,
@@ -144,7 +145,7 @@ export function Filmstrip(p: Props) {
                 }}
                 onClick={() => p.onSelect(i)}
                 onContextMenu={(e) => { e.preventDefault(); p.onSelect(i); setMenu({ x: e.clientX, y: e.clientY, i }); }}
-                className={`relative shrink-0 rounded-md outline-none ring-2 focus-visible:ring-focus-ring ${i === p.index ? "ring-focus-ring" : "ring-transparent"}`}
+                className={`relative shrink-0 ${CURSOR_CLASS.grab} rounded-md outline-none ring-2 focus-visible:ring-focus-ring ${i === p.index ? "ring-focus-ring" : "ring-transparent"}`}
                 style={{ width: W, height: H }}
               >
                 {drop === i && drag !== null && <div className="absolute -left-1.5 inset-y-0 w-0.5 rounded bg-focus-ring" />}

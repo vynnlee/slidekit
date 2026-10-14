@@ -247,7 +247,7 @@ const Switch = forwardRef<HTMLDivElement, SwitchProps>(
           // The whole row is the pointer target. touch-none stops the browser
           // from claiming a horizontal drag as a scroll (which would cancel
           // it); select-none keeps a drag from selecting the label.
-          "relative z-10 flex items-center cursor-pointer select-none touch-none",
+          "relative z-10 flex items-center cursor-default select-none touch-none",
           sizeClasses.gap,
           sizeClasses.px,
           sizeClasses.variant === "compact" ? "py-1" : "py-2",
@@ -283,7 +283,7 @@ const Switch = forwardRef<HTMLDivElement, SwitchProps>(
           disabled={disabled}
           tabIndex={0}
           className={cn(
-            "relative shrink-0 rounded-full outline-none cursor-pointer",
+            "relative shrink-0 rounded-full outline-none cursor-default",
             "transition-colors duration-80",
             // Only on :focus-visible, so a click leaves no ring. The 2px
             // offset is filled with the background to part it from the track.

@@ -41,7 +41,7 @@ export function AlignBox({ direction, justify, align, onChange }: AlignBoxProps)
                 if (isRow) onChange(x, y); else onChange(y, x);
               }}
               className={cn(
-                "flex cursor-pointer items-center justify-center outline-none transition-colors duration-80 hover:bg-surface-5",
+                "flex cursor-default items-center justify-center outline-none transition-colors duration-80 hover:bg-surface-5",
                 controlFocus,
                 shape.item
               )}

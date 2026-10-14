@@ -95,7 +95,7 @@ export function ColorField({ value, onChange, "aria-label": ariaLabel, allowNone
   const [picker, setPicker] = useState(false);
   const swatch = (
     <button type="button" aria-label={`${ariaLabel} swatch`} onClick={() => setPicker(true)}
-      className={cn("h-7 w-7 shrink-0 cursor-pointer rounded-md border border-border outline-none", controlFocus)}
+      className={cn("h-7 w-7 shrink-0 cursor-default rounded-md border border-border outline-none", controlFocus)}
       style={{ background: color ? serialize(color) : "transparent" }} />
   );
 

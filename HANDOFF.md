@@ -97,6 +97,8 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 ## 사용자 확인이 필요한 것
 
 1. **Worker 배포 승인**: 위 미배포 변경 전부. 실행 순서는 `deploy/README.md`.
+실기기 확인은 한 장짜리 [docs/DEVICE-CHECKLIST.md](docs/DEVICE-CHECKLIST.md)에 방법, 기대, 실패 시 알려 줄 정보와 함께 모아 두었다(자동 검증된 것은 빼고 사람이 봐야 할 것만).
+
 2. **실기기 iPhone 리모컨**: Safari에서 QR 스캔, 화면 잠금 뒤 재연결, Wake Lock, 지연 체감(두 컨텍스트 e2e와 QR 디코드는 통과).
 3. **mac-local 첫 실행**: 새 clone에서 `bun install`, `bun run slidekit doctor`, 한글 IME 편집, Cmd 단축키, 드래그 체감, 외장 모니터 발표(권한 팝업, 창 배치, 두 창 동기화). 시스템 Chrome 경로의 PDF는 headless shell로만 검증했다.
 4. **맥 미리보기에서 그라디언트 PDF가 검게 보임**: macOS 미리보기와 Quick Look(CoreGraphics)이 Chrome의 PDF 셰이딩을 검게 그린다. PDF 자체는 정상(셰이딩과 SMask가 들어 있음)이고 Chrome이나 Acrobat에서는 맞게 보이는 것으로 추정하며, 사용자의 Chrome에서 한 번 확인해 달라.

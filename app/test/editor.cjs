@@ -452,6 +452,31 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('단축키 안내가 그룹으로 보임', (await page.getByText('Select', { exact: true }).count()) >= 1 && (await page.locator('kbd').count()) > 10);
   await page.keyboard.press('Escape'); await settle();
 
+  // 발견 가능성: 최근 기능이 단축키 안내와 Cmd+K 팔레트에 모두 있다
+  await page.keyboard.press('Meta+/'); await settle();
+  const helpTxt = (await page.getByRole('dialog').innerText()).replace(/\s+/g, ' ');
+  const inHelp = ['Group', 'Ungroup', 'Find and replace', 'Copy style', 'Paste style', 'Paste an image from the clipboard', 'Drop an image', 'Pick a layout', 'Context menu', 'Add to selection'];
+  check('단축키 안내에 최근 기능이 모두 있음', inHelp.every((t) => helpTxt.includes(t)), inHelp.filter((t) => !helpTxt.includes(t)));
+  await page.keyboard.press('Escape'); await settle();
+  const inPalette = ['Group selection', 'Ungroup', 'Find and replace', 'Copy style', 'Paste style', 'Deck settings', 'Insert image', 'Add slide: Quote', 'Theme: Paper', 'Text style: Caption', 'Zoom to 100%', 'Show safe area', 'overflow outlines', 'Undo'];
+  const missingP = [];
+  await page.keyboard.press('Meta+k'); await settle(); // 팔레트를 한 번 열어 두고 검색어만 바꿔 가며 본다
+  const palIn = page.getByPlaceholder('Slide number, title or action');
+  for (const q of inPalette) {
+    await palIn.fill(q);
+    await cond(() => true, null, 50); // 목록 갱신 한 프레임
+    await page.waitForFunction(() => document.querySelectorAll('[role=option]').length >= 0);
+    if ((await page.getByRole('option').count()) < 1) { await settle(); if ((await page.getByRole('option').count()) < 1) missingP.push(q); }
+  }
+  await page.keyboard.press('Escape'); await settle();
+  check('Cmd+K 팔레트에 최근 기능이 모두 있음', missingP.length === 0, missingP);
+  // 글자 편집 중에는 Cmd+G가 요소를 감싸지 않는다
+  await fr().locator('[data-active] h1, [data-active] h2, [data-active] p').first().click({ modifiers: ['Meta'] }); await settle(); await fr().locator('[data-active] h1, [data-active] h2, [data-active] p').first().dblclick(); await settle();
+  const kidsE = await inDoc((s) => s.querySelectorAll('[data-name=Group]').length);
+  await page.keyboard.press('Meta+g'); await settle();
+  check('글자 편집 중 Cmd+G는 그룹을 만들지 않음', (await inDoc((s) => s.querySelectorAll('[data-name=Group]').length)) === kidsE);
+  await page.keyboard.press('Escape'); await settle(); await page.keyboard.press('Escape'); await settle();
+
   // 코멘트: 선택 요소에서 C 키로 작성창이 열리고 Esc로 닫힌다
   await focusBody(); await page.keyboard.press('Escape'); await page.keyboard.press('Tab'); await settle();
   await focusBody(); await page.keyboard.press('c'); await settle();

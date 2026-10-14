@@ -44,8 +44,8 @@ test("다중 선택 메뉴: Align 서브메뉴 6방향, Duplicate, Lock, Hide, D
   expect(sub.type === "sub" && sub.items.length).toBe(6);
 });
 test("슬라이드 빈 곳과 Layers 루트 행", () => {
-  const full = slideMenu({ addComment: noop, zoomFit: noop, zoom100: noop, addAfter: noop, duplicate: noop, remove: noop, canDelete: true });
-  expect(labels(full)).toEqual(["Add comment", "-", "Zoom to fit", "Zoom to 100%", "-", "Add slide after", "Duplicate slide", "-", "Delete slide"]);
+  const full = slideMenu({ insertImage: noop, addComment: noop, zoomFit: noop, zoom100: noop, addAfter: noop, duplicate: noop, remove: noop, canDelete: true });
+  expect(labels(full)).toEqual(["Add comment", "Insert image...", "-", "Zoom to fit", "Zoom to 100%", "-", "Add slide after", "Duplicate slide", "-", "Delete slide"]);
   expect(labels(slideMenu({ addAfter: noop, duplicate: noop, remove: noop, canDelete: false }))).toEqual(["Add slide after", "Duplicate slide", "-", "Delete slide"]);
 });
 test("필름스트립 타일: 처음 타일은 Move to start가 흐림, 마지막 하나만 남으면 Delete가 흐림", () => {

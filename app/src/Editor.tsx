@@ -22,6 +22,10 @@ import type { CommentActions } from "@/lib/comment-actions";
 import { numbering } from "@/lib/comment-state";
 import { firstChild, isLeaf, isLockedDeep, parentOf, siblings } from "@/lib/selection";
 import { EditorTip } from "./EditorTip";
+import { LAYOUTS } from "../../engine/layouts";
+import { THEMES } from "@/lib/themes";
+import { TEXT_STYLES } from "@/lib/text-styles";
+import { setToken } from "@/lib/deck-tokens";
 import { readStyle, writeStyle } from "@/lib/style-props";
 import { FindBar, type FindState } from "./FindBar";
 import { findInUnits, replaceInUnits } from "@/lib/find";
@@ -37,9 +41,10 @@ import { startPresentation } from "@/lib/present";
 import type { Comment, DeckEntry } from "@/lib/deck";
 
 const KEY_GROUPS: [string, [string, string][]][] = [
-  ["Edit", [["Cmd+S", "Save"], ["Cmd+Z", "Undo"], ["Shift+Cmd+Z", "Redo"], ["Cmd+D", "Duplicate"], ["Cmd+G", "Group"], ["Shift+Cmd+G", "Ungroup"], ["Cmd+[", "Send backward"], ["Cmd+]", "Bring forward"], ["F2", "Rename layer"], ["Cmd+C", "Copy"], ["Cmd+Opt+C", "Copy style"], ["Cmd+Opt+V", "Paste style"], ["Cmd+V", "Paste"], ["Delete", "Delete selection"], ["Cmd+B", "Bold"], ["Cmd+I", "Italic"]]],
+  ["Edit", [["Cmd+S", "Save"], ["Cmd+Z", "Undo"], ["Shift+Cmd+Z", "Redo"], ["Cmd+D", "Duplicate"], ["Cmd+G", "Group"], ["Shift+Cmd+G", "Ungroup"], ["Cmd+[", "Send backward"], ["Cmd+]", "Bring forward"], ["F2", "Rename layer"], ["Cmd+C", "Copy"], ["Cmd+Opt+C", "Copy style"], ["Cmd+Opt+V", "Paste style"], ["Cmd+V", "Paste (an image too)"], ["Delete", "Delete selection"], ["Cmd+B", "Bold"], ["Cmd+I", "Italic"]]],
   ["Select", [["Click", "Select a top-level element"], ["Double-click", "Go one level in, or edit text"], ["Cmd+Click", "Select the innermost element"], ["Enter", "First child, or edit text"], ["Shift+Enter", "Select the parent"], ["Shift+Click", "Add to selection"], ["Tab", "Next sibling"], ["Esc", "Finish editing, or deselect"]]],
   ["View", [["Up, Down", "Go to slide (no selection)"], ["Arrows", "Nudge 1px (Shift: 10px)"], ["Drag", "Move (Shift: lock axis)"], ["Cmd+Scroll", "Zoom"], ["Shift+1", "Zoom to fit"], ["Shift+0", "Zoom to 100%"], ["Cmd+0", "Zoom to fit"], ["Cmd+\\", "Toggle panels"], ["Shift+Cmd+\\", "Toggle filmstrip"]]],
+  ["Insert", [["Cmd+V", "Paste an image from the clipboard"], ["Drop", "Drop an image on the canvas, or on an image to replace it"], ["1, 2, 3, 4, 5", "Pick a layout in the Add slide menu"]]],
   ["General", [["Cmd+K", "Command palette"], ["Cmd+F", "Find and replace"], ["Cmd+Enter", "Present from this slide"], ["Shift+Cmd+Enter", "Present from the start"], ["Opt+Enter", "Present from this slide"], ["Shift+F10", "Context menu"], ["Cmd+/", "Shortcuts"]]],
 ];
 const GLYPH: Record<string, string> = { Cmd: "⌘", Shift: "⇧", Enter: "↵", Delete: "⌫", Esc: "⎋", Up: "↑", Down: "↓" };
@@ -482,6 +487,15 @@ export function Editor({ id }: { id: string }) {
     g.remove();
     pickGroup(kids); commit();
   };
+  // 테마 프리셋: 색과 글꼴 토큰 아홉 개를 한 번에(prefix 한 번 = 실행 취소 한 건). Tokens 패널의 Theme 선택과 같은 동작이다.
+  const applyTheme = (id: string) => {
+    const th = THEMES.find((x) => x.id === id), sh = shellRef.current;
+    if (!th || !sh) return;
+    let next = sh.prefix;
+    try { for (const [k, v] of Object.entries(th.tokens)) next = setToken(next, k, v); } catch { return; }
+    changePrefix(next);
+  };
+  const imageInput = useRef<HTMLInputElement>(null);
   const alignGroup = (axis: "h" | "v", where: "start" | "center" | "end") => {
     const s = canvas.current?.slide(indexRef.current);
     const els = ([sel, ...more].filter(Boolean) as HTMLElement[]).filter((e) => !isLockedDeep(e) && canMove(e));
@@ -593,12 +607,12 @@ export function Editor({ id }: { id: string }) {
     up: upSel, child: enterSel, next: () => cycle(1), prev: () => cycle(-1),
     forward: () => reorder(1), backward: () => reorder(-1), rename: () => setRenameTick((n) => n + 1),
     copyStyle, pasteStyle, group: groupSel, ungroup: ungroupSel, lock: () => toggleAll("lock"), hide: () => toggleAll("hide"), reset: resetChanges, dup: dupSelected, del: delSelected, align: alignGroup,
-    zoomFit: () => canvas.current?.zoom(0), zoom100: () => canvas.current?.zoom100(),
+    insertImage: () => imageInput.current?.click(), zoomFit: () => canvas.current?.zoom(0), zoom100: () => canvas.current?.zoom100(),
     addAfter: () => addSlide(indexRef.current), dupSlide: () => dupSlide(indexRef.current), delSlide: () => delSlide(indexRef.current),
   };
   const call = (k: string, ...a: any[]) => () => act.current[k]?.(...a);
   const slideActions = (canvasOnly: boolean): SlideMenuActions => ({
-    ...(canvasOnly ? { addComment: call("comment"), zoomFit: call("zoomFit"), zoom100: call("zoom100") } : {}),
+    ...(canvasOnly ? { insertImage: call("insertImage"), addComment: call("comment"), zoomFit: call("zoomFit"), zoom100: call("zoom100") } : {}),
     addAfter: call("addAfter"), duplicate: call("dupSlide"), remove: call("delSlide"), canDelete: unitsRef.current.length > 1,
   });
   // 대상(요소 묶음, 없으면 빈 곳)에 맞는 항목. 호출 전에 선택은 이미 바뀐 상태여야 한다.
@@ -649,11 +663,11 @@ export function Editor({ id }: { id: string }) {
     else if (mod && k === "/") { e.preventDefault(); setHelp((v) => !v); }
     else if (mod && e.key === "Enter") { e.preventDefault(); present(e.shiftKey); }
     else if (mod && (k === "b" || k === "i") && !/^(INPUT|TEXTAREA)$/.test(t.tagName) && (sel || t.isContentEditable || e.view !== window)) { e.preventDefault(); emphasis(k); }
+    else if (mod && k === "f") { e.preventDefault(); setFind((f) => f ?? { q: "", r: "", matchCase: false, notes: false }); setFindTick((n) => n + 1); }
+    else if (typing) return; // 아래 단축키는 글자 입력 중에는 동작하지 않는다(편집 중 Cmd+G가 요소를 감싸지 않게)
     else if (mod && e.altKey && e.code === "KeyC") { e.preventDefault(); copyStyle(); }
     else if (mod && e.altKey && e.code === "KeyV") { e.preventDefault(); pasteStyle(); }
     else if (mod && k === "g") { e.preventDefault(); if (e.shiftKey) ungroupSel(); else groupSel(); }
-    else if (mod && k === "f") { e.preventDefault(); setFind((f) => f ?? { q: "", r: "", matchCase: false, notes: false }); setFindTick((n) => n + 1); }
-    else if (typing) return;
     else if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); const els = [sel, ...more].filter(Boolean) as Element[]; cm.open(canvas.current?.anchor(els[0] ?? null) ?? { x: 0, y: 0 }, menuFor(els)); }
     else if (!mod && e.shiftKey && e.code === "Digit0") { e.preventDefault(); canvas.current?.zoom100(); }
     else if (e.altKey && e.key === "Enter") { e.preventDefault(); present(false); }
@@ -716,6 +730,10 @@ export function Editor({ id }: { id: string }) {
     { value: "act-paste-style", label: "Paste style", group: "Selection", shortcut: "mod+alt+v", disabled: !sel || !styleClip.current, onSelect: () => pasteStyle() },
     { value: "act-group", label: "Group selection", group: "Selection", shortcut: "mod+g", disabled: !sel, onSelect: () => groupSel() },
     { value: "act-ungroup", label: "Ungroup", group: "Selection", shortcut: "mod+shift+g", disabled: !sel, onSelect: () => ungroupSel() },
+    ...LAYOUTS.map((l, i) => ({ value: `act-layout-${l.id}`, label: `Add slide: ${l.label}`, group: "Slides", keywords: ["layout", "new"], onSelect: () => addSlide(indexRef.current, l.id) })),
+    { value: "act-image", label: "Insert image...", group: "Slides", keywords: ["picture", "photo"], onSelect: () => imageInput.current?.click() },
+    ...THEMES.map((t) => ({ value: `act-theme-${t.id}`, label: `Theme: ${t.label}`, group: "Theme", keywords: ["colors", "tokens"], onSelect: () => applyTheme(t.id) })),
+    ...TEXT_STYLES.map((t) => ({ value: `act-textstyle-${t.id}`, label: `Text style: ${t.label}`, group: "Selection", disabled: !sel, keywords: ["typography", "font"], onSelect: () => applyStyles(t.props) })),
     { value: "act-undo", label: "Undo", group: "Actions", shortcut: "mod+z", disabled: !past.current.length, onSelect: () => restore(past.current, future.current) },
     { value: "act-redo", label: "Redo", group: "Actions", shortcut: "mod+shift+z", disabled: !future.current.length, onSelect: () => restore(future.current, past.current) },
     { value: "act-comment", label: "Add comment", group: "Actions", shortcut: "c", onSelect: () => canvas.current?.compose() },
@@ -843,6 +861,7 @@ export function Editor({ id }: { id: string }) {
           <DeckSettingsForm meta={readMeta(shell.prefix) ?? {}} onChange={onMetaChange} error={metaError} />
         </DialogContent>
       </Dialog>
+      <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp" aria-label="Choose image file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void addImage(f, null); }} />
       <ContextMenu menu={cm} />
       <EditorTip sample={/<h2>제목<\/h2>\s*<p>내용<\/p>/.test(text)} />
       <Dialog open={help} onOpenChange={setHelp}>

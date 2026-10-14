@@ -189,6 +189,7 @@ export function groupMenu(a: GroupMenuActions): MenuItem[] {
 
 export type SlideMenuActions = {
   addComment?(): void;
+  insertImage?(): void;
   zoomFit?(): void; zoom100?(): void;
   addAfter(): void; duplicate(): void; remove(): void;
   canDelete: boolean;
@@ -197,6 +198,7 @@ export type SlideMenuActions = {
 export function slideMenu(a: SlideMenuActions): MenuItem[] {
   return tidy([
     a.addComment && item("comment", "Add comment", a.addComment, { shortcut: "c" }),
+    a.insertImage && item("insert-image", "Insert image...", a.insertImage),
     a.addComment && separator,
     a.zoomFit && item("zoom-fit", "Zoom to fit", a.zoomFit, { shortcut: "shift+1" }),
     a.zoom100 && item("zoom-100", "Zoom to 100%", a.zoom100, { shortcut: "shift+0" }),

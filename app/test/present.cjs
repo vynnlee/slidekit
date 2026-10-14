@@ -102,7 +102,7 @@ const MOCKS = {
     await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
     const pop = await ctx.newPage();
     await pop.goto(`${BASE}/decks/${DECK}/index.html?sync=1#12`);
-    await pop.waitForFunction(() => location.hash === '#12'); await sleep(500);
+    await pop.waitForFunction(() => location.hash === '#12' && document.readyState === 'complete'); // 엔진이 동기화 채널을 연 뒤
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errors.push(String(e)));
     await page.goto(`${BASE}/present/${ID}`);
@@ -119,8 +119,7 @@ const MOCKS = {
     await sleep(300); // 반복 입력이 더 넘기지 않는지 보려고 짧게 둔다(일어나지 않음 확인)
     check('방향키 반복 입력은 한 장만 넘긴다', (await counter()) === `14 / ${TOTAL}`, await counter());
     await page.keyboard.down('t'); await page.keyboard.down('t'); await page.keyboard.up('t');
-    await sleep(1600);
-    check('T 반복 입력은 한 번만 토글한다', (await page.locator('[role=timer]').first().innerText()) !== '00:00:00');
+    check('T 반복 입력은 한 번만 토글한다', await until(async () => (await page.locator('[role=timer]').first().innerText()) !== '00:00:00', 5000)); // 두 번 토글됐다면 시작하자마자 멈춰 0으로 남는다
     await ctx.close();
   }
   // 발표 전 점검: 노트가 없으면 한 번 묻고(Cancel로 돌아가거나 Present anyway로 시작), 노트가 있으면 묻지 않는다

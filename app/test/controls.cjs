@@ -16,7 +16,7 @@ const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' 
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(BASE + '/dev/controls');
   await page.getByRole('heading', { name: 'Control states' }).waitFor();
-  await sleep(500);
+  await page.evaluate(() => document.fonts.ready.then(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))); // 글꼴과 첫 레이아웃이 끝난 뒤
   if (process.env.SHOTS) await page.screenshot({ path: path.join(process.env.SHOTS, 'controls-1440.png') });
   check('가로 스크롤 없음', await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
 
@@ -35,15 +35,16 @@ const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' 
   const ring = async (locator) => {
     const before = await locator.boundingBox();
     await locator.focus();
-    await sleep(250); // transition-all(80ms)이 끝난 뒤 읽는다
-    const sh = await locator.evaluate((e) => getComputedStyle(e).boxShadow);
+    let sh = '';
+    for (let i = 0; i < 20; i++) { sh = await locator.evaluate((e) => getComputedStyle(e).boxShadow); if (/0px 0px 0px 1px/.test(sh)) break; await sleep(50); } // transition-all(80ms)이 끝나 링이 그려질 때까지 읽는다
     const after = await locator.boundingBox();
     return { sh, same: JSON.stringify(before) === JSON.stringify(after) };
   };
   const rs = await ring(page.locator('[data-state=Default] input[aria-label=Field]'));
   const rn = await ring(page.locator('[data-state=Default] input[aria-label=Number]'));
-  await sleep(250);
-  const rn2 = await page.locator('[data-state=Default] input[aria-label=Number]').evaluate((e) => getComputedStyle(e.parentElement).boxShadow);
+  const numWrap = page.locator('[data-state=Default] input[aria-label=Number]');
+  let rn2 = '';
+  for (let i = 0; i < 20; i++) { rn2 = await numWrap.evaluate((e) => getComputedStyle(e.parentElement).boxShadow); if (/0px 0px 0px 1px/.test(rn2)) break; await sleep(50); }
   const one = (s) => /0px 0px 0px 1px/.test(s);
   check('Field 포커스 링은 1px box-shadow', one(rs.sh), rs.sh);
   check('NumberField 포커스 링은 1px box-shadow', one(rn2), rn2);
@@ -68,11 +69,12 @@ const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' 
   const setCell = page.locator('[data-state=Set] input[aria-label="Number set"]').locator('xpath=..');
   check('설정됨 점이 보인다', (await setCell.locator('[data-dirty]').count()) === 1);
   const reset = page.getByRole('button', { name: 'Reset Number set' });
-  await page.mouse.move(0, 0); await sleep(300);
-  const op0 = await reset.evaluate((e) => getComputedStyle(e).opacity);
-    await page.keyboard.press('Escape'); await page.mouse.move(0, 0); await sleep(300); // 앞 단계의 툴팁이 가리지 않게 닫는다
-  await setCell.hover(); await sleep(500);
-  const op1 = await reset.evaluate((e) => getComputedStyle(e).opacity);
+  const opacityIs = async (want) => { let v = ''; for (let i = 0; i < 30; i++) { v = await reset.evaluate((e) => getComputedStyle(e).opacity); if (v === want) break; await sleep(50); } return v; }; // 호버 전환이 끝날 때까지 읽는다
+  await page.mouse.move(0, 0);
+  const op0 = await opacityIs('0');
+    await page.keyboard.press('Escape'); await page.mouse.move(0, 0); // 앞 단계의 툴팁이 가리지 않게 닫는다
+  await setCell.hover();
+  const op1 = await opacityIs('1');
   check('Reset은 호버 때만 보인다', op0 === '0' && op1 === '1', [op0, op1]);
 
   // ColorField: hex가 잘리지 않는다
@@ -82,7 +84,8 @@ const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' 
   // 비활성
   const dis = page.locator('[data-state=Disabled] input[aria-label="Number disabled"]');
   check('비활성 NumberField는 입력할 수 없다', await dis.isDisabled());
-  await dis.locator('xpath=..').hover(); await sleep(900);
+  await dis.locator('xpath=..').hover();
+  await page.getByText('Set by the layout').first().waitFor({ state: 'attached', timeout: 3000 }).catch(() => {}); // 툴팁이 지연 뒤 뜬다
   check('비활성 이유 툴팁', (await page.getByText('Set by the layout').count()) >= 1);
   check('비활성 Field', await page.locator('[data-state=Disabled] input[aria-label="Field disabled"]').isDisabled());
   check('오류 Field는 aria-invalid', (await page.locator('[data-state=Error] input[aria-label="Field error"]').getAttribute('aria-invalid')) === 'true');

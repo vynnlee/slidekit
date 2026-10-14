@@ -5,6 +5,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { deckFingerprint, readPublish, recordUnpublish } from "../engine/publish-record";
 import { deckCheck } from "../engine/deck-check";
+import { outline } from "../engine/outline";
 import { readOnlyDeck } from "./deck-lock";
 
 const root = join(import.meta.dir, "..");
@@ -206,6 +207,16 @@ export function makeRoutes(run: Run = spawnRun) {
           "Content-Type": ext.endsWith("pdf") ? "application/pdf" : "text/html; charset=utf-8",
           "Content-Disposition": `attachment; filename="${id}.${ext}"`, "Cache-Control": "no-store",
         } });
+      },
+    },
+    // 덱 내용을 Markdown으로(복사와 .md 내려받기). 덱 index.html만 읽고 코멘트, 게시 기록, 비밀번호는 담지 않는다.
+    "/api/decks/:id/outline": {
+      GET: async (req: Req) => {
+        const id = deckId(req);
+        if (!id) return bad("deck", 404);
+        const q = new URL(req.url).searchParams;
+        const md = outline(await Bun.file(join(root, "decks", id, "index.html")).text(), { notes: q.get("notes") !== "0" });
+        return new Response(md, { headers: { "Content-Type": "text/markdown; charset=utf-8", "Cache-Control": "no-store", ...(q.get("download") ? { "Content-Disposition": `attachment; filename="${id}.md"` } : {}) } });
       },
     },
     "/api/decks/:id/deploy": {

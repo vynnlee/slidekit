@@ -9,7 +9,7 @@ import { MenuItem } from "@/components/ui/menu-item";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ago } from "@/lib/comment-state";
 import { VersionHistory } from "@/VersionHistory";
-import { toast } from "@/Toaster";
+import { toast, TOAST } from "@/Toaster";
 
 interface ExportMenuProps {
   /** 덱 폴더 이름(= /edit/<id>가 아니라 decks/ 아래 폴더). 소문자, 숫자, - 만 쓰는 덱만 내보낼 수 있다. */
@@ -99,7 +99,7 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
     if (busy) { void post("/api/export/cancel").catch(() => {}); setBusy(false); }
     token.current++; setMode("idle"); setErr(""); setDetails("");
   };
-  const say = (t: string) => toast(t, { ms: 2500 });
+  const say = (t: string, ms: number = TOAST.info) => toast(t, { ms });
   const fail = async (res: Response) => { const e = await readErr(res); setErr(e.msg); setDetails(e.details); };
 
   const download = async (kind: "html" | "pdf", pdf?: { mode: PdfMode; per: number }) => {
@@ -182,13 +182,19 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
       }
       if (done && !failed) {
         setUnpubOpen(false); setPubOpen(false);
-        toast(done.dryRun ? "Dry run: nothing was removed." : "Unpublished. The link no longer works.", { ms: 6000 });
+        toast(done.dryRun ? "Dry run: nothing was removed" : "Unpublished, the link no longer works", { ms: TOAST.long });
         await loadPub();
       }
     } catch { setUnpubErr("Connection lost. The deck may or may not be unpublished. Check the link."); } finally { setUnpubBusy(false); }
   };
+  // 덱 내용을 Markdown으로: 복사는 클립보드에, 내려받기는 .md 파일로(발표자 노트 포함)
+  const copyMarkdown = async () => {
+    try { const r = await fetch(`/api/decks/${folder}/outline`); if (!r.ok) throw new Error(); await navigator.clipboard.writeText(await r.text()); say("Copied as Markdown", TOAST.copy); }
+    catch { say("Could not copy the deck as Markdown"); }
+  };
+  const downloadMarkdown = () => { const a = document.createElement("a"); a.href = `/api/decks/${folder}/outline?download=1`; a.download = `${folder}.md`; a.click(); say(`Downloading ${folder}.md`); };
   const linkOf = () => (pub && pub.published ? pub.url : last?.url ?? "");
-  const copyLast = async () => { try { await navigator.clipboard.writeText(linkOf()); say("Link copied"); } catch { say("Could not copy. Open Publish to see the link"); } };
+  const copyLast = async () => { try { await navigator.clipboard.writeText(linkOf()); say("Link copied", TOAST.copy); } catch { say("Could not copy. Open Publish to see the link"); } };
   const needPw = visibility === "password";
   const canPublish = !busy && !url && (!needPw || (pw.length >= MIN_PW && pw === pw2)) && (check === null || check === "error" || check.errors === 0 || anyway);
 
@@ -200,10 +206,12 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
           <MenuItem index={0} icon={FileText} label="Download HTML" onSelect={() => download("html")} />
           <MenuItem index={1} icon={FileText} label="Download PDF" onSelect={() => download("pdf")} />
           <MenuItem index={2} icon={FileText} label="PDF options..." onSelect={() => setPdfDialog(true)} />
-          <MenuItem index={3} icon={Globe} label="Publish to static.vynnlee.com..." onSelect={openPublish} />
-          {(pub?.published || last) && <MenuItem index={4} icon={Link2} label="Copy published link" onSelect={copyLast} />}
-          {pub?.published && <MenuItem index={5} icon={Globe} label="Published..." onSelect={() => { void loadPub(); setPubOpen(true); }} />}
-          <MenuItem index={pub?.published ? 6 : (pub?.published || last) ? 5 : 4} icon={History} label="Version history..." onSelect={() => setVersions(true)} />
+          <MenuItem index={3} icon={Copy} label="Copy as Markdown" onSelect={copyMarkdown} />
+          <MenuItem index={4} icon={FileText} label="Download .md" onSelect={downloadMarkdown} />
+          <MenuItem index={5} icon={Globe} label="Publish to static.vynnlee.com..." onSelect={openPublish} />
+          {(pub?.published || last) && <MenuItem index={6} icon={Link2} label="Copy published link" onSelect={copyLast} />}
+          {pub?.published && <MenuItem index={7} icon={Globe} label="Published..." onSelect={() => { void loadPub(); setPubOpen(true); }} />}
+          <MenuItem index={pub?.published ? 8 : (pub?.published || last) ? 7 : 6} icon={History} label="Version history..." onSelect={() => setVersions(true)} />
         </DropdownContent>
       </DropdownMenu>
       <Dialog open={mode !== "idle"} onOpenChange={(o) => !o && close()}>
@@ -391,7 +399,6 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
               )}
               <div className="flex items-center justify-between gap-2">
                 <Button size="compact" variant="ghost" className="text-destructive [&_svg]:text-destructive" leadingIcon={Trash2} onClick={() => { setUnpubErr(""); setUnpubDetails(""); setTypedName(""); setUnpubOpen(true); }}>Unpublish...</Button>
-                <Button size="compact" variant="ghost" onClick={() => setPubOpen(false)}>Close</Button>
               </div>
             </div>
           </DialogContent>

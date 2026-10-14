@@ -56,6 +56,13 @@ const PW = 'S3cret-pass-ZZ';
   await dlg.getByRole('button', { name: 'Close', exact: true }).first().click();
   // 게시 기록: dry-run 게시는 기록을 남기지 않아 메뉴에 Published가 없다. 기록 파일을 직접 써서 Published와 Unpublish 확인 흐름을 본다.
   const openMenu = async () => { await p.getByRole('button', { name: 'Export' }).click(); };
+  // Markdown 내보내기: .md 파일이 내려오고 머리말과 슬라이드 제목, 노트를 담는다
+  await openMenu();
+  const [md] = await Promise.all([p.waitForEvent('download', { timeout: 15000 }), p.getByRole('menuitem', { name: 'Download .md' }).click()]);
+  const mdFile = await saveDl(md);
+  const mdText = fs.readFileSync(mdFile, 'utf8'); fs.rmSync(mdFile, { force: true });
+  check('Download .md: 파일명 .md, 제목과 슬라이드 머리글', md.suggestedFilename() === 'qa-exp-pub.md' && mdText.startsWith('# ') && /^## 1\. /m.test(mdText), md.suggestedFilename());
+  check('Copy as Markdown 항목이 있다', await (async () => { await openMenu(); const ok = (await p.getByRole('menuitem', { name: 'Copy as Markdown' }).count()) === 1; await p.keyboard.press('Escape'); return ok; })());
   await openMenu();
   check('게시 기록이 없으면 Published 항목을 숨긴다', (await p.getByRole('menuitem', { name: 'Published...' }).count()) === 0);
   await p.keyboard.press('Escape');
@@ -72,7 +79,7 @@ const PW = 'S3cret-pass-ZZ';
   await ud.waitFor({ timeout: 5000 });
   check('확인 대화상자: 실제 주소와 everyone 경고, 덱은 지워지지 않는다는 안내', /https:\/\/static\.vynnlee\.com\/qa-exp-pub/.test(await ud.textContent()) && /for everyone/.test(await ud.textContent()) && /not deleted/.test(await ud.textContent()), await ud.textContent());
   await ud.getByRole('button', { name: 'Unpublish', exact: true }).click();
-  check('dry-run 서버에서는 아무것도 지우지 않고 그렇다고 알린다', await p.getByText('Dry run: nothing was removed.').first().waitFor({ timeout: 15000 }).then(() => true, () => false));
+  check('dry-run 서버에서는 아무것도 지우지 않고 그렇다고 알린다', await p.getByText('Dry run: nothing was removed').first().waitFor({ timeout: 15000 }).then(() => true, () => false));
   check('dry-run은 게시 기록을 그대로 둔다', JSON.parse(fs.readFileSync(path.join(ROOT, 'decks', 'qa-exp-pub', '.publish.json'), 'utf8')).current !== null);
   // 비밀번호 덱
   await p.goto(BASE + '/dev/export?deck=qa-exp-pw'); await p.getByRole('button', { name: 'Export' }).waitFor();

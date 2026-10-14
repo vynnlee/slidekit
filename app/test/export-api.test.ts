@@ -202,3 +202,23 @@ test("unpublish: 로그에 '게시된 덱' 문구가 있어도 종료 코드 1�
     expect(readPublish(pubDir).current).not.toBeNull();
   });
 });
+
+test("outline: Markdown 본문(노트는 기본 포함, notes=0이면 제외), 내려받기 헤더, 없는 덱은 404, 게시 기록은 담지 않는다", async () => {
+  await withPubDeck(async () => {
+    writeFileSync(pjoin(pubDir, "index.html"), `<!doctype html><html><head><script type="application/json" id="deck-meta">{"title":"개요","author":"a"}</script></head><body><section data-slide="cover"><h1>표지</h1><aside data-notes>노트 글</aside></section></body></html>`);
+    recordPublish(pubDir, entry());
+    const r = makeRoutes(ok());
+    const get = (q = "") => r["/api/decks/:id/outline"].GET(Object.assign(new Request(`http://x/?${q}`), { params: { id: PUB_DECK } }) as any);
+    const res = await get();
+    expect(res.headers.get("content-type")).toContain("text/markdown");
+    expect(res.headers.get("content-disposition")).toBeNull();
+    const md = await res.text();
+    expect(md.startsWith("# ")).toBe(true);
+    expect(md).toContain("## 1. ");
+    expect(md).toContain("> Notes:");
+    expect(md).not.toContain("static.vynnlee.com"); // .publish.json의 주소는 들어가지 않는다
+    expect(await (await get("notes=0")).text()).not.toContain("> Notes:");
+    expect((await get("download=1")).headers.get("content-disposition")).toBe(`attachment; filename="${PUB_DECK}.md"`);
+    expect((await r["/api/decks/:id/outline"].GET(req("../x"))).status).toBe(404);
+  });
+});

@@ -276,7 +276,7 @@ export function Presenter({ id }: { id: string }) {
           <span className="mr-auto truncate text-subtitle font-medium">{deck.title}</span>
           {err && <span role="status" className="truncate text-caption text-muted-foreground">{err}</span>}
           {blank && win && <span role="status" className="rounded bg-hover px-1.5 text-caption text-foreground">Blanked ({blank})</span>}
-          {win !== null && <span className="flex items-center gap-1.5 text-caption text-muted-foreground"><span className={`size-1.5 rounded-full ${win ? "bg-green-500" : "bg-red-500"}`} />{win ? "Presentation window open" : "Presentation window closed"}</span>}
+          {win !== null && <span className="flex items-center gap-1.5 text-caption text-muted-foreground"><span className={`size-1.5 rounded-full ${win ? "bg-green-500" : "bg-red-500"}`} /><span className="max-[640px]:sr-only">{win ? "Presentation window open" : "Presentation window closed"}</span></span>}
           {screens && screens.length >= 2 && (
             <Select value={screens.includes(screen ?? "") ? screen! : screens[0]} onValueChange={(v) => { chooseScreen(v); setScreen(v); }} size="compact">
               <SelectTrigger aria-label="Presentation display" className="w-36 min-w-0" />
@@ -393,7 +393,7 @@ export function Presenter({ id }: { id: string }) {
               data-notes=""
               aria-label="Speaker notes"
               style={{ fontSize: notesSize, lineHeight: 1.5 }}
-              className="min-h-0 flex-1 overflow-auto rounded-lg text-foreground outline-none focus-visible:ring-1 focus-visible:ring-focus-ring [&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_h1]:text-[1.4em] [&_h1]:font-semibold [&_h2]:text-[1.2em] [&_h2]:font-semibold [&_h3]:font-semibold [&_a]:underline [&_li]:ml-5 [&_ol]:list-decimal [&_p+*]:mt-2 [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-hover [&_pre]:p-2 [&_ul]:list-disc"
+              className="min-h-0 flex-1 overflow-auto rounded-lg p-1 text-foreground outline-none focus-visible:ring-1 focus-visible:ring-focus-ring [&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_h1]:text-[1.4em] [&_h1]:font-semibold [&_h2]:text-[1.2em] [&_h2]:font-semibold [&_h3]:font-semibold [&_a]:underline [&_li]:ml-5 [&_ol]:list-decimal [&_p+*]:mt-2 [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-hover [&_pre]:p-2 [&_ul]:list-disc"
               dangerouslySetInnerHTML={{ __html: slide?.notes ? markdown(slide.notes) : '<p class="text-caption text-muted-foreground">No notes</p>' }}
             />
           </div>

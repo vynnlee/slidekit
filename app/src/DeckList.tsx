@@ -414,12 +414,12 @@ export function DeckList() {
             <CommandMenuItem value={item.value}>
               <span className="flex min-w-0 flex-1 items-baseline gap-2">
                 <span className="truncate [text-box:trim-both_cap_alphabetic] py-1 -my-1"><Hl text={item.label} q={q} /></span>
-                {item.description && <span className="min-w-0 truncate [text-box:trim-both_cap_alphabetic] py-1 -my-1 text-muted-foreground"><Hl text={item.description} q={q} /></span>}
+                {item.description && <span className="min-w-0 truncate [text-box:trim-both_cap_alphabetic] py-1 -my-1 text-foreground/75"><Hl text={item.description} q={q} /></span>}
               </span>
             </CommandMenuItem>
           )} />
           <CommandMenuEmpty>No results</CommandMenuEmpty>
-          <CommandMenuFooter />
+          <CommandMenuFooter className="[&_kbd_*]:text-foreground/80" />
         </CommandMenu>
       </CommandMenuDialog>
 

@@ -100,7 +100,7 @@ export function Filmstrip(p: Props) {
         <span className="text-caption tabular-nums text-muted-foreground">Slide {p.index + 1} / {p.units.length}</span>
       </div>
       {!p.collapsed && (
-        <ScrollArea orientation="horizontal">
+        <ScrollArea orientation="horizontal" className="[mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)]">
           <div
             role="listbox" aria-label="Slides" aria-orientation="horizontal" className="flex items-center gap-2 p-2" /* 링(ring-2)이 스크롤 영역 안쪽에서 잘리지 않게 여유를 둔다 */
             onDragEnd={end}

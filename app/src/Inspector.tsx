@@ -3,7 +3,7 @@ import {
   AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical,
   ArrowDown, ArrowRight, Blend, CaseLower, CaseSensitive, CaseUpper, ALargeSmall, Droplets, Expand, EyeOff, Frame, Layers as LayersIcon,
   Minus, Plus, RotateCw, Shrink, Square, SquareRoundCorner, Strikethrough, TextAlignCenter, TextAlignEnd, TextAlignJustify, TextAlignStart,
-  Underline, WrapText, Scan, Spline, Footprints, Ban, MoveHorizontal, ListCollapse, Space, BetweenHorizontalStart, BetweenVerticalStart, Type,
+  Underline, WrapText, Scan, Spline, Footprints, Ban, MousePointer2, MoveHorizontal, ListCollapse, Space, BetweenHorizontalStart, BetweenVerticalStart, Type,
 } from "lucide-react";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
@@ -226,6 +226,7 @@ export function Inspector(p: Props) {
 
   const kind = p.slide?.getAttribute("data-slide") ?? "content";
   const steps = p.slide?.getAttribute("data-steps") ?? "";
+  const bgNone = !p.slide?.style.getPropertyValue("background-color");
   const autoSteps = Math.max(1, ...[...(p.slide?.querySelectorAll("[data-step]") ?? [])].map((e) => parseInt(e.getAttribute("data-step") ?? "1", 10) || 1));
 
   return (
@@ -237,23 +238,32 @@ export function Inspector(p: Props) {
       <TabPanel value="props">
         {!el ? (
           <div className="-mx-3 flex flex-col pt-1" key="slide">
+            <p className="flex items-center gap-2 px-4 pb-3 text-caption text-muted-foreground">
+              <MousePointer2 className="size-3.5 shrink-0" aria-hidden="true" />
+              <span>Select an element to edit its properties</span>
+            </p>
             <InspectorSection id="slide" title="Slide">
-              <Grid>
-                <div className="col-span-2"><Pick label="Type" value={KINDS.some(([k]) => k === kind) ? kind : "content"} items={KINDS} onChange={(v) => p.onAttr("data-slide", v)} /></div>
-                <div className="col-span-2"><Field aria-label="Chapter title" placeholder="Chapter title" defaultValue={p.slide?.getAttribute("data-title") ?? ""} onChange={(e) => p.onAttr("data-title", e.target.value || null)} /></div>
-                <div className="col-span-2">
-                  <NumberField label={<Frame />} aria-label="Steps" unit="" min={1} step={1} value={steps || "1"} muted={!steps}
-                    onChange={(v) => p.onAttr("data-steps", +v > 1 ? String(Math.round(+v)) : null)} />
-                </div>
-                {autoSteps > 1 && <span className="col-span-2 text-caption text-muted-foreground">Auto from element steps: {autoSteps}</span>}
-              </Grid>
+              <div className="flex flex-col gap-1">
+                <span className="text-micro text-muted-foreground">Type</span>
+                <Pick label="Type" value={KINDS.some(([k]) => k === kind) ? kind : "content"} items={KINDS} onChange={(v) => p.onAttr("data-slide", v)} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-micro text-muted-foreground">Chapter title</span>
+                <Field aria-label="Chapter title" placeholder="Shown in the table of contents" defaultValue={p.slide?.getAttribute("data-title") ?? ""} onChange={(e) => p.onAttr("data-title", e.target.value || null)} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-micro text-muted-foreground">Steps</span>
+                <NumberField label={<Frame />} aria-label="Steps" unit="" min={1} step={1} value={steps || "1"} muted={!steps}
+                  onChange={(v) => p.onAttr("data-steps", +v > 1 ? String(Math.round(+v)) : null)} />
+                {autoSteps > 1 && <span className="text-micro text-muted-foreground">Auto from element steps: {autoSteps}</span>}
+              </div>
             </InspectorSection>
             <InspectorSection id="slide-bg" title="Background">
               <ColorField aria-label="Background" allowNone
+                className={bgNone ? "[&_input[aria-label$='opacity_percent']]:hidden" : undefined}
                 value={p.slide?.style.getPropertyValue("background-color") ?? ""}
                 onChange={(v) => p.onSlideStyle("background-color", v)} />
             </InspectorSection>
-            <p className="px-4 pb-4 text-micro text-muted-foreground">Select an element to edit its properties</p>
             <TokensPanel prefix={p.prefix} onPrefixChange={p.onPrefixChange} canvas={p.canvasDoc} />
           </div>
         ) : (

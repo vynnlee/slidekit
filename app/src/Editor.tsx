@@ -4,6 +4,7 @@ import { TextArea } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { CommandMenu, CommandMenuDialog, CommandMenuEmpty, CommandMenuFooter, CommandMenuInput, CommandMenuList, type CommandMenuItemData } from "@/components/ui/command-menu";
 import { Shell } from "./Shell";
 import { Canvas, textual, type CanvasApi } from "./Canvas";
 import { Filmstrip } from "./Filmstrip";
@@ -16,10 +17,31 @@ import { firstChild, isLeaf, parentOf, siblings } from "@/lib/selection";
 import { startPresentation } from "@/lib/present";
 import type { Comment, DeckEntry } from "@/lib/deck";
 
-const KEYS: [string, string][] = [
-  ["Cmd+S", "Save"], ["Cmd+Z", "Undo"], ["Shift+Cmd+Z", "Redo"], ["Delete", "Delete selection"], ["Cmd+D", "Duplicate"],
-  ["Up, Down", "Go to slide"], ["Double-click", "Edit text"], ["Enter", "Finish editing"], ["Esc", "Deselect"], ["Tab", "Select next element"], ["Cmd+Scroll, Cmd+0", "Zoom, fit"], ["Cmd+Enter", "Present from this slide"], ["Shift+Cmd+Enter", "Present from the start"], ["Cmd+\\", "Toggle panels"], ["Shift+Cmd+\\", "Toggle filmstrip"], ["Cmd+/", "Shortcuts"],
+const KEY_GROUPS: [string, [string, string][]][] = [
+  ["Edit", [["Cmd+S", "Save"], ["Cmd+Z", "Undo"], ["Shift+Cmd+Z", "Redo"], ["Cmd+D", "Duplicate"], ["Cmd+C", "Copy"], ["Cmd+V", "Paste"], ["Delete", "Delete selection"], ["Cmd+B", "Bold"], ["Cmd+I", "Italic"]]],
+  ["Select", [["Click", "Select a top-level element"], ["Double-click", "Go one level in, or edit text"], ["Cmd+Click", "Select the innermost element"], ["Enter", "First child, or edit text"], ["Shift+Enter", "Select the parent"], ["Tab", "Next sibling"], ["Esc", "Finish editing, or deselect"]]],
+  ["View", [["Up, Down", "Go to slide"], ["Cmd+Scroll", "Zoom"], ["Shift+1", "Zoom to fit"], ["Cmd+0", "Zoom to fit"], ["Cmd+\\", "Toggle panels"], ["Shift+Cmd+\\", "Toggle filmstrip"]]],
+  ["General", [["Cmd+K", "Command palette"], ["Cmd+Enter", "Present from this slide"], ["Shift+Cmd+Enter", "Present from the start"], ["Cmd+/", "Shortcuts"]]],
 ];
+const GLYPH: Record<string, string> = { Cmd: "⌘", Shift: "⇧", Enter: "↵", Delete: "⌫", Esc: "⎋", Up: "↑", Down: "↓" };
+// "Shift+Cmd+Z" -> 키캡 칩 여러 개. "Up, Down"은 쉼표로 나눈 두 키.
+const Keys = ({ combo }: { combo: string }) => (
+  <span className="flex items-center gap-1">
+    {combo.split(", ").map((c, ci) => (
+      <span key={ci} className="flex items-center gap-0.5">
+        {c.split("+").map((k) => <kbd key={k} className="min-w-5 rounded bg-surface-3 px-1 py-0.5 text-center font-sans text-micro tabular-nums text-foreground">{GLYPH[k] ?? k}</kbd>)}
+      </span>
+    ))}
+  </span>
+);
+// 팔레트에 보일 슬라이드 제목: data-title, 없으면 첫 제목 태그, 없으면 첫 글자.
+const slideTitle = (html: string) => {
+  const t = document.createElement("template");
+  t.innerHTML = html;
+  const root = t.content.firstElementChild;
+  const s = root?.getAttribute("data-title") || t.content.querySelector("h1,h2,h3")?.textContent || t.content.querySelector("p,div")?.textContent || "";
+  return s.trim().replace(/\s+/g, " ").slice(0, 60);
+};
 // 슬라이드 원문에서 노트(aside[data-notes])의 글자만 꺼낸다. 앞뒤 공백은 보기용으로만 뗀다.
 const noteOf = (html: string) => {
   const t = document.createElement("template");
@@ -40,6 +62,7 @@ export function Editor({ id }: { id: string }) {
   const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
   const [changed, setChanged] = useState(false); // 열어 둔 사이 파일이 밖에서 바뀜
   const [help, setHelp] = useState(false);
+  const [palette, setPalette] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ key: string; text: string } | null>(null);
@@ -362,12 +385,14 @@ export function Editor({ id }: { id: string }) {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "\\", metaKey: e.metaKey, ctrlKey: e.ctrlKey, cancelable: true }));
     } else if (mod && k === "s") { e.preventDefault(); save(); }
     else if (mod && e.shiftKey && (k === "|" || k === "\\")) { e.preventDefault(); toggleFilm(); }
+    else if (mod && k === "k") { e.preventDefault(); setPalette((v) => !v); }
     else if (mod && k === "/") { e.preventDefault(); setHelp((v) => !v); }
     else if (mod && e.key === "Enter") { e.preventDefault(); present(e.shiftKey); }
     else if (mod && (k === "b" || k === "i") && !/^(INPUT|TEXTAREA)$/.test(t.tagName) && (sel || t.isContentEditable || e.view !== window)) { e.preventDefault(); emphasis(k); }
     else if (typing) return;
     else if (mod && k === "c" && sel) { e.preventDefault(); copySel(); }
     else if (mod && k === "v" && clip.current) { e.preventDefault(); pasteSel(); }
+    else if (!mod && e.shiftKey && e.code === "Digit1") { e.preventDefault(); canvas.current?.zoom(0); }
     else if (mod && k === "0") { e.preventDefault(); canvas.current?.zoom(0); }
     else if (mod && (k === "=" || k === "+")) { e.preventDefault(); canvas.current?.zoom(1); }
     else if (mod && k === "-") { e.preventDefault(); canvas.current?.zoom(-1); }
@@ -395,6 +420,21 @@ export function Editor({ id }: { id: string }) {
   };
   const back = async () => { if (await save()) go("/"); };
   const label = status === "saving" ? "Saving..." : dirty ? "Unsaved" : "Saved";
+
+  // 명령 팔레트(Cmd+K): 슬라이드로 이동하고 자주 쓰는 동작을 실행한다. 열 때만 만든다.
+  const paletteItems: CommandMenuItemData[] = palette ? [
+    ...units.map((u, i) => ({ value: `slide-${i}`, label: `Slide ${i + 1}`, description: slideTitle(u.html), group: "Slides", keywords: [String(i + 1)], onSelect: () => setIndex(i) })),
+    { value: "act-present", label: "Present from this slide", group: "Actions", shortcut: "mod+enter", onSelect: () => present() },
+    { value: "act-present-start", label: "Present from the start", group: "Actions", shortcut: "mod+shift+enter", onSelect: () => present(true) },
+    { value: "act-add", label: "Add slide after this one", group: "Actions", onSelect: () => addSlide(indexRef.current) },
+    { value: "act-dup", label: "Duplicate slide", group: "Actions", onSelect: () => dupSlide(indexRef.current) },
+    { value: "act-del", label: "Delete slide", group: "Actions", disabled: units.length < 2, onSelect: () => delSlide(indexRef.current) },
+    { value: "act-save", label: "Save", group: "Actions", shortcut: "mod+s", onSelect: () => { save(true); } },
+    { value: "act-fit", label: "Zoom to fit", group: "View", shortcut: "shift+1", onSelect: () => canvas.current?.zoom(0) },
+    { value: "act-film", label: filmCollapsed ? "Show filmstrip" : "Hide filmstrip", group: "View", shortcut: "mod+shift+\\", onSelect: toggleFilm },
+    { value: "act-keys", label: "Keyboard shortcuts", group: "Help", shortcut: "mod+/", onSelect: () => setHelp(true) },
+    { value: "act-back", label: "Back to decks", group: "Navigate", onSelect: () => { back(); } },
+  ] : [];
 
   return (
     <>
@@ -470,12 +510,26 @@ export function Editor({ id }: { id: string }) {
         </div>
         </div>
       </Shell>
+      <CommandMenuDialog open={palette} onOpenChange={setPalette} title="Command palette" description="Go to a slide or run an action">
+        <CommandMenu items={paletteItems}>
+          <CommandMenuInput placeholder="Slide number, title or action" />
+          <CommandMenuList />
+          <CommandMenuEmpty>No results</CommandMenuEmpty>
+          <CommandMenuFooter />
+        </CommandMenu>
+      </CommandMenuDialog>
+
       <Dialog open={help} onOpenChange={setHelp}>
-        <DialogContent size="sm">
+        <DialogContent size="lg">
           <DialogTitle>Shortcuts</DialogTitle>
-          <div className="flex flex-col gap-1 pt-2">
-            {KEYS.map(([k, v]) => (
-              <div key={k} className="flex justify-between text-body"><span className="text-muted-foreground">{v}</span><span>{k}</span></div>
+          <div className="grid grid-cols-2 gap-x-8 gap-y-4 pt-3">
+            {KEY_GROUPS.map(([g, list]) => (
+              <div key={g} className="flex flex-col gap-1.5">
+                <span className="text-caption font-semibold">{g}</span>
+                {list.map(([k, v]) => (
+                  <div key={k} className="flex items-center justify-between gap-3 text-body"><span className="text-muted-foreground">{v}</span><Keys combo={k} /></div>
+                ))}
+              </div>
             ))}
           </div>
         </DialogContent>

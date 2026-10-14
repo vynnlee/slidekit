@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
-import { MessageSquare, Pencil, Trash2 } from "lucide-react";
+import { MessageSquare, Minus, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TextArea } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -57,6 +57,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   const shown = useRef<{ keys: string[]; html: Map<string, string> }>({ keys: [], html: new Map() });
   const editing = useRef<HTMLElement | null>(null);
   const hover = useRef<Element | null>(null);
+  const sizeTag = useRef<HTMLDivElement>(null);
   const hoverBox = useRef<HTMLDivElement>(null), selBox = useRef<HTMLDivElement>(null), bar = useRef<HTMLDivElement>(null), pop = useRef<HTMLDivElement>(null);
   const markers = useRef<HTMLDivElement>(null);
   const P = useRef(p);
@@ -231,6 +232,18 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     const s = P.current.sel;
     const r = put(selBox.current, s);
     if (r && selBox.current) { selBox.current.style.width = r.width + "px"; selBox.current.style.height = r.height + "px"; }
+    // 선택 요소의 크기 칩(슬라이드 1920 기준 px)
+    const tag = sizeTag.current;
+    if (tag) {
+      if (!r || !s || editing.current || composing) tag.style.display = "none";
+      else {
+        const k = (size.w * zoom) / 1920 || 1;
+        const t = `${Math.round(r.width / k)} × ${Math.round(r.height / k)}`;
+        if (tag.textContent !== t) tag.textContent = t;
+        tag.style.display = "block";
+        tag.style.transform = `translate(${r.left + r.width / 2}px,${r.bottom + 6}px) translateX(-50%)`;
+      }
+    }
     const h = hover.current && hover.current !== s && hover.current !== cur() ? hover.current : null;
     const hr = put(hoverBox.current, h);
     if (hr && hoverBox.current) { hoverBox.current.style.width = hr.width + "px"; hoverBox.current.style.height = hr.height + "px"; }
@@ -246,18 +259,21 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       const mr = put(m, t);
       if (mr) m.style.transform = `translate(${mr.right - 6}px,${mr.top - 6}px)`;
     });
-  }, [size.w, size.h, zoom]);
+  }, [size.w, size.h, zoom, composing]);
   useEffect(() => { place(); const t = setInterval(place, 60); return () => clearInterval(t); });
 
   const here = p.comments;
 
+  const pct = Math.round(((size.w * zoom) / 1920) * 100);
   return (
+    <div className="relative h-full w-full">
     <div ref={box} className="flex h-full w-full overflow-auto">
       <div className="relative m-auto shrink-0 overflow-hidden rounded-lg bg-black shadow-surface-3 ring-1 ring-white/[0.06]" style={{ width: size.w * zoom, height: size.h * zoom }}>
         {url && <iframe ref={frame} src={url} onLoad={attach} title="Canvas" className="absolute inset-0 h-full w-full border-0" />}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div ref={hoverBox} className="absolute left-0 top-0 hidden border border-focus-ring/60" />
           <div ref={selBox} className="absolute left-0 top-0 hidden border-2 border-focus-ring" />
+          <div ref={sizeTag} aria-hidden="true" className="absolute left-0 top-0 hidden whitespace-nowrap rounded bg-focus-ring px-1.5 py-0.5 text-micro tabular-nums text-white" />
           <div ref={markers}>
             {here.map((c) => (
               <div key={c.id} data-path={c.path} className="pointer-events-auto absolute left-0 top-0 hidden">
@@ -289,6 +305,12 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
           )}
         </div>
       </div>
+    </div>
+    <div role="group" aria-label="Zoom" className="absolute bottom-3 right-3 flex items-center gap-0.5 rounded-lg bg-surface-3 p-0.5 shadow-surface-3">
+      <Tooltip content="Zoom out (Cmd+-)" side="top"><Button aria-label="Zoom out" variant="ghost" size="icon-compact" onClick={() => zoomBy(-1)}><Minus /></Button></Tooltip>
+      <Tooltip content="Zoom to fit (Cmd+0, Shift+1)" side="top"><Button aria-label="Zoom to fit" variant="ghost" size="compact" className="min-w-12 tabular-nums" onClick={() => zoomBy(0)}>{pct}%</Button></Tooltip>
+      <Tooltip content="Zoom in (Cmd+=)" side="top"><Button aria-label="Zoom in" variant="ghost" size="icon-compact" onClick={() => zoomBy(1)}><Plus /></Button></Tooltip>
+    </div>
     </div>
   );
 

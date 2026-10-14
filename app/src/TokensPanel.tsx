@@ -21,7 +21,8 @@ const DEFAULTS: Record<string, string> = {
   "--sk-pad-y": "150px", "--sk-pad-x": "170px", "--sk-gap": "56px",
   "--sk-fs-h1": "120px", "--sk-fs-h2": "68px", "--sk-fs-body": "36px", "--sk-fs-small": "28px",
 };
-const COLORS: [string, string][] = [["--sk-bg", "Page background"], ["--sk-fg", "Text"], ["--sk-muted", "Muted text"], ["--sk-faint", "Faint text"], ["--sk-line", "Line"], ["--sk-panel", "Panel"], ["--sk-accent", "Accent"]];
+// [변수, 전체 이름(aria와 툴팁), 화면에 보이는 짧은 이름]
+const COLORS: [string, string, string][] = [["--sk-bg", "Page background", "Page"], ["--sk-fg", "Text", "Text"], ["--sk-muted", "Muted text", "Muted"], ["--sk-faint", "Faint text", "Faint"], ["--sk-line", "Line", "Line"], ["--sk-panel", "Panel", "Panel"], ["--sk-accent", "Accent", "Accent"]];
 const SPACING: [string, string, string][] = [["--sk-pad-x", "Padding X", "Pad X"], ["--sk-pad-y", "Padding Y", "Pad Y"], ["--sk-gap", "Gap", "Gap"]];
 const SIZES: [string, string, string][] = [["--sk-fs-h1", "Heading 1 size", "H1"], ["--sk-fs-h2", "Heading 2 size", "H2"], ["--sk-fs-body", "Body size", "Body"], ["--sk-fs-small", "Small size", "Small"]];
 const FONT_PRESETS: [string, string][] = [
@@ -145,13 +146,16 @@ export function TokensPanel({ prefix, onPrefixChange, canvas }: TokensPanelProps
 
   return (
     <>
-      <div className="mt-2 flex items-center gap-2 border-t border-border/60 px-4 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Deck styles</div>
+      <div className="mt-2 flex flex-col border-t border-border/60 px-4 pt-4">
+        <span className="text-caption font-semibold">Deck styles</span>
+        <span className="text-micro text-muted-foreground">Applies to every slide</span>
+      </div>
       <InspectorSection id="tokens-colors" title="Colors">
         <div className="flex flex-col gap-1">
-          {COLORS.map(([n, label]) => (
+          {COLORS.map(([n, label, short]) => (
             <div key={n} className="flex items-center gap-2">
               <div className="relative w-14 shrink-0">
-                <Tooltip content={n} side="top"><span className="block truncate pr-3 text-caption text-muted-foreground">{label}</span></Tooltip>
+                <Tooltip content={`${label} (${n})`} side="top"><span className="block truncate pr-3 text-caption text-muted-foreground">{short}</span></Tooltip>
                 <ResetDot changed={changed(n)} label={label} onReset={() => set(n, DEFAULTS[n], true)} />
               </div>
               <ColorField aria-label={label} value={val(n)} onChange={(v) => set(n, v)} className={cn("min-w-0 flex-1", !hasAlpha(val(n)) && HIDE_ALPHA)} />

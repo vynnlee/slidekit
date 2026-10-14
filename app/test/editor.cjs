@@ -350,6 +350,22 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   await focusBody(); await page.keyboard.press('Meta+z'); await sleep(600);
   check('추가 실행 취소', (await layers.count()) === total);
 
+  // 줌 컨트롤, 크기 칩, 명령 팔레트, 단축키 안내
+  const pctBtn = page.getByRole('button', { name: 'Zoom to fit' });
+  const pct0 = await pctBtn.textContent();
+  await page.getByRole('button', { name: 'Zoom in' }).click(); await sleep(300);
+  check('줌 버튼이 비율을 바꾸고 맞춤으로 돌아옴', (await pctBtn.textContent()) !== pct0 && (await pctBtn.click(), await sleep(300), (await pctBtn.textContent()) === pct0), pct0);
+  await focusBody(); await page.keyboard.press('Escape'); await page.keyboard.press('Tab'); await sleep(400);
+  check('선택 요소 크기 칩(W × H)', (await page.getByText(/^\d+ × \d+$/).count()) === 1);
+  await focusBody(); await page.keyboard.press('Escape');
+  await page.keyboard.press('Meta+k'); await sleep(500);
+  await page.getByPlaceholder('Slide number, title or action').fill('Slide 3'); await sleep(300);
+  await page.keyboard.press('Enter'); await sleep(700);
+  check('Cmd+K 팔레트로 슬라이드 이동', (await layers.nth(2).getAttribute('aria-selected')) === 'true');
+  await page.keyboard.press('Meta+/'); await sleep(400);
+  check('단축키 안내가 그룹으로 보임', (await page.getByText('Select', { exact: true }).count()) >= 1 && (await page.locator('kbd').count()) > 10);
+  await page.keyboard.press('Escape'); await sleep(300);
+
   // 노트 pane은 접지 않는다
   check('노트 pane에 접기 버튼이 없고 입력창이 항상 보임', (await page.getByRole('button', { name: /notes/i }).count()) === 0 && (await page.getByPlaceholder('Speaker notes (Markdown)').isVisible()));
   // 자동 저장: Cmd+S 없이 1.5초 뒤 저장된다

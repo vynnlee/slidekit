@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { handle, hashPassword, makeCookie, type Env } from "./index";
+import { handle, hashPassword, Limiter, makeCookie, type Env, type LimiterNs } from "./index";
 
 const pw = await hashPassword("열쇠");
 const store: Record<string, string> = {
@@ -122,4 +122,72 @@ test("보안: 비밀번호(salt)가 바뀌면 옛 쿠키 무효, 보호된 덱�
   expect(nul.status).toBe(403);
   store["meta:broken"] = JSON.stringify({ visibility: "password" }); store["html:broken"] = "x";
   expect((await get("broken")).status).toBe(404);
+});
+
+// Durable Object 모킹: 객체(이름)마다 요청을 한 줄로 처리한다(실제 DO의 직렬 처리와 같다). 저장소 호출마다 한 틱씩 양보해 끼어들기 틈을 만든다.
+function fakeNs() {
+  const objs = new Map<string, { chain: Promise<unknown>; obj: Limiter; data: Map<string, unknown>; alarm?: number }>();
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+  const ns: LimiterNs & { objs: typeof objs } = {
+    objs,
+    idFromName: (n) => n,
+    get: (id) => ({
+      fetch: (req) => {
+        const name = String(id);
+        let o = objs.get(name);
+        if (!o) {
+          const data = new Map<string, unknown>();
+          const storage = {
+            get: async <T>(k: string) => { await tick(); return data.get(k) as T | undefined; },
+            put: async (k: string, v: unknown) => { await tick(); data.set(k, structuredClone(v)); },
+            deleteAll: async () => { await tick(); data.clear(); },
+            setAlarm: async (t: number) => { objs.get(name)!.alarm = t; },
+          };
+          o = { chain: Promise.resolve(), obj: new Limiter({ storage }), data };
+          objs.set(name, o);
+        }
+        const cur = o;
+        const run = cur.chain.then(() => cur.obj.fetch(req));
+        cur.chain = run.catch(() => {});
+        return run;
+      },
+    }),
+  };
+  return ns;
+}
+const withDo = (ns: LimiterNs): Env => ({ ...env, LIMITER: ns });
+const postE = (e: Env, p: string, ip: string, now = Date.now()) =>
+  handle(new Request("https://x/sec", { method: "POST", headers: { "cf-connecting-ip": ip }, body: new URLSearchParams({ password: p }) }), e, now);
+
+test("DO 제한: 동시 요청 30개 중 정확히 5개만 비밀번호를 시험하고 나머지는 429", async () => {
+  const e = withDo(fakeNs());
+  const rs = await Promise.all(Array.from({ length: 30 }, () => postE(e, "틀림", "21.0.0.1")));
+  const codes = rs.map((r) => r.status);
+  expect(codes.filter((c) => c === 401).length).toBe(5);
+  expect(codes.filter((c) => c === 429).length).toBe(25);
+  expect(rs.find((r) => r.status === 429)!.headers.get("Retry-After")).toBeTruthy();
+});
+test("KV 폴백은 같은 동시 요청에서 5번을 넘겨 뚫린다(DO가 필요한 이유)", async () => {
+  const slow: Env = { ...env, DECKS: { ...env.DECKS, get: async (k) => { await new Promise((r) => setTimeout(r, 1)); return store[k] ?? null; } } };
+  const rs = await Promise.all(Array.from({ length: 30 }, () => postE(slow, "틀림", "21.0.0.2")));
+  expect(rs.filter((r) => r.status === 401).length).toBeGreaterThan(5);
+});
+test("DO 제한: IP와 덱별로 따로 세고, 맞는 비밀번호는 카운터를 지우며, 잠기면 맞는 비밀번호도 429", async () => {
+  const e = withDo(fakeNs());
+  for (let i = 0; i < 5; i++) expect((await postE(e, "틀림", "21.0.0.3")).status).toBe(401);
+  expect((await postE(e, "열쇠", "21.0.0.3")).status).toBe(429);
+  expect((await postE(e, "열쇠", "21.0.0.4")).status).toBe(303); // 다른 IP는 영향 없음
+  for (let i = 0; i < 4; i++) await postE(e, "틀림", "21.0.0.4");
+  expect((await postE(e, "열쇠", "21.0.0.4")).status).toBe(303); // 맞으면 지워서 다시 시작
+  for (let i = 0; i < 5; i++) expect((await postE(e, "틀림", "21.0.0.4")).status).toBe(401);
+});
+test("DO 제한: 15분이 지나면 다시 시도할 수 있고, 알람이 저장소를 비운다", async () => {
+  const ns = fakeNs(), e = withDo(ns), t0 = Date.now();
+  for (let i = 0; i < 5; i++) await postE(e, "틀림", "21.0.0.5", t0);
+  expect((await postE(e, "열쇠", "21.0.0.5", t0 + 14 * 60_000)).status).toBe(429);
+  expect((await postE(e, "열쇠", "21.0.0.5", t0 + 15 * 60_000 + 1)).status).toBe(303);
+  const o = ns.objs.get("rl:sec:21.0.0.5")!;
+  expect(o.alarm).toBeGreaterThan(t0);
+  await o.obj.alarm();
+  expect(o.data.size).toBe(0);
 });

@@ -7,7 +7,9 @@ type KV = {
   put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
   delete(key: string): Promise<void>;
 };
-export type Env = { DECKS: KV; COOKIE_SECRET: string };
+// 로그인 시도 카운터 Durable Object 바인딩(선택). 없으면 KV 카운터로 동작한다(구버전 배포와 호환).
+export type LimiterNs = { idFromName(name: string): unknown; get(id: unknown): { fetch(req: Request): Promise<Response> } };
+export type Env = { DECKS: KV; COOKIE_SECRET: string; LIMITER?: LimiterNs };
 export type Meta = { visibility: "public" | "password"; lang?: string; title?: string; salt?: string; hash?: string };
 
 const enc = new TextEncoder();
@@ -92,11 +94,50 @@ const shell = (m: Msg, title: string, body: string, status: number, extra: Recor
 const plain = (status: number, text: string, extra: Record<string, string> = {}, m: Msg = T.ko, detail = "") =>
   shell(m, text, `<h1>${esc(text)}</h1>${detail ? `<p>${esc(detail)}</p>` : ""}`, status, extra);
 
-// (덱, IP)별 실패 횟수를 KV에 둔다. KV 만료는 최소 60초라 창 안에서만 유효한 start로 직접 판단한다.
+// 로그인 시도 제한. (덱, IP)별로 15분 창에서 MAX_FAILS번까지 시도할 수 있고, 맞으면 지운다.
+// Durable Object(LIMITER)가 있으면 시도를 검사와 동시에 센다(한 객체가 요청을 직렬로 처리하므로 동시 요청이 5번을 넘기지 못한다).
+// 없으면 KV 카운터를 쓴다: 읽고 쓰기 사이에 틈이 있어 동시 요청에 뚫릴 수 있다(구버전과 같은 동작).
 type Fails = { n: number; start: number };
-async function failsOf(env: Env, key: string, now: number): Promise<Fails> {
-  const f: Fails | null = JSON.parse((await env.DECKS.get(key)) ?? "null");
-  return f && now / 1000 - f.start < WINDOW ? f : { n: 0, start: now / 1000 };
+type Take = { ok: boolean; wait: number };
+const nextFail = (f: Fails | null, nowMs: number): Fails => (f && nowMs / 1000 - f.start < WINDOW ? f : { n: 0, start: nowMs / 1000 });
+function limiter(env: Env, key: string, now: number) {
+  if (env.LIMITER) {
+    const stub = env.LIMITER.get(env.LIMITER.idFromName(key));
+    const call = async (op: string) => (await (await stub.fetch(new Request(`https://limiter/${op}`, { method: "POST", body: JSON.stringify({ now }) }))).json()) as Take;
+    return { take: () => call("attempt"), fail: async () => {}, clear: async () => { await call("clear"); } };
+  }
+  return {
+    async take(): Promise<Take> {
+      const f = nextFail(JSON.parse((await env.DECKS.get(key)) ?? "null"), now);
+      return { ok: f.n < MAX_FAILS, wait: Math.ceil(f.start + WINDOW - now / 1000) };
+    },
+    async fail() {
+      const f = nextFail(JSON.parse((await env.DECKS.get(key)) ?? "null"), now);
+      f.n++;
+      await env.DECKS.put(key, JSON.stringify(f), { expirationTtl: WINDOW });
+    },
+    async clear() { await env.DECKS.delete(key); },
+  };
+}
+
+// Durable Object: 키(덱:IP)마다 하나. 시도 횟수와 창 시작을 저장하고, 창이 끝나면 알람으로 저장소를 비운다.
+type Storage = { get<T>(k: string): Promise<T | undefined>; put(k: string, v: unknown): Promise<void>; deleteAll(): Promise<void>; setAlarm(t: number): Promise<void> };
+export class Limiter {
+  constructor(private state: { storage: Storage }) {}
+  async fetch(req: Request): Promise<Response> {
+    const st = this.state.storage;
+    const { now } = (await req.json().catch(() => ({ now: Date.now() }))) as { now: number };
+    if (new URL(req.url).pathname === "/clear") { await st.deleteAll(); return Response.json({ ok: true, wait: 0 }); }
+    // 읽고 쓰는 사이에 외부 호출(fetch 등)이 없어 같은 객체의 다른 요청이 끼어들지 못한다.
+    const f = nextFail(await st.get<Fails>("f") ?? null, now);
+    const wait = Math.ceil(f.start + WINDOW - now / 1000);
+    if (f.n >= MAX_FAILS) return Response.json({ ok: false, wait });
+    f.n++;
+    await st.put("f", f);
+    await st.setAlarm(f.start * 1000 + WINDOW * 1000 + 1000);
+    return Response.json({ ok: true, wait });
+  }
+  async alarm() { await this.state.storage.deleteAll(); }
 }
 
 const form = (m: Msg, meta: Meta, err = "", nonce = crypto.randomUUID().replace(/-/g, "")) => shell(m, meta.title || m.title,
@@ -124,16 +165,16 @@ export async function handle(req: Request, env: Env, now = Date.now()): Promise<
     if (origin) { try { oh = new URL(origin).host; } catch { return plain(403, m.denied, {}, m); } }
     if (origin && oh !== new URL(req.url).host) return plain(403, m.denied, {}, m);
     const key = `rl:${deck}:${req.headers.get("cf-connecting-ip") ?? "unknown"}`;
-    const fails = await failsOf(env, key, now);
-    if (fails.n >= MAX_FAILS) { const wait = Math.ceil(fails.start + WINDOW - now / 1000); return plain(429, m.locked, { "Retry-After": String(wait) }, m, m.retry(Math.max(1, Math.ceil(wait / 60)))); } // 맞는 비밀번호도 잠금 중이면 거부한다
+    const rl = limiter(env, key, now);
+    const t = await rl.take();
+    if (!t.ok) { const wait = t.wait; return plain(429, m.locked, { "Retry-After": String(wait) }, m, m.retry(Math.max(1, Math.ceil(wait / 60)))); } // 맞는 비밀번호도 잠금 중이면 거부한다
     const pw = (await req.formData().catch(() => null))?.get("password");
     const { hash } = await hashPassword(typeof pw === "string" ? pw : "", meta.salt);
     if (!same(unb64(hash), unb64(meta.hash))) {
-      fails.n++;
-      await env.DECKS.put(key, JSON.stringify(fails), { expirationTtl: WINDOW });
+      await rl.fail();
       return form(m, meta, m.wrong);
     }
-    await env.DECKS.delete(key);
+    await rl.clear();
     return new Response(null, { status: 303, headers: { ...headers, Location: `/${deck}`, "Set-Cookie": await makeCookie(env.COOKIE_SECRET, deck, meta.salt, now) } });
   }
   // 같은 출처의 다른 덱 스크립트가 fetch로 읽는 것을 막는다: 보호된 덱은 주소창 이동(문서) 요청에만 서빙한다.

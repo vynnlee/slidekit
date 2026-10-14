@@ -24,8 +24,17 @@
 
 **배포 뒤 점검**: `bun run deploy --smoke [공개덱 [비밀번호덱]]`. GET만 보내며 토큰이 필요 없다. 헤더, 200, 404, 비밀번호 폼, fetch 거부를 확인한다. 지금 배포된 구버전에 실행하면 COOP, HSTS, 캐시 항목이 FAIL로 나오는 것이 정상이고, 배포 뒤에는 모두 PASS여야 한다. 손으로 할 것(시도 횟수를 쓰므로 스크립트에 넣지 않았다): 비밀번호 덱에서 틀린 비밀번호 한 번(401 안내가 뜨는지), 맞는 비밀번호 한 번(덱이 열리고 쿠키가 생기는지). 문제가 있으면 `cd deploy/worker && bunx wrangler@4.150.0 rollback`으로 직전 버전으로 되돌린다(KV 데이터는 그대로다).
 
-**로그인 시도 제한 원자화 선택지**(현재는 KV 읽고 쓰기라 동시 요청과 IP 회전에 뚫린다):
-- Durable Object: 덱마다 한 객체가 카운터를 직렬로 처리해 15분 5회를 정확히 지킬 수 있다. 코드는 객체 클래스와 wrangler 마이그레이션 추가로 약 40줄, 요청마다 객체 호출이 한 번 늘어난다. SQLite 기반 객체는 무료 플랜에서도 쓸 수 있고 이 용도의 사용량은 무료 한도(요청 하루 10만 건 수준)에 한참 못 미친다.
-- Rate Limiting 바인딩: wrangler 설정 몇 줄과 호출 한 줄이면 되고 무료 플랜에서도 쓸 수 있다. 다만 기간이 10초나 60초 중 하나이고 데이터센터별로 세어 15분 5회를 표현하지 못한다. 거친 1차 방어로만 맞다.
-- 추천: Durable Object(덱 이름과 IP를 키로 하는 카운터). 정확도가 요구 사항(15분 5회)과 맞고 비용은 사실상 0이다. 승인 때 이 선택을 함께 묻는다. 위 플랜별 한도 수치는 배포 직전에 Cloudflare 공식 문서로 다시 확인한다.
+**로그인 시도 제한(구현 완료, 미배포)**: Durable Object `Limiter`(SQLite 기반)가 덱과 IP를 키로 시도를 세고, 검사와 증가를 한 번에 해서 동시 요청이 5번을 넘기지 못한다(15분 창에서 5회, 맞으면 지움, 창이 끝나면 알람으로 저장소를 비움). `LIMITER` 바인딩이 없으면 이전과 같은 KV 카운터로 동작해 구버전 배포와도 호환된다. 단위 테스트가 동시 요청 30개 중 정확히 5개만 비밀번호를 시험함을 보이고, 같은 조건에서 KV 폴백이 5개를 넘기는 것도 보인다. `wrangler.toml`에 바인딩과 마이그레이션 `v1`(`new_sqlite_classes`)이 있고 `--dry-run`이 통과한다(번들 10.6 KiB, gzip 4.4 KiB, 바인딩 LIMITER와 DECKS). 마이그레이션 적용 자체는 드라이런으로 검증할 수 없고 첫 실제 배포에서 일어난다.
 
+선택지 비교(공식 문서로 확인한 수치):
+- Durable Object: 무료 플랜은 SQLite 기반만 쓸 수 있고, 하루 요청 100,000건, 기간 13,000 GB-s, 행 읽기 500만, 행 쓰기 100,000, SQL 저장 5 GB(합계) 한도다. 이 용도(시도 한 번에 쓰기 두세 행)는 한도에 한참 못 미친다. https://developers.cloudflare.com/durable-objects/platform/pricing/
+- Rate Limiting 바인딩: 기간이 10초 또는 60초뿐이고 데이터센터별 집계이며 비동기로 동기화되어 허용 쪽으로 느슨하다. 15분 5회를 표현하지 못한다. 요금제 조건은 문서에 없다. https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/
+- 결론: Durable Object를 쓴다(구현함).
+
+**승인 시 실행 순서** (이 순서대로, 모두 한 번에 적용되고 덱을 다시 올릴 필요는 없다):
+1. 작업트리가 깨끗한지 `git status`로 확인하고 `bun test deploy`가 통과하는지 본다.
+2. `cd deploy/worker && bunx wrangler@4.150.0 deploy --dry-run --outdir /tmp/sk-wr`로 번들과 바인딩(LIMITER, DECKS)을 확인한다.
+3. `bun run deploy --worker`: 코드, Durable Object 바인딩, 마이그레이션 v1이 함께 올라간다(`COOKIE_SECRET`은 이미 설정되어 있다).
+4. `bun run deploy --smoke vibe-coding-workshop`: 모두 PASS여야 한다.
+5. 비밀번호 덱을 올릴 때: `bun run deploy <덱>`(비밀번호는 숨김 입력), 이어서 `bun run deploy --smoke vibe-coding-workshop <덱>`, 그리고 손으로 틀린 비밀번호 한 번과 맞는 비밀번호 한 번을 확인한다. 같은 IP로 틀린 비밀번호를 5번 보내면 6번째가 429이고 `Retry-After`가 붙는지도 한 번 본다.
+6. 문제가 있으면 `cd deploy/worker && bunx wrangler@4.150.0 rollback`. 코드만 이전 버전으로 돌아가고 마이그레이션과 Durable Object 클래스는 남지만, 구코드가 쓰지 않으므로 해가 없다(KV 카운터로 돌아간다).

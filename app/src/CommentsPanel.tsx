@@ -52,7 +52,7 @@ function NotConnected({ open }: { open: boolean }) {
   const copy = async () => { try { await navigator.clipboard.writeText(CMD); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* 클립보드 거부: 명령을 직접 복사한다 */ } };
   return (
     <details open={open} className="rounded-lg bg-hover" data-testid="channel-help">
-      <summary className="flex cursor-pointer select-none items-center gap-2 rounded-lg px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-focus-ring">
+      <summary className="flex cursor-default select-none items-center gap-2 rounded-lg px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-focus-ring">
         <ChannelBadge connected={false} />
         <span className="ml-auto whitespace-nowrap text-micro text-muted-foreground">How to connect</span>
       </summary>

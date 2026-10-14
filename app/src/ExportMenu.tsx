@@ -170,7 +170,7 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
               )}
               {(log.length > 0 || busy) && (
                 <details open={!url} className="rounded-md bg-hover">
-                  <summary className="cursor-pointer select-none px-2 py-1 text-caption text-muted-foreground">Details</summary>
+                  <summary className="cursor-default select-none px-2 py-1 text-caption text-muted-foreground">Details</summary>
                   <div aria-live="polite" aria-label="Progress" className="max-h-40 overflow-auto px-2 pb-2 font-mono text-caption text-muted-foreground">
                     {log.map((l, i) => <div key={i}>{l}</div>)}<div ref={logEnd} />
                   </div>

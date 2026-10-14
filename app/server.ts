@@ -12,6 +12,21 @@ import { createDeck, routes as deckRoutes } from "./decks-api";
 // 하위 명령: slidekit new|lint|pdf|doctor|bundle|deploy <덱>. 해당 스크립트는 argv[2]를 덱 이름으로 읽는다.
 const sub = process.argv[2];
 const SUBS: Record<string, string> = { new: "../engine/new.ts", lint: "../engine/lint.ts", pdf: "../engine/pdf.ts", doctor: "../engine/doctor.ts", bundle: "../bundler/bundle.ts", deploy: "../deploy/deploy.ts" };
+const USAGE = `사용법: slidekit [명령]
+  (명령 없음)      앱을 연다(덱 목록, 편집기, 발표자 화면)
+  new <이름>       새 덱을 만든다
+  lint <덱>        규격 위반을 점검한다
+  bundle <덱>      단독 HTML 한 파일로 묶는다
+  pdf <덱>         슬라이드당 한 페이지의 PDF로 내보낸다
+  deploy <덱>      static.vynnlee.com에 올린다
+  doctor           환경을 점검한다`;
+const dist = (a: string, b: string) => { const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]); for (let j = 1; j <= b.length; j++) d[0][j] = j; for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); return d[a.length][b.length]; };
+if (sub === "help" || sub === "--help" || sub === "-h") { console.log(USAGE); process.exit(0); }
+if (sub && !(sub in SUBS)) {
+  const near = Object.keys(SUBS).find((k) => dist(sub, k) <= 2);
+  console.error(`알 수 없는 명령: ${sub}${near ? `. ${near}을 말한 것인가` : ""}\n\n${USAGE}`);
+  process.exit(1);
+}
 if (sub && sub in SUBS) {
   process.argv.splice(2, 1);
   process.env.SLIDEKIT_SUB = sub; // 하위 명령 스크립트가 직접 실행인지 알아보는 표시

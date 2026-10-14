@@ -33,16 +33,16 @@ for (const port of [3200, 3220]) {
 const up = (await probe(3200)) ? 3200 : (await probe(3220)) ? 3220 : 0;
 if (up) {
   const s = await probe(up, "evil.example");
-  row(s === 403 || s === 400 || s === 421, "guard", `낯선 Host 요청에 HTTP ${s} (${up})`);
+  row(s === 403 || s === 400 || s === 421, "guard", `낯선 Host 요청에 HTTP ${s} (${up})${s === 403 || s === 400 || s === 421 ? "" : ". app/guard.ts의 Host 허용 목록과 바인딩 주소(127.0.0.1)를 확인한다"}`);
 } else row(true, "guard", "서버가 꺼져 있어 건너뜀 (bun run slidekit 후 다시 실행)");
 
 const decks = existsSync(join(root, "decks")) ? readdirSync(join(root, "decks"), { withFileTypes: true }).filter((d) => d.isDirectory() && existsSync(join(root, "decks", d.name, "index.html"))) : [];
 for (const d of decks) {
   const issues = lint(await Bun.file(join(root, "decks", d.name, "index.html")).text());
   const e = issues.filter((i) => i.level === "error").length, w = issues.length - e;
-  row(e === 0, "lint", `${d.name}: 오류 ${e}, 경고 ${w}`);
+  row(e === 0, "lint", `${d.name}: 오류 ${e}, 경고 ${w}${e ? `. 자세히: bun run slidekit lint ${d.name}` : ""}`);
 }
-if (!decks.length) row(false, "lint", "decks/에 덱이 없다");
+if (!decks.length) row(false, "lint", "decks/에 덱이 없다. bun run slidekit new <이름>으로 만든다");
 
 console.log(warns ? `\n${warns}건 확인 필요` : "\n모두 정상");
 process.exit(0);

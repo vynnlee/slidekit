@@ -23,6 +23,14 @@
     ul.items li { font-size: 34px; line-height: 1.5; color: var(--sk-fg); position: relative; padding-left: 72px; counter-increment: i; }
     ul.items li::before { content: counter(i, decimal-leading-zero); font: 500 24px var(--sk-font-mono); color: var(--sk-faint); position: absolute; left: 0; top: 9px; }
     ul.items li b { font-weight: 700; }
+    .keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+    .key { background: var(--sk-panel); border: 1px solid var(--sk-line); border-radius: 14px; padding: 30px 34px; display: flex; flex-direction: column; gap: 14px; }
+    .key .k { font: 500 52px var(--sk-font-mono); color: var(--sk-fg); line-height: 1; }
+    .key .d { word-break: keep-all; font-size: 28px; line-height: 1.45; color: var(--sk-muted); }
+    .flow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; align-items: stretch; }
+    .flow .node { background: var(--sk-panel); border: 1px solid var(--sk-line); border-radius: 14px; padding: 30px 34px; display: flex; flex-direction: column; gap: 16px; }
+    .flow .node .t { font: 500 30px var(--sk-font-mono); color: var(--sk-fg); }
+    .flow .node .d { word-break: keep-all; font-size: 28px; line-height: 1.45; color: var(--sk-muted); }
     code { font-family: var(--sk-font-mono); font-size: 0.82em; color: var(--sk-fg); background: var(--sk-panel); border: 1px solid var(--sk-line); border-radius: 8px; padding: .08em .45em; margin: 0 .12em; }
   </style>
 </head>
@@ -66,16 +74,16 @@
 </section>
 
 <section data-slide="content">
-  <h2>이동과 발표자 화면</h2>
-  <ul class="items">
-    <li>슬라이드 이동은 <b>방향키</b>만 한다. 클릭, 스페이스, 스와이프로는 넘어가지 않는다.</li>
-    <li>F는 전체화면, O는 전체 보기, B와 W는 화면을 검게 또는 희게 가린다. 숫자를 입력하고 Enter를 누르면 그 번호의 장으로 간다.</li>
-    <li>발표자 화면은 현재와 다음 슬라이드, 노트, 타이머와 시계, 장 위치를 보여 주고 항목마다 켜고 끌 수 있다.</li>
-    <li>외장 모니터가 있으면 발표 화면을 그 모니터에 전체화면으로 띄운다(Chrome 계열).</li>
-  </ul>
+  <h2>이동은 방향키 하나로 한다</h2>
+  <div class="keys">
+    <div class="key"><span class="k">← →</span><span class="d">앞뒤로 이동한다. 클릭, 스페이스, 스와이프로는 넘어가지 않는다.</span></div>
+    <div class="key"><span class="k">F  O</span><span class="d">F는 전체화면, O는 전체 보기이다.</span></div>
+    <div class="key"><span class="k">B  W</span><span class="d">화면을 검게 또는 희게 가린다.</span></div>
+  </div>
+  <p>숫자를 입력하고 Enter를 누르면 그 번호의 장으로 간다. 발표자 화면은 현재와 다음 슬라이드, 노트, 타이머를 보여 주고 외장 모니터에 발표 화면을 띄운다.</p>
   <aside data-notes>이동 수단을 방향키로 제한한 이유는 **발표 중 오작동을 막기 위해서**이다.
 
-발표자 화면의 항목은 필요한 것만 켜 둔다.</aside>
+발표자 화면의 항목은 필요한 것만 켜 둔다. 외장 모니터는 Chrome 계열 브라우저에서 쓴다.</aside>
 </section>
 
 <section data-slide="chapter" data-title="만들기">
@@ -132,16 +140,16 @@
 </section>
 
 <section data-slide="content">
-  <h2>내보내기</h2>
-  <ul class="items">
-    <li><code>slidekit bundle</code>은 엔진, 이미지, 글꼴을 담은 HTML 파일 하나를 만든다.</li>
-    <li><code>slidekit pdf</code>는 슬라이드당 한 페이지, 16:9 PDF를 만든다.</li>
-    <li><code>slidekit deploy</code>는 static.vynnlee.com에 올리고 공개 또는 비밀번호를 고른다.</li>
-    <li>편집기의 Export 메뉴에서도 같은 일을 한다.</li>
-  </ul>
+  <h2>내보내기는 세 가지이다</h2>
+  <div class="flow">
+    <div class="node"><span class="t">bundle</span><span class="d">엔진, 이미지, 글꼴을 담은 HTML 파일 하나</span></div>
+    <div class="node"><span class="t">pdf</span><span class="d">슬라이드당 한 페이지, 16:9</span></div>
+    <div class="node"><span class="t">deploy</span><span class="d">static.vynnlee.com, 공개 또는 비밀번호</span></div>
+  </div>
+  <p>편집기의 Export 메뉴에서도 같은 일을 한다.</p>
   <aside data-notes>산출물은 **번들, PDF, 배포** 세 가지이다.
 
-명령과 Export 메뉴는 같은 기능을 쓴다.</aside>
+명령은 `slidekit bundle`, `slidekit pdf`, `slidekit deploy`이고 Export 메뉴와 같은 기능을 쓴다.</aside>
 </section>
 
 <section data-slide="end">

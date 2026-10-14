@@ -33,6 +33,6 @@ test("저장소 밖 경로는 거부한다", () => {
     writeFileSync(join(dir, "index.html"), `<html><body><section data-slide="cover"><img src="../../../../etc/hosts"></section></body></html>`);
     const r = Bun.spawnSync(["bun", join(root, "bundler", "bundle.ts"), "_bundletest"], { stderr: "pipe" });
     expect(r.exitCode).not.toBe(0);
-    expect(r.stderr.toString()).toContain("outside the repo");
+    expect(r.stderr.toString()).toContain("덱 폴더 밖");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

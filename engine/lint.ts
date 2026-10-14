@@ -18,23 +18,23 @@ export function lint(html: string): Issue[] {
     .replace(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi, (_, a, b) => { scripts.push({ attrs: a, body: b }); return `<script${a}></script>`; })
     .replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gi, (_, b) => { styles.push(b); return "<style></style>"; });
 
-  if (!/<html\b[^>]*\bdata-slidekit="1"/i.test(rest)) add("error", "html", '<html data-slidekit="1"> 이 없다');
+  if (!/<html\b[^>]*\bdata-slidekit="1"/i.test(rest)) add("error", "html", '<html> 태그에 data-slidekit="1"을 붙인다');
 
   const metaS = scripts.find((s) => /id=["']deck-meta["']/.test(s.attrs));
-  if (!metaS) add("error", "deck-meta", "#deck-meta 스크립트가 없다");
+  if (!metaS) add("error", "deck-meta", '<script type="application/json" id="deck-meta"> 블록이 없다. head에 {"title": "덱 제목"}을 담아 넣는다');
   else {
     try {
       const m = JSON.parse(metaS.body);
-      if (typeof m.title !== "string" || !m.title) add("error", "deck-meta", "title 필수");
-      if (m.date != null && !/^\d{4}-\d{2}-\d{2}$/.test(m.date)) add("error", "deck-meta", "date는 YYYY-MM-DD");
-      if (m.visibility != null && !["public", "password"].includes(m.visibility)) add("error", "deck-meta", 'visibility는 "public" 또는 "password"');
-      if (m.id != null && !/^[a-z0-9-]+$/.test(m.id)) add("error", "deck-meta", "id는 영문 소문자, 숫자, -");
-    } catch { add("error", "deck-meta", "JSON이 깨져 있다"); }
+      if (typeof m.title !== "string" || !m.title) add("error", "deck-meta", 'deck-meta에 title이 없다. "title": "덱 제목"을 적는다');
+      if (m.date != null && !/^\d{4}-\d{2}-\d{2}$/.test(m.date)) add("error", "deck-meta", "deck-meta의 date 형식이 틀렸다. 2026-10-14처럼 적는다");
+      if (m.visibility != null && !["public", "password"].includes(m.visibility)) add("error", "deck-meta", 'deck-meta의 visibility는 "public" 또는 "password"여야 한다');
+      if (m.id != null && !/^[a-z0-9-]+$/.test(m.id)) add("error", "deck-meta", "deck-meta의 id는 영문 소문자, 숫자, -만 쓴다(예: my-talk)");
+    } catch { add("error", "deck-meta", "deck-meta JSON을 읽지 못했다. 쉼표와 따옴표를 확인한다"); }
   }
-  if (!/slidekit\.css/.test(rest)) add("error", "engine", "slidekit.css 링크가 없다");
+  if (!/slidekit\.css/.test(rest)) add("error", "engine", 'head에 <link rel="stylesheet" href="../../engine/slidekit.css">를 넣는다');
   const eng = scripts.findIndex((s) => /slidekit\.js/.test(s.attrs));
-  if (eng < 0) add("error", "engine", "slidekit.js 스크립트가 없다");
-  else if (scripts.slice(0, eng).some((s) => !/application\/json|slidekit\.js/.test(s.attrs) && s.body.trim())) add("error", "engine", "덱 스크립트가 엔진보다 앞에 있다");
+  if (eng < 0) add("error", "engine", 'body 끝에 <script src="../../engine/slidekit.js"></script>를 넣는다');
+  else if (scripts.slice(0, eng).some((s) => !/application\/json|slidekit\.js/.test(s.attrs) && s.body.trim())) add("error", "engine", "덱 스크립트를 slidekit.js 뒤로 옮긴다");
 
   // body 안을 태그 단위로 훑어 깊이를 센다
   const bodyM = rest.match(/<body\b[^>]*>([\s\S]*)<\/body>/i);
@@ -55,10 +55,10 @@ export function lint(html: string): Issue[] {
     const at = (n: string) => attrs.match(new RegExp(`\\b${n}=(?:"([^"]*)"|'([^']*)')`))?.[1] ?? attrs.match(new RegExp(`\\b${n}=(?:'([^']*)')`))?.[1] ?? null;
     if (/\b(?:id|class)=["'][^"']*\b(viewport|stage)\b/i.test(attrs)) wrappers.push(tag);
     if (cur) { const ds = at("data-step"); if (ds !== null) cur.dsteps.push(ds.trim()); }
-    if (stack.length === 0 && !["section", "script"].includes(tag)) add("error", "wrapper", `body 직계에 <${tag}>가 있다(슬라이드만 둔다)`);
+    if (stack.length === 0 && !["section", "script"].includes(tag)) add("error", "wrapper", `<${tag}>가 슬라이드 밖에 있다. 모든 요소를 <section data-slide> 안으로 옮긴다`);
     if (stack.length === 0 && tag === "section") {
       const kind = at("data-slide");
-      if (kind === null) add("error", "slide", "body 직계 <section>에 data-slide가 없다");
+      if (kind === null) add("error", "slide", '<section>에 data-slide="content"를 붙인다(cover, chapter, content, end 중 하나)');
       cur = { kind: kind ?? "", title: at("data-title"), steps: Number(at("data-steps") ?? 1), id: at("id"), notes: 0, text: "", dsteps: [] };
       slides.push(cur);
     } else if (cur && tag === "aside" && /\bdata-notes\b/.test(attrs)) {
@@ -67,55 +67,63 @@ export function lint(html: string): Issue[] {
     }
     if (!VOID.has(tag) && !/\/$/.test(attrs)) stack.push(tag);
   }
-  if (wrappers.length) add("error", "wrapper", "viewport나 stage 이름의 래퍼를 쓴다");
+  if (wrappers.length) add("error", "wrapper", "viewport, stage 이름의 래퍼를 지운다. 화면 맞춤은 엔진이 맡는다");
   if (!slides.length) add("error", "slide", "슬라이드가 없다");
 
   slides.forEach((s, i) => {
     const n = i + 1;
-    if (s.kind && !KINDS.includes(s.kind)) add("warn", "slide", `슬라이드 ${n}: data-slide="${s.kind}"는 content로 처리된다`);
+    if (s.kind && !KINDS.includes(s.kind)) add("warn", "slide", `슬라이드 ${n}: data-slide="${s.kind}"는 알 수 없는 종류라 content로 처리된다. cover, chapter, content, end 중 하나로 바꾼다`);
     if (s.kind === "chapter") {
-      if (!s.title) add("error", "chapter", `슬라이드 ${n}: chapter에 data-title이 없다`);
+      if (!s.title) add("error", "chapter", `슬라이드 ${n}: chapter에 data-title="장 이름"을 달고 h1에도 같은 글자를 쓴다`);
       else {
         const h1 = s.text.match(/^\s*$/) ? "" : s.text.replace(/\s+/g, " ").trim();
-        if (!h1.includes(s.title.trim())) add("warn", "chapter", `슬라이드 ${n}: data-title 글자가 본문 h1에 없다`);
+        if (!h1.includes(s.title.trim())) add("warn", "chapter", `슬라이드 ${n}: data-title이 본문 h1의 글자와 다르다. 한쪽을 맞춘다`);
       }
     }
-    if (s.notes > 1) add("error", "notes", `슬라이드 ${n}: 노트 aside가 ${s.notes}개`);
+    if (s.notes > 1) add("error", "notes", `슬라이드 ${n}: 노트 aside[data-notes]가 ${s.notes}개다. 슬라이드당 하나로 합친다`);
     const bad = s.dsteps.filter((v) => !/^\d+$/.test(v) || Number(v) < 2);
     if (bad.length) add("error", "data-step", `슬라이드 ${n}: data-step은 2 이상의 정수여야 한다(잘못된 값: ${[...new Set(bad)].join(", ")}). 처음부터 보이는 요소에는 속성을 달지 않는다`);
     const have = new Set(s.dsteps.filter((v) => /^\d+$/.test(v)).map(Number));
-    for (const k of [...have].sort((a, b) => a - b)) if (k >= 3 && !have.has(k - 1)) add("warn", "data-step", `슬라이드 ${n}: 단계 ${k}가 있는데 단계 ${k - 1}에 요소가 없다(빈 단계)`);
+    for (const k of [...have].sort((a, b) => a - b)) if (k >= 3 && !have.has(k - 1)) add("warn", "data-step", `슬라이드 ${n}: 단계 ${k}가 있는데 단계 ${k - 1}에 요소가 없다. data-step을 2부터 빠짐없이 차례로 쓴다`);
     if (s.steps > 1) {
       const reg = scripts.some((c) => /SlideKit\.stepper\s*\(/.test(c.body) && (!s.id || c.body.includes(s.id)));
-      if (!s.id) add("error", "steps", `슬라이드 ${n}: data-steps가 있는데 id가 없다`);
-      if (!reg) add("error", "steps", `슬라이드 ${n}: data-steps="${s.steps}"인데 stepper 등록이 없다`);
+      if (!s.id) add("error", "steps", `슬라이드 ${n}: data-steps를 쓰려면 section에 id를 달고 SlideKit.stepper로 등록한다. 요소만 단계별로 나타내려면 data-step을 쓴다`);
+      if (!reg) add("error", "steps", `슬라이드 ${n}: data-steps="${s.steps}"인데 SlideKit.stepper 등록이 없다. 요소만 나타내려면 data-steps 대신 요소에 data-step을 쓴다`);
     }
   });
   const kinds = slides.map((s) => s.kind);
-  if (kinds.filter((k) => k === "cover").length > 1) add("error", "cover", "cover가 둘 이상");
-  if (kinds.includes("cover") && kinds[0] !== "cover") add("error", "cover", "cover가 첫 슬라이드가 아니다");
-  if (kinds.filter((k) => k === "end").length > 1) add("error", "end", "end가 둘 이상");
-  if (kinds.includes("end") && kinds.at(-1) !== "end") add("error", "end", "end가 마지막 슬라이드가 아니다");
+  if (kinds.filter((k) => k === "cover").length > 1) add("error", "cover", "cover는 첫 슬라이드 하나만 둔다");
+  if (kinds.includes("cover") && kinds[0] !== "cover") add("error", "cover", "cover를 첫 슬라이드로 옮긴다");
+  if (kinds.filter((k) => k === "end").length > 1) add("error", "end", "end는 마지막 슬라이드 하나만 둔다");
+  if (kinds.includes("end") && kinds.at(-1) !== "end") add("error", "end", "end를 마지막 슬라이드로 옮긴다");
 
   // 금지 문자: 보이는 글자, 노트, data-title
   const visible = rest.replace(/<[^>]+>/g, "\n") + "\n" + (rest.match(/data-title="[^"]*"/g) ?? []).join("\n");
-  visible.split("\n").forEach((l) => { const m = l.match(BAD_CHARS); if (m) add("error", "chars", `금지 문자 U+${m[0].codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}: ${l.trim().slice(0, 40)}`); });
+  const CHAR_NAMES: Record<string, string> = { "\u2014": "em-dash", "\u2013": "en-dash", "\u00b7": "가운뎃점", "\u30fb": "가운뎃점", "\u2022": "불릿 문자" };
+  visible.split("\n").forEach((l) => {
+    const m = l.match(BAD_CHARS);
+    if (m) add("error", "chars", `금지 문자 ${CHAR_NAMES[m[0]] ?? "이모지"}(U+${m[0].codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}). 쉼표나 마침표, 단어로 바꾼다: ${l.trim().slice(0, 40)}`);
+  });
 
   const css = styles.join("\n") + "\n" + (rest.match(/style="[^"]*"/g) ?? []).join("\n");
-  if (/\d(?:\.\d+)?\s*(?:vw|vh)\b/i.test(css)) add("error", "units", "vw 또는 vh 단위를 쓴다(전부 px)");
+  if (/\d(?:\.\d+)?\s*(?:vw|vh)\b/i.test(css)) add("error", "units", "vw, vh 단위를 px로 바꾼다. 슬라이드는 1920x1080 고정이다");
   const js = scripts.filter((s) => !/slidekit\.js|application\/json/.test(s.attrs)).map((s) => s.body).join("\n");
-  if (/addEventListener\(\s*['"](?:wheel|touchstart|touchend|pointerdown|click)['"]/.test(js) || /\bonclick=/.test(rest)) add("warn", "nav", "click, wheel, touch 핸들러가 있다(이동에 쓰면 안 된다)");
-  if (/['"](?:Space|PageDown|PageUp)['"]|key\s*===?\s*['"] ['"]/.test(js)) add("error", "nav", "스페이스나 PageUp, PageDown 이동 핸들러 흔적");
-  for (const m of rest.matchAll(/\b(?:src|href)=["'](https?:\/\/[^"']+)/g)) if (!/fonts\.(?:googleapis|gstatic)\.com/.test(m[1])) add("warn", "external", `외부 리소스(번들 불가): ${m[1].slice(0, 60)}`);
-  for (const m of css.matchAll(/url\(\s*["']?(https?:\/\/[^)"']+)/g)) if (!/fonts\.(?:googleapis|gstatic)\.com/.test(m[1])) add("warn", "external", `외부 리소스(번들 불가): ${m[1].slice(0, 60)}`);
+  if (/addEventListener\(\s*['"](?:wheel|touchstart|touchend|pointerdown|click)['"]/.test(js) || /\bonclick=/.test(rest)) add("warn", "nav", "슬라이드 이동은 방향키만 쓴다. click, wheel, touch 핸들러를 이동에 쓰지 않는다");
+  if (/['"](?:Space|PageDown|PageUp)['"]|key\s*===?\s*['"] ['"]/.test(js)) add("error", "nav", "스페이스와 PageUp, PageDown 이동은 쓰지 않는다. 방향키만 쓴다");
+  for (const m of rest.matchAll(/\b(?:src|href)=["'](https?:\/\/[^"']+)/g)) if (!/fonts\.(?:googleapis|gstatic)\.com|font|pretendard|woff/i.test(m[1])) add("warn", "external", `외부 리소스: ${m[1].slice(0, 60)}. 파일을 덱 폴더에 내려받아 상대 경로로 쓴다(글꼴 CSS는 번들 때 인라인된다)`);
+  for (const m of css.matchAll(/url\(\s*["']?(https?:\/\/[^)"']+)/g)) if (!/fonts\.(?:googleapis|gstatic)\.com/.test(m[1])) add("warn", "external", `외부 리소스: ${m[1].slice(0, 60)}. 파일을 덱 폴더에 내려받아 상대 경로로 쓴다`);
   return out;
 }
 
 if (import.meta.main || process.env.SLIDEKIT_SUB === "lint") {
   const name = process.argv[2];
-  if (!name) { console.error("usage: slidekit lint <덱>"); process.exit(1); }
+  if (!name) { console.error("사용법: slidekit lint <덱>  (예: slidekit lint my-talk)"); process.exit(1); }
   const file = join(import.meta.dir, "..", "decks", name, "index.html");
-  if (!(await Bun.file(file).exists())) { console.error(`없는 덱: decks/${name}`); process.exit(1); }
+  if (!(await Bun.file(file).exists())) {
+    const have = (await import("node:fs")).readdirSync(join(import.meta.dir, "..", "decks")).filter((d) => !d.startsWith(".") && !d.startsWith("_"));
+    console.error(`없는 덱: decks/${name}. 있는 덱: ${have.join(", ") || "(없음)"}. 새 덱은 slidekit new <이름>`);
+    process.exit(1);
+  }
   const issues = lint(await Bun.file(file).text());
   for (const i of issues) console.log(`${i.level} ${i.rule}: ${i.msg}`);
   const errs = issues.filter((i) => i.level === "error").length;

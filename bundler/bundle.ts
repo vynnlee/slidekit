@@ -7,19 +7,20 @@ import { fetchCached, processFaces, usedChars } from "./fonts";
 
 const root = join(import.meta.dir, "..");
 const name = process.argv[2];
-if (!name) { console.error("usage: bun run bundler/bundle.ts <deck>"); process.exit(1); }
+const fail = (m: string): never => { console.error(m); process.exit(1); };
+if (!name) fail("사용법: slidekit bundle <덱>  (예: slidekit bundle my-talk)");
 const deckDir = join(root, "decks", name);
 
 const isLocal = (u: string) => !/^(data:|https?:|\/\/|#|mailto:|about:)/i.test(u);
 /* url (relative to a base dir) -> file path: drop ?query and #hash, decode %xx, stay inside the repo */
 function localPath(base: string, u: string) {
   const p = resolve(base, decodeURIComponent(u.split(/[?#]/)[0]).replace(/^\//, ""));
-  if (p !== root && !p.startsWith(root + "/")) throw new Error(`asset outside the repo: ${u}`);
+  if (p !== root && !p.startsWith(root + "/")) fail(`덱 폴더 밖의 파일은 쓸 수 없다: ${u}. 파일을 덱 폴더 안으로 옮기고 상대 경로로 쓴다.`);
   return p;
 }
 async function dataUri(file: string) {
   const f = Bun.file(file);
-  if (!(await f.exists())) throw new Error(`missing asset: ${file}`);
+  if (!(await f.exists())) fail(`없는 파일: ${file.replace(deckDir + "/", "")}. 덱 안의 src나 url() 경로를 확인하거나 파일을 덱 폴더에 넣는다.`);
   const mime = (f.type || "application/octet-stream").split(";")[0];
   return `data:${mime};base64,${Buffer.from(await f.arrayBuffer()).toString("base64")}`;
 }
@@ -34,6 +35,7 @@ const inlineCssUrls = (css: string, base: string) =>
   replaceAsync(css, /url\(\s*(['"]?)([^)'"]+)\1\s*\)/g, async (m) =>
     isLocal(m[2]) ? `url("${await dataUri(localPath(base, m[2]))}")` : m[0]);
 
+if (!(await Bun.file(join(deckDir, "index.html")).exists())) fail(`없는 덱: decks/${name}. 새 덱은 slidekit new ${name}`);
 let html = await Bun.file(join(deckDir, "index.html")).text();
 
 /* 1. fonts: only the characters this deck uses. Remote font CSS (Google Fonts, jsdelivr, any CDN), local @font-face files,

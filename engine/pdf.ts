@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 const root = join(import.meta.dir, "..");
 const name = process.argv[2];
-if (!name) { console.error("usage: slidekit pdf <덱>"); process.exit(1); }
+if (!name) { console.error("사용법: slidekit pdf <덱>  (예: slidekit pdf my-talk)"); process.exit(1); }
 
 function findChrome(): string | null {
   const env = process.env.SLIDEKIT_CHROME;

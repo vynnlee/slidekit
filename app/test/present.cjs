@@ -16,7 +16,8 @@ ${Array.from({ length: TOTAL - 1 }, (_, i) => `<section data-slide="content"><h2
 process.on('exit', () => fs.rmSync(DIR, { recursive: true, force: true }));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fail = 0;
-const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + name + (ok || extra === undefined ? '' : '  ' + JSON.stringify(extra))); };
+let __last = Date.now(); // TIMING=1이면 직전 검사 이후 1.5초 넘게 걸린 구간을 보여 준다(느린 단계 찾기)
+const check = (name, ok, extra) => { if (process.env.TIMING) { const n = Date.now(); if (n - __last > 1500) console.log('SLOW +' + (n - __last) + 'ms before: ' + name); __last = n; } if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + name + (ok || extra === undefined ? '' : '  ' + JSON.stringify(extra))); };
 const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(100); } return false; };
 
 // getScreenDetails 모킹: 미지원, 거부, 모니터 하나뿐
@@ -77,6 +78,8 @@ const MOCKS = {
     const note = { unsupported: 'Display access unavailable', denied: 'Display access unavailable', 'single screen': 'No external display found' }[name];
     check(`[${name}] 폴백 사유 표시`, await until(async () => ((await page.getByRole('status').filter({ hasText: note }).innerText()) || '').includes(note)), await page.getByRole('status').filter({ hasText: note }).innerText().catch(() => null));
     check(`[${name}] 발표 창 열림 표시`, await until(async () => (await page.getByText('Presentation window open').count()) === 1));
+    // 위치 복원, 양방향 동기화, 닫힘 표시는 변형마다 되풀이할 필요가 없어 첫 변형(unsupported)에서만 본다(폴백 사유와 창 열림은 모두 본다).
+    if (name !== 'unsupported') { await pop.close(); await ctx.close(); continue; }
     // 발표 창이 시작할 때 hello로 위치를 받는다
     const hash = () => new URL(pop.url()).hash;
     check(`[${name}] 발표 창이 발표자 위치로 맞춰진다`, await until(async () => hash() === `#${base}`), [hash(), base]);
@@ -86,7 +89,7 @@ const MOCKS = {
     await page.bringToFront();
     check(`[${name}] 발표 창 -> 발표자 동기화`, await until(async () => (await counter()) === `${base + 2} / ${TOTAL}`), await counter());
     await pop.close();
-    check(`[${name}] 발표 창 닫힘 표시`, await until(async () => (await page.getByText('Presentation window closed').count()) === 1, 7000)); // 하트비트 유예(2.5초)를 포함
+    check(`[${name}] 발표 창 닫힘 표시`, await until(async () => (await page.getByText('Presentation window closed').count()) === 1, 5000)); // 하트비트 유예(1.6초)를 포함
     await ctx.close();
   }
   // 이미 12번에 있는 발표 창에 발표자 화면이 붙으면 12번으로 시작한다. 보기를 꺼도 이동과 동기화가 유지된다. 반복 입력 무시.
@@ -149,7 +152,7 @@ const MOCKS = {
     await page.keyboard.press('ArrowRight'); await sleep(250);
     check('탭에서 화살표는 슬라이드를 넘기지 않는다', (await counter()) === `1 / ${TOTAL}`, await counter());
     await page.getByRole('button', { name: 'Reset timer' }).focus();
-    await page.keyboard.press('t'); await page.clock.runFor(3000);
+    await page.keyboard.press('t'); await page.clock.fastForward(3000);
     check('버튼에 포커스가 있으면 T는 타이머를 켜지 않는다', (await page.locator('[role=timer]').first().innerText()) === '00:00:00');
     await page.locator('body').focus();
     check('Current와 Next 라벨', (await page.getByText('Current', { exact: true }).count()) === 1 && (await page.getByText(/^Next/).count()) >= 1);
@@ -158,9 +161,9 @@ const MOCKS = {
     await page.keyboard.press('Tab');
     await page.mouse.click(640, 780);
     await page.keyboard.press('t');
-    await page.clock.runFor(10000);
+    await page.clock.fastForward(10000);
     check('목표 시간이 있으면 남은 시간', await until(async () => /^00:5\d left$/.test(await page.getByText(/ left$/).first().innerText())), await page.getByText(/ left$/).first().innerText().catch(() => null));
-    await page.clock.runFor(60000);
+    await page.clock.fastForward(60000);
     check('초과하면 over 문구', await until(async () => /^\+00:\d\d over$/.test(await page.getByText(/ over$/).first().innerText())), await page.getByText(/ over$/).count());
     // 리허설 요약: 슬라이드별 체류 시간(타이머가 돈 시간만)
     await page.getByRole('button', { name: 'Summary' }).click();
@@ -220,12 +223,12 @@ const MOCKS = {
     check('발표 창이 없으면 상태를 표시하지 않는다', (await page.getByText(/Presentation window (open|closed)/).count()) === 0);
     const w1 = await ctx.newPage();
     await w1.goto(`${BASE}/decks/${DECK}/index.html?sync=1`);
-    check('따로 열린 발표 창을 하트비트로 알아본다', await until(async () => (await page.getByText('Presentation window open').count()) === 1, 12000));
+    check('따로 열린 발표 창을 하트비트로 알아본다', await until(async () => (await page.getByText('Presentation window open').count()) === 1, 8000));
     await w1.close();
-    check('창이 닫히면 closed로 바뀐다', await until(async () => (await page.getByText('Presentation window closed').count()) === 1, 12000));
+    check('창이 닫히면 closed로 바뀐다', await until(async () => (await page.getByText('Presentation window closed').count()) === 1, 8000));
     const w2 = await ctx.newPage();
     await w2.goto(`${BASE}/decks/${DECK}/index.html?sync=1#5`);
-    check('다시 열리면 open으로 돌아온다', await until(async () => (await page.getByText('Presentation window open').count()) === 1, 12000));
+    check('다시 열리면 open으로 돌아온다', await until(async () => (await page.getByText('Presentation window open').count()) === 1, 8000));
     check('재연결 안내 토스트', await until(async () => (await page.getByText('Presentation window reconnected').count()) >= 1, 6000));
     check('다시 열린 창이 발표자 위치(1)로 맞춰진다', await until(async () => new URL(w2.url()).hash === '#1', 8000), w2.url());
     // 가리기 상태: 엔진이 BroadcastChannel로 알리면 발표자 화면에 보인다

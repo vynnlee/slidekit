@@ -1,13 +1,13 @@
 /* 세 라우트(목록, 발표자 화면, 편집기)가 뜨고 콘솔과 페이지 오류가 0인지 확인한다. production 실행에서도 쓴다.
    Usage: PW=<playwright-core> CHROME=<headless shell> BASE=http://127.0.0.1:3200 node routes.cjs */
-const { chromium } = require(process.env.PW || 'playwright-core');
+const { launch } = require('../../scripts/lib/pw.cjs');
 const BASE = process.env.BASE || 'http://127.0.0.1:3200';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fail = 0;
 const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + name + (ok || extra === undefined ? '' : '  ' + JSON.stringify(extra))); };
 
 (async () => {
-  const browser = await chromium.launch({ executablePath: process.env.CHROME, args: ['--disable-gpu'] });
+  const browser = await launch();
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
   const errors = [], scripts = new Set();

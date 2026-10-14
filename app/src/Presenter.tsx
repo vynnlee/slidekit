@@ -36,6 +36,8 @@ const readJson = (k: string): Record<string, unknown> => {
 };
 const rid = () => Math.random().toString(36).slice(2, 8);
 
+// 발표 창 생존 확인 간격과 판정 창(SPEC 6.5). 하트비트는 1초마다, 답이 PEER_HEARD_MS 안에 있으면 열려 있다고 본다.
+const HEARTBEAT_MS = 1000, PEER_RECENT_MS = 1600, PEER_HEARD_MS = 3500;
 export function Presenter({ id }: { id: string }) {
   const [deck, setDeck] = useState<DeckEntry | null>(null);
   const [info, setInfo] = useState<Info | null>(null);
@@ -51,7 +53,7 @@ export function Presenter({ id }: { id: string }) {
   // 리허설: 타이머가 도는 동안 슬라이드별 체류 시간을 메모리에만 센다(새로고침하면 사라진다).
   // 시간은 밀리초로 쌓고 틱마다 Date.now() 차이를 더한다(백그라운드 탭에서 틱이 늦어도 정확하다).
   const dwell = useRef<Record<number, number>>({});
-  // 발표 창 생존 확인: 2초마다 hello를 보내고, 발표 창(role이 presenter가 아닌 쪽)의 답이 5초 안에 있으면 열려 있다고 본다.
+  // 발표 창 생존 확인: 1초마다 hello를 보내고, 발표 창(role이 presenter가 아닌 쪽)의 답이 3.5초 안에 있으면 열려 있다고 본다.
   const peerAt = useRef(0), everSeen = useRef(false), hb = useRef<{ key: string; t: number } | null>(null), wasOpen = useRef<boolean | null>(null);
   const accMs = useRef(0), lastTick = useRef(Date.now()), resetArmed = useRef(0);
   const [blank, setBlank] = useState<"black" | "white" | null>(null); // 발표 창이 B 또는 W로 가려진 상태(엔진이 알려 줄 때만)
@@ -111,7 +113,7 @@ export function Presenter({ id }: { id: string }) {
       const t = Date.now(), dt = t - lastTick.current;
       lastTick.current = t;
       setNow(new Date(t));
-      const ref = presentationOpen(), recent = t - peerAt.current < 2500, heard = t - peerAt.current < 5000;
+      const ref = presentationOpen(), recent = t - peerAt.current < PEER_RECENT_MS, heard = t - peerAt.current < PEER_HEARD_MS;
       const open = ref === false ? recent : ref === true || heard;
       const v = open ? true : ref === false || everSeen.current ? false : null;
       if (v === true && wasOpen.current === false) toast("Presentation window reconnected", { ms: 3000 });
@@ -159,7 +161,7 @@ export function Presenter({ id }: { id: string }) {
       else if (m.type === "hello") send({ type: "state", ...posRef.current });
     };
     send({ type: "hello" });
-    const beat = setInterval(() => { hb.current = { key: `${posRef.current.slide}:${posRef.current.step}`, t: Date.now() }; send({ type: "hello" }); }, 2000);
+    const beat = setInterval(() => { hb.current = { key: `${posRef.current.slide}:${posRef.current.step}`, t: Date.now() }; send({ type: "hello" }); }, HEARTBEAT_MS);
     return () => { clearInterval(beat); ch.close(); chan.current = null; };
   }, [deck, goto]);
 

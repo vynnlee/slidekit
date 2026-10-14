@@ -1,6 +1,6 @@
 /* 레이아웃 검증: 뷰포트별로 세 화면에 가로 스크롤이 없고 주요 요소가 보이며 패널이 규칙대로 동작하는지 본다.
    Usage: PW=<playwright-core> CHROME=<headless shell> BASE=http://127.0.0.1:3200 [SHOTS=<폴더>] node responsive.cjs */
-const { chromium } = require(process.env.PW || 'playwright-core');
+const { launch } = require('../../scripts/lib/pw.cjs');
 const fs = require('fs'), path = require('path');
 const BASE = process.env.BASE || 'http://127.0.0.1:3200';
 const DECK = '_e2e-resp', ID = 'e2e-resp';
@@ -14,14 +14,18 @@ fs.writeFileSync(path.join(DIR, 'index.html'), `<!doctype html><html lang="en" d
 <script src="../../engine/slidekit.js"></script></body></html>`);
 process.on('exit', () => fs.rmSync(DIR, { recursive: true, force: true }));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const until = async (fn, ms = 3000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(50); } return false; };
+const settle = (ms) => (process.env.SHOTS ? sleep(ms) : Promise.resolve()); // 스크린샷을 찍을 때만 렌더가 가라앉기를 기다린다
 let fail = 0;
-const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + name + (ok || extra === undefined ? '' : '  ' + JSON.stringify(extra))); };
-const VIEWPORTS = [[1024, 768], [820, 1180], [1440, 900], [1920, 1080]];
+let __last = Date.now(); // TIMING=1이면 직전 검사 이후 1.5초 넘게 걸린 구간을 보여 준다(느린 단계 찾기)
+const check = (name, ok, extra) => { if (process.env.TIMING) { const n = Date.now(); if (n - __last > 1500) console.log('SLOW +' + (n - __last) + 'ms before: ' + name); __last = n; } if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + name + (ok || extra === undefined ? '' : '  ' + JSON.stringify(extra))); };
+// 1920x1080은 1440x900과 같은 넓은 레이아웃이라 뺐다(패널 펼침, 캔버스 크기 결론이 같다). 1024는 오버레이 경계, 820은 세로 쌓기 경계.
+const VIEWPORTS = [[1024, 768], [820, 1180], [1440, 900]];
 const inside = (b, w, h) => b && b.x >= -1 && b.y >= -1 && b.x + b.width <= w + 1 && b.y + b.height <= h + 1;
 const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
 (async () => {
-  const browser = await chromium.launch({ executablePath: process.env.CHROME, args: ['--disable-gpu'] });
+  const browser = await launch();
   for (const [w, h] of VIEWPORTS) {
     const tag = `${w}x${h}`;
     const ctx = await browser.newContext({ viewport: { width: w, height: h } });
@@ -31,18 +35,18 @@ const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.
     const noScroll = async (n) => check(`[${tag}] ${n} 가로 스크롤 없음`, await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth && document.body.scrollWidth <= window.innerWidth), await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]));
 
     // 덱 목록
-    await page.goto(BASE + '/');
+    await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: 'New deck' }).waitFor();
-    await sleep(1500); await shot('list');
+    await settle(1500); await shot('list');
     await noScroll('목록');
     for (const n of ['New deck', 'Search', 'Trash']) check(`[${tag}] 목록 컨트롤 ${n} 보임`, inside(await page.getByRole('button', { name: new RegExp(n) }).first().boundingBox(), w, h));
     const cards = await page.getByRole('button', { name: ID, exact: true }).first().boundingBox().catch(() => null);
     check(`[${tag}] 카드 폭 220px 이상`, !cards || cards.width >= 200, cards);
 
     // 발표자 화면
-    await page.goto(`${BASE}/present/${ID}`);
+    await page.goto(`${BASE}/present/${ID}`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: 'Present' }).waitFor();
-    await sleep(1500); await shot('present');
+    await settle(1500); await shot('present');
     await noScroll('발표자');
     const cur = await page.locator('iframe[title="Current slide"]').boundingBox();
     const nxt = await page.locator('iframe[title="Next slide"]').boundingBox();
@@ -57,7 +61,7 @@ const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.
     // 편집기와 패널
     await page.goto(`${BASE}/edit/${ID}`);
     await page.locator('iframe').first().waitFor();
-    await sleep(2000); await shot('edit');
+    await sleep(300); await settle(1700); await shot('edit'); // 캔버스 iframe 배치가 끝나기까지 잠깐
     await noScroll('편집기');
     // 넓은 화면에서는 왼쪽 패널의 썸네일도 iframe이라 가장 큰 것을 캔버스로 본다.
     await page.locator('iframe[title="Canvas"]').waitFor(); // 부하에서 iframe이 아직 없을 때 canvas가 undefined가 되던 경합을 막는다
@@ -70,24 +74,41 @@ const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.
     if (w <= 1100) {
       check(`[${tag}] 좁은 폭에서 패널은 기본 접힘`, (await asides()) === 0, await asides());
       await page.getByRole('button', { name: 'Toggle sidebar' }).click();
-      await sleep(500); await shot('edit-left-open');
+      await page.locator('[data-shell-panel]').waitFor(); await settle(500); await shot('edit-left-open');
       const left = await page.locator('aside[aria-label]').first().boundingBox();
       check(`[${tag}] 열린 패널 폭은 화면의 85% 이내`, left && left.width <= w * 0.85 + 1, left);
       const main = await page.locator('main').boundingBox();
       check(`[${tag}] 패널은 콘텐츠를 밀지 않고 위에 뜬다`, Math.abs(main.width - w) < 2, main);
+      await until(() => page.evaluate(() => !!document.querySelector('[data-shell-panel]')?.contains(document.activeElement))); // 포커스는 다음 프레임에 들어간다
       check(`[${tag}] 열린 패널은 role=dialog이고 포커스가 안으로 들어간다`, await page.evaluate(() => { const d = document.querySelector('[data-shell-panel]'); return !!d && d.getAttribute('role') === 'dialog' && d.contains(document.activeElement); }));
-      await page.keyboard.press('Escape'); await sleep(500);
+      await page.keyboard.press('Escape'); await page.locator('[data-shell-panel]').waitFor({ state: 'detached' }).catch(() => {});
+      await until(() => page.evaluate(() => document.activeElement?.getAttribute('aria-label') === 'Toggle sidebar')); // 포커스 복귀도 다음 프레임
       check(`[${tag}] 닫으면 포커스가 토글 버튼으로 돌아간다`, await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label') === 'Toggle sidebar'), await page.evaluate(() => document.activeElement && document.activeElement.outerHTML.slice(0, 80)));
       check(`[${tag}] Esc로 닫힌다`, (await asides()) === 0, await asides());
-      await page.getByRole('button', { name: 'Toggle sidebar' }).click(); await sleep(400);
-      await page.getByTestId('shell-scrim').click({ position: { x: w - 5, y: 300 } }); await sleep(500);
+      await page.getByRole('button', { name: 'Toggle sidebar' }).click(); await page.getByTestId('shell-scrim').waitFor();
+      await page.getByTestId('shell-scrim').click({ position: { x: w - 5, y: 300 } }); await page.locator('[data-shell-panel]').waitFor({ state: 'detached' }).catch(() => {});
       check(`[${tag}] 바깥 클릭으로 닫힌다`, (await asides()) === 0, await asides());
-      await page.keyboard.press('Control+\\'); await sleep(500);
+      await page.keyboard.press('Control+\\'); await page.locator('[data-shell-panel]').nth(1).waitFor().catch(() => {});
       check(`[${tag}] Cmd+\\로 좌우 패널이 함께 열린다`, (await asides()) === 2, await asides());
       await shot('edit-both-open');
     } else {
       check(`[${tag}] 넓은 폭에서 패널은 기본 펼침`, (await asides()) === 2, await asides());
     }
+    await ctx.close();
+  }
+  // 큰 화면 스모크: 1440x900과 같은 넓은 레이아웃이라 전체 검사는 생략하고 첫 로드에서 핵심 세 가지만 본다.
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+    await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/edit/${ID}`);
+    await page.locator('iframe[title="Canvas"]').waitFor();
+    const canvas = await page.locator('iframe[title="Canvas"]').boundingBox();
+    check('[1920x1080 스모크] 캔버스가 보인다', inside(canvas, 1920, 1080) && canvas.width > 600, canvas);
+    const asides = await page.locator('aside[aria-label]').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().width)));
+    check('[1920x1080 스모크] 좌우 패널이 펼쳐지고 폭이 화면의 30% 이내', asides.length === 2 && asides.every((x) => x > 100 && x < 1920 * 0.3), asides);
+    const film = await page.locator('section[data-testid="filmstrip"]').boundingBox().catch(() => null);
+    check('[1920x1080 스모크] 필름스트립이 화면 안에 있다', !film || (film.x >= -1 && film.x + film.width <= 1921 && film.height > 20), film);
     await ctx.close();
   }
   await browser.close();

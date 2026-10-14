@@ -1,6 +1,6 @@
 /* 덱 목록 브라우저 검증: Cmd/Ctrl+K, 새 덱 오류 표시, 목록 요청 실패와 재시도, 보기 전환 기억.
    Usage: PW=<playwright-core> CHROME=<headless shell> BASE=http://127.0.0.1:3200 node list.cjs */
-const { chromium } = require(process.env.PW || 'playwright-core');
+const { launch, clock, tick } = require('../../scripts/lib/pw.cjs');
 const BASE = process.env.BASE || 'http://127.0.0.1:3200';
 const fs = require('fs'), path = require('path');
 const DECKS = path.join(__dirname, '..', '..', 'decks');
@@ -8,16 +8,18 @@ const cleanup = () => { for (const d of fs.readdirSync(DECKS)) if (d.startsWith(
 process.on('exit', cleanup);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fail = 0;
-const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + name + (ok || extra === undefined ? '' : '  ' + JSON.stringify(extra))); };
+let __last = Date.now(); // TIMING=1이면 직전 검사 이후 1.5초 넘게 걸린 구간을 보여 준다(느린 단계 찾기)
+const check = (name, ok, extra) => { if (process.env.TIMING) { const n = Date.now(); if (n - __last > 1500) console.log('SLOW +' + (n - __last) + 'ms before: ' + name); __last = n; } if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + name + (ok || extra === undefined ? '' : '  ' + JSON.stringify(extra))); };
 const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await sleep(100); } return false; };
 
 (async () => {
-  const browser = await chromium.launch({ executablePath: process.env.CHROME, args: ['--disable-gpu'] });
+  const browser = await launch();
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
   const page = await ctx.newPage();
+  if (process.env.TIMING) page.on('load', () => console.log('LOAD ' + page.url().slice(-30) + ' @' + Date.now() % 100000));
   const errors = []; page.on('pageerror', (e) => errors.push(String(e)));
-  await page.goto(BASE + '/');
+  await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'New deck' }).waitFor();
   for (const combo of ['Control+k', 'Meta+k']) {
     await sleep(400); // 앞 팔레트의 닫힘 애니메이션이 끝난 뒤 다음 단축키를 누른다
@@ -47,7 +49,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   let fails = true;
   await ctx2.route('**/api/decks', (r) => (fails ? r.abort() : r.continue()));
   const p2 = await ctx2.newPage();
-  await p2.goto(BASE + '/');
+  await p2.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   check('목록 요청 실패 표시', await until(async () => (await p2.getByRole('alert').innerText()).includes('Could not load decks')));
   fails = false;
   await p2.getByRole('button', { name: 'Retry' }).click();
@@ -56,7 +58,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   cleanup();
   const post = (u, data) => ctx.request.post(BASE + u, { data });
   check('API로 덱 생성', (await post('/api/decks', { name: 'zz-e2e-a', title: 'zz-e2e-a' })).status() === 201);
-  await page.goto(BASE + '/');
+  await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   const actions = (title) => page.getByRole('button', { name: `Actions for ${title}`, exact: true });
   const item = (name) => page.getByRole('menuitem', { name });
   const ids = async () => (await (await ctx.request.get(BASE + '/api/decks')).json()).map((d) => d.id);
@@ -101,7 +103,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   check('없는 덱 삭제는 404', (await ctx.request.post(BASE + '/api/decks/nope-nope/trash', { data: {} })).status() === 404);
   check('경로 이탈 이름 거부', (await ctx.request.post(BASE + '/api/decks/..%2Fapp/rename', { data: { name: 'zz-e2e-x' } })).status() === 404);
   // 휴지통 보기: 복구(이름 충돌은 -restored), 영구 삭제는 이름 입력 필요
-  await page.goto(BASE + '/');
+  await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Trash', exact: true }).click();
   await page.getByRole('button', { name: 'Restore Renamed Title' }).waitFor();
   check('휴지통 목록에 삭제한 덱', (await page.getByRole('button', { name: 'Restore Renamed Title' }).count()) === 1);
@@ -132,7 +134,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   cleanup();
 
   // 새 덱: 제목에서 폴더 이름 제안, 만들면 바로 편집기로
-  await page.goto(BASE + '/');
+  await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'New deck' }).click();
   await page.getByRole('dialog').getByLabel('Title').fill('zz e2e T');
   check('제목에서 zz-e2e-t 제안', (await page.getByRole('dialog').getByLabel('Folder').inputValue()) === 'zz-e2e-t');
@@ -143,7 +145,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   check('색인 API', Array.isArray(await (await ctx.request.get(BASE + '/api/search-index')).json()));
   await post('/api/decks', { name: 'zz-e2e-s', title: 'Zebra Quartz' });
   check('색인에 HTML 주석 글자가 섞이지 않는다', !(await (await ctx.request.get(BASE + '/api/search-index')).json()).some((d) => d.slides.some((sl) => /<!--|-->/.test(sl.text + sl.notes + sl.title))));
-  await page.goto(BASE + '/');
+  await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: /^Search/ }).click();
   await page.getByRole('dialog').getByRole('combobox').fill('zebra quartz');
   check('일치한 글자를 굵게 보인다', await until(async () => (await page.getByRole('dialog').locator('mark').count()) >= 1 && (await page.getByRole('dialog').locator('mark').first().innerText()).toLowerCase() === 'zebra'));
@@ -155,7 +157,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   // 키보드 이동, 빠른 발표 버튼, 메타 위계, Public 칩 숨김, 없는 덱 화면
   await post('/api/decks', { name: 'zz-e2e-k1', title: 'zz-e2e-k1' });
   await post('/api/decks', { name: 'zz-e2e-k2', title: 'zz-e2e-k2' });
-  await page.goto(BASE + '/');
+  await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   // 앞 단계가 목록 보기로 남겼을 수 있으니 화면의 토글로 그리드를 확실히 맞춘다(저장소 값을 직접 쓰면 마운트 효과와 경합한다)
   await page.getByRole('button', { name: 'Toggle view' }).waitFor();
   await sleep(500);
@@ -165,17 +167,17 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   const activeLabel = () => page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label'));
   await page.getByRole('button', { name: 'zz-e2e-k1', exact: true }).focus();
   const first = await activeLabel();
-  await page.keyboard.press('ArrowRight'); await sleep(300);
+  await page.keyboard.press('ArrowRight'); await until(async () => (await activeLabel()) !== first);
   const second = await activeLabel();
   check('화살표로 다음 카드에 포커스가 간다', !!second && second !== first && !/^(Actions|Present) /.test(second), [first, second, await page.evaluate(() => [localStorage.getItem('slidekit:list-view'), document.querySelectorAll('[data-deck]').length, [...document.querySelectorAll('[data-deck]')].map((r) => r.getBoundingClientRect().x | 0).join(',')])]);
-  await page.keyboard.press('ArrowLeft'); await sleep(300);
+  await page.keyboard.press('ArrowLeft'); await until(async () => (await activeLabel()) === first);
   check('왼쪽 화살표로 되돌아간다', (await activeLabel()) === first, await activeLabel());
   check('Public 칩은 보이지 않는다', (await page.getByText('Public', { exact: true }).count()) === 0);
   check('메타는 슬라이드 수와 수정 시각으로 나뉜다', (await page.getByText(/^\d+ slides$/).count()) >= 1 && (await page.getByText(/^Edited /).count()) >= 1);
   await page.getByRole('button', { name: 'zz-e2e-k1', exact: true }).focus();
   await page.keyboard.press('Control+Enter');
   check('Ctrl+Enter로 발표자 화면', await until(async () => new URL(page.url()).pathname === '/present/zz-e2e-k1'), page.url());
-  await page.goto(BASE + '/');
+  await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Present zz-e2e-k2' }).waitFor();
   await page.getByRole('button', { name: 'Present zz-e2e-k2' }).click({ force: true });
   check('카드의 Present 버튼', await until(async () => new URL(page.url()).pathname === '/present/zz-e2e-k2'), page.url());
@@ -191,7 +193,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   check('저장소 밖을 가리키는 링크는 404', (await ctx.request.get(BASE + '/decks/zz-e2e-ln/leak.txt')).status() === 404);
   check('링크는 덱으로 취급하지 않는다(복제 404)', (await post('/api/decks/zz-e2e-ln/duplicate', {})).status() === 404);
   // 컨텍스트 메뉴: 포인터 위치 앵커, 항목과 키캡과 빨강, Esc와 포커스 복귀, 키보드로 열기, 교체, 닫힘 조건, 가장자리 뒤집기
-  await page.goto(BASE + '/');
+  await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'zz-e2e-k1', exact: true }).waitFor();
   await sleep(600);
   const cardBtn = (t) => page.getByRole('button', { name: t, exact: true });
@@ -230,12 +232,12 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await cardBtn('zz-e2e-k1').focus();
   await page.keyboard.press('ContextMenu');
   check('ContextMenu 키로 메뉴가 열린다', await until(async () => (await page.getByRole('menu').count()) === 1));
-  await page.getByRole('menuitem', { name: 'Open' }).waitFor(); await sleep(400); // 메뉴가 첫 항목에 포커스를 줄 때까지
-  await page.keyboard.press('ArrowDown'); await sleep(200);
+  await page.getByRole('menuitem', { name: 'Open' }).waitFor(); await until(async () => (await activeLabel()) === 'Open'); // 메뉴가 첫 항목에 포커스를 줄 때까지
+  await page.keyboard.press('ArrowDown'); await until(async () => (await activeLabel()) === 'Present');
   check('ArrowDown으로 다음 항목(Present)에 포커스가 간다', (await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label'))) === 'Present', await page.evaluate(() => document.activeElement && document.activeElement.outerHTML.slice(0, 90)));
   await page.keyboard.press('Enter');
   check('화살표와 Enter로 항목을 실행한다(Present)', await until(async () => new URL(page.url()).pathname === '/present/zz-e2e-k1'), page.url());
-  await page.goto(BASE + '/');
+  await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await cardBtn('zz-e2e-k1').waitFor(); await sleep(600);
   // 다른 곳을 우클릭하면 교체, 창 크기가 바뀌면 닫힘
   await cardBtn('zz-e2e-k1').click({ button: 'right', position: { x: 30, y: 30 } });
@@ -265,7 +267,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.setViewportSize({ width: 1280, height: 800 });
   // 휴지통 행 메뉴
   await ctx.request.post(BASE + '/api/decks/zz-e2e-k2/trash', { data: {} });
-  await page.goto(BASE + '/');
+  await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Trash', exact: true }).click();
   await page.getByRole('button', { name: 'Restore zz-e2e-k2' }).waitFor();
   await page.getByRole('button', { name: 'Restore zz-e2e-k2' }).click({ button: 'right' });
@@ -273,7 +275,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.getByRole('menuitem', { name: 'Restore' }).click();
   check('메뉴에서 복구한다', await until(async () => (await ids()).includes('zz-e2e-k2')), await ids());
   // 최근 연 덱: 가장 최근 하나에 Opened 표시, Recent 정렬은 최근 순
-  await page.goto(BASE + '/');
+  await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'zz-e2e-k2', exact: true }).waitFor();
   check('가장 최근에 연 덱에 Opened 표시', (await page.getByText(/^Opened /).count()) === 1);
   for (let i = 0; i < 2; i++) await page.getByRole('button', { name: /^(Date|Name|Recent)$/ }).click();
@@ -282,7 +284,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   const recent0 = await page.evaluate(() => JSON.parse(localStorage.getItem('slidekit:recent') || '[]')[0]?.id);
   check('최근 연 덱이 맨 앞', order[0] === recent0, [order[0], recent0]);
   await page.evaluate(() => localStorage.setItem('slidekit:list-sort', 'date'));
-  await page.goto(BASE + '/present/nope-nope');
+  await page.goto(BASE + '/present/nope-nope', { waitUntil: 'domcontentloaded' });
   check('없는 덱은 안내와 돌아가기', await until(async () => (await page.getByText('Deck not found').count()) === 1));
   await page.getByRole('button', { name: 'Back to decks' }).click();
   check('Back to decks로 목록 복귀', await until(async () => new URL(page.url()).pathname === '/'));
@@ -293,16 +295,18 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   let down = false;
   await ctx3.route('**/api/ping', (r) => (down ? r.abort() : r.continue()));
   const p3 = await ctx3.newPage();
-  await p3.goto(BASE + '/');
-  down = true;
+  await clock(p3); // 연결 확인은 5초 간격이라 가짜 시계로 건너뛴다
+  await p3.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+  await p3.getByRole('button', { name: 'New deck' }).waitFor();
+  down = true; await tick(p3, 5200);
   check('서버가 끊기면 표시', await until(async () => (await p3.getByRole('status').filter({ hasText: 'Server unreachable' }).count()) === 1, 12000));
-  down = false;
+  down = false; await tick(p3, 5200);
   check('다시 연결되면 Reconnected 표시', await until(async () => (await p3.getByText('Reconnected').count()) === 1, 15000));
   check('다시 연결되면 사라진다', await until(async () => (await p3.getByRole('status').filter({ hasText: 'Server unreachable' }).count()) === 0, 15000));
   const ctx4 = await browser.newContext();
   await ctx4.route('**/api/decks', (r) => r.request().method() === 'GET' ? r.fulfill({ json: {} }) : r.continue());
   const p4 = await ctx4.newPage();
-  await p4.goto(BASE + '/');
+  await p4.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   check('렌더 오류는 Reload 화면', await until(async () => (await p4.getByText('Something went wrong.').count()) === 1 && (await p4.getByRole('button', { name: 'Reload' }).count()) === 1));
   check('페이지 오류 없음', errors.length === 0, errors);
   await browser.close();

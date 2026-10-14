@@ -41,6 +41,7 @@ type Props = {
   onHover(id: string | null): void;
   channel: boolean | null;
   onSel(el: Element | null): void;
+  onGroup(list: Element[]): void; // 마퀴로 고른 묶음(첫 요소가 대표)
   onMulti(el: Element | null): void; // Shift+클릭: 선택에 더하거나 뺀다
   onCommit(coalesce?: string): void;
   onKey(e: KeyboardEvent): void;
@@ -94,6 +95,8 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   // 끌어서 이동: 시작 상태. moved는 3px 넘게 움직인 뒤에만 참이다.
   const drag = useRef<{ els: HTMLElement[]; x0: number; y0: number; t0: [number, number][]; ks: number; moved: boolean; start: Rect; cands: Rect[]; orig: string[]; primary: HTMLElement } | null>(null);
   const swallowClick = useRef(false);
+  const marquee = useRef<{ x0: number; y0: number; moved: boolean; add: Element[] } | null>(null);
+  const marqueeBox = useRef<HTMLDivElement>(null);
   const hoverBox = useRef<HTMLDivElement>(null), selBox = useRef<HTMLDivElement>(null), bar = useRef<HTMLDivElement>(null), pop = useRef<HTMLDivElement>(null);
   const markers = useRef<HTMLDivElement>(null);
   const P = useRef(p);
@@ -324,7 +327,8 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       if (e.button !== 0 || editing.current || !sl) return;
       if (e.shiftKey) return; // Shift+클릭은 선택 토글이라 끌기를 시작하지 않는다
       const el = pick(e) as HTMLElement | null;
-      if (!el || isLockedDeep(el) || !canMove(el)) return;
+      if (!el) { marquee.current = { x0: e.clientX, y0: e.clientY, moved: false, add: [] }; (e.target as Element).setPointerCapture?.(e.pointerId); return; } // 빈 곳을 끌면 마퀴 선택
+      if (isLockedDeep(el) || !canMove(el)) return;
       const multi = [P.current.sel, ...P.current.more].filter(Boolean) as HTMLElement[];
       const els = P.current.more.length && multi.includes(el) ? multi.filter((n) => !isLockedDeep(n) && canMove(n)) : [el];
       const sr = sl.getBoundingClientRect(), ks = sr.width / 1920 || 1;
@@ -333,6 +337,15 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       (e.target as Element).setPointerCapture?.(e.pointerId);
     }, true);
     d.addEventListener("pointermove", (e) => {
+      const m = marquee.current;
+      if (m) {
+        if (!m.moved && Math.hypot(e.clientX - m.x0, e.clientY - m.y0) < 4) return;
+        m.moved = true;
+        const b = marqueeBox.current;
+        if (b) { b.style.display = "block"; b.style.transform = `translate(${Math.min(m.x0, e.clientX)}px,${Math.min(m.y0, e.clientY)}px)`; b.style.width = Math.abs(e.clientX - m.x0) + "px"; b.style.height = Math.abs(e.clientY - m.y0) + "px"; }
+        e.preventDefault();
+        return;
+      }
       const g = drag.current;
       if (!g) return;
       let dx = e.clientX - g.x0, dy = e.clientY - g.y0;
@@ -364,8 +377,24 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       if (cancel) { g.els.forEach((el, i) => { if (g.orig[i]) el.style.translate = g.orig[i]; else el.style.removeProperty("translate"); }); return; }
       P.current.onCommit(); // 한 번 끌기 = 실행 취소 한 건
     };
-    d.addEventListener("pointerup", () => endDrag(false), true);
-    d.addEventListener("pointercancel", () => endDrag(true), true);
+    const endMarquee = (e: PointerEvent | null) => {
+      const m = marquee.current;
+      marquee.current = null;
+      if (marqueeBox.current) marqueeBox.current.style.display = "none";
+      const sl = cur();
+      if (!m || !m.moved || !e || !sl) return;
+      swallowClick.current = true; setTimeout(() => { swallowClick.current = false; }, 0);
+      const l = Math.min(m.x0, e.clientX), t = Math.min(m.y0, e.clientY), r = Math.max(m.x0, e.clientX), b = Math.max(m.y0, e.clientY);
+      const hit = siblings<Element>(sl, null).filter((n) => {
+        if (isLockedDeep(n) || getComputedStyle(n).display === "none") return false;
+        const q = n.getBoundingClientRect();
+        return q.width > 0 && q.left < r && q.right > l && q.top < b && q.bottom > t;
+      });
+      selRef.current = hit[0] ?? null;
+      P.current.onGroup(hit);
+    };
+    d.addEventListener("pointerup", (e) => { endMarquee(e); endDrag(false); }, true);
+    d.addEventListener("pointercancel", () => { endMarquee(null); endDrag(true); }, true);
     d.addEventListener("keydown", (e) => { if (e.key === "Escape" && drag.current?.moved) { e.preventDefault(); e.stopPropagation(); endDrag(true); } }, true);
     const inEdit = (e: Event) => !!editing.current && editing.current.contains(e.target as Node);
     d.addEventListener("mouseover", (e) => { if (!editing.current) hover.current = pick(e); }, true);
@@ -485,6 +514,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div ref={hoverBox} className="absolute left-0 top-0 hidden border border-focus-ring/60" />
           <div ref={selBox} className="absolute left-0 top-0 hidden border-2 border-focus-ring" />
+          <div ref={marqueeBox} className="absolute left-0 top-0 hidden border border-focus-ring bg-focus-ring/10" />
           <div ref={extraBoxes} />
           <div ref={handles}>
             {HANDLES.map(([id, cursor]) => (

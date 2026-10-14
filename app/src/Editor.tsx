@@ -518,7 +518,7 @@ export function Editor({ id }: { id: string }) {
           collapsed={filmCollapsed} onToggle={toggleFilm}
           onSelect={setIndex} onMove={moveSlide} onDuplicate={dupSlide} onDelete={delSlide} onAdd={addSlide} />
         <div className="min-h-0 flex-1 bg-[var(--canvas-bg)]">
-        <Canvas ref={canvas} shell={shell} folder={folder} units={units} index={index} sel={sel} more={more} onMulti={toggleSel}
+        <Canvas ref={canvas} shell={shell} folder={folder} units={units} index={index} sel={sel} more={more} onMulti={toggleSel} onGroup={pickGroup}
           comments={comments.filter((c) => !c.slideDeleted && c.slide === origin.current.get(units[index]?.key ?? ""))}
           onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
           numbers={nums} hoverId={hoverId} onHover={setHoverId} channel={live.channel}

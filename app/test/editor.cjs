@@ -457,6 +457,17 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('삭제 실행 취소 한 번에 둘 다 돌아옴', (await nKids()) === k0n, await nKids());
   await page.keyboard.press('Escape');
 
+  // 마퀴: 빈 곳을 끌면 겹친 최상위 요소가 모두 선택된다
+  await focusBody(); await page.keyboard.press('Escape'); await sleep(200);
+  const sbox = await fr().locator('[data-active]').first().boundingBox();
+  await page.mouse.move(sbox.x + sbox.width - 6, sbox.y + sbox.height - 6); await page.mouse.down();
+  await page.mouse.move(sbox.x + sbox.width / 2, sbox.y + sbox.height / 2, { steps: 6 }); await sleep(150);
+  const marqVisible = await page.evaluate(() => [...document.querySelectorAll('div')].some((d) => d.className.includes('bg-focus-ring/10') && d.style.display === 'block'));
+  await page.mouse.move(sbox.x + 6, sbox.y + 6, { steps: 6 }); await page.mouse.up(); await sleep(400);
+  check('마퀴 상자가 끄는 동안 보이고 놓으면 사라짐', marqVisible && !(await page.evaluate(() => [...document.querySelectorAll('div')].some((d) => d.className.includes('bg-focus-ring/10') && d.style.display === 'block'))), marqVisible);
+  check('마퀴로 최상위 요소가 여럿 선택됨', (await page.locator('[role=treeitem][aria-selected=true]').count()) >= 2, await page.locator('[role=treeitem][aria-selected=true]').count());
+  await focusBody(); await page.keyboard.press('Escape');
+
   // Inspector Offset 필드와 리사이즈 핸들
   await fr().locator('[data-active] h2').first().click({ modifiers: ['Meta'] }); await sleep(300);
   await focusBody(); await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight'); await sleep(400);

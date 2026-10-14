@@ -18,9 +18,11 @@ function localPath(base: string, u: string) {
   if (p !== root && !p.startsWith(root + "/")) fail(`덱 폴더 밖의 파일은 쓸 수 없다: ${u}. 파일을 덱 폴더 안으로 옮기고 상대 경로로 쓴다.`);
   return p;
 }
+const assetBytes = new Map<string, number>(); // 큰 이미지 경고용
 async function dataUri(file: string) {
   const f = Bun.file(file);
   if (!(await f.exists())) fail(`없는 파일: ${file.replace(deckDir + "/", "")}. 덱 안의 src나 url() 경로를 확인하거나 파일을 덱 폴더에 넣는다.`);
+  assetBytes.set(file.replace(deckDir + "/", ""), f.size);
   const mime = (f.type || "application/octet-stream").split(";")[0];
   return `data:${mime};base64,${Buffer.from(await f.arrayBuffer()).toString("base64")}`;
 }
@@ -96,8 +98,27 @@ html = await replaceAsync(html, /(\ssrcset=")([^"]+)(")/g, async (m) => {
 html = await replaceAsync(html, /(\sstyle=")([^"]*url\([^"]*)(")/g, async (m) => m[1] + (await inlineCssUrls(m[2], deckDir)) + m[3]);
 html = await replaceAsync(html, /(<style\b[^>]*>)([\s\S]*?)(<\/style>)/g, async (m) => m[1] + (await inlineCssUrls(await inlineFonts(m[2], deckDir), deckDir)) + m[3]);
 
+/* head: share preview, favicon, robots, lang. Only what the deck does not already declare. */
+const metaJson = html.match(/<script[^>]*id="deck-meta"[^>]*>([\s\S]*?)<\/script>/)?.[1];
+let dm: { title?: string; subtitle?: string; visibility?: string; lang?: string } = {};
+try { dm = JSON.parse(metaJson ?? "{}"); } catch { /* lint가 알려 준다 */ }
+const esc = (t: string) => t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#000"/><rect x="7" y="9" width="18" height="14" rx="2" fill="none" stroke="#fff" stroke-width="2"/></svg>`;
+const heads: string[] = [];
+if (!/<meta[^>]*name=["']viewport["']/i.test(html)) heads.push('<meta name="viewport" content="width=device-width,initial-scale=1">');
+if (!/<link[^>]*rel=["'](?:shortcut )?icon["']/i.test(html)) heads.push(`<link rel="icon" href="data:image/svg+xml,${encodeURIComponent(FAVICON)}">`);
+if (dm.title && !/property=["']og:title["']/i.test(html)) heads.push(`<meta property="og:title" content="${esc(dm.title)}">`);
+if (dm.subtitle && !/name=["']description["']/i.test(html)) heads.push(`<meta name="description" content="${esc(dm.subtitle)}">`, `<meta property="og:description" content="${esc(dm.subtitle)}">`);
+if (dm.visibility === "password" && !/name=["']robots["']/i.test(html)) heads.push('<meta name="robots" content="noindex">');
+if (heads.length) html = html.replace(/<head[^>]*>/i, (h) => `${h}\n  ${heads.join("\n  ")}`);
+if (!/<title>[^<]+<\/title>/i.test(html) && dm.title) html = html.replace(/<\/head>/i, `  <title>${esc(dm.title)}</title>\n</head>`);
+if (!/<html[^>]*\blang=/i.test(html)) html = html.replace(/<html\b/i, `<html lang="${dm.lang === "en" ? "en" : "ko"}"`);
+
 await mkdir(join(root, "dist"), { recursive: true });
 const outFile = join(root, "dist", `${name}.html`);
 await Bun.write(outFile, html);
 if (fontFaces) console.log(`fonts: ${fontFaces} faces, ${(fontBytes / 1024).toFixed(0)} KB`);
+const imgBytes = [...assetBytes.values()].reduce((a, b) => a + b, 0);
+if (assetBytes.size) console.log(`images: ${assetBytes.size} files, ${(imgBytes / 1024).toFixed(0)} KB`);
+for (const [f, b] of assetBytes) if (b > 400 * 1024) console.warn(`큰 이미지: ${f} (${(b / 1024 / 1024).toFixed(1)} MB). 크기를 줄이면 번들이 가벼워지고 열리는 속도가 빨라진다(권장: 1920px 폭 이하, 400KB 이하).`);
 console.log(`${outFile}  ${(Buffer.byteLength(html) / 1024).toFixed(0)} KB`);

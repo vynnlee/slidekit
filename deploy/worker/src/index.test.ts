@@ -61,8 +61,8 @@ test("폼과 오류 문구는 meta.lang, 없으면 Accept-Language, 기본 ko", 
   store["meta:nolang"] = JSON.stringify({ visibility: "password", ...pw }); store["html:nolang"] = "x";
   const en = await handle(new Request("https://x/nolang", { headers: { "Accept-Language": "en-US,ko;q=0.5" } }), env);
   expect(await en.text()).toContain("This deck is password protected");
-  expect(await (await handle(new Request("https://x/none", { headers: { "Accept-Language": "en" } }), env)).text()).toBe("Not found");
-  expect(await (await get("none")).text()).toBe("찾을 수 없습니다");
+  expect(await (await handle(new Request("https://x/none", { headers: { "Accept-Language": "en" } }), env)).text()).toContain("<h1>Not found</h1>");
+  expect(await (await get("none")).text()).toContain("<h1>찾을 수 없습니다</h1>");
 });
 test("보안 헤더와 캐시", async () => {
   for (const r of [await get("open"), await get("sec"), await post("틀림", "9.9.9.9")]) {
@@ -79,4 +79,23 @@ test("다른 사이트 Origin의 폼 전송은 403, 같은 Origin은 통과", as
   const send = (origin: string) => handle(new Request("https://x/sec", { method: "POST", headers: { Origin: origin, "cf-connecting-ip": "7.7.7.7" }, body: new URLSearchParams({ password: "열쇠" }) }), env);
   expect((await send("https://evil.com")).status).toBe(403);
   expect((await send("https://x")).status).toBe(303);
+});
+
+test("안내 페이지: 제목은 이스케이프해 보이고, 잠금 안내는 남은 분을 알려 주고, 404도 같은 모양이다", async () => {
+  store["meta:titled"] = JSON.stringify({ visibility: "password", title: '<b>"디자인" & 발표</b>', ...pw }); store["html:titled"] = "x";
+  const page = await (await get("titled")).text();
+  expect(page).toContain("&lt;b&gt;&quot;디자인&quot; &amp; 발표&lt;/b&gt;");
+  expect(page).not.toContain("<b>\"디자인\"");
+  for (const a of ['autocomplete="current-password"', 'enterkeyhint="go"', "autofocus", 'name="viewport"']) expect(page).toContain(a);
+  const nf = await get("none");
+  expect(nf.status).toBe(404);
+  expect(await nf.text()).toContain("<main>");
+  const now = Date.now();
+  let r: Response = await post("x", "9.9.9.9", now);
+  for (let i = 0; i < 5; i++) r = await post("x", "9.9.9.9", now);
+  expect(r.status).toBe(429);
+  expect(await r.text()).toMatch(/약 \d+분 뒤/);
+  const bad = await (await post("x", "8.8.8.8", now)).text();
+  expect(bad).toContain('aria-invalid="true"');
+  expect(bad).toContain('role="alert"');
 });

@@ -127,16 +127,16 @@
 </section>
 
 <section data-slide="content">
-  <h2>AI와 함께</h2>
-  <ul class="items">
-    <li>편집기에서 요소를 골라 코멘트를 남기면 열려 있는 Claude Code 세션이 받아 덱을 고치고 답한다(Claude Code Channels).</li>
-    <li>코멘트는 파일에도 저장된다.</li>
-    <li>저장소의 <code>.claude/skills/slidekit</code> 스킬을 읽은 AI는 규격에 맞는 덱을 새로 만들 수 있다.</li>
-    <li><code>slidekit lint</code>가 위반을 알려 준다.</li>
-  </ul>
-  <aside data-notes>수정 요청은 **요소 단위 코멘트**로 전달한다.
+  <h2>AI와 함께 덱을 만든다</h2>
+  <div class="flow">
+    <div class="node"><span class="t">코멘트</span><span class="d">요소를 골라 남기면 열려 있는 Claude Code 세션이 받아 덱을 고치고 답한다</span></div>
+    <div class="node"><span class="t">스킬</span><span class="d">저장소의 slidekit 스킬을 읽은 AI가 규격에 맞는 덱을 새로 만든다</span></div>
+    <div class="node"><span class="t">lint</span><span class="d">slidekit lint가 규격 위반을 알려 준다</span></div>
+  </div>
+  <p>코멘트는 파일에도 저장된다(Claude Code Channels).</p>
+  <aside data-notes>AI와의 협업은 **코멘트, 스킬, lint** 세 도구로 이루어진다.
 
-스킬과 lint가 있어서 AI가 만든 덱도 규격을 지킨다.</aside>
+코멘트는 파일에도 남아 놓친 것을 다시 가져올 수 있다.</aside>
 </section>
 
 <section data-slide="content">

@@ -8,7 +8,7 @@ type KV = {
   delete(key: string): Promise<void>;
 };
 export type Env = { DECKS: KV; COOKIE_SECRET: string };
-export type Meta = { visibility: "public" | "password"; lang?: string; salt?: string; hash?: string };
+export type Meta = { visibility: "public" | "password"; lang?: string; title?: string; salt?: string; hash?: string };
 
 const enc = new TextEncoder();
 const ITER = 100_000; // Workers의 PBKDF2 반복 상한
@@ -52,8 +52,8 @@ const headers = {
 };
 
 const T = {
-  ko: { title: "비밀번호", hint: "이 덱은 비밀번호가 필요합니다", ph: "비밀번호", open: "열기", wrong: "비밀번호가 맞지 않습니다", locked: "시도가 너무 많습니다. 잠시 뒤 다시 시도하세요", none: "찾을 수 없습니다", denied: "허용되지 않은 요청입니다" },
-  en: { title: "Password", hint: "This deck is password protected", ph: "Password", open: "Open", wrong: "Incorrect password", locked: "Too many attempts. Try again later", none: "Not found", denied: "Request not allowed" },
+  ko: { title: "비밀번호", hint: "이 덱은 비밀번호가 필요합니다", ph: "비밀번호", open: "열기", wrong: "비밀번호가 맞지 않습니다", locked: "시도가 너무 많습니다", retry: (n: number) => `약 ${n}분 뒤에 다시 시도할 수 있습니다`, none: "찾을 수 없습니다", denied: "허용되지 않은 요청입니다", opening: "여는 중" },
+  en: { title: "Password", hint: "This deck is password protected", ph: "Password", open: "Open", wrong: "Incorrect password", locked: "Too many attempts", retry: (n: number) => `Try again in about ${n} min`, none: "Not found", denied: "Request not allowed", opening: "Opening" },
 };
 type Msg = (typeof T)["ko"];
 // deck-meta.lang이 우선이고, 없으면 Accept-Language 첫 항목, 기본은 ko이다.
@@ -61,8 +61,32 @@ const msgs = (req: Request, meta?: Meta | null): Msg => {
   const l = meta?.lang ?? req.headers.get("Accept-Language")?.split(",")[0].trim().toLowerCase() ?? "";
   return l.startsWith("en") ? T.en : T.ko;
 };
-const plain = (status: number, text: string, extra: Record<string, string> = {}) =>
-  new Response(text, { status, headers: { ...headers, "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", ...extra } });
+const esc = (t: string) => t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+
+// 비밀번호, 잠금, 없음 안내가 같은 모양(검은 바탕, 흰 글자, 가운데 한 칸)을 쓴다. 모바일 390px에서도 한 칸 폭을 지킨다.
+const CSS = `<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:24px;background:#000;color:#fff;font:16px/1.5 system-ui,-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;-webkit-font-smoothing:antialiased}
+main{display:grid;gap:14px;width:min(320px,100%)}
+h1{margin:0;font-size:20px;font-weight:600;letter-spacing:-.01em;overflow-wrap:anywhere}
+p{margin:0;font-size:14px;color:#a3a3a3}
+p.e{color:#f87171}
+form{display:grid;gap:12px}
+input,button{font:inherit;width:100%;min-height:44px;padding:11px 14px;border-radius:10px;border:1px solid #333;background:#0a0a0a;color:#fff}
+input::placeholder{color:#6b6b6b}
+input[aria-invalid=true]{border-color:#f87171}
+button{background:#fff;color:#000;border-color:#fff;font-weight:600;cursor:pointer}
+button:disabled{opacity:.6;cursor:progress}
+input:focus-visible,button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+</style>`;
+const shell = (m: Msg, title: string, body: string, status: number, extra: Record<string, string> = {}) => new Response(
+  `<!doctype html><html lang="${m === T.en ? "en" : "ko"}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><link rel="icon" href="data:,"><title>${esc(title)}</title>${CSS}<main>${body}</main>`,
+  { status, headers: { ...headers, "Content-Type": "text/html; charset=utf-8", "Cache-Control": "private, no-store", ...extra } },
+);
+// 없음, 잠금, 거부 같은 막다른 안내
+const plain = (status: number, text: string, extra: Record<string, string> = {}, m: Msg = T.ko, detail = "") =>
+  shell(m, text, `<h1>${esc(text)}</h1>${detail ? `<p>${esc(detail)}</p>` : ""}`, status, extra);
 
 // (덱, IP)별 실패 횟수를 KV에 둔다. KV 만료는 최소 60초라 창 안에서만 유효한 start로 직접 판단한다.
 type Fails = { n: number; start: number };
@@ -71,27 +95,17 @@ async function failsOf(env: Env, key: string, now: number): Promise<Fails> {
   return f && now / 1000 - f.start < WINDOW ? f : { n: 0, start: now / 1000 };
 }
 
-const form = (m: Msg, err = "") => new Response(
-  `<!doctype html><html lang="${m === T.en ? "en" : "ko"}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${m.title}</title>
-<style>
-body{margin:0;min-height:100vh;display:grid;place-items:center;background:#000;color:#fff;font:16px system-ui,sans-serif}
-form{display:grid;gap:12px;width:min(280px,86vw)}
-p{margin:0;font-size:14px;color:#a3a3a3}
-p.e{color:#f87171}
-input,button{font:inherit;padding:11px 12px;border-radius:8px;border:1px solid #404040;background:#0a0a0a;color:#fff}
-button{background:#fff;color:#000;border-color:#fff;cursor:pointer}
-input:focus-visible,button:focus-visible{outline:2px solid #fff;outline-offset:2px}
-</style>
-<form method="post"><p>${m.hint}</p><input type="password" name="password" placeholder="${m.ph}" aria-label="${m.ph}" autocomplete="current-password" autofocus required>${err ? `<p class="e" role="alert">${err}</p>` : ""}<button>${m.open}</button></form>`,
-  { status: err ? 401 : 200, headers: { ...headers, "Content-Type": "text/html; charset=utf-8", "Cache-Control": "private, no-store" } },
-);
+const form = (m: Msg, meta: Meta, err = "") => shell(m, meta.title || m.title,
+  `<form method="post"><h1>${esc(meta.title || m.title)}</h1><p id="h">${m.hint}</p><input type="password" name="password" placeholder="${m.ph}" aria-label="${m.ph}" aria-describedby="${err ? "e" : "h"}"${err ? ' aria-invalid="true"' : ""} autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" autofocus required>${err ? `<p class="e" id="e" role="alert">${err}</p>` : ""}<button>${m.open}</button></form>
+<script>(function(){var f=document.forms[0],b=f.querySelector("button"),t=b.textContent;f.addEventListener("submit",function(){b.disabled=true;b.textContent="${m.opening}..."});addEventListener("pageshow",function(){b.disabled=false;b.textContent=t})})()</script>`,
+  err ? 401 : 200);
 
 export async function handle(req: Request, env: Env, now = Date.now()): Promise<Response> {
   const deck = new URL(req.url).pathname.replace(/^\/|\/$/g, "");
-  if (!/^[\w-]+$/.test(deck)) return plain(404, msgs(req).none);
+  if (!/^[\w-]+$/.test(deck)) return plain(404, msgs(req).none, {}, msgs(req));
   const meta: Meta | null = JSON.parse((await env.DECKS.get(`meta:${deck}`)) ?? "null");
   const html = meta && (await env.DECKS.get(`html:${deck}`));
-  if (!meta || !html) return plain(404, msgs(req, meta).none);
+  if (!meta || !html) return plain(404, msgs(req, meta).none, {}, msgs(req, meta));
   const m = msgs(req, meta);
 
   const page = (cache: string) => new Response(html, { headers: { ...headers, "Content-Type": "text/html; charset=utf-8", "Cache-Control": cache } });
@@ -101,21 +115,21 @@ export async function handle(req: Request, env: Env, now = Date.now()): Promise<
   if (req.method === "POST") {
     // 로그인 CSRF 방지: 다른 사이트에서 온 폼 전송은 거부한다. SameSite=Strict 쿠키가 나머지를 막는다.
     const origin = req.headers.get("Origin");
-    if (origin && new URL(origin).host !== new URL(req.url).host) return plain(403, m.denied);
+    if (origin && new URL(origin).host !== new URL(req.url).host) return plain(403, m.denied, {}, m);
     const key = `rl:${deck}:${req.headers.get("cf-connecting-ip") ?? "unknown"}`;
     const fails = await failsOf(env, key, now);
-    if (fails.n >= MAX_FAILS) return plain(429, m.locked, { "Retry-After": String(Math.ceil(fails.start + WINDOW - now / 1000)) }); // 맞는 비밀번호도 잠금 중이면 거부한다
+    if (fails.n >= MAX_FAILS) { const wait = Math.ceil(fails.start + WINDOW - now / 1000); return plain(429, m.locked, { "Retry-After": String(wait) }, m, m.retry(Math.max(1, Math.ceil(wait / 60)))); } // 맞는 비밀번호도 잠금 중이면 거부한다
     const pw = (await req.formData().catch(() => null))?.get("password");
     const { hash } = await hashPassword(typeof pw === "string" ? pw : "", meta.salt);
     if (!same(unb64(hash), unb64(meta.hash))) {
       fails.n++;
       await env.DECKS.put(key, JSON.stringify(fails), { expirationTtl: WINDOW });
-      return form(m, m.wrong);
+      return form(m, meta, m.wrong);
     }
     await env.DECKS.delete(key);
     return new Response(null, { status: 303, headers: { ...headers, Location: `/${deck}`, "Set-Cookie": await makeCookie(env.COOKIE_SECRET, deck, now) } });
   }
-  return (await validCookie(req, env.COOKIE_SECRET, deck)) ? page("private, no-store") : form(m);
+  return (await validCookie(req, env.COOKIE_SECRET, deck)) ? page("private, no-store") : form(m, meta);
 }
 
 export default { fetch: handle };

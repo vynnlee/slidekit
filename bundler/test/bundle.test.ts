@@ -36,3 +36,21 @@ test("저장소 밖 경로는 거부한다", () => {
     expect(r.stderr.toString()).toContain("덱 폴더 밖");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("head: 파비콘, og:title, description, 비밀번호 덱의 noindex, lang을 채운다", async () => {
+  mkdirSync(dir, { recursive: true });
+  try {
+    writeFileSync(join(dir, "index.html"), `<!doctype html><html data-slidekit="1"><head><title>t</title>
+<script type="application/json" id="deck-meta">{"title":"발표 <A>","subtitle":"부제","visibility":"password","lang":"en"}</script></head><body>
+<section data-slide="cover"><h1>x</h1></section></body></html>`);
+    const r = Bun.spawnSync(["bun", join(root, "bundler", "bundle.ts"), "_bundletest"], { stderr: "pipe" });
+    expect(r.stderr.toString()).toBe("");
+    const out = await Bun.file(join(root, "dist", "_bundletest.html")).text();
+    expect(out).toContain('<html lang="en" data-slidekit="1">');
+    expect(out).toContain('rel="icon" href="data:image/svg+xml,');
+    expect(out).toContain('property="og:title" content="발표 &lt;A&gt;"');
+    expect(out).toContain('name="description" content="부제"');
+    expect(out).toContain('name="robots" content="noindex"');
+    expect(out).toContain('name="viewport"');
+  } finally { rmSync(dir, { recursive: true, force: true }); rmSync(join(root, "dist", "_bundletest.html"), { force: true }); }
+});

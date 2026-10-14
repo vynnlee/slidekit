@@ -54,6 +54,26 @@ const PW = 'S3cret-pass-ZZ';
   await p.getByRole('link').first().waitFor({ timeout: 60000 });
   check('성공: URL 링크와 Copy 버튼, dry run 로그', (await p.getByRole('link').first().getAttribute('href')) === 'https://static.vynnlee.com/qa-exp-pub' && (await p.getByRole('button', { name: 'Copy link' }).count()) === 1 && /DRY RUN/.test(await dlg.textContent()), await dlg.textContent());
   await dlg.getByRole('button', { name: 'Close', exact: true }).first().click();
+  // 게시 기록: dry-run 게시는 기록을 남기지 않아 메뉴에 Published가 없다. 기록 파일을 직접 써서 Published와 Unpublish 확인 흐름을 본다.
+  const openMenu = async () => { await p.getByRole('button', { name: 'Export' }).click(); };
+  await openMenu();
+  check('게시 기록이 없으면 Published 항목을 숨긴다', (await p.getByRole('menuitem', { name: 'Published...' }).count()) === 0);
+  await p.keyboard.press('Escape');
+  const rec = { name: 'qa-exp-pub', url: 'https://static.vynnlee.com/qa-exp-pub', at: new Date(Date.now() - 3600e3).toISOString(), visibility: 'public', bytes: 123456, sha: 'a'.repeat(40) };
+  fs.writeFileSync(path.join(ROOT, 'decks', 'qa-exp-pub', '.publish.json'), JSON.stringify({ current: rec, history: [rec] }));
+  await p.reload(); await p.getByRole('button', { name: 'Export' }).waitFor();
+  await openMenu();
+  await p.getByRole('menuitem', { name: 'Published...' }).click();
+  const pd = p.getByTestId('published-dialog');
+  check('Published 대화상자: 주소, 시각, 크기', await pd.waitFor({ timeout: 5000 }).then(() => true, () => false) && /static\.vynnlee\.com\/qa-exp-pub/.test(await pd.textContent()) && /1 h ago|60 min ago/.test(await pd.textContent()) && /121 KB|0\.1 MB/.test(await pd.textContent()), await pd.textContent().catch(() => ''));
+  check('덱이 기록의 지문과 다르면 Changed since publish', await p.getByTestId('changed-since-publish').isVisible());
+  await pd.getByRole('button', { name: /^Unpublish/ }).click();
+  const ud = p.getByTestId('unpublish-dialog');
+  await ud.waitFor({ timeout: 5000 });
+  check('확인 대화상자: 실제 주소와 everyone 경고, 덱은 지워지지 않는다는 안내', /https:\/\/static\.vynnlee\.com\/qa-exp-pub/.test(await ud.textContent()) && /for everyone/.test(await ud.textContent()) && /not deleted/.test(await ud.textContent()), await ud.textContent());
+  await ud.getByRole('button', { name: 'Unpublish', exact: true }).click();
+  check('dry-run 서버에서는 아무것도 지우지 않고 그렇다고 알린다', await p.getByText('Dry run: nothing was removed.').first().waitFor({ timeout: 15000 }).then(() => true, () => false));
+  check('dry-run은 게시 기록을 그대로 둔다', JSON.parse(fs.readFileSync(path.join(ROOT, 'decks', 'qa-exp-pub', '.publish.json'), 'utf8')).current !== null);
   // 비밀번호 덱
   await p.goto(BASE + '/dev/export?deck=qa-exp-pw'); await p.getByRole('button', { name: 'Export' }).waitFor();
   await menu('Publish to static.vynnlee.com...');

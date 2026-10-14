@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, Check, Circle, Copy, Download, ExternalLink, FileText, Globe, History, Link2, Loader2, RotateCcw } from "lucide-react";
+import { AlertCircle, Check, Circle, Copy, Download, ExternalLink, FileText, Globe, History, Link2, Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { DropdownMenu, DropdownTrigger, DropdownContent } from "@/components/ui/dropdown";
@@ -21,6 +21,9 @@ interface ExportMenuProps {
 }
 
 type Mode = "idle" | "html" | "pdf" | "publish";
+// 서버의 게시 기록(.publish.json)과 현재 덱 지문 비교 결과
+type PubEntry = { url: string; at: string; visibility: "public" | "password"; bytes: number; unpublishedAt?: string };
+type Published = { published: false } | { published: true; name: string; url: string; at: string; visibility: "public" | "password"; bytes: number; changed: boolean; history: PubEntry[] };
 type Stage = "idle" | "saving" | "bundling" | "publishing" | "done";
 type Check = { errors: number; warnings: number; issues: { level: string; rule: string; msg: string }[]; largeImages: { file: string; bytes: number }[]; visibility: "public" | "password" | "unknown"; estimatedBytes: number; lastBundleBytes: number | null };
 const fmt = (b: number) => (b >= 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
@@ -75,6 +78,11 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
   const [check, setCheck] = useState<Check | null | "error">(null);
   const [versions, setVersions] = useState(false);
   const [pdfDialog, setPdfDialog] = useState(false);
+  const [pub, setPub] = useState<Published | null>(null);
+  const [pubOpen, setPubOpen] = useState(false), [unpubOpen, setUnpubOpen] = useState(false);
+  const [unpubBusy, setUnpubBusy] = useState(false), [unpubErr, setUnpubErr] = useState(""), [unpubDetails, setUnpubDetails] = useState("");
+  const loadPub = () => fetch(`/api/decks/${folder}/published`).then((r) => (r.ok ? r.json() : Promise.reject())).then((j: Published) => setPub(j), () => setPub(null));
+  useEffect(() => { void loadPub(); }, [folder]); // eslint-disable-line react-hooks/exhaustive-deps
   const [pdfMode, setPdfMode] = useState<PdfMode>("notes");
   const [per, setPer] = useState(3);
   const [fileLabel, setFileLabel] = useState("");
@@ -146,6 +154,7 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
             const rec = { url: m.url, at: new Date().toISOString() };
             try { localStorage.setItem(PUBLISHED_KEY(folder), JSON.stringify(rec)); } catch { /* 저장소 거부: 기록만 건너뛴다 */ }
             setLast(rec);
+            void loadPub(); // 서버 기록(.publish.json)을 다시 읽는다
           }
         }
       }
@@ -153,7 +162,33 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
   };
 
   const copy = async () => { try { await navigator.clipboard.writeText(url); setCopied(true); } catch { say("Could not copy. Select the link and copy it by hand."); } };
-  const copyLast = async () => { try { await navigator.clipboard.writeText(last!.url); say("Link copied"); } catch { say("Could not copy. Open Publish to see the link"); } };
+  // 게시 취소: 서버가 CLI를 돌리고 NDJSON으로 진행을 알린다. 실제 삭제는 사용자가 이 확인 대화상자에서 Unpublish를 눌렀을 때만 일어난다.
+  const unpublish = async () => {
+    setUnpubBusy(true); setUnpubErr(""); setUnpubDetails("");
+    try {
+      const res = await post(`/api/decks/${folder}/unpublish`, { confirm: true });
+      if (!res.ok || !res.body) { const e = await readErr(res); setUnpubErr(e.msg); setUnpubDetails(e.details); return; }
+      let buf = "", done: { dryRun?: boolean } | null = null, failed = false;
+      for await (const chunk of res.body.pipeThrough(new TextDecoderStream())) {
+        buf += chunk;
+        let i;
+        while ((i = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, i); buf = buf.slice(i + 1);
+          let m: { error?: string; details?: string; done?: boolean; dryRun?: boolean };
+          try { m = JSON.parse(line); } catch { continue; }
+          if (m.error) { failed = true; setUnpubErr(m.error); setUnpubDetails(m.details ?? ""); }
+          if (m.done) done = { dryRun: m.dryRun };
+        }
+      }
+      if (done && !failed) {
+        setUnpubOpen(false); setPubOpen(false);
+        toast(done.dryRun ? "Dry run: nothing was removed." : "Unpublished. The link no longer works.", { ms: 6000 });
+        await loadPub();
+      }
+    } catch { setUnpubErr("Connection lost. The deck may or may not be unpublished. Check the link."); } finally { setUnpubBusy(false); }
+  };
+  const linkOf = () => (pub && pub.published ? pub.url : last?.url ?? "");
+  const copyLast = async () => { try { await navigator.clipboard.writeText(linkOf()); say("Link copied"); } catch { say("Could not copy. Open Publish to see the link"); } };
   const needPw = visibility === "password";
   const canPublish = !busy && !url && (!needPw || (pw.length >= MIN_PW && pw === pw2)) && (check === null || check === "error" || check.errors === 0 || anyway);
 
@@ -166,8 +201,9 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
           <MenuItem index={1} icon={FileText} label="Download PDF" onSelect={() => download("pdf")} />
           <MenuItem index={2} icon={FileText} label="PDF options..." onSelect={() => setPdfDialog(true)} />
           <MenuItem index={3} icon={Globe} label="Publish to static.vynnlee.com..." onSelect={openPublish} />
-          {last && <MenuItem index={4} icon={Link2} label="Copy published link" onSelect={copyLast} />}
-          <MenuItem index={last ? 5 : 4} icon={History} label="Version history..." onSelect={() => setVersions(true)} />
+          {(pub?.published || last) && <MenuItem index={4} icon={Link2} label="Copy published link" onSelect={copyLast} />}
+          {pub?.published && <MenuItem index={5} icon={Globe} label="Published..." onSelect={() => { void loadPub(); setPubOpen(true); }} />}
+          <MenuItem index={pub?.published ? 6 : (pub?.published || last) ? 5 : 4} icon={History} label="Version history..." onSelect={() => setVersions(true)} />
         </DropdownContent>
       </DropdownMenu>
       <Dialog open={mode !== "idle"} onOpenChange={(o) => !o && close()}>
@@ -323,6 +359,60 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
           </div>
         </DialogContent>
       </Dialog>
+      {pub?.published && (
+        <Dialog open={pubOpen} onOpenChange={setPubOpen}>
+          <DialogContent size="sm">
+            <div className="flex flex-col gap-3" data-testid="published-dialog">
+              <DialogTitle>Published</DialogTitle>
+              <a href={pub.url} target="_blank" rel="noreferrer" className="break-all underline">{pub.url}</a>
+              <p className="text-caption text-muted-foreground">
+                Published {ago(pub.at)}, {pub.visibility === "password" ? "password protected" : "public"}, about {fmt(pub.bytes)}.
+              </p>
+              {pub.changed && (
+                <div className="flex items-start gap-2 rounded-md bg-hover p-2 text-caption" data-testid="changed-since-publish">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span className="flex-1">Changed since publish. The published version is older than this deck.</span>
+                  <Button size="compact" variant="secondary" onClick={() => { setPubOpen(false); void openPublish(); }}>Publish again</Button>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button size="compact" variant="secondary" onClick={copyLast} aria-label="Copy published link" leadingIcon={Copy}>Copy link</Button>
+                <a href={pub.url} target="_blank" rel="noreferrer" aria-label="Open published deck in a new tab" className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-body hover:bg-hover"><ExternalLink className="h-4 w-4" aria-hidden="true" />Open</a>
+              </div>
+              {pub.history.length > 1 && (
+                <section aria-label="Publish history" className="flex flex-col gap-1">
+                  <span className="text-micro uppercase tracking-wide text-muted-foreground">History</span>
+                  <ul className="flex flex-col gap-0.5 text-caption text-muted-foreground" data-testid="publish-history">
+                    {pub.history.slice(0, 5).map((h, i) => <li key={i}>{ago(h.at)}, {h.visibility === "password" ? "password" : "public"}, {fmt(h.bytes)}{h.unpublishedAt ? `, unpublished ${ago(h.unpublishedAt)}` : ""}</li>)}
+                  </ul>
+                </section>
+              )}
+              <div className="flex items-center justify-between gap-2">
+                <Button size="compact" variant="ghost" className="text-destructive [&_svg]:text-destructive" leadingIcon={Trash2} onClick={() => { setUnpubErr(""); setUnpubDetails(""); setUnpubOpen(true); }}>Unpublish...</Button>
+                <Button size="compact" variant="ghost" onClick={() => setPubOpen(false)}>Close</Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+      {pub?.published && (
+        <Dialog open={unpubOpen} onOpenChange={(o) => { if (!unpubBusy) setUnpubOpen(o); }}>
+          <DialogContent size="sm">
+            <div className="flex flex-col gap-3" data-testid="unpublish-dialog">
+              <DialogTitle>Unpublish this deck?</DialogTitle>
+              <p className="text-body">This removes <span className="break-all">{pub.url}</span> for everyone. People with the link will see a not found page. The deck in this app is not deleted.</p>
+              {pub.visibility === "password" && <p className="text-caption text-muted-foreground">The password-protected copy is removed too.</p>}
+              {unpubBusy && <p className="flex items-center gap-2 text-caption text-muted-foreground" aria-live="polite"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />Removing from Cloudflare...</p>}
+              {unpubErr && <p role="alert" className="text-body">{unpubErr}</p>}
+              {unpubErr && unpubDetails && <details className="rounded-md bg-hover"><summary className="cursor-default select-none px-2 py-1 text-caption text-muted-foreground">Details</summary><pre className="max-h-32 overflow-auto whitespace-pre-wrap px-2 pb-2 font-mono text-caption text-muted-foreground">{unpubDetails}</pre></details>}
+              <div className="flex justify-end gap-2">
+                <Button size="compact" variant="ghost" disabled={unpubBusy} onClick={() => setUnpubOpen(false)}>Cancel</Button>
+                <Button size="compact" variant="secondary" className="text-destructive [&_svg]:text-destructive" disabled={unpubBusy} onClick={unpublish} leadingIcon={unpubErr ? RotateCcw : Trash2}>{unpubErr ? "Try again" : "Unpublish"}</Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
       <VersionHistory folder={folder} open={versions} onOpenChange={setVersions} ensureSaved={saved} />
     </>
   );

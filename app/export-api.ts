@@ -2,8 +2,9 @@
 // 한 번에 하나만 돌린다(409). 배포는 NDJSON 스트림으로 진행 로그를 흘린다: {"log":"..."} 줄들 뒤에 {"done":true,"url":...} 또는 {"error":...}.
 // 비밀번호는 자식 프로세스 환경 변수로만 넘기고, 로그와 응답에서는 지운다.
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { join, normalize } from "node:path";
+import { join } from "node:path";
 import { lint } from "../engine/lint";
+import { deckFingerprint, localImageRefs, readPublish, recordUnpublish } from "../engine/publish-record";
 
 const root = join(import.meta.dir, "..");
 const ID = /^[a-z0-9][a-z0-9-]*$/;
@@ -20,6 +21,8 @@ const WORDS: Record<string, string> = {
   "bundle-failed": "The HTML bundle could not be built. Run lint on the deck or see Details.",
   "pdf-failed": "The PDF could not be made. See Details.",
   canceled: "Canceled.",
+  "not-published": "This deck has no publish record, so there is nothing to unpublish.",
+  "read-only": "This deck is read-only here.",
 };
 const bad = (code: string, status = 400, details?: string) => Response.json({ error: WORDS[code] ?? code, code, ...(details ? { details } : {}) }, { status });
 
@@ -124,11 +127,7 @@ export function makeRoutes(run: Run = spawnRun) {
     const issues = lint(html);
     const images: { file: string; bytes: number }[] = [];
     let assets = 0;
-    for (const m of html.matchAll(/\b(?:src|href)=["']([^"':#?]+\.(?:png|jpe?g|gif|webp|avif|svg))["']/gi)) {
-      const f = normalize(m[1]);
-      if (f.startsWith("..") || f.startsWith("/")) continue; // 덱 폴더 밖은 번들러도 읽지 않는다
-      try { const b = statSync(join(dir, f)).size; assets += b; if (b > 400 * 1024) images.push({ file: f, bytes: b }); } catch { /* 없는 파일은 lint나 번들이 알려 준다 */ }
-    }
+    for (const r of localImageRefs(html, dir)) { assets += r.size; if (r.size > 400 * 1024) images.push({ file: r.rel, bytes: r.size }); } // 400KB 넘는 이미지(번들러 경고 기준과 같다)
     images.sort((a, b) => b.bytes - a.bytes);
     const visibility = meta(id)?.visibility === "password" ? "password" : meta(id) ? "public" : "unknown";
     const built = existsSync(dist(id, "html")) && statSync(dist(id, "html")).mtimeMs > statSync(join(dir, "index.html")).mtimeMs ? statSync(dist(id, "html")).size : null;
@@ -144,6 +143,52 @@ export function makeRoutes(run: Run = spawnRun) {
   };
   return {
     "/api/decks/:id/check": { GET: check },
+    // 게시 기록(.publish.json)과 현재 덱의 달라짐. 기록이 없으면 published false.
+    "/api/decks/:id/published": {
+      GET: (req: Req) => {
+        const id = deckId(req);
+        if (!id) return bad("deck", 404);
+        const dir = join(root, "decks", id);
+        const { current, history } = readPublish(dir);
+        if (!current) return Response.json({ published: false });
+        return Response.json({ published: true, ...current, changed: deckFingerprint(dir) !== current.sha, history: history.slice(0, 20) });
+      },
+    },
+    // 게시 취소: 확인(confirm)이 있어야 하고 CLI를 --yes로 부른다. 실제 삭제는 이 요청에서만 일어난다. 기록의 name으로 지워서 폴더 이름이 바뀌었어도 옛 주소를 취소할 수 있다.
+    "/api/decks/:id/unpublish": {
+      POST: async (req: Req) => {
+        const id = deckId(req);
+        if (!id) return bad("deck", 404);
+        const b = (await req.json().catch(() => null)) as { confirm?: unknown } | null;
+        if (!b || b.confirm !== true) return bad("confirm");
+        if ((process.env.SLIDEKIT_READONLY_DECKS ?? "").split(",").some((f) => f.trim() === id)) return bad("read-only", 403);
+        const dir = join(root, "decks", id);
+        const cur = readPublish(dir).current;
+        if (!cur) return bad("not-published", 409);
+        if (busy) return bad("busy", 409);
+        busy = true; canceled = false;
+        const enc = new TextEncoder();
+        const stream = new ReadableStream({
+          async start(c) {
+            const send = (o: unknown) => c.enqueue(enc.encode(JSON.stringify(o) + "\n"));
+            try {
+              const env: Record<string, string> = {};
+              if (process.env.SLIDEKIT_DEPLOY_DRY_RUN) env.SLIDEKIT_DEPLOY_DRY_RUN = "1";
+              send({ log: "Removing from Cloudflare..." });
+              const r = await run("deploy/unpublish.ts", cur.name, env, (l) => send({ log: l }), ["--yes"]);
+              const text = r.lines.join("\n");
+              if (canceled) send({ error: WORDS.canceled, code: "canceled" });
+              else if (r.code === 0 && /^Dry run:/m.test(text)) send({ done: true, dryRun: true }); // 아무것도 지우지 않았으니 기록도 그대로 둔다
+              else if (r.code === 0 && /^Unpublished /m.test(text)) { try { recordUnpublish(dir); } catch { /* 기록 실패는 취소 결과에 영향 없음 */ } send({ done: true, dryRun: false }); }
+              else if (/게시된 덱|게시되지/.test(text)) { try { recordUnpublish(dir); } catch { /* */ } send({ error: "Nothing is published under that name anymore. The record was out of date and is cleared.", details: r.lines.slice(-3).join("\n") }); }
+              else send({ error: `Could not unpublish. ${why(r.lines) || "See Details."}`, details: r.lines.slice(-3).join("\n") });
+            } catch (e) { send({ error: String(e) }); }
+            finally { busy = false; c.close(); }
+          },
+        });
+        return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" } });
+      },
+    },
     "/api/export/cancel": { POST: () => Response.json({ ok: true, canceled: cancelExport() }) },
     "/api/decks/:id/bundle": { POST: quick("bundler/bundle.ts", "html") },
     "/api/decks/:id/pdf": { POST: pdf },

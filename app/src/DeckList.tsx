@@ -12,13 +12,15 @@ import { Shell } from "./Shell";
 import { TrashList } from "./TrashList";
 import { StatusPage } from "./StatusPage";
 import { toast } from "./Toaster";
+import { readRecent } from "@/lib/recent";
 import { FOLDER_RE, slugify } from "@/lib/slug";
 import { UNREACHABLE, isDown, onReconnect } from "@/lib/connection";
 import { go } from "./App";
 import { deckUrl, type DeckEntry } from "@/lib/deck";
 import { cn } from "@/lib/utils";
 
-const SORTS = { date: "Date", title: "Name" } as const;
+const SORTS = { date: "Date", title: "Name", recent: "Recent" } as const;
+const ORDER = ["date", "title", "recent"] as const;
 type Sort = keyof typeof SORTS;
 // 표지 썸네일: 1920x1080 임베드 iframe을 축소한다. 화면에 들어오면 잠깐 뒤 한 번만 만들고 유지한다.
 function Thumb({ deck, width: fixed }: { deck: DeckEntry; width?: number }) {
@@ -32,6 +34,7 @@ function Thumb({ deck, width: fixed }: { deck: DeckEntry; width?: number }) {
   }, []);
   const width = w;
   const [seen, setSeen] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     let t: ReturnType<typeof setTimeout> | undefined;
     const io = new IntersectionObserver(([e]) => {
@@ -42,11 +45,12 @@ function Thumb({ deck, width: fixed }: { deck: DeckEntry; width?: number }) {
     return () => { clearTimeout(t); io.disconnect(); };
   }, []);
   return (
-    <div ref={ref} className="relative shrink-0 overflow-hidden rounded-md bg-hover" style={{ width: fixed ?? "100%", aspectRatio: "16 / 9" }}>
+    <div ref={ref} className={cn("relative shrink-0 overflow-hidden rounded-md bg-hover", !loaded && "motion-safe:animate-pulse")} style={{ width: fixed ?? "100%", aspectRatio: "16 / 9" }}>
       {seen && (
         <iframe
           src={deckUrl(deck.folder, "?embed=1")} title={deck.title} aria-hidden="true" tabIndex={-1} loading="lazy"
-          className="pointer-events-none absolute left-0 top-0 origin-top-left border-0 bg-black"
+          onLoad={() => setLoaded(true)}
+          className={cn("pointer-events-none absolute left-0 top-0 origin-top-left border-0 bg-black transition-opacity duration-300 motion-reduce:transition-none", loaded ? "opacity-100" : "opacity-0")}
           style={{ width: 1920, height: 1080, transform: `scale(${width / 1920})` }}
         />
       )}
@@ -65,11 +69,12 @@ const ago = (iso?: string) => {
 const Badge = ({ deck }: { deck: DeckEntry }) =>
   deck.visibility === "password" ? <span className="shrink-0 rounded bg-hover px-1.5 text-caption text-muted-foreground">Password</span> : null;
 // 메타는 단위별 span으로 나눠 위계를 만든다: 슬라이드 수, 수정 시각, 작성자.
-const Meta = ({ d }: { d: DeckEntry }) => (
+const Meta = ({ d, opened }: { d: DeckEntry; opened?: number }) => (
   <span className="flex min-w-0 flex-wrap gap-x-2 tabular-nums" title={[d.date, d.folder].filter(Boolean).join("  ")}>
     {d.slides != null && <span>{d.slides} slides</span>}
     {d.modified && <span>Edited {ago(d.modified)}</span>}
     {d.author && <span className="truncate">{d.author}</span>}
+    {opened && <span className="flex items-center gap-1"><span aria-hidden className="size-1.5 rounded-full bg-focus-ring" />Opened {ago(new Date(opened).toISOString())}</span>}
   </span>
 );
 
@@ -118,7 +123,7 @@ const pref = <T extends string>(k: string, ok: readonly T[], d: T) => { const v 
 export function DeckList() {
   const [decks, setDecks] = useState<DeckEntry[] | null>(null);
   const [view, setView] = useState(() => pref("slidekit:list-view", ["grid", "list"], "grid"));
-  const [sort, setSort] = useState<Sort>(() => pref("slidekit:list-sort", ["date", "title"], "date"));
+  const [sort, setSort] = useState<Sort>(() => pref("slidekit:list-sort", ORDER, "date"));
   const [palette, setPalette] = useState(false);
   // 전체 검색: 팔레트를 열 때 슬라이드 제목, 본문, 노트 색인을 받아 둔다(서버는 파일이 안 바뀌면 캐시를 쓴다).
   const [q, setQ] = useState("");
@@ -160,13 +165,20 @@ export function DeckList() {
   useEffect(() => { load(); return onReconnect(() => { load(); }); }, []);
   useEffect(() => { localStorage.setItem("slidekit:list-view", view); localStorage.setItem("slidekit:list-sort", sort); }, [view, sort]);
 
+  const recent = useMemo(readRecent, []);
+  const lastOpened = recent[0];
   const sorted = useMemo(() => {
     const l = [...(decks ?? [])];
-    return sort === "title" ? l.sort((a, b) => a.title.localeCompare(b.title, "ko")) : l.sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
-  }, [decks, sort]);
+    if (sort === "title") return l.sort((a, b) => a.title.localeCompare(b.title, "ko"));
+    if (sort === "recent") {
+      const at = (d: DeckEntry) => recent.find((r) => r.id === d.id || r.id === d.folder)?.t ?? 0;
+      return l.sort((a, b) => at(b) - at(a) || (b.date ?? "").localeCompare(a.date ?? ""));
+    }
+    return l.sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+  }, [decks, sort, recent]);
 
   const open = (d: DeckEntry) => go(`/edit/${encodeURIComponent(d.id)}`);
-  const cycleSort = () => setSort((s) => (s === "date" ? "title" : "date"));
+  const cycleSort = () => setSort((s) => ORDER[(ORDER.indexOf(s) + 1) % ORDER.length]);
 
   // 새 덱: 폴더 이름은 제목에서 제안하고, 형식과 중복은 입력하는 동안 바로 알린다.
   const known = useMemo(() => new Set((decks ?? []).map((d) => d.folder)), [decks]);
@@ -271,7 +283,7 @@ export function DeckList() {
   const items: CommandMenuItemData[] = useMemo(() => [
     { value: "new", label: "New deck", icon: Plus, group: "Actions", onSelect: startCreate },
     { value: "view", label: view === "grid" ? "View as list" : "View as grid", icon: view === "grid" ? List : LayoutGrid, group: "Actions", onSelect: () => setView(view === "grid" ? "list" : "grid") },
-    { value: "sort", label: `Sort by ${SORTS[sort === "date" ? "title" : "date"]}`, icon: ArrowDownUp, group: "Actions", onSelect: cycleSort },
+    { value: "sort", label: `Sort by ${SORTS[ORDER[(ORDER.indexOf(sort) + 1) % ORDER.length]]}`, icon: ArrowDownUp, group: "Actions", onSelect: cycleSort },
     ...sorted.flatMap((d): CommandMenuItemData[] => [
       { value: `edit:${d.id}`, label: d.title, description: "Edit", icon: Pencil, group: "Decks", keywords: [d.folder, d.author ?? ""], onSelect: () => open(d) },
       { value: `present:${d.id}`, label: d.title, description: "Presenter view", icon: MonitorPlay, group: "Decks", keywords: [d.folder, "present"], onSelect: () => go(`/present/${encodeURIComponent(d.id)}`) },
@@ -322,7 +334,7 @@ export function DeckList() {
                   <Thumb deck={d} />
                   <CardHeader>
                     <CardTitle>{d.title}</CardTitle>
-                    <CardDescription><Meta d={d} /></CardDescription>
+                    <CardDescription><Meta d={d} opened={lastOpened && (lastOpened.id === d.id || lastOpened.id === d.folder) ? lastOpened.t : undefined} /></CardDescription>
                   </CardHeader>
                 </Card>
               ))}
@@ -335,7 +347,7 @@ export function DeckList() {
                     <Thumb deck={d} width={56} />
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-3">
                       <span className="min-w-0 truncate text-body sm:flex-1">{d.title}</span>
-                      <span className="flex items-center gap-2 text-caption text-muted-foreground"><Badge deck={d} /><Meta d={d} /></span>
+                      <span className="flex items-center gap-2 text-caption text-muted-foreground"><Badge deck={d} /><Meta d={d} opened={lastOpened && (lastOpened.id === d.id || lastOpened.id === d.folder) ? lastOpened.t : undefined} /></span>
                     </span>
                   </div>
                   {menu(d, "absolute right-2 top-1/2 z-30 -translate-y-1/2")}

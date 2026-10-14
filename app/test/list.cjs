@@ -175,6 +175,15 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.getByRole('button', { name: 'Present zz-e2e-k2' }).waitFor();
   await page.getByRole('button', { name: 'Present zz-e2e-k2' }).click({ force: true });
   check('카드의 Present 버튼', await until(async () => new URL(page.url()).pathname === '/present/zz-e2e-k2'), page.url());
+  // 최근 연 덱: 가장 최근 하나에 Opened 표시, Recent 정렬은 최근 순
+  await page.goto(BASE + '/');
+  await page.getByRole('button', { name: 'zz-e2e-k2', exact: true }).waitFor();
+  check('가장 최근에 연 덱에 Opened 표시', (await page.getByText(/^Opened /).count()) === 1);
+  for (let i = 0; i < 2; i++) await page.getByRole('button', { name: /^(Date|Name|Recent)$/ }).click();
+  check('Recent 정렬 이름', (await page.getByRole('button', { name: 'Recent', exact: true }).count()) === 1);
+  const order = await page.evaluate(() => [...document.querySelectorAll('[data-deck]')].map((r) => r.querySelector('button')?.getAttribute('aria-label')));
+  check('최근 연 덱이 맨 앞', order[0] === 'zz-e2e-k2' || order[0] === 'Present zz-e2e-k2' || String(order[0]).includes('zz-e2e-k2'), order);
+  await page.evaluate(() => localStorage.setItem('slidekit:list-sort', 'date'));
   await page.goto(BASE + '/present/nope-nope');
   check('없는 덱은 안내와 돌아가기', await until(async () => (await page.getByText('Deck not found').count()) === 1));
   await page.getByRole('button', { name: 'Back to decks' }).click();

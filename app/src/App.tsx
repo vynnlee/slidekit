@@ -14,6 +14,8 @@ if (process.env.NODE_ENV !== "production") {
   dev["/dev/export"] = lazy(() => import("./ExportDemo").then((m) => ({ default: m.ExportDemo })));
 }
 
+import { recordRecent } from "@/lib/recent";
+
 export function go(path: string) {
   history.pushState(null, "", path);
   window.dispatchEvent(new PopStateEvent("popstate"));
@@ -29,10 +31,11 @@ export function App() {
     window.addEventListener("popstate", on);
     return () => window.removeEventListener("popstate", on);
   }, []);
+  const p = path.match(/^\/present\/([^/]+)/);
+  const e = path.match(/^\/edit\/([^/]+)/);
+  useEffect(() => { const m = p ?? e; if (m) recordRecent(decodeURIComponent(m[1])); }, [p?.[1], e?.[1]]);
   const Demo = dev[path];
   if (Demo) return <Page><Demo /></Page>;
-  const p = path.match(/^\/present\/([^/]+)/);
   if (p) return <Page><Presenter id={decodeURIComponent(p[1])} /></Page>;
-  const e = path.match(/^\/edit\/([^/]+)/);
   return <Page>{e ? <Editor id={decodeURIComponent(e[1])} /> : <DeckList />}</Page>;
 }

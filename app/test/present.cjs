@@ -140,6 +140,45 @@ const MOCKS = {
     check('Present anyway는 발표 창을 연다', !!(await popP.catch(() => null)));
     await ctx.close();
   }
+  // 팔레트(Cmd+K)와 단축키 안내('?')
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/present/${ID}`, { waitUntil: 'domcontentloaded' });
+    const counter = () => page.getByText(/^\d+ \/ \d+$/).first().innerText();
+    await until(async () => (await counter()) === `1 / ${TOTAL}`);
+    const pal = page.getByRole('dialog', { name: 'Search' });
+    const openPal = async (q) => { await page.keyboard.press('Control+k'); await pal.getByRole('combobox').fill(q); };
+    await openPal('12');
+    check('Cmd+K 팔레트가 열리고 번호로 슬라이드를 찾는다', await until(async () => (await pal.getByRole('option', { name: /^12\. / }).count()) >= 1));
+    await page.keyboard.press('Enter');
+    check('Enter로 그 슬라이드로 이동', await until(async () => (await counter()) === `12 / ${TOTAL}`), await counter());
+    check('팔레트는 이동 뒤 닫힌다', await until(async () => (await pal.count()) === 0));
+    await openPal('Notes for cover');
+    await page.keyboard.press('Enter');
+    check('노트 글자로 찾아 이동한다', await until(async () => (await counter()) === `1 / ${TOTAL}`), await counter());
+    await openPal('Hide notes'); await page.keyboard.press('Enter');
+    check('보기 토글: 노트 숨김', await until(async () => (await page.locator('[aria-label="Speaker notes"]').count()) === 0));
+    await openPal('Show notes'); await page.keyboard.press('Enter');
+    check('보기 토글: 노트 다시 보임', await until(async () => (await page.locator('[aria-label="Speaker notes"]').count()) === 1));
+    await openPal('Start timer'); await page.keyboard.press('Enter');
+    const timer = () => page.locator('[role=timer]').first().innerText();
+    check('팔레트로 타이머를 시작한다', await until(async () => (await timer()) !== '00:00:00', 6000), await timer());
+    await openPal('Reset timer'); await page.keyboard.press('Enter');
+    check('팔레트 리셋도 한 번은 확인을 요구한다', (await page.getByText('Choose Reset timer again to confirm').count()) >= 1 && (await timer()) !== '00:00:00');
+    await openPal('Reset timer'); await page.keyboard.press('Enter');
+    check('두 번째 선택에서 리셋된다', await until(async () => (await timer()) === '00:00:00'), await timer());
+    await openPal('Black screen'); await page.keyboard.press('Enter');
+    check('발표 창이 없으면 가리기는 안내만 한다', await until(async () => (await page.getByText('Open the presentation window first').count()) >= 1));
+    await page.mouse.click(640, 780);
+    await page.keyboard.press('Shift+?');
+    const help = page.getByRole('dialog', { name: 'Shortcuts' });
+    check("'?'로 단축키 안내가 열린다", await until(async () => (await help.count()) === 1 && (await help.getByText('Search slides and actions').count()) === 1));
+    await page.keyboard.press('Escape');
+    check('Esc로 닫힌다', await until(async () => (await help.count()) === 0));
+    await ctx.close();
+  }
   // ?from=N: 그 장에서 시작, 범위 밖은 가장 가까운 장. 발표 시작은 현재 장부터.
   {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });

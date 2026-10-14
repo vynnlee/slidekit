@@ -15,6 +15,8 @@ import { markdown } from "@/lib/markdown";
 import { saveRun, type Run } from "@/lib/rehearsals";
 import { isLocalOrigin, remoteUrl, useRemoteHost, type Cmd } from "@/lib/remote-host";
 import { qrMatrix, qrPath } from "@/lib/qr";
+import { ShortcutHelp, type KeyGroup } from "./ShortcutHelp";
+import { CommandMenu, CommandMenuDialog, CommandMenuEmpty, CommandMenuFooter, CommandMenuInput, CommandMenuItem, CommandMenuList, type CommandMenuItemData } from "@/components/ui/command-menu";
 import { cn } from "@/lib/utils";
 import { Field } from "@/components/ui/field";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -29,7 +31,14 @@ const VIEW_ITEMS = { current: "Current slide", next: "Next slide", notes: "Notes
 type View = Record<keyof typeof VIEW_ITEMS, boolean>;
 const defaultView = Object.fromEntries(Object.keys(VIEW_ITEMS).map((k) => [k, true])) as View;
 
-const SHORTCUTS = [["← →", "Move"], ["F", "Full screen"], ["+ -", "Notes size"], ["PgUp PgDn", "Scroll notes"], ["T", "Start or pause timer"], ["R", "Reset timer"], ["B W", "Blank presentation (in its window)"]];
+// 단축키 안내('?')의 내용. 이 화면의 키만 담는다.
+const KEY_GROUPS: KeyGroup[] = [
+  ["Slides", [["Left, Right", "Previous or next slide"], ["Cmd+K", "Search slides and actions"], ["?", "Show this list"]]],
+  ["Notes", [["+, -", "Notes size"], ["PgUp, PgDn", "Scroll notes"]]],
+  ["Timer", [["T", "Start or pause"], ["R", "Reset (press twice)"]]],
+  ["Presentation window", [["F", "Full screen"], ["B, W", "Black or white screen (in its window)"]]],
+];
+const SHORTCUTS = [["← →", "Move"], ["Cmd K", "Search slides and actions"], ["?", "All shortcuts"], ["F", "Full screen"], ["+ -", "Notes size"], ["PgUp PgDn", "Scroll notes"], ["T", "Start or pause timer"], ["R", "Reset timer"], ["B W", "Blank presentation (in its window)"]];
 const mmss = (s: number) => `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
 const pad = (n: number) => String(n).padStart(2, "0");
 const hms = (s: number) => `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
@@ -81,6 +90,7 @@ export function Presenter({ id }: { id: string }) {
   const [full, setFull] = useState(() => !!document.fullscreenElement);
   const [win, setWin] = useState<boolean | null>(presentationOpen);
   const [check, setCheck] = useState<string[] | null>(null);
+  const [help, setHelp] = useState(false), [palette, setPalette] = useState(false);
   const [notesSize, setNotesSize] = useState(() => Math.min(NOTES_MAX, Math.max(NOTES_MIN, Number(localStorage.getItem(NOTES_KEY)) || 20)));
   const notesRef = useRef<HTMLDivElement>(null);
 
@@ -215,6 +225,11 @@ export function Presenter({ id }: { id: string }) {
   // 다음 슬라이드 미리보기는 slide+1의 1단계를 보여 준다.
   useEffect(() => { if (info && pos.slide < total) post(nextRef.current, { type: "goto", slide: pos.slide + 1 }); }, [pos.slide, info, total]);
 
+  // 타이머 리셋: 시간이 쌓여 있으면 실수로 기록이 날아가지 않게 2.5초 안에 한 번 더 요청해야 한다(키 R과 팔레트가 같은 규칙).
+  const requestReset = (via: "key" | "menu") => {
+    if (accMs.current > 0 && Date.now() > resetArmed.current) { resetArmed.current = Date.now() + 2500; toast(via === "key" ? "Press R again to reset the timer" : "Choose Reset timer again to confirm", { ms: 2500 }); }
+    else { resetArmed.current = 0; setRunning(false); setElapsed(0); accMs.current = 0; dwell.current = {}; }
+  };
   // 키 입력은 앱이 받는다. 방향키만 이동한다.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -237,11 +252,8 @@ export function Presenter({ id }: { id: string }) {
       else if (e.key === "+" || e.key === "=") setNotesSize((n) => Math.min(NOTES_MAX, n + 2));
       else if (e.key === "-" || e.key === "_") setNotesSize((n) => Math.max(NOTES_MIN, n - 2));
       else if (e.key === "t" || e.key === "T") setRunning((r) => !r);
-      else if (e.key === "r" || e.key === "R") {
-        // 실수로 눌러 기록이 날아가지 않게, 시간이 쌓여 있으면 2.5초 안에 한 번 더 눌러야 리셋한다.
-        if (accMs.current > 0 && Date.now() > resetArmed.current) { resetArmed.current = Date.now() + 2500; toast("Press R again to reset the timer", { ms: 2500 }); }
-        else { resetArmed.current = 0; setRunning(false); setElapsed(0); accMs.current = 0; dwell.current = {}; }
-      }
+      else if (e.key === "r" || e.key === "R") requestReset("key");
+      else if (e.key === "?") setHelp(true);
       else if (e.key === "PageDown" || e.key === "PageUp") {
         e.preventDefault();
         const el = notesRef.current;
@@ -281,6 +293,27 @@ export function Presenter({ id }: { id: string }) {
   const curSlide = info?.slides[pos.slide - 1];
   const remote = useRemoteHost(deck?.folder, info ? { slide: pos.slide, total, title: curSlide?.title ?? curSlide?.kind ?? `Slide ${pos.slide}`, notes: curSlide?.notes ?? "", elapsed, running, blank, target } : null, runCmd);
   const [remoteErr, setRemoteErr] = useState("");
+  // 팔레트(Cmd+K): 슬라이드(번호, 제목, 노트 글자로 찾기), 장, 발표 동작. 키 충돌은 기존 입력 포커스 규칙이 그대로 막는다(입력 칸에 있으면 단축키는 동작하지 않는다).
+  const setBlankMode = (mode: "black" | "white" | "off") => {
+    if (win !== true) { toast("Open the presentation window first", { ms: 2500 }); return; }
+    send({ type: "setblank", mode });
+  };
+  const paletteItems: CommandMenuItemData[] = !info ? [] : [
+    ...info.slides.map((s): CommandMenuItemData => ({ value: `slide:${s.n}`, label: `${s.n}. ${s.title ?? s.kind}`, description: info.chapters.find((c) => c.n === s.chapter)?.title, group: "Slides", keywords: [s.notes.slice(0, 400), String(s.n)], onSelect: () => goto(s.n) })),
+    ...info.chapters.map((c): CommandMenuItemData => ({ value: `chapter:${c.n}`, label: c.title, description: "Chapter", group: "Chapters", onSelect: () => goto(info.slides.find((s) => s.chapter === c.n)?.n ?? 1) })),
+    { value: "act-present", label: win ? "Focus presentation window" : "Present", group: "Actions", onSelect: present },
+    { value: "act-remote", label: "Phone remote", description: "Use your phone as a remote", group: "Actions", onSelect: () => setRemoteOpen(true) },
+    { value: "act-timer", label: running ? "Pause timer" : "Start timer", group: "Timer", shortcut: "t", onSelect: () => setRunning((r) => !r) },
+    { value: "act-reset", label: "Reset timer", description: "Choose twice to confirm", group: "Timer", shortcut: "r", onSelect: () => requestReset("menu") },
+    { value: "act-notes-up", label: "Larger notes", group: "Notes", shortcut: "+", onSelect: () => setNotesSize((n) => Math.min(NOTES_MAX, n + 2)) },
+    { value: "act-notes-down", label: "Smaller notes", group: "Notes", shortcut: "-", onSelect: () => setNotesSize((n) => Math.max(NOTES_MIN, n - 2)) },
+    { value: "act-black", label: "Black screen", group: "Presentation window", shortcut: "b", onSelect: () => setBlankMode("black") },
+    { value: "act-white", label: "White screen", group: "Presentation window", shortcut: "w", onSelect: () => setBlankMode("white") },
+    { value: "act-unblank", label: "Show the slide again", group: "Presentation window", onSelect: () => setBlankMode("off") },
+    ...(Object.keys(VIEW_ITEMS) as (keyof View)[]).map((k): CommandMenuItemData => ({ value: `view:${k}`, label: `${view[k] ? "Hide" : "Show"} ${VIEW_ITEMS[k].toLowerCase()}`, group: "View", onSelect: () => setView((v) => ({ ...v, [k]: !v[k] })) })),
+    { value: "act-keys", label: "Keyboard shortcuts", group: "Help", shortcut: "?", onSelect: () => setHelp(true) },
+    { value: "act-decks", label: "All decks", group: "Help", onSelect: () => go("/") },
+  ];
   const startRemote = () => { setRemoteErr(""); remote.start().catch(() => setRemoteErr("Could not start the remote. Check that the server is running.")); };
   // 발표 전 가벼운 점검: 슬라이드 수, 노트, 글꼴, 표시할 화면. 발표 버튼의 툴팁으로만 보인다.
   const withNotes = info?.slides.filter((x) => x.notes).length ?? 0;
@@ -452,6 +485,22 @@ export function Presenter({ id }: { id: string }) {
           </div>
         )}
       </div>
+      <CommandMenuDialog open={palette} onOpenChange={setPalette} title="Search" description="Go to a slide or run an action">
+        <CommandMenu items={paletteItems}>
+          <CommandMenuInput placeholder="Slide number, title, notes, or action" />
+          <CommandMenuList renderItem={(item) => (
+            <CommandMenuItem value={item.value}>
+              <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                <span className="truncate [text-box:trim-both_cap_alphabetic] py-1 -my-1">{item.label}</span>
+                {item.description && <span className="min-w-0 truncate [text-box:trim-both_cap_alphabetic] py-1 -my-1 text-foreground/75">{item.description}</span>}
+              </span>
+            </CommandMenuItem>
+          )} />
+          <CommandMenuEmpty>No results</CommandMenuEmpty>
+          <CommandMenuFooter className="[&_kbd_*]:text-foreground/80" />
+        </CommandMenu>
+      </CommandMenuDialog>
+      <ShortcutHelp open={help} onOpenChange={setHelp} groups={KEY_GROUPS} description="Keyboard shortcuts for the presenter screen" />
       <Dialog open={remoteOpen} onOpenChange={setRemoteOpen}>
         <DialogContent size="sm">
           <DialogTitle>Phone remote</DialogTitle>

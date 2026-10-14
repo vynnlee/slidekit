@@ -1,10 +1,11 @@
 #!/usr/bin/env bun
-// 전체 검증. 실행: bun run test [--only <이름 일부>...] [--changed [--base <ref>] [--dry-run]] [--list] [--bail] [--slow]
+// 전체 검증. 실행: bun run test [--only <이름|글로브|그룹>...] [--changed [--base <ref>] [--dry-run]] [--list] [--bail] [--slow]
 // 평소에는 `bun run test:changed`(변경 파일에 해당하는 단계만)를 쓰고, 전체 게이트는 푸시 전에만 돌린다.
 // 무거운 작업이라 /tmp/slidekit-heavy.lock을 한 번 잡고 모든 단계를 순서대로 돈다.
 // 실제 덱은 읽기 전용이다. 덱을 고치는 테스트는 scripts/lib/test-deck.cjs의 사본(decks/_e2e-*/)만 쓴다.
 // 단계 전후로 실제 덱(decks/_* 제외)의 내용 해시를 비교해 달라졌으면 WARN으로 보고만 한다(복원하지 않고 실패로도 치지 않는다). 지문은 경로와 크기다..
 import { createWriteStream, globSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync, statSync, writeFileSync } from "node:fs";
+import { ALIASES, selectSteps } from "./lib/select-steps";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
@@ -84,7 +85,7 @@ const steps: Step[] = [
   if (isolated.length) steps.splice(at, 0, { name: "unit-isolated", cmd: ["sh", "-c", isolated.map((f) => `bun test ${f}`).join(" && ")] });
   if (shared.length) steps.splice(at, 0, { name: "unit-other", cmd: ["bun", "test", ...shared] });
 }
-if (flag("--list")) { console.log(steps.map((s) => s.name + (s.slow ? " (slow)" : "")).join("\n")); process.exit(0); }
+if (flag("--list")) { console.log(steps.map((s) => s.name + (s.slow ? " (slow)" : "")).join("\n")); console.log("\n그룹(--only 별칭): " + Object.entries(ALIASES).map(([k, v]) => `${k} = ${v.join(", ")}`).join(" | ") + "\n글로브: --only 'editor*' (이름이 정확히 일치하는 단계만 고르는 것이 기본)"); process.exit(0); }
 // 변경 파일 -> 단계 매핑표(여기 한 곳). 규칙은 모두 적용해 단계를 합친다. 문서만 바뀌면 단계가 없다.
 const NOSTEP = /^(package\.json|bun\.lock|\.gitignore|\.githooks\/|tsconfig.*\.json)$/;
 const DOCS = /(^|\/)(HANDOFF|README|PLAN|SKILL|INTERACTION|SPEC)\.md$|^(spec|docs)\/|\.md$/;
@@ -145,9 +146,11 @@ if (flag("--changed")) {
   console.log("단계: " + c.names.join(", "));
   if (flag("--dry-run")) process.exit(0); // 어떤 단계가 도는지만 본다
 }
-const nameOk = (s: Step, o: string) => (o.startsWith("\u0000") ? s.name === o.slice(1) : s.name.includes(o));
-const picked = steps.filter((s) => (only.length ? only.some((o) => nameOk(s, o)) : !s.slow || flag("--slow")));
+const sel = only.length ? selectSteps(steps.map((s) => s.name), only) : null;
+if (sel) for (const m of sel.missing) console.error(`맞는 단계가 없음: ${m.ask}` + (m.similar.length ? `  비슷한 이름: ${m.similar.join(", ")}  (여럿이면 --only '${m.ask}*')` : "  --list로 확인"));
+const picked = steps.filter((s) => (sel ? sel.picked.includes(s.name) : !s.slow || flag("--slow")));
 if (!picked.length) { console.error("맞는 단계가 없음. --list로 확인"); process.exit(2); }
+if (sel) console.log("선택: " + picked.map((s) => s.name).join(", "));
 if (picked.some((s) => s.cmd[0] === "node") && (!PW || !CHROME)) { console.error("playwright-core 또는 headless shell을 찾지 못함"); process.exit(2); }
 
 // 프로세스 그룹 전체를 종료한다. 단계가 띄운 서버가 남아 출력 파이프를 붙들면 러너가 잠금을 쥔 채 멈추기 때문이다.

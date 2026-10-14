@@ -11,6 +11,39 @@ const workerDir = join(import.meta.dir, "worker");
 const arg = process.argv[2];
 if (!arg) { console.error("사용: bun run deploy <덱> 또는 bun run deploy --worker"); process.exit(1); }
 
+// 배포 뒤 점검: bun run deploy --smoke [공개덱 [비밀번호덱]]. GET만 보낸다(토큰 불필요, 잘못된 비밀번호 POST는 시도 횟수를 쓰므로 보내지 않는다). SLIDEKIT_BASE로 주소를 바꾼다.
+if (arg === "--smoke") {
+  const base = process.env.SLIDEKIT_BASE ?? "https://static.vynnlee.com";
+  const [pub = "vibe-coding-workshop", pwd] = process.argv.slice(3);
+  let bad = 0;
+  const ok = (name: string, good: boolean, extra = "") => { if (!good) bad++; console.log(`${good ? "PASS" : "FAIL"} ${name}${good || !extra ? "" : "  " + extra}`); };
+  const get = (p: string) => fetch(`${base}/${p}`, { redirect: "manual" }).catch((e) => { console.error(`접속 실패: ${e.message}. mac-cloud의 DNS 캐시 문제면 HANDOFF의 dig 안내를 본다`); process.exit(1); });
+  const common = (r: Response, name: string) => {
+    ok(`${name}: nosniff`, r.headers.get("x-content-type-options") === "nosniff");
+    ok(`${name}: COOP same-origin`, r.headers.get("cross-origin-opener-policy") === "same-origin");
+    ok(`${name}: HSTS`, (r.headers.get("strict-transport-security") ?? "").includes("max-age="));
+    ok(`${name}: frame-ancestors none`, (r.headers.get("content-security-policy") ?? "").includes("frame-ancestors 'none'"));
+    ok(`${name}: noindex`, r.headers.get("x-robots-tag") === "noindex");
+  };
+  const a = await get(pub); common(a, `공개 덱 ${pub}`);
+  ok("공개 덱 200", a.status === 200, String(a.status));
+  ok("공개 덱 캐시 must-revalidate", (a.headers.get("cache-control") ?? "").includes("must-revalidate"), a.headers.get("cache-control") ?? "");
+  ok("공개 덱이 슬라이드 HTML", (await a.text()).includes("data-slide"));
+  const n = await get("no-such-deck-smoke"); common(n, "없는 덱");
+  ok("없는 덱 404", n.status === 404, String(n.status));
+  if (pwd) {
+    const f = await get(pwd); common(f, `비밀번호 덱 ${pwd}`);
+    const t = await f.text();
+    ok("비밀번호 덱은 폼을 보임(슬라이드 없음)", f.status === 200 && t.includes("type=\"password\"") && !t.includes("data-slide"), String(f.status));
+    ok("폼 CSP에 nonce", /script-src 'nonce-/.test(f.headers.get("content-security-policy") ?? ""));
+    ok("비밀번호 덱 no-store", (f.headers.get("cache-control") ?? "").includes("no-store"));
+    const x = await fetch(`${base}/${pwd}`, { headers: { "Sec-Fetch-Dest": "empty" } });
+    ok("비밀번호 덱은 fetch(문서 아님) 요청을 거부", x.status === 403, String(x.status));
+  }
+  console.log(bad ? `\n실패 ${bad}건` : "\n전체 통과");
+  process.exit(bad ? 1 : 0);
+}
+
 const dryRun = process.argv.includes("--dry-run") || !!process.env.SLIDEKIT_DEPLOY_DRY_RUN; // 업로드 직전까지만 하는 테스트용
 // 토큰은 환경 변수나 키체인(slidekit-cloudflare-token)에서만 읽고 출력하지 않는다.
 const token = process.env.CLOUDFLARE_API_TOKEN

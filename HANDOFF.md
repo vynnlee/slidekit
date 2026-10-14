@@ -61,6 +61,7 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 - 2026-10-13에 Worker(`slidekit-static`)와 워크숍 덱(public)을 배포했다: https://static.vynnlee.com/vibe-coding-workshop . mac-cloud의 로컬 DNS 캐시가 실패 결과를 들고 있어 `curl`이 000(DNS 실패)일 수 있다. 그때는 `dig +short @1.1.1.1 static.vynnlee.com`의 IP로 `curl --resolve static.vynnlee.com:443:<IP> ...`로 확인한다(캐시 비우기는 sudo 필요). 응답 없음을 미배포로 판단하지 않는다.
 - 배포 순서: meta를 먼저, html을 나중에 올린다(공개에서 비밀번호로 바꿀 때 노출 방지).
 - **미배포(승인 대기)**: 2026-10-14에 Worker 안내 페이지(비밀번호, 잠금, 404 통일, 덱 제목 표시, 로딩 상태)와 `deploy`가 meta에 `title`을 올리는 변경, 번들 head 변경을 코드와 테스트까지만 했다. 반영하려면 사용자 승인 뒤 `bun run deploy --worker`를 실행한다(이미 올린 덱은 다시 `slidekit deploy <덱>`으로 올려야 제목이 보인다).
+  - 배포 준비는 `deploy/README.md` 마지막 절에 있다(드라이런 결과, 구버전과의 차이, 사용자에게 보일 변화, 롤백). 배포 뒤 `bun run deploy --smoke [공개덱 [비밀번호덱]]`로 점검한다(GET만).
   - 승인 때 함께 사용자에게 물을 것: Worker 로그인 시도 제한은 KV 읽기와 쓰기라 원자적이지 않고(동시 요청과 IP 회전에 뚫림) 덱 단위 총량 제한이 없다. 선택지는 Durable Object(덱별 원자적 카운터, 정확하지만 구성과 플랜 요건 확인 필요) 또는 Rate Limiting 바인딩(설정이 간단하고 덱과 IP 키로 근사 제한, 정확한 횟수는 보장하지 않음)이다. 같은 배포에 Worker 보안 변경(쿠키에 salt 바인딩, 보호된 덱은 문서 요청에만 서빙, COOP, HSTS, 입력 폼 nonce CSP, 비밀번호 덱 제목은 `lockTitle` 옵트인)도 들어 있어 비밀번호 덱의 기존 쿠키는 모두 무효가 된다.
 
 ## 알려진 한계

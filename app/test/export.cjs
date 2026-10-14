@@ -62,7 +62,7 @@ const PW = 'S3cret-pass-ZZ';
   const mdFile = await saveDl(md);
   const mdText = fs.readFileSync(mdFile, 'utf8'); fs.rmSync(mdFile, { force: true });
   check('Download .md: 파일명 .md, 제목과 슬라이드 머리글', md.suggestedFilename() === 'qa-exp-pub.md' && mdText.startsWith('# ') && /^## 1\. /m.test(mdText), md.suggestedFilename());
-  check('Copy as Markdown 항목이 있다', await (async () => { await openMenu(); const ok = (await p.getByRole('menuitem', { name: 'Copy as Markdown' }).count()) === 1; await p.keyboard.press('Escape'); return ok; })());
+  check('Copy as Markdown 항목이 있다', await (async () => { await openMenu(); const ok = await p.getByRole('menuitem', { name: 'Copy as Markdown' }).waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false); await p.keyboard.press('Escape'); return ok; })(), 'menuitem not found');
   await openMenu();
   check('게시 기록이 없으면 Published 항목을 숨긴다', (await p.getByRole('menuitem', { name: 'Published...' }).count()) === 0);
   await p.keyboard.press('Escape');

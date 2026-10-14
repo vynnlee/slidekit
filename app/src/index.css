@@ -340,3 +340,12 @@ body { margin: 0; font-family: var(--font-sans); background: var(--background); 
     }
   }
 }
+
+/* 좁은 화면(640px 미만)의 드롭다운과 팝오버는 화면 가장자리에서 8px 떨어진다.
+   Fluid 원본 DropdownContent는 Radix의 collisionPadding을 넘기지 않으므로, Radix가 위치를 정하는 바깥 상자(wrapper)에 좌우 여백을 줘서
+   충돌 보정(화면 안으로 밀기)이 그 여백까지 포함해 계산하게 한다. 내용 상자는 그 안쪽에 8px 들어가 앉는다. 데스크톱은 영향이 없다. */
+@media (max-width: 639px) {
+  [data-radix-popper-content-wrapper] {
+    padding-inline: 8px;
+  }
+}

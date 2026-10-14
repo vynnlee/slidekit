@@ -107,6 +107,18 @@ const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.
     const sw = await page.evaluate(() => [document.documentElement.scrollWidth, document.body.scrollWidth, window.innerWidth]);
     check(`[편집기 ${w}px] 문서가 가로로 넘치지 않음`, sw[0] <= sw[2] && sw[1] <= sw[2], sw);
     for (const name of ['Present', 'Export']) check(`[편집기 ${w}px] 헤더 ${name} 버튼이 화면 안`, inside(await page.getByRole('button', { name }).first().boundingBox(), w, h));
+    if (w < 640) { // 좁은 폭의 드롭다운 메뉴는 화면 가장자리에서 8px 이상 떨어진다(Fluid 원본 DropdownContent는 collisionPadding이 없어 사용처에서 폭을 줄인다)
+      for (const [label, name] of [['Export', 'Export'], ['Add slide', 'Add slide']]) {
+        await page.getByRole('button', { name }).first().click({ force: true });
+        const menu = page.getByRole('menu');
+        await menu.waitFor({ timeout: 3000 }).catch(() => {});
+        let bb = null; // 열리는 애니메이션이 끝나 위치가 멈출 때까지 읽는다
+        for (let i = 0; i < 20; i++) { const n = await menu.boundingBox(); if (n && bb && n.x === bb.x && n.width === bb.width) { bb = n; break; } bb = n; await sleep(60); }
+        check(`[편집기 ${w}px] ${label} 메뉴가 화면 가장자리에서 8px 이상 떨어짐`, !!bb && bb.x >= 8 && bb.x + bb.width <= w - 8, bb);
+        await page.keyboard.press('Escape');
+        await menu.waitFor({ state: 'detached', timeout: 3000 }).catch(() => {});
+      }
+    }
     if (w === 390) { // 좁은 폭의 찾기 줄: Find와 Replace 입력의 높이와 글자 크기가 같고 줄이 화면 밖으로 넘치지 않는다
       await page.keyboard.press('Meta+f');
       await page.getByLabel('Find', { exact: true }).waitFor({ timeout: 5000 }).catch(() => {});

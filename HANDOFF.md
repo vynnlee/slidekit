@@ -73,6 +73,11 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 - 편집기는 슬라이드 단위 원문 보존(`app/src/lib/deck-source.ts`)을 전제로 한다. 인라인 편집은 글자만 담은 요소 중심.
 - Chrome 계열 전용(Window Management API). mac-cloud에는 화면이 없어 외장 모니터 기능은 검증하지 못한다.
 
+## 테스트 후속 후보
+
+- 풀 게이트(`bun run test`)는 약 550초다. 오래 걸리는 단계는 editor 174초, engine-verify 59초, list 56초, inspector-a11y 51초.
+- `scripts/test.ts`가 출력 사이가 3초 넘게 벌어지면 `[느림 +N초]` 줄을 넣는다. 이 표시로 고정 sleep이 있는 검사를 찾아 조건 대기(waitForFunction)로 바꾸면 줄어든다. editor.cjs에 sleep 137곳(합계 약 68초), inspector-a11y.cjs에 32곳(약 13초)이 있다. 디바운스처럼 일어나지 않음을 보는 대기와 애니메이션 종료 대기는 남긴다. list.cjs는 이미 조건 대기 위주다.
+
 ## 알려진 위험 (2026-10-14 보안 감사, 결정 보류)
 
 - 앱 API에는 인증 토큰이 없다. 127.0.0.1 바인딩, Host와 Origin 검사, 프록시(tailnet)에만 의존하며 사용자 기기만 접근한다는 전제다.

@@ -100,7 +100,15 @@ mkdirSync(logDir, { recursive: true });
 async function run(name: string, cmd: string[], env: Record<string, string> = {}) {
   const out = createWriteStream(join(logDir, `${name}.log`));
   const p = Bun.spawn(["taskpolicy", "-b", ...cmd], { cwd: root, env: { ...process.env, ...env }, stdout: "pipe", stderr: "pipe" });
-  const pump = async (s: ReadableStream<Uint8Array>, to: NodeJS.WriteStream) => { for await (const c of s) { to.write(c); out.write(c); } };
+  // 출력 사이가 3초 넘게 벌어지면 "[느림 +N초]" 줄을 넣는다. 고정 sleep과 긴 대기가 어느 검사 앞에 있는지 찾는 용도다.
+  let prev = Date.now();
+  const pump = async (s: ReadableStream<Uint8Array>, to: NodeJS.WriteStream) => {
+    for await (const c of s) {
+      const now = Date.now(), gap = (now - prev) / 1000; prev = now;
+      if (gap > 3) { const m = `[느림 +${gap.toFixed(1)}초]\n`; to.write(m); out.write(m); }
+      to.write(c); out.write(c);
+    }
+  };
   await Promise.all([pump(p.stdout, process.stdout), pump(p.stderr, process.stderr)]);
   out.end();
   return p.exited;

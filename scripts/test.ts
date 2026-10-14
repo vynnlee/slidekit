@@ -46,6 +46,7 @@ const steps: Step[] = [
   { name: "channel-trust", cmd: ["bun", "channel/trust.ts"], env: { TEST_PORT: "3248" } },
   browser("engine-verify", "engine/test/verify.cjs", "static", STATIC),
   { ...browser("engine-moved", "engine/test/moved.cjs", "static", STATIC), server: undefined }, // file:// 로 연다
+  { ...browser("engine-gradient", "engine/test/gradient.cjs", "static", STATIC), server: undefined }, // file:// 로 연다, PDF 바이트의 셰이딩까지 본다
   browser("routes", "app/test/routes.cjs", "app", APP),
   browser("list", "app/test/list.cjs", "app", APP),
   browser("present", "app/test/present.cjs", "app", APP),
@@ -79,7 +80,7 @@ const NOSTEP = /^(package\.json|bun\.lock|\.gitignore|\.githooks\/|tsconfig.*\.j
 const DOCS = /(^|\/)(HANDOFF|README|PLAN|SKILL|INTERACTION|SPEC)\.md$|^(spec|docs)\/|\.md$/;
 const BROWSER_APP = ["routes", "responsive", "list"]; // 앱 공통 화면 변경 때의 연기 검사
 const MAP: [RegExp, string[]][] = [
-  [/^engine\/(slidekit\.(js|css)|test\/(verify|moved)\.cjs)/, ["engine-verify", "engine-moved", "bundler-bundle"]],
+  [/^engine\/(slidekit\.(js|css)|test\/(verify|moved|gradient)\.cjs)/, ["engine-verify", "engine-moved", "engine-gradient", "bundler-bundle"]],
   [/^engine\/(lint\.ts|test\/lint\.test\.ts|doctor\.ts|new\.ts|template\/)/, ["lint", "tokens"]],
   [/^bundler\//, ["bundler-bundle", "bundler-fonts"]],
   [/^deploy\//, ["deploy-worker", "export-api"]],

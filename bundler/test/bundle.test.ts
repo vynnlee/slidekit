@@ -84,3 +84,22 @@ test("assets/ 안의 이미지(slidekit image가 저장한 경로)를 인라인�
     expect(out).toContain("data:image/png;base64");
   } finally { rmSync(d, { recursive: true, force: true }); rmSync(join(root, "dist", "_bundleassets.html"), { force: true }); }
 });
+
+test("그라디언트 style 속성(var() 스톱, 슬라이드 배경)은 번들에서 글자 그대로 남는다", async () => {
+  const d = join(root, "decks", "_bundlegrad");
+  const g1 = "linear-gradient(135deg, var(--sk-accent) 0%, #0b1020 100%)", g2 = "linear-gradient(90deg, rgb(255, 0, 0) 0%, var(--sk-accent) 50%, #00f 100%)";
+  mkdirSync(d, { recursive: true });
+  try {
+    writeFileSync(join(d, "index.html"), `<!doctype html><html data-slidekit="1"><head><title>t</title>
+<script type="application/json" id="deck-meta">{"title":"t"}</script></head><body>
+<section data-slide="cover" style="background-image: ${g1}"><div style="background-image: ${g2}"></div></section></body></html>`);
+    const r = Bun.spawnSync(["bun", join(root, "bundler", "bundle.ts"), "_bundlegrad"], { stderr: "pipe" });
+    expect(r.stderr.toString()).toBe("");
+    const out = await Bun.file(join(root, "dist", "_bundlegrad.html")).text();
+    expect(out).toContain(g1);
+    expect(out).toContain(g2);
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+    rmSync(join(root, "dist", "_bundlegrad.html"), { force: true });
+  }
+});

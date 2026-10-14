@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hashPassword } from "./worker/src/index";
 import { WRANGLER } from "./kv";
+import { deckFingerprint, recordPublish } from "../engine/publish-record";
 
 const root = join(import.meta.dir, "..");
 const workerDir = join(import.meta.dir, "worker");
@@ -115,6 +116,10 @@ try {
 } finally {
   rmSync(tmp, { recursive: true, force: true });
 }
+// 업로드가 모두 끝난 뒤에만 기록한다(dry-run은 위에서 이미 끝났다). 기록 실패는 게시 결과에 영향을 주지 않는다.
+try {
+  recordPublish(join(root, "decks", arg), { name: arg, url: `https://static.vynnlee.com/${arg}`, at: new Date().toISOString(), visibility: visibility as "public" | "password", bytes: statSync(join(root, "dist", `${arg}.html`)).size, sha: deckFingerprint(join(root, "decks", arg)) });
+} catch { console.log("게시 기록(.publish.json)을 남기지 못했습니다. 게시는 끝났습니다."); }
 console.log(`\n올렸습니다: https://static.vynnlee.com/${arg} (${visibility})`);
 if (visibility === "password") console.log("비밀번호 덱입니다. 주소와 비밀번호를 따로 전달하세요. 비밀번호는 저장되지 않고 해시만 올라갑니다.");
 else console.log("공개 덱입니다. 주소를 아는 누구나 볼 수 있습니다(검색 엔진에는 노출되지 않습니다).");

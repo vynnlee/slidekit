@@ -41,7 +41,7 @@
 
 ## 게시 취소: slidekit unpublish
 
-배포한 덱을 Worker의 KV(`DECKS`)에서 지운다. 지우는 키는 `html:<덱>`(본문), `meta:<덱>`(공개 범위와 비밀번호 해시), `rl:<덱>:*`(로그인 시도 제한 카운터, 있으면)이다. html을 먼저 지우므로 중간에 멈춰도 공개 범위가 풀린 채 본문이 남지 않는다. 로컬 덱과 `dist/` 파일은 그대로다. Durable Object 시도 제한(`LIMITER`)을 쓰는 경우 카운터는 15분 뒤 알람으로 스스로 비워진다.
+배포한 덱을 Worker의 KV(`DECKS`)에서 지운다. 지우는 키는 `meta:<덱>`(공개 범위와 비밀번호 해시), `html:<덱>`(본문), `rl:<덱>:*`(로그인 시도 제한 카운터, 있으면)이다. meta를 먼저 지우므로 중간에 멈춰도 Worker는 404를 주고 남은 본문(html)은 열리지 않는다. 로컬 덱과 `dist/` 파일은 그대로다. Durable Object 시도 제한(`LIMITER`)을 쓰는 경우 카운터는 15분 뒤 알람으로 스스로 비워진다.
 
 ```
 bun run slidekit unpublish <덱>          # 지울 목록만 보인다. 종료 코드 2
@@ -53,4 +53,8 @@ SLIDEKIT_DEPLOY_DRY_RUN=1 bun run slidekit unpublish <덱>   # 지울 키만 출
 - 토큰은 환경 변수 `CLOUDFLARE_API_TOKEN`이나 키체인 `slidekit-cloudflare-token`에서만 읽고 출력하지 않는다. wrangler는 `deploy/kv.ts`에 고정된 버전만 쓴다.
 - 이미 퍼진 링크와 브라우저 캐시는 지울 수 없다. 공개 덱은 `max-age=0, must-revalidate`라 지운 뒤 다음 요청부터 404다.
 - 이 명령의 실제 삭제는 사용자 승인 뒤에만 실행한다(개발 중에는 dry-run과 가짜 KV 단위 테스트만 돌렸다).
+
+## 게시 기록
+
+`bun run deploy <덱>`이 KV 업로드를 모두 끝낸 뒤 `decks/<덱>/.publish.json`에 기록을 남긴다(dry-run은 남기지 않는다). 모양은 `{ "current": Entry | null, "history": Entry[] }`이고 `Entry`는 `name`, `url`, `at`, `visibility`, `bytes`, `sha`(덱 지문)이며 취소하면 `unpublishedAt`이 붙는다. history는 최신순 최대 20개다. 지문은 `index.html`과 거기서 참조한 로컬 이미지의 `경로:크기`로 만들어서, 게시 뒤 덱이 바뀌었는지 비교한다. 구현은 `engine/publish-record.ts`(`deckFingerprint`, `readPublish`, `recordPublish`, `recordUnpublish`)이고 `slidekit unpublish` 명령은 이 파일을 건드리지 않는다(기록 정리는 서버가 한다).
 

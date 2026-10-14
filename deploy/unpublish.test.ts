@@ -18,10 +18,12 @@ test("--yes 없이는 대상 목록만 보이고 종료 코드 2, 아무것도 �
   expect(t).toContain("html:a"); expect(t).toContain("meta:a"); expect(t).toContain("rl:a:1.1.1.1"); expect(t).toContain("--yes"); expect(t).toContain("비밀번호");
   expect(t).not.toContain("meta:b");
 });
-test("--yes면 html, meta, 시도 카운터 순으로 지우고 다른 덱은 건드리지 않는다", () => {
+test("--yes면 meta, html, 시도 카운터 순으로 지우고 다른 덱은 건드리지 않는다", () => {
   const { ops, dels } = fake({ "meta:a": "{}", "html:a": "x", "rl:a:9.9.9.9": "{}", "meta:ab": "{}", "html:ab": "y" });
-  expect(runUnpublish("a", { yes: true, dry: false }, ops, lines().log)).toBe(0);
-  expect(dels).toEqual(["html:a", "meta:a", "rl:a:9.9.9.9"]);
+  const { out, log } = lines();
+  expect(runUnpublish("a", { yes: true, dry: false }, ops, log)).toBe(0);
+  expect(dels).toEqual(["meta:a", "html:a", "rl:a:9.9.9.9"]);
+  expect(out.at(-1)).toBe("Unpublished https://static.vynnlee.com/a");
 });
 test("게시되지 않은 덱은 오류 1과 게시된 덱 목록(이름이 비슷한 덱 포함)을 보인다", () => {
   const { ops, dels } = fake({ "meta:x": "{}", "html:x": "y" });
@@ -33,8 +35,8 @@ test("게시되지 않은 덱은 오류 1과 게시된 덱 목록(이름이 비�
 test("dry-run은 ops 없이도 지울 키만 출력하고 0", () => {
   const { out, log } = lines();
   expect(runUnpublish("a", { yes: true, dry: true }, null, log)).toBe(0);
-  expect(out.join("\n")).toContain("meta:a");
-  expect(out.join("\n")).toContain("삭제는 하지 않았습니다");
+  expect(out[0]).toBe("Dry run: would delete meta:a, html:a (and rl:a:* login counters if any)");
+  expect(out.join("\n")).not.toContain("Unpublished");
 });
 test("CLI: 인자 없음과 잘못된 이름은 종료 코드 1, dry-run은 접속 없이 0", () => {
   const run = (args: string[], env: Record<string, string> = {}) => {
@@ -45,7 +47,7 @@ test("CLI: 인자 없음과 잘못된 이름은 종료 코드 1, dry-run은 접�
   expect(run(["../x"], { SLIDEKIT_DEPLOY_DRY_RUN: "1" }).code).toBe(1);
   const d = run(["my-talk"], { SLIDEKIT_DEPLOY_DRY_RUN: "1" });
   expect(d.code).toBe(0);
-  expect(d.out).toContain("html:my-talk");
-  expect(d.out).toContain("DRY RUN");
+  expect(d.out).toContain("Dry run: would delete meta:my-talk, html:my-talk");
+  expect(d.out).not.toContain("Unpublished");
   expect(run(["my-talk", "--dry-run", "--yes"]).code).toBe(0);
 });

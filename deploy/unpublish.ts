@@ -34,7 +34,7 @@ const ops: KvOps = {
   },
   del(key) {
     const r = wr("kv", "key", "delete", key, "--binding", "DECKS", "--remote");
-    if (r.exitCode !== 0) throw new Error(`wrangler 삭제 실패: ${key} (종료 코드 ${r.exitCode})`);
+    if (r.exitCode !== 0) throw new Error(`wrangler 삭제 실패: ${key} (종료 코드 ${r.exitCode}). ${r.stderr.toString().split(token).join("***").trim().split("\n").slice(-2).join(" ").slice(0, 300)}`); // 토큰과 네트워크 단서만 남긴다
   },
 };
 try { process.exit(runUnpublish(deck, { yes, dry: false }, ops)); }

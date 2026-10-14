@@ -13,15 +13,16 @@ const Thumb = memo(function Thumb({ shell, unit, folder, eager }: { shell: { pre
   const [w, setW] = useState(128);
   const [seen, setSeen] = useState(eager);
   useEffect(() => {
-    if (eager) return;
+    // 가까이(120px) 오면 올리고, 220px 넘게 멀어지면 내려 53장을 끝까지 넘겨도 iframe이 쌓이지 않게 한다.
     let t: ReturnType<typeof setTimeout> | undefined;
     const root = ref.current!.closest("[data-radix-scroll-area-viewport],[data-slot=scroll-area-viewport]");
-    const io = new IntersectionObserver(([e]) => {
+    const near = new IntersectionObserver(([e]) => {
       clearTimeout(t);
-      if (e.isIntersecting) t = setTimeout(() => { setSeen(true); io.disconnect(); }, 60);
+      if (e.isIntersecting) t = setTimeout(() => setSeen(true), 60);
     }, { root, rootMargin: "0px 120px 0px 120px" });
-    io.observe(ref.current!);
-    return () => { clearTimeout(t); io.disconnect(); };
+    const far = new IntersectionObserver(([e]) => { if (!e.isIntersecting) { clearTimeout(t); setSeen(false); } }, { root, rootMargin: "0px 220px 0px 220px" });
+    near.observe(ref.current!); far.observe(ref.current!);
+    return () => { clearTimeout(t); near.disconnect(); far.disconnect(); };
   }, []);
   useEffect(() => {
     const ro = new ResizeObserver(([e]) => setW(e.contentRect.width));

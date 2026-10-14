@@ -37,6 +37,8 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   await p2.close();
   console.log('INFO 썸네일 3개 표시 ' + thumbMs + 'ms'); // 부하에 따라 흔들려 회귀 감시용으로만 쓴다
   check('썸네일 3개 3초 안에 표시', thumbMs < 3000, thumbMs);
+  const nThumbs = await page.locator('iframe[srcdoc]').count();
+  check('필름스트립은 화면 근처 썸네일만 올림', nThumbs < slides(fs.readFileSync(FILE, 'utf8')) || nThumbs <= 12, nThumbs);
   // 확대 축소, Tab 선택
   const wid = async () => (await frameEl.boundingBox()).width;
   const w0 = await wid();

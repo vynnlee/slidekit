@@ -63,6 +63,22 @@ description: slidekit 덱(HTML 슬라이드)을 새로 만들거나 고칠 때 �
 - 슬라이드 번호는 1부터 센다. URL 해시 `#N`도 1부터다.
 - 기본 구성은 cover 하나, chapter 여러 개와 각 장의 content, end 하나다.
 
+## 2-1. 레이아웃 프리셋
+
+`content` 슬라이드는 `data-layout`으로 모양을 고른다. 종류(`data-slide`)가 아니라 변형이다. 목록과 마크업 조각은 `bun app/server.ts layouts`(`--json`)로 본다.
+
+| `data-layout` | 쓰임 | 마크업 |
+|---|---|---|
+| (없음) | 핵심 문장과 설명 | `h2`, `p` |
+| `two-column` | 비교, 전과 후 | `h2`와 `<div data-col>` 둘 (각각 `h3`과 글) |
+| `big-number` | 숫자 하나 | `<p data-big>42%</p>`와 설명 `p` |
+| `quote` | 인용 | `blockquote` 안에 `p`와 `footer` |
+| `image-full` | 이미지가 주인공 | `img`(alt 필수)와 선택적 `h2` |
+
+- 한 덱에서 같은 목적의 장은 같은 레이아웃을 쓴다. 비교는 `two-column`, 핵심 숫자는 `big-number`.
+- 레이아웃의 모양을 바꾸고 싶으면 덱 CSS에서 `[data-slide][data-layout="quote"] ...`처럼 `data-layout`을 넣은 선택자로 덮는다.
+- 조각의 예제 문구("...를 여기에 적는다")를 모두 바꾼다. 남으면 `slidekit lint`가 `placeholder` 경고를 낸다.
+
 ## 3. 디자인 토큰과 덱 CSS
 
 ### 화면

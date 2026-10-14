@@ -42,3 +42,27 @@ test("new: author는 placeholder 문구 없이 git 사용자 이름이나 빈 �
     expect(run("lint", "qa-cli-author").code).toBe(0);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("lint는 출력과 종료 코드를 낸다(조용한 종료 회귀 방지)", () => {
+  const ok = run("lint", "slidekit-guide");
+  expect(ok.code).toBe(0);
+  expect(ok.out).toContain("통과");
+  const missing = run("lint", "no-such-deck-xyz");
+  expect(missing.code).toBe(1);
+  expect(missing.err).toContain("없는 덱");
+});
+test("앱 코드가 engine/lint를 먼저 import해 둔 프로세스에서도 lint 명령이 돈다", () => {
+  const root = join(import.meta.dir, "..", "..");
+  // 서버 모듈 그래프가 lint.ts를 정적으로 import하는 상황을 흉내 낸다: 먼저 import한 뒤 CLI 진입점을 연다.
+  const r = Bun.spawnSync(["bun", "-e", `await import("./engine/lint.ts"); process.argv[2] = "slidekit-guide"; await import("./engine/lint-cli.ts");`], { cwd: root, stdout: "pipe", stderr: "pipe" });
+  expect(r.stdout.toString()).toContain("통과");
+  expect(r.exitCode).toBe(0);
+});
+test("layouts: 프리셋 목록을 사람 글과 JSON으로 낸다", () => {
+  const t = run("layouts");
+  expect(t.code).toBe(0);
+  for (const id of ["title-body", "two-column", "big-number", "quote", "image-full"]) expect(t.out).toContain(id);
+  const j = JSON.parse(run("layouts", "--json").out);
+  expect(j.map((l: { id: string }) => l.id)).toEqual(["title-body", "two-column", "big-number", "quote", "image-full"]);
+  expect(j.every((l: { html: string }) => l.html.startsWith("<section data-slide=\"content\""))).toBe(true);
+});

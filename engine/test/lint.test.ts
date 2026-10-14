@@ -61,3 +61,17 @@ test("예제 문구가 남은 덱은 placeholder 경고(템플릿 문구, 제목
   expect(w(ok.replace('"title"', '"title": "제목을 여기에 적는다", "x"')).length).toBe(1);
   expect(w(withBody('<!-- 핵심 문장 하나 --><section data-slide="content"><h2>실제 제목</h2></section>'))).toEqual([]);
 });
+
+test("data-layout: 알 수 없는 값, content 아닌 종류, 마크업 불일치는 경고, 올바른 프리셋은 경고 없음", async () => {
+  const { LAYOUTS } = await import("../layouts");
+  const w = (b: string) => lint(ok.replace("</body>", `${b}</body>`)).filter((i) => i.rule === "layout");
+  for (const l of LAYOUTS) expect(w(l.html), l.id).toEqual([]); // 편집기가 넣는 조각 자체는 경고 없음
+  expect(w('<section data-slide="content" data-layout="nope"><h2>x</h2></section>').length).toBe(1);
+  expect(w('<section data-slide="end" data-layout="quote"><h1>x</h1></section>').length).toBe(1);
+  expect(w('<section data-slide="content" data-layout="two-column"><h2>x</h2><div data-col><p>a</p></div></section>').length).toBe(1);
+  expect(w('<section data-slide="content" data-layout="big-number"><p>x</p></section>').length).toBe(1);
+  expect(w('<section data-slide="content" data-layout="quote"><p>x</p></section>').length).toBe(1);
+  expect(w('<section data-slide="content" data-layout="image-full"><h2>x</h2></section>').length).toBe(1);
+  // 프리셋 조각의 예제 문구는 placeholder 경고로 잡힌다(title-body 포함)
+  for (const l of LAYOUTS) expect(lint(ok.replace("</body>", `${l.html}</body>`)).some((i) => i.rule === "placeholder"), l.id).toBe(true);
+});

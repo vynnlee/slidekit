@@ -44,19 +44,6 @@ const hasAlpha = (v: string) => /^transparent$/i.test(v.trim()) || !/^(#([0-9a-f
 const HIDE_ALPHA = "[&_input[aria-label$='opacity_percent']]:hidden";
 const isColor = (v: string) => /^(#[0-9a-f]{3,8}|rgba?\(.*\)|hsla?\(.*\))$/i.test(v.trim());
 
-// "Deck variables"는 처음 한 번만 접어 둔다. InspectorSection은 저장된 접힘 목록이 있으면 defaultOpen을 무시하므로 목록에 직접 넣는다.
-const COLLAPSE_KEY = "slidekit.inspector.collapsed", SEED_KEY = "slidekit.inspector.seeded";
-function seedCollapsed(id: string) {
-  try {
-    const seen: string[] = JSON.parse(localStorage.getItem(SEED_KEY) ?? "[]");
-    if (seen.includes(id)) return;
-    const list: string[] = JSON.parse(localStorage.getItem(COLLAPSE_KEY) ?? "[]");
-    if (!list.includes(id)) list.push(id);
-    localStorage.setItem(COLLAPSE_KEY, JSON.stringify(list));
-    localStorage.setItem(SEED_KEY, JSON.stringify([...seen, id]));
-  } catch { /* 저장소를 못 쓰면 기본 펼침 */ }
-}
-
 /** 기본값과 다른 토큰에만 보이는 작은 점. 누르면 기본값으로 되돌린다. */
 function ResetDot({ changed, label, onReset }: { changed: boolean; label: string; onReset(): void }) {
   if (!changed) return null;
@@ -102,7 +89,6 @@ function FontRow({ label, value, cur, opts, onSet }: { label: string; value: str
 }
 
 export function TokensPanel({ prefix, onPrefixChange, canvas }: TokensPanelProps) {
-  useState(() => seedCollapsed("tokens-custom"));
   const declared = useMemo(() => readTokens(prefix), [prefix]);
   const val = (n: string) => declared[n] ?? DEFAULTS[n] ?? "";
   const dim = (n: string) => !(n in declared);
@@ -159,7 +145,7 @@ export function TokensPanel({ prefix, onPrefixChange, canvas }: TokensPanelProps
 
   return (
     <>
-      <div className="mt-2 flex items-center gap-2 border-t border-border/60 px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Deck styles</div>
+      <div className="mt-2 flex items-center gap-2 border-t border-border/60 px-4 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Deck styles</div>
       <InspectorSection id="tokens-colors" title="Colors">
         <div className="flex flex-col gap-1">
           {COLORS.map(([n, label]) => (
@@ -180,15 +166,15 @@ export function TokensPanel({ prefix, onPrefixChange, canvas }: TokensPanelProps
       <InspectorSection id="tokens-spacing" title="Spacing">{num(SPACING)}</InspectorSection>
       <InspectorSection id="tokens-sizes" title="Text sizes">{num(SIZES)}</InspectorSection>
       {custom.length > 0 && (
-        <InspectorSection id="tokens-custom" defaultOpen={false}
+        <InspectorSection id="tokens-custom"
           title={<span className="flex items-center gap-1.5">Deck variables<span className="rounded-full bg-hover px-1.5 text-[10px] font-normal tabular-nums text-muted-foreground">{custom.length}</span></span>}>
           {custom.map((n) => {
             const v = declared[n], ref = /^var\(/i.test(v.trim());
             return (
               <div key={n} className="flex items-center gap-2">
-                <Tooltip content={n} side="top"><span className="w-20 shrink-0 truncate text-caption text-muted-foreground">{n}</span></Tooltip>
+                <Tooltip content={n} side="top"><span className="w-16 shrink-0 truncate text-caption text-muted-foreground">{n}</span></Tooltip>
                 {isColor(v)
-                  ? <ColorField aria-label={n} value={v} onChange={(x) => set(n, x)} className="min-w-0 flex-1" />
+                  ? <ColorField aria-label={n} value={v} onChange={(x) => set(n, x)} className={cn("min-w-0 flex-1", !hasAlpha(v) && HIDE_ALPHA)} />
                   : <Field aria-label={n} defaultValue={v} key={v} className={ref ? "flex-1 text-muted-foreground" : "flex-1"} title={ref ? `Reference: ${v}. Type a value to override it` : undefined}
                       onBlur={(e) => e.target.value !== v && set(n, e.target.value.trim(), true)}
                       onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />}

@@ -53,11 +53,7 @@ const check = (n, ok, extra) => { if (!ok) bad++; console.log((ok ? 'PASS ' : 'F
   await input('X').focus(); await p.keyboard.press('ArrowUp'); s = await st();
   check('arrow on Mixed field resolves it', s.mixed === false, s);
 
-  await p.getByRole('button', { name: 'Position' }).click(); await p.waitForTimeout(400);
-  check('section collapse persists to localStorage', /demo-pos/.test(await p.evaluate(() => localStorage.getItem('slidekit.inspector.collapsed') || '')));
-  await p.reload(); await p.waitForSelector('[data-testid=panel]');
-  check('collapsed after reload', await p.getByRole('button', { name: 'Position' }).getAttribute('aria-expanded') === 'false');
-  await p.getByRole('button', { name: 'Position' }).click(); await p.waitForTimeout(300);
+  check('sections no longer collapse (no chevron buttons)', (await p.locator('[aria-controls^="inspector-section-"]').count()) === 0);
   await p.getByRole('radio', { name: 'Column' }).click(); s = await st();
   check('segmented control selects', s.dir === 'column', s.dir);
   await p.getByRole('button', { name: 'Link ratio' }).click(); s = await st();

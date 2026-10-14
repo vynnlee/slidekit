@@ -341,23 +341,9 @@ const findAxe = () => {
     await audit('comments');
     await page.getByRole('tab', { name: 'Design' }).click(); await sleep(300);
 
-    // 5) 섹션 접기 상태가 새로고침 후에도 유지된다
-    // 새로고침 뒤와 같은 상태(텍스트 요소 선택)에서 비교하도록 먼저 제목을 다시 고른다.
+    // 5) 섹션은 접지 않는다: 접기 버튼(aria-expanded)이 없다
     await fr().locator('[data-active] h1, [data-active] h2').first().click({ modifiers: ['Meta'] }); await sleep(500);
-    const heads = () => panel().locator('button[aria-expanded]');
-    const n = await heads().count();
-    if (n > 0) {
-      const target = heads().nth(Math.min(1, n - 1));
-      const label = (await target.textContent()).trim();
-      const was = await target.getAttribute('aria-expanded');
-      await target.click(); await sleep(300);
-      const flipped = await target.getAttribute('aria-expanded');
-      check('중간', 'persist', 'persist', `섹션 "${label}" 헤더를 누르면 접힘 상태가 바뀐다`, flipped !== was, [was, flipped]);
-      await page.reload(); await page.waitForFunction(() => document.querySelector('iframe[title="Canvas"]')?.contentDocument?.querySelector('[data-active]')); await sleep(800);
-      await fr().locator('[data-active] h1, [data-active] h2').first().click({ modifiers: ['Meta'] }); await sleep(500);
-      const again = panel().locator('button[aria-expanded]').filter({ hasText: label }).first();
-      check('중간', 'persist', 'persist', `새로고침 뒤에도 섹션 "${label}" 접힘 상태가 유지된다`, (await again.getAttribute('aria-expanded')) === flipped, await again.getAttribute('aria-expanded'));
-    } else check('중간', 'persist', 'persist', '접을 수 있는 섹션 헤더(button[aria-expanded])가 있다', false);
+    check('중간', 'persist', 'persist', '섹션 헤더에 접기 버튼이 없다', (await panel().locator('[aria-controls^="inspector-section-"]').count()) === 0);
 
     check('높음', 'name', 'page', '페이지 오류 없음', errors.length === 0, errors);
   } catch (e) {

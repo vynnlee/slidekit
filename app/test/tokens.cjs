@@ -42,8 +42,8 @@ async function run(label, prep, expectDiff) {
   check(label + ': 슬라이드 본문 그대로', after.slice(after.indexOf('<body>')) === before.slice(before.indexOf('<body>')));
   check(label + ': lint 통과', sh('bun app/server.ts lint _qa-tok').status === 0, sh('bun app/server.ts lint _qa-tok').stdout);
   if (label === '기존 :root') {
-    const dv = p.getByRole('button', { name: /Deck variables/ });
-    check(label + ': Deck variables는 기본 접힘과 개수 배지', (await dv.count()) === 1 && (await dv.getAttribute('aria-expanded')) === 'false' && /1/.test(await dv.textContent()), await dv.textContent());
+    const dv = p.locator('[data-section=tokens-custom] h3');
+    check(label + ': Deck variables 섹션 제목과 개수 배지(접지 않음)', (await dv.count()) === 1 && /1/.test(await dv.textContent()), await dv.textContent());
     check(label + ': Deck styles 그룹 헤더', (await p.getByText('Deck styles', { exact: true }).count()) === 1);
   }
   const e = await ctx.newPage(); await e.goto(BASE + '/decks/_qa-tok/index.html#2'); await e.waitForSelector('#sk-stage');

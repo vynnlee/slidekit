@@ -1,95 +1,29 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
-import { AnimatePresence, motion } from "motion/react";
-import { ChevronDown } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { spring } from "@/lib/springs";
+import type { ReactNode } from "react";
 import { useSize } from "@/lib/size-context";
-import { controlFocus } from "@/lib/control-surface";
-
-const STORAGE_KEY = "slidekit.inspector.collapsed";
-
-// 저장된 값은 접힌 id 배열. 저장소가 없거나 깨졌으면 null.
-function readCollapsed(): string[] | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const arr = raw ? JSON.parse(raw) : null;
-    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === "string") : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeCollapsed(id: string, collapsed: boolean) {
-  try {
-    const set = new Set(readCollapsed() ?? []);
-    if (collapsed) set.add(id); else set.delete(id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...set]));
-  } catch {
-    // 저장 실패는 무시한다(접힘 상태만 기억 못 함)
-  }
-}
+import { cn } from "@/lib/utils";
 
 interface InspectorSectionProps {
+  /** 시험과 추적에 쓰는 이름(data-section). */
   id: string;
   title: ReactNode;
-  /** 헤더 오른쪽 슬롯. 호버 때만 보이게 하는 것은 호출 측이 정한다. */
+  /** 헤더 오른쪽 슬롯(+, 눈 같은 아이콘 버튼). */
   action?: ReactNode;
-  /** 저장된 상태가 없을 때의 초기 상태. 기본 true. */
-  defaultOpen?: boolean;
-  children: ReactNode;
+  children?: ReactNode;
 }
 
-export function InspectorSection({ id, title, action, defaultOpen = true, children }: InspectorSectionProps) {
+// Figma 디자인 패널처럼 접지 않는 섹션: 제목 한 줄과 우측 액션, 아래에 내용. 안쪽 여백은 상하좌우 16px로 같다.
+export function InspectorSection({ id, title, action, children }: InspectorSectionProps) {
   const size = useSize();
-  const [open, setOpen] = useState(() => {
-    const stored = readCollapsed();
-    return stored ? !stored.includes(id) :defaultOpen;
-  });
-  const panelId = `inspector-section-${id}`;
-
-  const toggle = () => {
-    writeCollapsed(id, open);
-    setOpen(!open);
-  };
-
+  const hasBody = children !== undefined && children !== null && children !== false;
   return (
-    <section className="border-b border-border/60">
-      <div className={cn("flex items-center", size.control)}>
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={panelId}
-          onClick={toggle}
-          className={cn(
-            "flex h-full min-w-0 flex-1 cursor-pointer items-center px-3 text-left text-foreground outline-none",
-            controlFocus, "focus-visible:ring-inset",
-            size.gap
-          )}
-        >
-          <span className={cn("truncate font-semibold", size.type.caption)}>{title}</span>
-          <ChevronDown
-            size={size.icon}
-            aria-hidden
-            className={cn("shrink-0 text-muted-foreground transition-transform duration-80", !open && "-rotate-90")}
-          />
-        </button>
-        {action && <div className="flex shrink-0 items-center pr-3">{action}</div>}
+    <section data-section={id} className="border-b border-border/60 p-4">
+      <div className={cn("-my-1 flex items-center justify-between", size.control)}>
+        <h3 className={cn("truncate font-semibold", size.type.caption)}>{title}</h3>
+        {action && <div className="flex shrink-0 items-center">{action}</div>}
       </div>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            id={panelId}
-            className="overflow-hidden"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1, transition: spring.moderate }}
-            exit={{ height: 0, opacity: 0, transition: spring.moderate.exit }}
-          >
-            <div className="flex flex-col gap-2 px-3 pb-3">{children}</div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {hasBody && <div className="mt-2 flex flex-col gap-2">{children}</div>}
     </section>
   );
 }

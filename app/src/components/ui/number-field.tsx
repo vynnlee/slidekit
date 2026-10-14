@@ -170,7 +170,7 @@ const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
           size.control,
           shape.input,
           error && controlError,
-          disabled && cn(controlDisabled, "hover:bg-transparent"),
+          disabled && cn(controlDisabled, "hover:bg-surface-3"),
           className
         )}
       >

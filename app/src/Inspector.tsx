@@ -253,12 +253,12 @@ export function Inspector(p: Props) {
                 value={p.slide?.style.getPropertyValue("background-color") ?? ""}
                 onChange={(v) => p.onSlideStyle("background-color", v)} />
             </InspectorSection>
-            <p className="px-3 pb-3 text-micro text-muted-foreground">Select an element to edit its properties</p>
+            <p className="px-4 pb-4 text-micro text-muted-foreground">Select an element to edit its properties</p>
             <TokensPanel prefix={p.prefix} onPrefixChange={p.onPrefixChange} canvas={p.canvasDoc} />
           </div>
         ) : (
           <div className="-mx-3 flex flex-col pt-1" key={p.selId}>
-            <div className="px-3 pb-2">
+            <div className="px-4 pb-2">
               <Tooltip content="Show in Layers" side="top">
                 <Button aria-label="Show in layers" data-depth={depthOf(el, p.slide)} variant="ghost" size="compact" leadingIcon={SelIcon} className="w-full justify-start" onClick={p.onShowLayers}>
                   <span className="flex min-w-0 flex-1 items-center gap-2">
@@ -314,7 +314,7 @@ export function Inspector(p: Props) {
               </div>
             </InspectorSection>
 
-            <InspectorSection id="position" title="Position" defaultOpen={false}>
+            <InspectorSection id="position" title="Position">
               <Pick label="Position" value={val("position")} items={POSITIONS} onChange={(v) => set("position", v)} />
               <Grid>
                 {val("position") !== "static" && n("left", "X", "X")}

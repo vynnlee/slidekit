@@ -72,11 +72,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await shot('comments-tab');
     await tab('Design').click();
 
-    // 접힌 상태: 첫 섹션 헤더 버튼(aria-controls=inspector-section-*)을 접는다.
-    const head = panel.locator('button[aria-controls^="inspector-section-"][aria-expanded="true"]').first();
-    if (await head.count()) { await head.click(); await shot('collapsed'); await head.click(); }
-    else console.warn('WARN collapsed: 접을 섹션이 없어 건너뜀');
-
     // 호버: 첫 NumberField(aria-label이 있는 입력) 위에 마우스.
     const field = panel.locator('input[aria-label]').first();
     if (await field.count()) {

@@ -25,7 +25,7 @@ export function AlignBox({ direction, justify, align, onChange }: AlignBoxProps)
   const yi = VALUES.indexOf(yVal as (typeof VALUES)[number]);
 
   return (
-    <div role="group" aria-label="Alignment" className={cn("grid size-14 grid-cols-3 grid-rows-3 p-0.5", controlSurface, "hover:bg-transparent", shape.input)}>
+    <div role="group" aria-label="Alignment" className={cn("grid size-14 grid-cols-3 grid-rows-3 p-0.5", controlSurface, "hover:bg-surface-3", shape.input)}>
       {ROW_NAMES.flatMap((rowName, r) =>
         COL_NAMES.map((colName, c) => {
           const selected = r === yi && c === xi;
@@ -41,7 +41,7 @@ export function AlignBox({ direction, justify, align, onChange }: AlignBoxProps)
                 if (isRow) onChange(x, y); else onChange(y, x);
               }}
               className={cn(
-                "flex cursor-pointer items-center justify-center outline-none transition-colors duration-80 hover:bg-hover",
+                "flex cursor-pointer items-center justify-center outline-none transition-colors duration-80 hover:bg-surface-5",
                 controlFocus,
                 shape.item
               )}

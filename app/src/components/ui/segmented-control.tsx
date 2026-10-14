@@ -70,7 +70,7 @@ function SegmentedControl({ value, onChange, options, "aria-label": ariaLabel, m
       onKeyDown={onKeyDown}
       className={cn(
         "relative grid grid-flow-col auto-cols-fr min-w-0",
-        controlSurface, "hover:bg-transparent",
+        controlSurface, "hover:bg-surface-3",
         size.control, shape.input,
         disabled && controlDisabled,
         className
@@ -79,7 +79,7 @@ function SegmentedControl({ value, onChange, options, "aria-label": ariaLabel, m
       {radio && idx >= 0 && (
         <motion.div
           aria-hidden="true"
-          className={cn("absolute inset-y-0 bg-hover pointer-events-none", shape.input)}
+          className={cn("absolute inset-y-0 bg-surface-5 pointer-events-none", shape.input)}
           initial={false}
           animate={{ left: `${(idx * 100) / n}%`, width: `${100 / n}%` }}
           transition={spring.moderate}
@@ -105,7 +105,7 @@ function SegmentedControl({ value, onChange, options, "aria-label": ariaLabel, m
                 "relative z-10 flex h-full items-center justify-center outline-none cursor-pointer select-none transition-colors duration-80 [&_svg]:size-3.5 disabled:cursor-not-allowed disabled:opacity-50",
                 controlFocus,
                 shape.input,
-                !radio && on && "bg-hover",
+                !radio && on && "bg-surface-5",
                 on ? "text-foreground" : "text-muted-foreground hover:text-foreground"
               )}
             >

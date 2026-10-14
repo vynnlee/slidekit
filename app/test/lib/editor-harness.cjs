@@ -21,6 +21,7 @@ async function startEditor({ name, slides: nSlides = 8 } = {}) {
   const browser = await launch();
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+  await ctx.addInitScript(() => { try { localStorage.setItem('slidekit.tip.editor', '1'); } catch {} }); // 첫 열기 안내 카드는 상단 가운데를 가려 클릭을 가로채므로 닫힌 상태로 시작한다(카드 검사는 별도)
   const page = await ctx.newPage();
   // 렌더와 오버레이 갱신(60ms 주기)이 끝나기를 기다린다: 프레임 두 번 + 한 주기. 고정 시간 sleep 대신 쓴다.
   const settleOf = (pg) => pg.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 70)))));

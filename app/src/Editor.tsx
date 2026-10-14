@@ -19,7 +19,7 @@ import { ReplyToasts } from "./ReplyToasts";
 import { useCommentsLive } from "@/lib/use-comments-live";
 import { canMove, readTranslate, toLocal, writeTranslate } from "@/lib/move";
 import type { CommentActions } from "@/lib/comment-actions";
-import { numbering } from "@/lib/comment-state";
+import { holdPref, numbering } from "@/lib/comment-state";
 import { firstChild, isLeaf, isLockedDeep, parentOf, siblings } from "@/lib/selection";
 import { EditorTip } from "./EditorTip";
 import { LAYOUTS } from "../../engine/layouts";
@@ -575,11 +575,11 @@ export function Editor({ id }: { id: string }) {
     const s = canvas.current?.slide(indexRef.current);
     if (!s) return;
     const target = sel ?? s; // 선택이 없으면 슬라이드 전체(path는 빈 글자)
-    const body = { deck: deck.folder, slide: indexRef.current + 1, path: pathOf(s, target), excerpt: (target.textContent ?? "").trim().slice(0, 80), text: t };
+    const body = { deck: deck.folder, slide: indexRef.current + 1, path: pathOf(s, target), excerpt: (target.textContent ?? "").trim().slice(0, 80), text: t, ...(holdPref() ? { hold: true } : {}) };
     const r = await fetch("/api/comments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!r.ok) throw new Error(`Could not send the comment (${r.status})`); // 작성창이 글을 남기고 다시 시도하게 한다
     const { id } = await r.json();
-    live.upsert({ id, slide: body.slide, path: body.path, excerpt: body.excerpt, text: t, status: "open", createdAt: new Date().toISOString() });
+    live.upsert({ id, slide: body.slide, path: body.path, excerpt: body.excerpt, text: t, status: "open", createdAt: new Date().toISOString(), ...(body.hold ? { held: true } : {}) });
     setTab("comments");
   };
   const slideOf = (n: number) => unitsRef.current.findIndex((u) => origin.current.get(u.key) === n);
@@ -760,21 +760,21 @@ export function Editor({ id }: { id: string }) {
         toolbar={
           <>
             <Tooltip content="Decks" side="bottom"><Button aria-label="Decks" variant="ghost" size="icon-compact" onClick={back}><ArrowLeft /></Button></Tooltip>
-            <span className="truncate text-subtitle font-medium">{deck.title}</span>
+            <span className="min-w-0 truncate text-subtitle font-medium">{deck.title}</span>
             {status === "error"
               ? <Button variant="ghost" size="compact" onClick={() => save()}>Save failed. Retry</Button>
-              : <span data-testid="status" className="text-caption text-muted-foreground">{label}</span>}
-            <ChannelBadge connected={live.channel} />
+              : <span data-testid="status" className="max-sm:sr-only text-caption text-muted-foreground">{label}</span>}
+            <ChannelBadge connected={live.channel} className="max-md:hidden" />
             {changed && (
               <>
-                <span className="text-caption text-muted-foreground">File changed outside the editor</span>
+                <span className="text-caption text-muted-foreground max-sm:hidden">File changed outside the editor</span>
                 <Button variant="ghost" size="compact" onClick={() => load(deck.folder, indexRef.current)}>Reload</Button>
                 <Button variant="ghost" size="compact" onClick={() => save(true)}>Overwrite</Button>
               </>
             )}
             {err && <span className="text-caption text-muted-foreground">{err}</span>}
             <span className="ml-auto" />
-            <div role="group" aria-label="History" className="flex items-center">
+            <div role="group" aria-label="History" className="flex items-center max-sm:hidden">
               <Tooltip content={`Undo (Cmd+Z)${past.current.length ? `, ${past.current.length} step${past.current.length > 1 ? "s" : ""}` : ""}`} side="bottom">
                 <span className="inline-flex"><Button aria-label="Undo" variant="ghost" size="icon-compact" disabled={!past.current.length} onClick={() => restore(past.current, future.current)}><Undo2 /></Button></span>
               </Tooltip>
@@ -783,7 +783,7 @@ export function Editor({ id }: { id: string }) {
               </Tooltip>
             </div>
             {dirty && !changed && <Button variant="ghost" size="compact" onClick={() => save()}>Save</Button>}
-            <Tooltip content="Deck settings" side="bottom"><Button aria-label="Deck settings" variant="ghost" size="icon-compact" onClick={() => setSettingsOpen(true)}><Settings2 /></Button></Tooltip>
+            <Tooltip content="Deck settings" side="bottom"><Button aria-label="Deck settings" variant="ghost" size="icon-compact" className="max-sm:hidden" onClick={() => setSettingsOpen(true)}><Settings2 /></Button></Tooltip>
             <ExportMenu folder={deck.folder} dirty={dirty} onSave={() => save()} />
             <Button variant="primary" size="compact" leadingIcon={MonitorPlay} onClick={() => present()}>Present</Button>
           </>
@@ -799,7 +799,7 @@ export function Editor({ id }: { id: string }) {
         }
         right={
           <Inspector sel={sel} slide={canvas.current?.slide(index) ?? null} more={more} onAlignGroup={alignGroup} selId={selId} tab={tab} onTab={setTab}
-            comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} onRemove={live.remove} onRevert={live.revert} onStyles={applyStyles} onPreviewStep={() => sel && canvas.current?.previewStep(sel)} onImageFile={(f) => addImage(f, sel)} hoverId={hoverId} onHover={setHoverId} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
+            comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} onRemove={live.remove} onRevert={live.revert} onSendAll={live.sendAll} onResolveReplied={live.resolveReplied} onStyles={applyStyles} onPreviewStep={() => sel && canvas.current?.previewStep(sel)} onImageFile={(f) => addImage(f, sel)} hoverId={hoverId} onHover={setHoverId} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
         }
       >
         <div className="flex h-full flex-col">

@@ -96,6 +96,19 @@ const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.
     }
     await ctx.close();
   }
+  // 좁은 폭의 편집기(휴대폰, 분할 화면, iPad 세로): 문서가 가로로 넘치지 않고 헤더의 Export와 Present가 화면 안에 있다
+  for (const [w, h] of [[360, 740], [390, 844], [820, 1180]]) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+    await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/edit/${ID}`);
+    await page.locator('iframe[title="Canvas"]').waitFor();
+    await sleep(500);
+    const sw = await page.evaluate(() => [document.documentElement.scrollWidth, document.body.scrollWidth, window.innerWidth]);
+    check(`[편집기 ${w}px] 문서가 가로로 넘치지 않음`, sw[0] <= sw[2] && sw[1] <= sw[2], sw);
+    for (const name of ['Present', 'Export']) check(`[편집기 ${w}px] 헤더 ${name} 버튼이 화면 안`, inside(await page.getByRole('button', { name }).first().boundingBox(), w, h));
+    await ctx.close();
+  }
   // 큰 화면 스모크: 1440x900과 같은 넓은 레이아웃이라 전체 검사는 생략하고 첫 로드에서 핵심 세 가지만 본다.
   {
     const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });

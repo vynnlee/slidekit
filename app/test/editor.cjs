@@ -46,8 +46,13 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   await sleep(600);
   const endN = await nIframes();
   console.log('INFO 필름스트립 iframe 수 처음 ' + firstN + ', 끝까지 넘긴 뒤 ' + endN + ' (슬라이드 ' + nSlides + '장)');
-  check('필름스트립은 끝까지 넘겨도 근처 썸네일만 올림', nSlides < 20 || endN <= 14, endN);
-  await vp.evaluate((e) => { e.scrollLeft = 0; }); await sleep(600);
+  const vpW = (await vp.boundingBox()).width, perScreen = Math.ceil(vpW / 130); // 썸네일 하나 약 128px
+  const has = (n) => page.getByRole('option', { name: 'Slide ' + n, exact: true }).locator('iframe[srcdoc]').count();
+  check('테스트 덱이 30장 이상(검사가 의미 있으려면)', nSlides >= 30, nSlides);
+  check('끝까지 넘기면 iframe 수가 보이는 수 + 여유 이내이고 슬라이드 수보다 훨씬 적음', endN <= perScreen + 6 && endN < nSlides / 2, [endN, perScreen, nSlides]);
+  check('끝에서는 마지막 썸네일이 올라와 있고 먼 2번은 내려감', (await has(nSlides)) === 1 && (await has(2)) === 0, [await has(nSlides), await has(2)]);
+  await vp.evaluate((e) => { e.scrollLeft = 0; }); await sleep(800);
+  check('처음으로 돌아오면 먼 쪽(마지막)이 내려가고 2번이 다시 올라옴', (await has(nSlides)) === 0 && (await has(2)) === 1, [await has(nSlides), await has(2)]);
   // 확대 축소, Tab 선택
   const wid = async () => (await frameEl.boundingBox()).width;
   const w0 = await wid();

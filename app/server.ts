@@ -79,6 +79,9 @@ Bun.serve({
   maxRequestBodySize: 8 << 20, // 덱 원문(이미지 포함 가능)보다 넉넉하게
   // 테스트 서버는 SLIDEKIT_STABLE=1로 띄운다: HMR을 꺼서 팀원이 파일을 저장해도 열린 페이지가 다시 로드되지 않는다.
   ...(process.env.SLIDEKIT_STABLE ? { development: { hmr: false, console: false } } : {}),
+  // 알려진 한계: Bun의 HTML 번들 라우트("/", "/edit/:id" 등)와 /_bun/*는 핸들러로 감쌀 수 없어 Host 검사가 /api/와 정적 파일에만 걸린다.
+  // 127.0.0.1에만 바인딩하고 프런트 번들에는 비밀이 없으며 변경과 읽기 API는 모두 검사하므로, DNS 리바인딩으로 얻는 것은 앱 소스뿐이다.
+  // 닫으려면 검사하는 앞단 프록시(app/preview-proxy.ts 방식) 뒤에 서버를 두거나 번들을 정적 파일로 빌드해 fetch에서 서빙해야 한다.
   routes: guardRoutes({
     "/": index,
     "/present/:id": index,

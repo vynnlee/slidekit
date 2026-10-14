@@ -56,6 +56,11 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   const before = fs.readFileSync(FILE, 'utf8');
   check('원본 슬라이드 수 53', slides(before) === 53, slides(before));
   const n = (sel) => page.evaluate((s) => document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll(s).length, sel);
+  // 고정 sleep 대신 조건 대기. 조건이 끝내 안 맞아도 던지지 않는다(뒤의 check가 실패로 보고한다).
+  const cond = (fn, arg, ms = 5000) => page.waitForFunction(([src, a]) => { try { return !!(0, eval)('(' + src + ')')(a); } catch { return false; } }, [fn.toString(), arg], { timeout: ms }).catch(() => {}); // 읽는 도중 iframe이 다시 그려져 예외가 나면 아직 아님으로 본다
+  const saveDone = async () => { await sleep(150); await cond(() => document.querySelector('[data-testid=status]')?.textContent === 'Saved', null, 8000); }; // 키 입력이 Unsaved로 반영될 틈을 둔 뒤 Saved를 기다린다
+  const unsaved = () => cond(() => document.querySelector('[data-testid=status]')?.textContent !== 'Saved', null, 4000);
+  const stageCount = (c) => cond((c) => document.querySelector('iframe[title="Canvas"]')?.contentDocument?.querySelectorAll('#sk-stage > [data-slide]').length === c, c);
   check('캔버스에 슬라이드 53장', (await n('#sk-stage > [data-slide]')) === 53);
 
   // 3번째 슬라이드로 이동 후 제목 편집
@@ -73,7 +78,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('Enter로 편집 종료', !(await h.evaluate((e) => e.isContentEditable)));
   check('저장 전 상태 표시', (await page.getByText('Unsaved').count()) > 0);
   // 인라인 스타일: 선택된 요소의 속성 패널을 거치지 않고 키로 저장
-  await page.keyboard.press('Meta+s'); await sleep(800);
+  await page.keyboard.press('Meta+s'); await saveDone();
   const after = fs.readFileSync(FILE, 'utf8');
   check('저장됨 표시', (await page.getByText('Saved', { exact: true }).count()) > 0);
   check('파일에 새 제목 반영', after.includes('편집 테스트 제목'), oldText);
@@ -88,22 +93,25 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   // 슬라이드 복제, 삭제, 순서 변경
   const layers = page.locator('[data-testid=filmstrip] [role=option]'); // 슬라이드 필름스트립
   await layers.nth(2).click({ button: 'right' });
-  await page.getByRole('menuitem', { name: 'Duplicate' }).click(); await sleep(1200);
+  await page.getByRole('menuitem', { name: 'Duplicate' }).click(); await stageCount(54);
   check('복제 후 54장', (await n('#sk-stage > [data-slide]')) === 54);
   check('복제 후 현재 위치 4', (await page.evaluate(() => [].findIndex.call(document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll('#sk-stage > [data-slide]'), (s) => s.hasAttribute('data-active')) + 1)) === 4);
   await layers.nth(6).click({ button: 'right' });
-  await page.getByRole('menuitem', { name: 'Delete' }).click(); await sleep(1200);
+  await page.getByRole('menuitem', { name: 'Delete' }).click(); await stageCount(53);
   check('삭제 후 53장', (await n('#sk-stage > [data-slide]')) === 53);
   const titleOf = (i) => page.evaluate((i) => (document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll('#sk-stage > [data-slide]')[i].textContent || '').trim().slice(0, 20), i);
   const t4 = await titleOf(3), t8 = await titleOf(7);
-  await layers.nth(3).dragTo(layers.nth(5), { targetPosition: { x: 20, y: 30 } }); await sleep(1500);
+  await layers.nth(3).dragTo(layers.nth(5), { targetPosition: { x: 20, y: 30 } });
+  await cond(([a]) => { const t = (i) => (document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll('#sk-stage > [data-slide]')[i].textContent || '').trim().slice(0, 20); return t(4) === a; }, [t4]);
   const moved = await titleOf(4);
   check('드래그로 순서 변경', moved === t4 && (await titleOf(3)) !== t4, [t4, t8, moved]);
-  await page.keyboard.press('Meta+z'); await sleep(1500);
+  await page.keyboard.press('Meta+z');
+  await cond(([a]) => (document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll('#sk-stage > [data-slide]')[3].textContent || '').trim().slice(0, 20) === a, [t4]);
   check('실행 취소로 순서 복귀', (await titleOf(3)) === t4);
-  await page.keyboard.press('Meta+Shift+z'); await sleep(1500);
+  await page.keyboard.press('Meta+Shift+z');
+  await cond(([a]) => (document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll('#sk-stage > [data-slide]')[4].textContent || '').trim().slice(0, 20) === a, [t4]);
   check('다시 실행', (await titleOf(4)) === t4);
-  await page.keyboard.press('Meta+s'); await sleep(1800); // 자동 저장과 겹쳐도 마지막 저장이 끝나도록 넉넉히
+  await page.keyboard.press('Meta+s'); await saveDone(); // 자동 저장과 겹쳐도 Saved가 될 때까지 기다린다
   const fin = fs.readFileSync(FILE, 'utf8');
   check('최종 파일 슬라이드 53', slides(fin) === 53, slides(fin));
   check('최종 파일에 복제본 존재', (fin.match(/<section[^>]*>\s*<h1>편집 테스트 제목/g) || []).length === 2, fin.match(/.{0,90}편집 테스트 제목.{0,20}/g));
@@ -118,14 +126,15 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   const cA = (await post(5, 'T-A')).id, cB = (await post(6, 'T-B')).id;
   await page.reload(); await frameEl.waitFor();
   await page.waitForFunction(() => { const f = document.querySelector('iframe[title="Canvas"]'); return f && f.contentDocument && f.contentDocument.querySelector('[data-active]'); }); await sleep(800);
-  await layers.nth(4).dragTo(layers.nth(5), { targetPosition: { x: 100, y: 30 } }); await sleep(1500); // 오른쪽 절반에 놓으면 한 칸 뒤로 간다
-  await page.keyboard.press('Meta+s'); await sleep(1000);
+  await layers.nth(4).dragTo(layers.nth(5), { targetPosition: { x: 100, y: 30 } }); // 오른쪽 절반에 놓으면 한 칸 뒤로 간다
+  await unsaved();
+  await page.keyboard.press('Meta+s'); await saveDone();
   const posOf = (t, occ = 0) => page.evaluate(([t, occ]) => { const m = []; [...document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll('#sk-stage > [data-slide]')].forEach((s, i) => { if ((s.textContent || '').trim().slice(0, 20) === t) m.push(i + 1); }); return m[occ] || 0; }, [t, occ]);
   let cs = rd();
   check('순서 변경 뒤 코멘트 번호가 따라감', cs.find((c) => c.id === cA).slide === (await posOf(tA, oA)) && cs.find((c) => c.id === cB).slide === (await posOf(tB, oB)) && (await posOf(tA, oA)) !== 5, [cs.map((c) => c.slide), await posOf(tA, oA), await posOf(tB, oB)]);
   await layers.nth((await posOf(tA, oA)) - 1).click({ button: 'right' });
-  await page.getByRole('menuitem', { name: 'Delete' }).click(); await sleep(1000);
-  await page.keyboard.press('Meta+s'); await sleep(1000);
+  await page.getByRole('menuitem', { name: 'Delete' }).click(); await unsaved();
+  await page.keyboard.press('Meta+s'); await saveDone();
   cs = rd();
   check('삭제한 슬라이드의 코멘트는 남고 slideDeleted', cs.find((c) => c.id === cA) && cs.find((c) => c.id === cA).slideDeleted === true);
   check('나머지 코멘트 번호 유지', cs.find((c) => c.id === cB).slide === (await posOf(tB, oB)), [cs.find((c) => c.id === cB).slide, await posOf(tB)]);

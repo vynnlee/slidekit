@@ -51,6 +51,10 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 - 발표자 화면 항목(현재와 다음 슬라이드, 노트, 타이머와 시계, 장 위치)은 각각 토글. 노트는 마크다운 원문.
 - 문구: em-dash, en-dash, 가운뎃점, 이모지, 구어체, 비유 금지(사용자가 직접 요청한 예외만). 배경 검정, 글자 흰색, 페이지 번호와 꾸밈 없이 미니멀. 로고는 브랜드 색, 사용자 이미지는 원본 그대로.
 - 코멘트는 Claude Code Channels(연구 프리뷰)로 보내고 `comments.json`에도 저장. 띄우기: `claude --dangerously-load-development-channels server:slidekit`(`channel/README.md`).
+  - 흐름: 편집기에서 C 키(또는 우클릭, 툴바)로 요소나 슬라이드 전체(path가 빈 값)에 코멘트, 빠른 문구 칩 3개, Cmd+Enter 전송 -> 서버가 이 기기 키(`~/.config/slidekit/comments.key`, 0600)의 HMAC 서명을 달아 저장 -> 채널(SSE `?client=channel`)이 서명 검증된 코멘트만 Claude 세션에 전달(연결 때 못 받은 것은 오래된 순 10개 + "더 있다" 알림, `get_pending`) -> Claude가 `ack`, 수정, `reply` -> 패널 상태(Waiting, Sent to Claude, Claude is working, Replied, Resolved, Unverified), 번호 핀, 답 토스트. 해결(E), 삭제(Delete, Undo 토스트), 우클릭 메뉴, J/K 이동.
+  - 서명 없는(또는 본문이 바뀐) 코멘트는 Unverified로 보이고 전달되지 않는다. 사용자가 Trust 하면 이 기기 키로 다시 서명한다. 키 파일을 지우면 기존 코멘트는 모두 Unverified가 된다.
+  - Revert Claude's edit: 답이 달릴 때 서버가 그 사이의 편집기 밖 수정(`.versions`의 external 스냅샷)을 코멘트에 연결한다. 덱이 그 수정 뒤로 더 바뀌지 않았을 때만(해시 비교) 한 번에 되돌리고, 바뀌었으면 거절하고 Version history를 안내한다. 수정 연결은 ack부터 reply 사이의 시간 창 기준이라 그 사이 사용자가 직접 고친 것도 같은 수정으로 묶일 수 있다(해시 검사가 막아 준다).
+  - Version history(Export 메뉴): `decks/<덱>/.versions/`에 index.html 스냅샷(save, external, restore)을 최근 50개와 30MB까지 둔다(.gitignore, 복제 제외). 복원은 현재를 먼저 스냅샷으로 남기고 Undo 토스트로 취소한다. HTML만 기록하고 이미지 변경은 기록하지 않으며, 복원하면 코멘트의 슬라이드 번호가 어긋날 수 있다.
 - 사용자는 오케스트레이터 방식을 선호한다: 큰 일은 팀원과 서브에이전트에 나누고 결과를 직접 검증한 뒤 보고한다. 선택지가 있는 결정은 AskUserQuestion.
 - 보안: Host와 Origin 검사(`app/guard.ts`, 모든 메서드), 입력 크기 제한, 127.0.0.1에만 바인딩, 공개 노출(Funnel, 포트포워딩) 금지.
 
@@ -81,7 +85,7 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 - 2026-10-14 실측: editor.cjs의 저장, 복제, 삭제, 순서 변경 뒤 고정 sleep 약 14초를 조건 대기(Saved 상태, 슬라이드 수, 제목 위치)로 바꿨지만 단계 시간은 197초에서 207초로 줄지 않았다. 시간은 sleep이 아니라 낮은 우선순위(`taskpolicy -b`)에서의 페이지 로드와 렌더 CPU 시간이다. 남은 sleep 교체는 시간 단축보다 흔들림 감소가 목적이다.
 - 후속 후보(측정 미실시, 2026-10-14 사용자 지시로 중단): `taskpolicy -b` 유무, Chrome 플래그(`--disable-extensions`, `--disable-renderer-backgrounding` 등)와 작은 뷰포트가 단계 시간에 주는 영향 A/B. 벤치 스크립트 초안은 세션 스크래치패드(bench.cjs)에만 있다. 발열 규칙상 `taskpolicy` 변경은 사용자 승인이 필요하다. 이미 알려진 값: sleep 정리와 가짜 시계의 효과는 약 4%이고 시간은 페이지 로드와 렌더 CPU가 지배한다.
 - `scripts/test.ts`가 출력 사이가 3초 넘게 벌어지면 `[느림 +N초]` 줄을 넣는다. 이 표시로 고정 sleep이 있는 검사를 찾아 조건 대기(waitForFunction)로 바꾸면 줄어든다. editor.cjs에 sleep 137곳(합계 약 68초), inspector-a11y.cjs에 32곳(약 13초)이 있다. 디바운스처럼 일어나지 않음을 보는 대기와 애니메이션 종료 대기는 남긴다. list.cjs는 이미 조건 대기 위주다.
-- 코멘트 후속 후보: 압축 파일로 받은 덱의 comments.json에는 서명이 없다(형식 검증과 길이 제한만 있음). 로컬 비밀 키 HMAC 서명으로 우리 서버가 만든 코멘트만 채널로 보내게 할 수 있다. 코멘트 패널의 R(답 보기) 단축키와 Claude 응답 중(처리 중) 상태 표시는 미구현.
+- 코멘트와 내보내기 후속 후보: 코멘트 패널의 R(답 보기) 단축키, 앱에서 공개 범위(public, password) 바꾸기(지금은 deck-meta 안내만, 편집기 자동 저장과의 충돌을 먼저 정해야 함), 서명 키 교체와 여러 기기 공유, 버전 기록의 이미지 포함과 앱 안 미리보기(지금은 새 탭 sandbox 미리보기), `ack`는 모델이 호출해야 보이는 상태라 호출하지 않으면 Sent to Claude에서 Replied로 바로 간다.
 - 수동 점검 도구(집계 단계에는 넣지 않았다. 시간 부담): `app/test/list-load.cjs`(덱 30개 합성 사본으로 스크롤 중 iframe 수와 동시 로드 수, 검색 반응을 잰다. `CHECK=1`이면 검증), `app/test/a11y-app.cjs`(덱 목록과 발표자 화면의 axe 점검과 1440, 1024, 390 스크린샷. `AXE=<axe.min.js> SHOTS=<폴더>`). 둘 다 테스트 덱을 `decks/_e2e-*`와 `zz-e2e-qa-*`로 만들고 끝나면 지운다. Fluid SidebarMenu의 `ul` 안 `div`(axe list 규칙)는 레지스트리 파일 한계로 예외 처리했다.
 
 ## 알려진 위험 (2026-10-14 보안 감사, 결정 보류)

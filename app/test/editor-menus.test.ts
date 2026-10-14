@@ -5,14 +5,14 @@ const noop = () => {};
 const labels = (m: MenuItem[]): string[] => m.map((x) => (x.type === "separator" ? "-" : x.label));
 const el: ElementMenuActions = {
   addComment: noop, selectParent: noop, selectFirstChild: noop, selectNext: noop, selectPrev: noop, bringForward: noop, sendBackward: noop,
-  rename: noop, locked: false, toggleLock: noop, hidden: false, toggleHidden: noop, resetChanges: noop, duplicate: noop, remove: noop,
+  rename: noop, group: noop, locked: false, toggleLock: noop, hidden: false, toggleHidden: noop, resetChanges: noop, duplicate: noop, remove: noop,
   has: { parent: true, child: true, next: true, prev: true, forward: true, backward: true, reset: false },
 };
 const count = (m: MenuItem[]) => m.filter((x) => x.type !== "separator").length;
 
 test("요소 메뉴: 그룹 순서와 12개 이하, 삭제는 빨강 맨 아래, 글자 요소만 Edit text", () => {
   const m = elementMenu({ ...el, editText: noop });
-  expect(labels(m)).toEqual(["Edit text", "Add comment", "-", "Select", "-", "Bring forward", "Send backward", "Rename layer", "Lock", "Hide", "-", "Reset changes", "Duplicate", "-", "Delete"]);
+  expect(labels(m)).toEqual(["Edit text", "Add comment", "-", "Select", "-", "Bring forward", "Send backward", "Group", "Rename layer", "Lock", "Hide", "-", "Reset changes", "Duplicate", "-", "Delete"]);
   expect(count(m)).toBeLessThanOrEqual(12);
   const last = m[m.length - 1];
   expect(last.type === "item" && last.destructive).toBe(true);
@@ -26,12 +26,17 @@ test("요소 메뉴: 쓸 수 없는 항목은 흐리게(숨기지 않음), 숨�
   const sub = m.find((x) => x.type === "sub");
   expect(sub && sub.type === "sub" && sub.items.length).toBe(4);
 });
+test("div 요소 메뉴는 Ungroup이 있고 12개 이하(글자 요소가 아니라 Edit text 없음)", () => {
+  const m = elementMenu({ ...el, ungroup: noop });
+  expect(labels(m)).toContain("Ungroup");
+  expect(count(m)).toBeLessThanOrEqual(12);
+});
 test("잠긴 요소 메뉴는 Unlock, Select parent, Add comment 세 가지만", () => {
   expect(labels(elementMenu({ ...el, locked: true })).filter((l) => l !== "-")).toEqual(["Unlock", "Select parent", "Add comment"]);
 });
 test("다중 선택 메뉴: Align 서브메뉴 6방향, Duplicate, Lock, Hide, Delete", () => {
-  const m = groupMenu({ align: noop, duplicate: noop, toggleLock: noop, toggleHidden: noop, remove: noop });
-  expect(labels(m)).toEqual(["Align", "-", "Duplicate", "Lock", "Hide", "-", "Delete"]);
+  const m = groupMenu({ group: noop, align: noop, duplicate: noop, toggleLock: noop, toggleHidden: noop, remove: noop });
+  expect(labels(m)).toEqual(["Align", "-", "Group", "Duplicate", "Lock", "Hide", "-", "Delete"]);
   const sub = m[0];
   expect(sub.type === "sub" && sub.items.length).toBe(6);
 });

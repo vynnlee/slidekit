@@ -108,6 +108,8 @@ export type ElementMenuActions = {
   selectParent(): void; selectFirstChild(): void; selectNext(): void; selectPrev(): void;
   bringForward(): void; sendBackward(): void;
   rename(): void;
+  /** 선택을 div로 감싼다 / 선택한 div를 푼다(div일 때만 준다) */
+  group(): void; ungroup?(): void;
   locked: boolean; toggleLock(): void;
   hidden: boolean; toggleHidden(): void;
   resetChanges(): void;
@@ -139,6 +141,8 @@ export function elementMenu(a: ElementMenuActions): MenuItem[] {
     separator,
     item("forward", "Bring forward", a.bringForward, { shortcut: "mod+]", disabled: !a.has.forward }),
     item("backward", "Send backward", a.sendBackward, { shortcut: "mod+[", disabled: !a.has.backward }),
+    item("group", "Group", a.group, { shortcut: "mod+g" }),
+    a.ungroup && item("ungroup", "Ungroup", a.ungroup, { shortcut: "mod+shift+g" }),
     item("rename", "Rename layer", a.rename, { shortcut: "f2" }),
     item("lock", "Lock", a.toggleLock),
     item("hide", a.hidden ? "Show" : "Hide", a.toggleHidden),
@@ -151,6 +155,7 @@ export function elementMenu(a: ElementMenuActions): MenuItem[] {
 }
 
 export type GroupMenuActions = {
+  group(): void;
   align(axis: "h" | "v", where: "start" | "center" | "end"): void;
   duplicate(): void; toggleLock(): void; toggleHidden(): void; remove(): void;
 };
@@ -166,6 +171,7 @@ export function groupMenu(a: GroupMenuActions): MenuItem[] {
       item("align-bottom", "Bottom", () => a.align("v", "end")),
     ] },
     separator,
+    item("group", "Group", a.group, { shortcut: "mod+g" }),
     item("duplicate", "Duplicate", a.duplicate, { shortcut: "mod+d" }),
     item("lock", "Lock", a.toggleLock),
     item("hide", "Hide", a.toggleHidden),

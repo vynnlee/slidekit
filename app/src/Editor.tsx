@@ -36,7 +36,7 @@ import { startPresentation } from "@/lib/present";
 import type { Comment, DeckEntry } from "@/lib/deck";
 
 const KEY_GROUPS: [string, [string, string][]][] = [
-  ["Edit", [["Cmd+S", "Save"], ["Cmd+Z", "Undo"], ["Shift+Cmd+Z", "Redo"], ["Cmd+D", "Duplicate"], ["Cmd+[", "Send backward"], ["Cmd+]", "Bring forward"], ["F2", "Rename layer"], ["Cmd+C", "Copy"], ["Cmd+V", "Paste"], ["Delete", "Delete selection"], ["Cmd+B", "Bold"], ["Cmd+I", "Italic"]]],
+  ["Edit", [["Cmd+S", "Save"], ["Cmd+Z", "Undo"], ["Shift+Cmd+Z", "Redo"], ["Cmd+D", "Duplicate"], ["Cmd+G", "Group"], ["Shift+Cmd+G", "Ungroup"], ["Cmd+[", "Send backward"], ["Cmd+]", "Bring forward"], ["F2", "Rename layer"], ["Cmd+C", "Copy"], ["Cmd+V", "Paste"], ["Delete", "Delete selection"], ["Cmd+B", "Bold"], ["Cmd+I", "Italic"]]],
   ["Select", [["Click", "Select a top-level element"], ["Double-click", "Go one level in, or edit text"], ["Cmd+Click", "Select the innermost element"], ["Enter", "First child, or edit text"], ["Shift+Enter", "Select the parent"], ["Shift+Click", "Add to selection"], ["Tab", "Next sibling"], ["Esc", "Finish editing, or deselect"]]],
   ["View", [["Up, Down", "Go to slide (no selection)"], ["Arrows", "Nudge 1px (Shift: 10px)"], ["Drag", "Move (Shift: lock axis)"], ["Cmd+Scroll", "Zoom"], ["Shift+1", "Zoom to fit"], ["Shift+0", "Zoom to 100%"], ["Cmd+0", "Zoom to fit"], ["Cmd+\\", "Toggle panels"], ["Shift+Cmd+\\", "Toggle filmstrip"]]],
   ["General", [["Cmd+K", "Command palette"], ["Cmd+F", "Find and replace"], ["Cmd+Enter", "Present from this slide"], ["Shift+Cmd+Enter", "Present from the start"], ["Opt+Enter", "Present from this slide"], ["Shift+F10", "Context menu"], ["Cmd+/", "Shortcuts"]]],
@@ -438,6 +438,30 @@ export function Editor({ id }: { id: string }) {
     changePrefix(r.html);
     if (typeof patch.title === "string" && patch.title) setDeck((d) => (d ? { ...d, title: patch.title as string } : d));
   };
+  // 그룹: 같은 부모의 선택 요소들을 div(data-name="Group") 하나로 감싼다. 문서 순서와 자리는 그대로고, 한 번 = 실행 취소 한 건.
+  const groupSel = () => {
+    const els = [sel, ...more].filter(Boolean) as Element[];
+    if (!els.length) return;
+    if (els.some((e) => isLockedDeep(e))) { toast("Unlock the layers before grouping", { ms: 3000 }); return; }
+    const parent = els[0].parentElement;
+    if (!parent || els.some((e) => e.parentElement !== parent)) return;
+    const ordered = [...parent.children].filter((c) => els.includes(c));
+    const g = parent.ownerDocument.createElement("div");
+    g.setAttribute("data-name", "Group");
+    ordered[0].before(g);
+    g.append(...ordered);
+    pickSel(g); commit();
+  };
+  // 그룹 해제: 선택한 div의 자식을 제자리에 풀고 div를 지운다. 자식들이 선택된다.
+  const ungroupSel = () => {
+    const g = sel;
+    if (!g || more.length || g.tagName !== "DIV" || !g.children.length) return;
+    if (isLockedDeep(g)) { toast("Unlock the group before ungrouping", { ms: 3000 }); return; }
+    const kids = [...g.children];
+    g.before(...kids);
+    g.remove();
+    pickGroup(kids); commit();
+  };
   const alignGroup = (axis: "h" | "v", where: "start" | "center" | "end") => {
     const s = canvas.current?.slide(indexRef.current);
     const els = ([sel, ...more].filter(Boolean) as HTMLElement[]).filter((e) => !isLockedDeep(e) && canMove(e));
@@ -548,7 +572,7 @@ export function Editor({ id }: { id: string }) {
     comment: () => canvas.current?.compose(), editText: () => sel && canvas.current?.edit(sel),
     up: upSel, child: enterSel, next: () => cycle(1), prev: () => cycle(-1),
     forward: () => reorder(1), backward: () => reorder(-1), rename: () => setRenameTick((n) => n + 1),
-    lock: () => toggleAll("lock"), hide: () => toggleAll("hide"), reset: resetChanges, dup: dupSelected, del: delSelected, align: alignGroup,
+    group: groupSel, ungroup: ungroupSel, lock: () => toggleAll("lock"), hide: () => toggleAll("hide"), reset: resetChanges, dup: dupSelected, del: delSelected, align: alignGroup,
     zoomFit: () => canvas.current?.zoom(0), zoom100: () => canvas.current?.zoom100(),
     addAfter: () => addSlide(indexRef.current), dupSlide: () => dupSlide(indexRef.current), delSlide: () => delSlide(indexRef.current),
   };
@@ -561,12 +585,13 @@ export function Editor({ id }: { id: string }) {
   const menuFor = (els: Element[]): MenuItem[] => {
     const s = canvas.current?.slide(indexRef.current);
     if (!els.length || !s) return slideMenu(slideActions(true));
-    if (els.length > 1) return groupMenu({ align: call("align") as never, duplicate: call("dup"), toggleLock: call("lock"), toggleHidden: call("hide"), remove: call("del") });
+    if (els.length > 1) return groupMenu({ group: call("group"), align: call("align") as never, duplicate: call("dup"), toggleLock: call("lock"), toggleHidden: call("hide"), remove: call("del") });
     const el = els[0] as HTMLElement, sibs = siblings<Element>(s, el), i = sibs.indexOf(el);
     return elementMenu({
       editText: !isLockedDeep(el) && isLeaf(el) && textual(el) ? call("editText") : undefined,
       addComment: call("comment"), selectParent: call("up"), selectFirstChild: call("child"), selectNext: call("next"), selectPrev: call("prev"),
       bringForward: call("forward"), sendBackward: call("backward"), rename: call("rename"),
+      ungroup: el.tagName === "DIV" && el.children.length > 0 && !isLockedDeep(el) ? call("ungroup") : undefined, group: call("group"),
       locked: el.hasAttribute("data-locked"), toggleLock: call("lock"), hidden: el.style.display === "none", toggleHidden: call("hide"),
       resetChanges: call("reset"), duplicate: call("dup"), remove: call("del"),
       has: { parent: !!parentOf<Element>(s, el), child: !isLeaf(el) && !!firstChild<Element>(el), next: sibs.length > 1, prev: sibs.length > 1, forward: i >= 0 && i < sibs.length - 1, backward: i > 0, reset: !!el.getAttribute("style") },
@@ -603,6 +628,7 @@ export function Editor({ id }: { id: string }) {
     else if (mod && k === "/") { e.preventDefault(); setHelp((v) => !v); }
     else if (mod && e.key === "Enter") { e.preventDefault(); present(e.shiftKey); }
     else if (mod && (k === "b" || k === "i") && !/^(INPUT|TEXTAREA)$/.test(t.tagName) && (sel || t.isContentEditable || e.view !== window)) { e.preventDefault(); emphasis(k); }
+    else if (mod && k === "g") { e.preventDefault(); if (e.shiftKey) ungroupSel(); else groupSel(); }
     else if (mod && k === "f") { e.preventDefault(); setFind((f) => f ?? { q: "", r: "", matchCase: false, notes: false }); setFindTick((n) => n + 1); }
     else if (typing) return;
     else if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); const els = [sel, ...more].filter(Boolean) as Element[]; cm.open(canvas.current?.anchor(els[0] ?? null) ?? { x: 0, y: 0 }, menuFor(els)); }
@@ -663,6 +689,8 @@ export function Editor({ id }: { id: string }) {
     { value: "act-save", label: "Save", group: "Actions", shortcut: "mod+s", onSelect: () => { save(true); } },
     { value: "act-settings", label: "Deck settings", group: "Actions", onSelect: () => setSettingsOpen(true) },
     { value: "act-find", label: "Find and replace", group: "Actions", shortcut: "mod+f", onSelect: () => { setFind((f) => f ?? { q: "", r: "", matchCase: false, notes: false }); setFindTick((n) => n + 1); } },
+    { value: "act-group", label: "Group selection", group: "Selection", shortcut: "mod+g", disabled: !sel, onSelect: () => groupSel() },
+    { value: "act-ungroup", label: "Ungroup", group: "Selection", shortcut: "mod+shift+g", disabled: !sel, onSelect: () => ungroupSel() },
     { value: "act-undo", label: "Undo", group: "Actions", shortcut: "mod+z", disabled: !past.current.length, onSelect: () => restore(past.current, future.current) },
     { value: "act-redo", label: "Redo", group: "Actions", shortcut: "mod+shift+z", disabled: !future.current.length, onSelect: () => restore(future.current, past.current) },
     { value: "act-comment", label: "Add comment", group: "Actions", shortcut: "c", onSelect: () => canvas.current?.compose() },

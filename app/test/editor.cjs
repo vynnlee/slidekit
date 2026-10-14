@@ -197,6 +197,21 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('그라디언트 전환', /linear-gradient/.test(await styleOf()) && (await page.getByLabel('Gradient angle').count()) === 1, await styleOf());
   const ang = page.getByLabel('Gradient angle'); await ang.fill('90'); await ang.press('Enter'); await settle();
   check('그라디언트 각도', /linear-gradient\(90deg/.test(await styleOf()), await styleOf());
+  // 스톱 편집: 막대를 눌러 추가(최대 4개), 핸들 끌기, 토큰 var() 색, 삭제는 2개까지
+  const gbar = page.getByTestId('gradient-bar'); const gbb = await gbar.boundingBox();
+  await page.mouse.click(gbb.x + gbb.width * 0.5, gbb.y + gbb.height / 2); await settle();
+  check('막대를 눌러 스톱을 추가(3개)', (await page.getByRole('slider', { name: /^Gradient stop/ }).count()) === 3 && ((await styleOf()).match(/\d%/g) || []).length >= 3, await styleOf());
+  const stopH = page.getByRole('slider', { name: 'Gradient stop 2' }); const stopB = await stopH.boundingBox();
+  await page.mouse.move(stopB.x + stopB.width / 2, stopB.y + stopB.height / 2); await page.mouse.down();
+  await page.mouse.move(gbb.x + gbb.width * 0.8, stopB.y + stopB.height / 2, { steps: 5 }); await page.mouse.up(); await settle();
+  check('핸들을 끌어 스톱 위치가 바뀜', /\b(7[5-9]|8[0-5])(\.\d)?%/.test(await styleOf()), await styleOf());
+  await page.getByLabel('Gradient stop color swatch').click();
+  await page.getByTestId('deck-token').first().waitFor({ timeout: 8000 }).catch(() => {});
+  await page.getByTestId('deck-token').first().click(); await settle();
+  check('스톱 색에 덱 토큰 var()를 쓸 수 있음', /var\(--sk-/.test(await styleOf()), await styleOf());
+  await page.keyboard.press('Escape'); await settle();
+  await page.getByRole('button', { name: 'Remove stop' }).click(); await settle();
+  check('스톱 삭제 뒤 2개이고 더는 지울 수 없음', (await page.getByRole('slider', { name: /^Gradient stop/ }).count()) === 2 && !(await page.getByRole('button', { name: 'Remove stop' }).isEnabled()));
   if (await page.getByRole('button', { name: 'Add stroke' }).count()) await page.getByRole('button', { name: 'Add stroke' }).click();
   await settle(); await page.getByRole('button', { name: 'Individual sides' }).click();
   const tw = page.getByLabel('top stroke width', { exact: true }); await tw.fill('4'); await tw.press('Enter'); await settle();
@@ -640,6 +655,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('덱 설정 변경 실행 취소', !/"author"\s*:\s*"테스트 저자"/.test(fs.readFileSync(FILE, 'utf8')));
 
   // 헤더 Undo와 Redo 버튼: 편집 뒤 켜지고 누르면 되돌린다
+  await layers.nth(1).click(); await settle(); await focusBody(); await page.keyboard.press('Escape'); // 찾기 시험이 첫 슬라이드에 두고 간 위치를 2번 슬라이드로
   await fr().locator('[data-active] h2').first().click(); await settle();
   await focusBody(); await page.keyboard.press('ArrowRight'); await settle();
   const undoBtn = page.getByRole('button', { name: 'Undo', exact: true }), redoBtn = page.getByRole('button', { name: 'Redo', exact: true });
@@ -683,6 +699,27 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   await focusBody(); await page.keyboard.press('Meta+z'); await settle();
   check('토큰 선택 실행 취소', (await inDoc((s) => s.querySelector('h2').style.color)) === '');
   await page.keyboard.press('Escape');
+
+  // 그룹과 그룹 해제(Cmd+G, Shift+Cmd+G): 같은 부모의 선택을 div 하나로 감싸고 되돌린다
+  await layers.nth(1).click(); await settle(); await focusBody(); await page.keyboard.press('Escape');
+  const kidsBefore = await nKids();
+  await fr().locator('[data-active] > :nth-child(1)').first().click(); await settle();
+  await fr().locator('[data-active] > :nth-child(2)').first().click({ modifiers: ['Shift'] }); await settle();
+  await focusBody(); await page.keyboard.press('Meta+g'); await settle();
+  check('Cmd+G가 선택을 Group div 하나로 감쌈', (await nKids()) === kidsBefore - 1 && (await inDoc((s) => s.querySelectorAll(':scope > [data-name=Group] > *').length)) === 2, [kidsBefore, await nKids()]);
+  check('그룹이 한 요소로 선택됨', (await page.getByRole('button', { name: 'Show in layers' }).textContent()).includes('Group'));
+  await focusBody(); await page.keyboard.press('Meta+Shift+g'); await settle();
+  check('Shift+Cmd+G가 그룹을 풀어 원래 개수로', (await nKids()) === kidsBefore && (await inDoc((s) => !s.querySelector('[data-name=Group]'))), [kidsBefore, await nKids()]);
+  await focusBody(); await page.keyboard.press('Meta+z'); await settle(); await page.keyboard.press('Meta+z'); await settle();
+  check('그룹과 해제 실행 취소 뒤 원래 상태', (await nKids()) === kidsBefore && (await inDoc((s) => !s.querySelector('[data-name=Group]'))));
+  await page.keyboard.press('Escape');
+
+  // 슬라이드 배경 그라디언트
+  await focusBody(); await page.keyboard.press('Escape'); await settle();
+  await page.getByRole('radio', { name: 'Linear gradient' }).last().click(); await settle();
+  check('슬라이드 배경을 그라디언트로', await inDoc((s) => /linear-gradient/.test(s.style.backgroundImage)) && (await page.getByRole('group', { name: 'Background gradient' }).count()) === 1);
+  await page.getByRole('radio', { name: 'Solid' }).last().click(); await settle();
+  check('Solid로 돌아오면 배경 이미지가 지워짐', await inDoc((s) => !/gradient/.test(s.style.backgroundImage)));
 
   // 마퀴: 빈 곳을 끌면 겹친 최상위 요소가 모두 선택된다
   await focusBody(); await page.keyboard.press('Escape'); await settle();

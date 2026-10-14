@@ -26,17 +26,27 @@ try {
   const names = (await client.listTools()).tools.map((t) => t.name).sort().join();
   assert(names === "get_pending,reply", names);
   await Bun.sleep(500); // SSE 구독 대기
+  assert(((await (await fetch(`${url}/api/channel`)).json()) as any).connected === true, "channel presence true");
 
   const { id } = await (await fetch(`${url}/api/comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deck, slide: 1, path: "h1", excerpt: "x", text: "제목 키워줘" }) })).json() as any;
   await Bun.sleep(500);
   const n = got.find((g) => g.method === "notifications/claude/channel");
   assert(n?.params.meta.comment_id === id && n.params.content.includes("제목 키워줘"), JSON.stringify(got));
+  const afterPush = await (await fetch(`${url}/api/comments?deck=${deck}`)).json() as any[];
+  assert(!!afterPush.find((c) => c.id === id)?.deliveredAt, "deliveredAt set after push");
 
   const pend = JSON.parse(((await client.callTool({ name: "get_pending", arguments: {} })) as any).content[0].text);
   assert(pend.some((c: any) => c.id === id), "pending");
   await client.callTool({ name: "reply", arguments: { id, text: "완료" } });
   const list = await (await fetch(`${url}/api/comments?deck=${deck}`)).json() as any[];
   assert(list.find((c) => c.id === id)?.status === "done", "done");
+  // 해결 표시와 되돌리기
+  const post = (path: string, body: unknown) => fetch(`${url}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  assert((await post(`/api/comments/${id}/resolve`, { deck, resolved: true })).ok, "resolve ok");
+  assert(((await (await fetch(`${url}/api/comments?deck=${deck}`)).json()) as any[]).find((c) => c.id === id)?.resolved === true, "resolved");
+  assert((await post(`/api/comments/${id}/resolve`, { deck, resolved: "yes" })).status === 400, "resolve validates");
+  await post(`/api/comments/${id}/resolve`, { deck, resolved: false });
+  assert(((await (await fetch(`${url}/api/comments?deck=${deck}`)).json()) as any[]).find((c) => c.id === id)?.resolved === undefined, "unresolved");
 
   const sse = await fetch(`${url}/api/events`);
   const reader = sse.body!.pipeThrough(new TextDecoderStream()).getReader();
@@ -46,6 +56,8 @@ try {
   if (!text.includes("deck-changed")) text += (await Promise.race([reader.read(), Bun.sleep(3000).then(() => ({ value: "" }))])).value;
   assert(text.includes("deck-changed"), `sse: ${text}`);
   await client.close();
+  await Bun.sleep(800);
+  assert(((await (await fetch(`${url}/api/channel`)).json()) as any).connected === false, "channel presence false after close");
   console.log("channel test ok");
 } finally {
   app.kill();

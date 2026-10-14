@@ -14,10 +14,15 @@ export type Comment = {
   createdAt: string;
   repliedAt?: string;
   slideDeleted?: boolean; // 저장 때 슬라이드가 지워진 코멘트. 지우지 않고 표시만 한다
+  deliveredAt?: string; // 채널이 Claude 세션에 전달한 시각
+  resolved?: boolean; // 사용자가 해결로 표시
+  resolvedAt?: string;
 };
 
-// SSE 구독자. 이벤트는 comment, reply, deck-changed.
+// SSE 구독자. 이벤트는 comment(새 코멘트), reply(코멘트가 갱신됨: 답, 전달됨, 해결), deck-changed, channel({connected}).
+// 채널 MCP 서버는 /api/events?client=channel 로 연결하므로 그 연결이 있으면 Claude 세션이 열려 있는 것이다.
 const clients = new Set<ReadableStreamDefaultController<string>>();
+const channelClients = new Set<ReadableStreamDefaultController<string>>();
 function emit(event: string, data: unknown) {
   const chunk = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const c of clients) {
@@ -110,8 +115,42 @@ export const routes = {
       return Response.json({ ok: true });
     },
   },
+  "/api/channel": { GET: () => Response.json({ connected: channelClients.size > 0 }) },
+  // 채널이 세션에 코멘트를 전달했다고 표시한다(전달 전에는 "대기", 후에는 "Claude에게 전달됨").
+  "/api/comments/:id/delivered": {
+    POST: async (req: Request & { params: { id: string } }) => {
+      const b = await body(req);
+      if (!b || !validDeck(b.deck)) return bad("deck");
+      const list = load(b.deck);
+      const comment = list.find((c) => c.id === req.params.id);
+      if (!comment) return bad("not found", 404);
+      if (!comment.deliveredAt) {
+        comment.deliveredAt = new Date().toISOString();
+        save(b.deck, list);
+        emit("reply", { deck: b.deck, comment });
+      }
+      return Response.json({ ok: true });
+    },
+  },
+  // 사용자가 코멘트를 해결로 표시하거나 되돌린다. body {deck, resolved:boolean}.
+  "/api/comments/:id/resolve": {
+    POST: async (req: Request & { params: { id: string } }) => {
+      const b = await body(req);
+      if (!b || !validDeck(b.deck)) return bad("deck");
+      if (typeof b.resolved !== "boolean") return bad("resolved");
+      const list = load(b.deck);
+      const comment = list.find((c) => c.id === req.params.id);
+      if (!comment) return bad("not found", 404);
+      if (b.resolved) Object.assign(comment, { resolved: true, resolvedAt: new Date().toISOString() });
+      else { delete comment.resolved; delete comment.resolvedAt; }
+      save(b.deck, list);
+      emit("reply", { deck: b.deck, comment });
+      return Response.json({ ok: true });
+    },
+  },
   "/api/events": (req: Request, server: { timeout(r: Request, s: number): void }) => {
     server.timeout(req, 0); // SSE 연결이 유휴로 끊기지 않게 한다
+    const isChannel = new URL(req.url).searchParams.get("client") === "channel";
     let ctrl!: ReadableStreamDefaultController<string>;
     let ping: Timer;
     const stream = new ReadableStream<string>({
@@ -119,9 +158,18 @@ export const routes = {
         ctrl = c;
         clients.add(c);
         c.enqueue(": connected\n\n");
+        if (isChannel) {
+          const was = channelClients.size;
+          channelClients.add(c);
+          if (!was) emit("channel", { connected: true });
+        }
+        c.enqueue(`event: channel\ndata: ${JSON.stringify({ connected: channelClients.size > 0 })}\n\n`); // 새 연결에 현재 상태를 알린다
         ping = setInterval(() => { try { c.enqueue(": ping\n\n"); } catch {} }, 15000);
       },
-      cancel() { clients.delete(ctrl); clearInterval(ping); },
+      cancel() {
+        clients.delete(ctrl); clearInterval(ping);
+        if (channelClients.delete(ctrl) && !channelClients.size) emit("channel", { connected: false });
+      },
     });
     return new Response(stream, { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } });
   },

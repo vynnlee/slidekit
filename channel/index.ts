@@ -6,8 +6,9 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 // 앱 서버는 127.0.0.1만 연다. 채널도 거기만 호출한다.
 const base = process.env.SLIDEKIT_URL ?? "http://127.0.0.1:3200";
 
-type Comment = { id: string; slide: number; path: string; excerpt: string; text: string; status: string };
+type Comment = { id: string; slide: number; path: string; excerpt: string; text: string; status: string; deliveredAt?: string };
 const deckOf = new Map<string, string>(); // 코멘트 id -> 덱 폴더
+const pushed = new Set<string>(); // 이미 세션에 전달한 코멘트 id(재연결 때 중복 방지)
 
 const mcp = new Server(
   { name: "slidekit", version: "0.0.1" },
@@ -42,7 +43,7 @@ async function pending() {
   const out: (Comment & { deck: string })[] = [];
   for (const { folder } of decks) {
     const list = (await (await fetch(`${base}/api/comments?deck=${encodeURIComponent(folder)}`)).json()) as Comment[];
-    for (const c of list) if (c.status === "open") { deckOf.set(c.id, folder); out.push({ ...c, deck: folder }); }
+    for (const c of list) if (c.status === "open" && !(c as Comment & { resolved?: boolean }).resolved) { deckOf.set(c.id, folder); out.push({ ...c, deck: folder }); }
   }
   return out;
 }
@@ -72,6 +73,8 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
 });
 
 export async function push(deck: string, c: Comment) {
+  if (pushed.has(c.id)) return;
+  pushed.add(c.id);
   deckOf.set(c.id, deck);
   await mcp.notification({
     method: "notifications/claude/channel",
@@ -84,15 +87,27 @@ export async function push(deck: string, c: Comment) {
       meta: { deck, slide: String(c.slide), comment_id: c.id },
     },
   });
+  // 앱에 전달 완료를 알린다(실패해도 코멘트는 저장되어 있다).
+  await fetch(`${base}/api/comments/${encodeURIComponent(c.id)}/delivered`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deck }),
+  }).catch(() => {});
+}
+
+// 연결(또는 재연결)될 때 아직 전달되지 않은 코멘트를 밀어 넣는다. 채널이 꺼져 있는 동안 쌓인 코멘트를 따라잡는다.
+async function backfill() {
+  try {
+    for (const c of await pending()) if (!c.deliveredAt) await push(c.deck, c);
+  } catch (e) { console.error("[slidekit channel] 대기 코멘트 전달 실패:", e); }
 }
 
 // 앱 서버 SSE 구독. 꺼져 있으면 조용히 재시도한다.
 async function listen() {
   for (let wait = 1000; ; wait = Math.min(wait * 2, 15000)) {
     try {
-      const res = await fetch(`${base}/api/events`);
+      const res = await fetch(`${base}/api/events?client=channel`);
       if (!res.ok || !res.body) throw new Error();
       wait = 500;
+      backfill();
       let buf = "";
       for await (const chunk of res.body.pipeThrough(new TextDecoderStream())) {
         buf += chunk;

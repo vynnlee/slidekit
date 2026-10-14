@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { ArrowDownUp, Copy, LayoutGrid, List, MonitorPlay, MoreHorizontal, Pencil, Plus, Presentation, Search, TextCursorInput, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardGroup, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownTrigger, DropdownContent } from "@/components/ui/dropdown";
-import { MenuItem } from "@/components/ui/menu-item";
+import { ContextMenu, MenuItems, useContextMenu } from "@/components/ui/context-menu";
+import { deckMenu, type MenuItem } from "@/lib/menu-model";
 import { Field } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
 import { CommandMenu, CommandMenuDialog, CommandMenuItem, useIsMac, CommandMenuEmpty, CommandMenuFooter, CommandMenuInput, CommandMenuList, type CommandMenuItemData } from "@/components/ui/command-menu";
@@ -111,26 +112,17 @@ const api = async (path: string, method: string, body: object = {}) => {
   return j;
 };
 
-// 카드와 행의 ... 메뉴. 우클릭도 같은 메뉴를 연다(메뉴는 ... 버튼 자리에 뜬다).
+// 카드와 행의 ... 버튼 메뉴. 우클릭 메뉴와 같은 항목 목록(menuFor)을 쓴다.
 const hoverShow = "transition-opacity group-hover/deck:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100";
-function DeckMenu({ deck, open, onOpenChange, onRename, onTrash, onDuplicate, onPresent, onOpen }: {
-  deck: DeckEntry; open: boolean; onOpenChange: (o: boolean) => void;
-  onRename: () => void; onTrash: () => void; onDuplicate: () => void; onPresent: () => void; onOpen: () => void;
-}) {
+function DeckMenu({ deck, items }: { deck: DeckEntry; items: MenuItem[] }) {
   return (
-    <DropdownMenu open={open} onOpenChange={onOpenChange}>
+    <DropdownMenu>
       <DropdownTrigger render={
-        <Button variant="ghost" size="icon-compact" aria-label={`Actions for ${deck.title}`} className={cn(hoverShow, open ? "opacity-100" : "opacity-0")}>
+        <Button variant="ghost" size="icon-compact" aria-label={`Actions for ${deck.title}`} className={cn(hoverShow, "opacity-0 data-[state=open]:opacity-100")}>
           <MoreHorizontal />
         </Button>
       } />
-      <DropdownContent align="end">
-        <MenuItem index={0} icon={Pencil} label="Open" onSelect={onOpen} />
-        <MenuItem index={1} icon={MonitorPlay} label="Present" onSelect={onPresent} />
-        <MenuItem index={2} icon={Copy} label="Duplicate" onSelect={onDuplicate} />
-        <MenuItem index={3} icon={TextCursorInput} label="Rename" onSelect={onRename} />
-        <MenuItem index={4} icon={Trash2} label="Move to trash" onSelect={onTrash} />
-      </DropdownContent>
+      <DropdownContent align="end"><MenuItems items={items} /></DropdownContent>
     </DropdownMenu>
   );
 }
@@ -196,7 +188,7 @@ export function DeckList() {
 
   const [loadErr, setLoadErr] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [menuId, setMenuId] = useState<string | null>(null);
+  const cm = useContextMenu();
   const [renaming, setRenaming] = useState<DeckEntry | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
   const [renameFolder, setRenameFolder] = useState("");
@@ -271,22 +263,19 @@ export function DeckList() {
     const j = await run(() => api(`/api/decks/${encodeURIComponent(d.folder)}/trash`, "POST"));
     if (j) toast(`Moved ${d.title} to Trash`, { action: { label: "Undo", onClick: () => { run(() => api(`/api/trash/${encodeURIComponent((j as { entry: string }).entry)}/restore`, "POST")); } } });
   };
+  // 카드와 행의 메뉴 항목은 한 곳(menu-model)에서 만들고, ... 버튼과 우클릭과 ContextMenu 키가 같은 목록을 쓴다.
+  const menuFor = (d: DeckEntry) => deckMenu(
+    { open: () => open(d), present: () => present(d), rename: () => startRename(d), duplicate: () => { duplicate(d); }, trash: () => { trash(d); } },
+    { open: Pencil, present: MonitorPlay, rename: TextCursorInput, duplicate: Copy, trash: Trash2 },
+  );
   const menu = (d: DeckEntry, cls = "absolute right-2 top-2 z-30") => (
     <div className={cn(cls, "flex items-center gap-0.5")}>
       <Tooltip content="Present" side="top">
         <Button variant="ghost" size="icon-compact" aria-label={`Present ${d.title}`} className={cn(hoverShow, "opacity-0")} onClick={() => present(d)}><MonitorPlay /></Button>
       </Tooltip>
-      <DeckMenu
-        deck={d} open={menuId === d.id} onOpenChange={(o) => setMenuId(o ? d.id : null)}
-        onOpen={() => open(d)} onPresent={() => present(d)} onDuplicate={() => { duplicate(d); }} onRename={() => startRename(d)} onTrash={() => trash(d)}
-      />
+      <DeckMenu deck={d} items={menuFor(d)} />
     </div>
   );
-  // 우클릭은 버튼을 뗀 뒤에 연다. 누르는 중에 열면 같은 입력의 pointerup이 메뉴 항목을 바로 실행한다.
-  const ctx = (d: DeckEntry) => ({
-    onContextMenu: (e: MouseEvent) => e.preventDefault(),
-    onMouseUp: (e: MouseEvent) => { if (e.button === 2) setMenuId(d.id); },
-  });
 
   // 카드 사이 키보드 이동: 화살표(그리드는 열 수만큼 위아래), Cmd 또는 Ctrl+Enter로 발표. Enter는 카드 버튼의 기본 동작(열기).
   const onKeys = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -377,7 +366,7 @@ export function DeckList() {
           {view === "grid" ? (
             <CardGroup columns={cols} separated>
               {sorted.map((d) => (
-                <Card key={d.id} onClick={() => open(d)} label={d.title} className="group/deck" data-deck="" {...ctx(d)}>
+                <Card key={d.id} onClick={() => open(d)} label={d.title} className="group/deck" data-deck="" {...cm.bind(() => menuFor(d))}>
                   {menu(d)}
                   <Thumb deck={d} />
                   <CardHeader>
@@ -390,7 +379,7 @@ export function DeckList() {
           ) : (
             <CardGroup columns={1} separated>
               {sorted.map((d) => (
-                <Card key={d.id} onClick={() => open(d)} label={d.title} className="group/deck" data-deck="" {...ctx(d)}>
+                <Card key={d.id} onClick={() => open(d)} label={d.title} className="group/deck" data-deck="" {...cm.bind(() => menuFor(d))}>
                   <div className="flex items-center gap-3 pr-16">
                     <Thumb deck={d} width={56} />
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-3">
@@ -406,6 +395,8 @@ export function DeckList() {
           </>}
         </div>
       </Shell>
+
+      <ContextMenu menu={cm} />
 
       <CommandMenuDialog open={palette} onOpenChange={setPalette} title="Search" description="Open a deck or run an action">
         <CommandMenu items={items} query={q} onQueryChange={setQ}>

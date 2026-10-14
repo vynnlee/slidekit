@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { DropdownContent, DropdownMenu, DropdownSeparator, DropdownSub, DropdownSubContent, DropdownSubTrigger, DropdownTrigger } from "@/components/ui/dropdown";
 import { MenuItem as FluidMenuItem } from "@/components/ui/menu-item";
@@ -29,7 +30,8 @@ export interface ContextMenuController {
   open(at: { x: number; y: number }, items: MenuItem[], returnTo?: HTMLElement | null): void;
   /** 요소의 왼쪽 아래에서 연다(키보드로 열 때). */
   openFor(el: HTMLElement, items: MenuItem[]): void;
-  close(): void;
+  /** id를 주면 그 메뉴가 아직 열려 있을 때만 닫는다(교체된 새 메뉴를 옛 메뉴의 닫힘 알림이 닫지 않게). */
+  close(id?: number): void;
   /** 우클릭과 ContextMenu 키와 Shift+F10을 한 번에 연결한다. getItems가 빈 목록이나 null을 주면 열지 않는다. */
   bind(getItems: (e: MouseEvent | KeyboardEvent) => MenuItem[] | null | undefined): {
     onContextMenu: (e: MouseEvent) => void;
@@ -41,13 +43,21 @@ export interface ContextMenuController {
 const native = (t: EventTarget | null) => t instanceof HTMLElement && !!t.closest("input,textarea,select,[contenteditable=true],[contenteditable='']");
 
 export function useContextMenu(): ContextMenuController {
-  const [state, setState] = useState<Open | null>(null);
+  const [state, setRaw] = useState<Open | null>(null);
+  const cur = useRef<Open | null>(null);
   const seq = useRef(0);
-  const close = useCallback(() => setState(null), []);
+  const closedAt = useRef(0);
+  const set = useCallback((v: Open | null) => { if (!v) closedAt.current = Date.now(); cur.current = v; setRaw(v); }, []);
+  const close = useCallback((id?: number) => { if (cur.current && (id === undefined || cur.current.id === id)) set(null); }, [set]);
   const open = useCallback((at: { x: number; y: number }, items: MenuItem[], returnTo?: HTMLElement | null) => {
     if (!items.length) return;
-    setState({ id: ++seq.current, x: at.x, y: at.y, items, returnTo: returnTo ?? (document.activeElement as HTMLElement | null) });
-  }, []);
+    const next = { id: ++seq.current, x: at.x, y: at.y, items, returnTo: returnTo ?? cur.current?.returnTo ?? (document.activeElement as HTMLElement | null) };
+    // 옛 메뉴가 열려 있거나 방금 닫혔으면(바깥 우클릭은 눌리는 순간 옛 메뉴를 먼저 닫는다) 그 메뉴가 포커스를 돌려놓은 뒤에 새 메뉴를 연다.
+    // 겹치면 옛 메뉴의 포커스 복귀가 새 메뉴를 "바깥 포커스"로 보고 닫는다.
+    if (cur.current) set(null);
+    const wait = Math.max(0, 120 - (Date.now() - closedAt.current));
+    if (wait > 0 && closedAt.current) setTimeout(() => set(next), wait); else set(next);
+  }, [set]);
   const openFor = useCallback((el: HTMLElement, items: MenuItem[]) => {
     const r = el.getBoundingClientRect();
     open({ x: r.left + 8, y: r.bottom - 4 }, items, el);
@@ -114,14 +124,26 @@ export function ContextMenu({ menu }: { menu: ContextMenuController }) {
   const returnTo = useRef<HTMLElement | null>(null);
   returnTo.current = state?.returnTo ?? returnTo.current;
 
-  // 스크롤, 창 크기, 창 포커스를 잃을 때 닫는다(메뉴 안의 스크롤은 제외).
+  // 스크롤, 휠, 창 크기, 창 포커스, 포커스 이동, 줌 키에서 닫는다(메뉴 안의 입력은 제외).
   useEffect(() => {
     if (!state) return;
     const onScroll = (e: Event) => { if (!(e.target instanceof HTMLElement && e.target.closest("[role=menu]"))) close(); };
+    const closeAll = () => close();
+    const inMenu = (t: EventTarget | null) => t instanceof HTMLElement && !!t.closest("[role=menu]");
+    // 휠(Cmd+휠 줌 포함)과 메뉴 밖으로 가는 포커스 이동, 줌 키(Cmd 또는 Ctrl과 + - 0)에서도 닫는다.
+    const onWheel = (e: WheelEvent) => { if (!inMenu(e.target)) close(); };
+    const onFocusIn = (e: FocusEvent) => { if (!inMenu(e.target)) close(); };
+    const onKey = (e: globalThis.KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && /^[=+\-_0]$/.test(e.key)) close(); };
     window.addEventListener("scroll", onScroll, true);
-    window.addEventListener("resize", close);
-    window.addEventListener("blur", close);
-    return () => { window.removeEventListener("scroll", onScroll, true); window.removeEventListener("resize", close); window.removeEventListener("blur", close); };
+    window.addEventListener("wheel", onWheel, { capture: true, passive: true });
+    document.addEventListener("focusin", onFocusIn, true);
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("resize", closeAll);
+    window.addEventListener("blur", closeAll);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true); window.removeEventListener("wheel", onWheel, true); document.removeEventListener("focusin", onFocusIn, true);
+      window.removeEventListener("keydown", onKey, true); window.removeEventListener("resize", closeAll); window.removeEventListener("blur", closeAll);
+    };
   }, [state?.id, close]);
 
   // 모달 메뉴는 바깥에 pointer-events:none을 걸어서, 다른 곳을 우클릭해도 그 곳의 contextmenu 이벤트가 오지 않는다.
@@ -146,13 +168,15 @@ export function ContextMenu({ menu }: { menu: ContextMenuController }) {
   }, [state]);
 
   if (!state) return null;
-  return (
-    <DropdownMenu key={state.id} open onOpenChange={(o) => { if (!o) close(); }}>
+  // 항상 document.body로 포털한다: transform이 걸린 조상(캔버스 래퍼, 핀 오버레이) 안에서는 position:fixed 앵커가 그 조상 기준이 되어 메뉴가 어긋난다.
+  return createPortal(
+    <DropdownMenu key={state.id} open onOpenChange={(o) => { if (!o) close(state.id); }}>
       <DropdownTrigger render={<span aria-hidden="true" tabIndex={-1} style={{ position: "fixed", left: state.x, top: state.y, width: 1, height: 1, pointerEvents: "none" }} />} />
       {/* 포인터 아래가 아니라 오른쪽 아래 2px에서 시작한다: 누른 버튼을 떼는 순간 첫 항목이 실행되지 않게 */}
       <DropdownContent side="bottom" align="start" sideOffset={2} alignOffset={2}>
         <MenuItems items={state.items} />
       </DropdownContent>
-    </DropdownMenu>
+    </DropdownMenu>,
+    document.body,
   );
 }

@@ -5,6 +5,8 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Field } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
 import { StatusPage } from "./StatusPage";
+import { ContextMenu, useContextMenu } from "@/components/ui/context-menu";
+import { trashMenu } from "@/lib/menu-model";
 import { toast } from "./Toaster";
 import { UNREACHABLE, isDown, onReconnect } from "@/lib/connection";
 
@@ -25,6 +27,7 @@ export function TrashList({ onRestored }: { onRestored: () => void }) {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [purging, setPurging] = useState<Item | null>(null);
+  const cm = useContextMenu();
   const [typed, setTyped] = useState("");
 
   const load = () => fetch("/api/trash").then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); }).then(setItems).catch(() => setErr("Could not load trash"));
@@ -45,6 +48,7 @@ export function TrashList({ onRestored }: { onRestored: () => void }) {
 
   return (
     <>
+      <ContextMenu menu={cm} />
       {err && (
         <p role="alert" className="mb-2 flex items-center gap-2 text-caption text-destructive">
           {err}{items === null && <Button variant="ghost" size="compact" onClick={() => { setErr(""); load(); }}>Retry</Button>}
@@ -53,7 +57,7 @@ export function TrashList({ onRestored }: { onRestored: () => void }) {
       {items?.length === 0 && <StatusPage as="h2" title="Trash is empty">Decks you move to Trash show up here.</StatusPage>}
       <ul className="flex flex-col gap-0.5">
         {items?.map((i) => (
-          <li key={i.entry} className="flex h-9 items-center gap-3 px-2 text-body">
+          <li key={i.entry} className="flex h-9 items-center gap-3 px-2 text-body" {...cm.bind(() => trashMenu({ restore: () => { restore(i); }, purge: () => { setTyped(""); setErr(""); setPurging(i); } }, { restore: RotateCcw, purge: Trash2 }))}>
             <span className="min-w-0 flex-1 truncate">{i.title}</span>
             <span className="shrink-0 text-caption text-muted-foreground">{i.folder}</span>
             <span className="shrink-0 text-caption text-muted-foreground tabular-nums">{when(i.deletedAt)}</span>

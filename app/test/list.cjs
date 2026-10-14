@@ -190,6 +190,88 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   check('저장소 안 파일은 서빙한다', (await ctx.request.get(BASE + '/decks/zz-e2e-ln/ok.txt')).status() === 200);
   check('저장소 밖을 가리키는 링크는 404', (await ctx.request.get(BASE + '/decks/zz-e2e-ln/leak.txt')).status() === 404);
   check('링크는 덱으로 취급하지 않는다(복제 404)', (await post('/api/decks/zz-e2e-ln/duplicate', {})).status() === 404);
+  // 컨텍스트 메뉴: 포인터 위치 앵커, 항목과 키캡과 빨강, Esc와 포커스 복귀, 키보드로 열기, 교체, 닫힘 조건, 가장자리 뒤집기
+  await page.goto(BASE + '/');
+  await page.getByRole('button', { name: 'zz-e2e-k1', exact: true }).waitFor();
+  await sleep(600);
+  const cardBtn = (t) => page.getByRole('button', { name: t, exact: true });
+  const menuBox = () => page.getByRole('menu').first().boundingBox();
+  const kb = await cardBtn('zz-e2e-k1').boundingBox();
+  const px = kb.x + 40, py = kb.y + 40;
+  await cardBtn('zz-e2e-k1').click({ button: 'right', position: { x: 40, y: 40 } });
+  await page.getByRole('menu').waitFor();
+  const mb = await menuBox();
+  check('메뉴가 포인터 오른쪽 아래에서 시작한다', mb && mb.x >= px - 1 && mb.x <= px + 12 && mb.y >= py - 1 && mb.y <= py + 12, [mb, px, py]);
+  check('항목 순서', JSON.stringify(await page.getByRole('menuitem').allInnerTexts().then((a) => a.map((t) => t.split('\n')[0].trim()))) === JSON.stringify(['Open', 'Present', 'Rename', 'Duplicate', 'Move to trash']), await page.getByRole('menuitem').allInnerTexts());
+  check('단축키 키캡(Open과 Present)', (await page.getByRole('menuitem', { name: 'Open' }).getAttribute('data-shortcut')) === '↵' && /↵$/.test((await page.getByRole('menuitem', { name: 'Present' }).getAttribute('data-shortcut')) || ''));
+  const col = await page.getByRole('menuitem', { name: 'Move to trash' }).evaluate((e) => [...e.querySelectorAll('span')].map((x) => getComputedStyle(x).color));
+  check('파괴적 항목은 빨강(--destructive)', col.length > 0 && col.every((c) => c === 'rgb(248, 113, 113)'), col);
+  check('구분선이 있다', (await page.getByRole('separator').count()) >= 2);
+  await page.keyboard.press('Escape');
+  check('Esc로 닫힌다', await until(async () => (await page.getByRole('menu').count()) === 0));
+  check('닫힌 뒤 포커스가 카드로 돌아간다', await until(async () => (await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label'))) === 'zz-e2e-k1'), await page.evaluate(() => document.activeElement && document.activeElement.outerHTML.slice(0, 100)));
+  // 닫는 조건: 휠(줌 포함), 줌 키. 드래그 중(왼쪽 버튼을 누른 채)에는 열리지 않는다
+  await cardBtn('zz-e2e-k1').click({ button: 'right', position: { x: 40, y: 40 } });
+  await page.getByRole('menu').waitFor();
+  await page.mouse.wheel(0, 120);
+  check('휠을 돌리면 닫힌다', await until(async () => (await page.getByRole('menu').count()) === 0));
+  await cardBtn('zz-e2e-k1').click({ button: 'right', position: { x: 40, y: 40 } });
+  await page.getByRole('menu').waitFor();
+  await page.keyboard.press('Control+='); // 줌 키
+  check('줌 키(Ctrl +)를 누르면 닫힌다', await until(async () => (await page.getByRole('menu').count()) === 0));
+  await page.evaluate(() => { const el = document.querySelector('[data-deck]'); el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 50, clientY: 50, buttons: 1 })); });
+  await sleep(300);
+  check('왼쪽 버튼을 누른 채(드래그 중)에는 열리지 않는다', (await page.getByRole('menu').count()) === 0);
+  // 키보드: ContextMenu 키와 Shift+F10, 화살표와 Enter
+  await cardBtn('zz-e2e-k1').focus();
+  await page.keyboard.press('Shift+F10');
+  check('Shift+F10으로 메뉴가 열린다', await until(async () => (await page.getByRole('menu').count()) === 1));
+  await page.keyboard.press('Escape'); await sleep(300);
+  await cardBtn('zz-e2e-k1').focus();
+  await page.keyboard.press('ContextMenu');
+  check('ContextMenu 키로 메뉴가 열린다', await until(async () => (await page.getByRole('menu').count()) === 1));
+  await page.getByRole('menuitem', { name: 'Open' }).waitFor(); await sleep(400); // 메뉴가 첫 항목에 포커스를 줄 때까지
+  await page.keyboard.press('ArrowDown'); await sleep(200);
+  check('ArrowDown으로 다음 항목(Present)에 포커스가 간다', (await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label'))) === 'Present', await page.evaluate(() => document.activeElement && document.activeElement.outerHTML.slice(0, 90)));
+  await page.keyboard.press('Enter');
+  check('화살표와 Enter로 항목을 실행한다(Present)', await until(async () => new URL(page.url()).pathname === '/present/zz-e2e-k1'), page.url());
+  await page.goto(BASE + '/');
+  await cardBtn('zz-e2e-k1').waitFor(); await sleep(600);
+  // 다른 곳을 우클릭하면 교체, 창 크기가 바뀌면 닫힘
+  await cardBtn('zz-e2e-k1').click({ button: 'right', position: { x: 30, y: 30 } });
+  await page.getByRole('menu').waitFor();
+  await cardBtn('zz-e2e-k2').click({ button: 'right', position: { x: 30, y: 30 }, force: true });
+  await sleep(400);
+  const k2 = await cardBtn('zz-e2e-k2').boundingBox();
+  const swapped = await menuBox();
+  check('다른 카드를 우클릭하면 메뉴가 하나로 교체된다', (await page.getByRole('menu').count()) === 1 && swapped.y >= k2.y + 29 && swapped.y <= k2.y + 45, [swapped, k2]); // 오른쪽 가장자리라 가로는 뒤집힐 수 있어 세로 위치로 본다
+  await page.setViewportSize({ width: 1200, height: 800 });
+  check('창 크기가 바뀌면 닫힌다', await until(async () => (await page.getByRole('menu').count()) === 0));
+  await page.setViewportSize({ width: 1280, height: 800 });
+  // 입력 칸은 네이티브 메뉴를 쓴다(우리 메뉴가 열리지 않는다)
+  await page.getByRole('button', { name: 'New deck' }).click();
+  await page.getByRole('dialog').getByLabel('Title').click({ button: 'right' });
+  check('입력 칸 우클릭은 네이티브 메뉴(우리 메뉴 없음)', (await page.getByRole('menu').count()) === 0);
+  await page.keyboard.press('Escape'); await sleep(300);
+  // 가장자리: 카드가 화면 오른쪽 아래에 있어도 메뉴가 화면 안에서 뒤집힌다
+  await page.setViewportSize({ width: 420, height: 380 });
+  await sleep(500);
+  const small = await cardBtn('zz-e2e-k1').boundingBox();
+  await cardBtn('zz-e2e-k1').click({ button: 'right', position: { x: Math.min(small.width - 4, 300), y: Math.min(small.height - 4, 100) }, force: true });
+  await page.getByRole('menu').waitFor();
+  const edge = await menuBox();
+  check('화면 가장자리에서는 메뉴가 화면 안으로 뒤집힌다', edge && edge.x >= 0 && edge.y >= 0 && edge.x + edge.width <= 420 + 1 && edge.y + edge.height <= 380 + 1, edge);
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 1280, height: 800 });
+  // 휴지통 행 메뉴
+  await ctx.request.post(BASE + '/api/decks/zz-e2e-k2/trash', { data: {} });
+  await page.goto(BASE + '/');
+  await page.getByRole('button', { name: 'Trash', exact: true }).click();
+  await page.getByRole('button', { name: 'Restore zz-e2e-k2' }).waitFor();
+  await page.getByRole('button', { name: 'Restore zz-e2e-k2' }).click({ button: 'right' });
+  check('휴지통 행 메뉴(Restore, Delete forever)', await until(async () => (await page.getByRole('menuitem', { name: 'Restore' }).count()) === 1 && (await page.getByRole('menuitem', { name: 'Delete forever' }).count()) === 1));
+  await page.getByRole('menuitem', { name: 'Restore' }).click();
+  check('메뉴에서 복구한다', await until(async () => (await ids()).includes('zz-e2e-k2')), await ids());
   // 최근 연 덱: 가장 최근 하나에 Opened 표시, Recent 정렬은 최근 순
   await page.goto(BASE + '/');
   await page.getByRole('button', { name: 'zz-e2e-k2', exact: true }).waitFor();
@@ -197,7 +279,8 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   for (let i = 0; i < 2; i++) await page.getByRole('button', { name: /^(Date|Name|Recent)$/ }).click();
   check('Recent 정렬 이름', (await page.getByRole('button', { name: 'Recent', exact: true }).count()) === 1);
   const order = await page.evaluate(() => [...document.querySelectorAll('[data-deck]')].map((r) => r.querySelector('button')?.getAttribute('aria-label')));
-  check('최근 연 덱이 맨 앞', order[0] === 'zz-e2e-k2' || order[0] === 'Present zz-e2e-k2' || String(order[0]).includes('zz-e2e-k2'), order);
+  const recent0 = await page.evaluate(() => JSON.parse(localStorage.getItem('slidekit:recent') || '[]')[0]?.id);
+  check('최근 연 덱이 맨 앞', order[0] === recent0, [order[0], recent0]);
   await page.evaluate(() => localStorage.setItem('slidekit:list-sort', 'date'));
   await page.goto(BASE + '/present/nope-nope');
   check('없는 덱은 안내와 돌아가기', await until(async () => (await page.getByText('Deck not found').count()) === 1));

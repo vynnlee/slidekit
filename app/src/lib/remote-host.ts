@@ -18,9 +18,11 @@ const storedKey = (folder: string) => { try { return sessionStorage.getItem(keyN
 export const remoteUrl = (folder: string, code: string, origin = location.origin) => `${origin}/remote/${encodeURIComponent(folder)}#code=${code.replace("-", "")}`;
 export const isLocalOrigin = (origin = location.origin) => /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|$)/.test(origin);
 
+import { openRemoteStream, type RemoteStream } from "@/lib/remote-stream";
+
 export function useRemoteHost(folder: string | undefined, state: RemoteState | null, onCmd: (c: Cmd) => void) {
   const [session, setSession] = useState<RemoteSession | null>(null);
-  const cmd = useRef(onCmd), latest = useRef(state), sess = useRef<RemoteSession | null>(null), es = useRef<EventSource | null>(null);
+  const cmd = useRef(onCmd), latest = useRef(state), sess = useRef<RemoteSession | null>(null), es = useRef<RemoteStream | null>(null);
   cmd.current = onCmd; latest.current = state; sess.current = session;
 
   const push = useCallback(() => {
@@ -39,16 +41,23 @@ export function useRemoteHost(folder: string | undefined, state: RemoteState | n
     if (!r.ok) throw new Error(String(r.status));
     const s = (await r.json()) as RemoteSession;
     try { sessionStorage.setItem(keyName(folder), s.host); } catch {}
-    close();
+    // 같은 발표자 키로 코드만 새로 받은 경우(틀린 코드 한도, 새로고침)에는 열려 있는 연결을 그대로 둔다.
+    const refreshed = !!es.current && sess.current?.host === s.host;
     sess.current = s; setSession(s);
-    const src = new EventSource(`/api/remote/${encodeURIComponent(folder)}/events?role=host&t=${encodeURIComponent(s.host)}`);
-    es.current = src;
-    src.onopen = () => push(); // 재연결 때도 마지막 상태를 다시 올린다
-    src.onerror = () => { if (src.readyState === EventSource.CLOSED) { setSession(null); sess.current = null; } };
-    src.addEventListener("cmd", (e) => { try { cmd.current(JSON.parse((e as MessageEvent).data)); } catch {} });
-    src.addEventListener("end", () => { src.close(); setSession(null); sess.current = null; });
-    // 틀린 코드가 한도에 이르러 서버가 코드를 폐기하면 새 코드를 받아 대화상자를 갱신한다(휴대폰 연결은 유지된다).
-    src.addEventListener("locked", () => { void start().catch(() => {}); });
+    if (refreshed) return;
+    close();
+    es.current = openRemoteStream({
+      api: `/api/remote/${encodeURIComponent(folder)}`,
+      role: "host",
+      headers: () => ({ "X-Remote-Key": s.host }),
+      onOpen: () => push(), // 재연결 때도 마지막 상태를 다시 올린다
+      onDead: () => { es.current = null; setSession(null); sess.current = null; },
+      on: {
+        cmd: (c) => cmd.current(c),
+        // 틀린 코드가 한도에 이르러 서버가 코드를 폐기하면 새 코드를 받아 대화상자를 갱신한다(휴대폰 연결은 유지된다).
+        locked: () => { void start().catch(() => {}); },
+      },
+    });
   }, [folder, close, push]);
 
   const stop = useCallback(async () => {

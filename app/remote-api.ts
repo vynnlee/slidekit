@@ -10,6 +10,7 @@ const CMD_PER_SEC = 10;
 const HOST_GRACE = 30_000; // 발표자 연결이 끊긴 뒤 이 시간 안에는 다른 사람이 세션을 가로채지 못한다
 const MAX_VIEWER_SINKS = 4, MAX_HOST_SINKS = 2; // 세션당 열린 SSE 연결 상한
 const BODY_MAX = 4096, STATE_MAX = 65536;
+const TICKET_TTL = 15_000, MAX_TICKETS = 20; // SSE 연결용 1회용 티켓(세션 토큰은 URL에 싣지 않는다)
 const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
 export type Cmd =
@@ -58,6 +59,7 @@ type Session = {
 
 export function createHub(now: () => number = Date.now) {
   const sessions = new Map<string, Session>();
+  const tickets = new Map<string, { id: string; role: "host" | "viewer"; session: Session; exp: number }>(); // 키: 티켓의 sha256(hex)
   const end = (id: string) => {
     const s = sessions.get(id);
     if (!s) return;
@@ -70,6 +72,19 @@ export function createHub(now: () => number = Date.now) {
     return s;
   };
   const presence = (s: Session) => { for (const v of s.sinks) v.send("presence", { online: s.hosts.size > 0 }); };
+
+  const openHost = (s: Session, id: string, sink: Sink): (() => void) | null => {
+    if (s.hosts.size >= MAX_HOST_SINKS) return null;
+    s.hosts.add(sink); presence(s);
+    return () => { s.hosts.delete(sink); if (sessions.get(id) === s) { if (!s.hosts.size) s.hostGone = now(); presence(s); } };
+  };
+  const openViewer = (s: Session, sink: Sink): (() => void) | null => {
+    if (s.sinks.size >= MAX_VIEWER_SINKS) return null;
+    s.sinks.add(sink);
+    sink.send("presence", { online: s.hosts.size > 0 });
+    if (s.state) sink.send("state", s.state);
+    return () => { s.sinks.delete(sink); };
+  };
 
   return {
     /** 세션을 만든다. 이미 있으면 기존 발표자 키(hostKey)가 맞을 때만 코드를 새로 받아 이어 가고(휴대폰 연결은 유지), 아니면 발표자가 붙어 있는 동안 null(거절). */
@@ -132,23 +147,38 @@ export function createHub(now: () => number = Date.now) {
       for (const h of s.hosts) h.send("cmd", cmd);
       return "ok";
     },
+    /** SSE 연결용 1회용 티켓. 발표자 키 또는 휴대폰 토큰을 확인해 15초짜리 티켓을 준다(세션당 미사용 20개까지). 틀리면 null. */
+    issueTicket(id: string, role: "host" | "viewer", credential: string): string | null {
+      const s = get(id);
+      if (!s) return null;
+      if (role === "host" ? !same(s.host, sha(credential)) : !s.viewers.has(sha(credential).toString("hex"))) return null;
+      const t = now();
+      let open = 0;
+      for (const [k, v] of tickets) { if (v.exp <= t) tickets.delete(k); else if (v.session === s) open++; }
+      if (open >= MAX_TICKETS) return null;
+      const ticket = randomBytes(18).toString("base64url");
+      tickets.set(sha(ticket).toString("hex"), { id, role, session: s, exp: t + TICKET_TTL });
+      return ticket;
+    },
+    /** 티켓을 한 번 쓰고 그 역할로 연결을 연다. 없거나 만료됐거나 다른 덱(세션)의 것이면 null. */
+    attach(id: string, ticket: string, sink: Sink): (() => void) | null {
+      const k = sha(ticket).toString("hex"), tk = tickets.get(k);
+      tickets.delete(k); // 성공해도 실패해도 한 번뿐
+      const s = get(id);
+      if (!tk || !s || tk.id !== id || tk.session !== s || tk.exp <= now()) return null;
+      return tk.role === "host" ? openHost(s, id, sink) : openViewer(s, sink);
+    },
     /** 발표자 화면이 명령을 받는 연결. 열고 닫을 때 휴대폰에 접속 상태를 알린다. */
     subscribeHost(id: string, hostKey: string, sink: Sink): (() => void) | null {
       const s = get(id);
       if (!s || !same(s.host, sha(hostKey))) return null;
-      if (s.hosts.size >= MAX_HOST_SINKS) return null;
-      s.hosts.add(sink); presence(s);
-      return () => { s.hosts.delete(sink); if (sessions.get(id) === s) { if (!s.hosts.size) s.hostGone = now(); presence(s); } };
+      return openHost(s, id, sink);
     },
     /** 휴대폰이 상태를 받는 연결. 붙자마자 마지막 상태와 발표자 접속 여부를 다시 보낸다(재연결 대비). */
     subscribeViewer(id: string, tk: string, sink: Sink): (() => void) | null {
       const s = get(id);
       if (!s || !s.viewers.has(sha(tk).toString("hex"))) return null;
-      if (s.sinks.size >= MAX_VIEWER_SINKS) return null;
-      s.sinks.add(sink);
-      sink.send("presence", { online: s.hosts.size > 0 });
-      if (s.state) sink.send("state", s.state);
-      return () => { s.sinks.delete(sink); };
+      return openViewer(s, sink);
     },
     sweep() { for (const id of [...sessions.keys()]) get(id); },
     size: () => sessions.size,
@@ -226,14 +256,25 @@ export const remoteRoutes = {
       return r === "ok" ? Response.json({ ok: true }) : r === "rate" ? bad("rate", 429) : r === "offline" ? bad("offline", 409) : bad("auth", 403);
     },
   },
-  // EventSource는 헤더를 못 붙여 키를 query로 받는다. 키는 이 연결에만 쓰이고 세션 종료에 폐기된다.
+  // SSE 연결용 티켓: 자격(발표자 키는 X-Remote-Key, 휴대폰 토큰은 Authorization)은 헤더로만 받고 URL에는 티켓만 실린다.
+  "/api/remote/:id/ticket": {
+    POST: async (req: Req) => {
+      const id = deckOf(req);
+      if (!id) return bad("deck", 404);
+      const big = tooBig(req, BODY_MAX);
+      if (big) return big;
+      const b = (await req.json().catch(() => null)) as { role?: unknown } | null;
+      if (b?.role !== "host" && b?.role !== "viewer") return bad("role");
+      const cred = b.role === "host" ? (req.headers.get("x-remote-key") ?? "") : bearer(req);
+      const t = hub.issueTicket(id, b.role, cred);
+      return t ? Response.json({ ticket: t, ttl: TICKET_TTL }) : bad("auth", 403);
+    },
+  },
   "/api/remote/:id/events": {
     GET: (req: Req, server: Srv) => {
       const id = deckOf(req);
       if (!id) return bad("deck", 404);
-      const host = q(req, "role") === "host";
-      const s = stream(req, server, (sink) => (host ? hub.subscribeHost(id, q(req, "t"), sink) : hub.subscribeViewer(id, q(req, "t"), sink)));
-      return s;
+      return stream(req, server, (sink) => hub.attach(id, q(req, "ticket"), sink));
     },
   },
 };

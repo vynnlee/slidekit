@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { StatusPage } from "./StatusPage";
 import { markdown } from "@/lib/markdown";
+import { openRemoteStream } from "@/lib/remote-stream";
 import { cn } from "@/lib/utils";
 import type { Cmd, RemoteState } from "@/lib/remote-host";
 
@@ -26,6 +27,7 @@ export function Remote({ id }: { id: string }) {
   const [token, setToken] = useState<string | null>(() => sessionStorage.getItem(tokenKey(id)));
   const [state, setState] = useState<RemoteState | null>(null);
   const [online, setOnline] = useState(false);
+  const [lost, setLost] = useState(false); // 서버와의 연결이 끊겨 다시 붙는 중
   const [err, setErr] = useState("");
   const [typed, setTyped] = useState("");
   const [armed, setArmed] = useState(false); // 리셋은 두 번 눌러야 한다(실수 방지)
@@ -47,16 +49,19 @@ export function Remote({ id }: { id: string }) {
     else if (!token) setPhase("code");
   }, []);
 
-  // 상태 구독. 끊기면 브라우저가 다시 붙고, 서버가 마지막 상태를 다시 보낸다. 만료나 폐기(403)는 다시 붙지 않는다.
+  // 상태 구독. 연결마다 1회용 티켓을 받아 붙고(토큰은 URL에 없다), 끊기면 새 티켓으로 다시 붙으며 서버가 마지막 상태를 다시 보낸다.
+  // 만료나 폐기(403)와 세션 종료(end)는 다시 붙지 않는다.
   useEffect(() => {
     if (!token) return;
-    const es = new EventSource(`${api}/events?t=${encodeURIComponent(token)}`);
-    es.onopen = () => setPhase("live");
-    es.onerror = () => { if (es.readyState === EventSource.CLOSED) { sessionStorage.removeItem(tokenKey(id)); setToken(null); setPhase("ended"); } };
-    es.addEventListener("state", (e) => setState(JSON.parse((e as MessageEvent).data)));
-    es.addEventListener("presence", (e) => setOnline(JSON.parse((e as MessageEvent).data).online === true));
-    es.addEventListener("end", () => { es.close(); sessionStorage.removeItem(tokenKey(id)); setToken(null); setPhase("ended"); });
-    return () => es.close();
+    const s = openRemoteStream({
+      api, role: "viewer",
+      headers: () => ({ Authorization: `Bearer ${token}` }),
+      onOpen: () => { setPhase("live"); setLost(false); },
+      onLost: () => setLost(true),
+      onDead: () => { sessionStorage.removeItem(tokenKey(id)); setToken(null); setPhase("ended"); },
+      on: { state: (d) => setState(d), presence: (d) => setOnline(d.online === true) },
+    });
+    return () => s.close();
   }, [token, api, id]);
 
   // 화면 꺼짐 방지(지원하는 브라우저만). 탭이 다시 보일 때 다시 잡는다.
@@ -98,32 +103,38 @@ export function Remote({ id }: { id: string }) {
     ) : <StatusPage role="status" title="Waiting for the presenter" />;
   }
 
-  const big = "h-14 min-w-0 flex-1 text-body";
+  // text-body 같은 글자 크기 클래스는 tailwind-merge가 글자색(primary의 text-*)과 헷갈려 지우므로 임의 값으로 크기를 준다.
+  const big = "h-14 min-w-0 text-[17px]";
   const blankOn = state.blank;
   return (
-    <div className="mx-auto flex h-full max-w-xl flex-col gap-3 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] touch-manipulation">
-      <header className="flex items-baseline gap-3">
-        <h1 className="text-subtitle font-medium tabular-nums" aria-label="Current slide">{state.slide} / {state.total}</h1>
-        <span className="min-w-0 flex-1 truncate text-body text-muted-foreground">{state.title}</span>
-        <span className="text-body tabular-nums" role="timer" aria-label="Elapsed time">{hms(state.elapsed)}</span>
-      </header>
-      {(!online || err) && <p role="status" className="rounded bg-hover px-2 py-1 text-caption text-foreground">{!online ? "The presenter screen is offline." : err}</p>}
-      <section aria-label="Speaker notes" className="min-h-0 flex-1 overflow-y-auto rounded-lg bg-hover p-3" style={{ fontSize: size }}>
-        {state.notes ? <div className="space-y-2" dangerouslySetInnerHTML={{ __html: markdown(state.notes) }} /> : <p className="text-muted-foreground">No notes</p>}
-      </section>
-      <div className="flex items-center gap-2">
-        <Button variant="secondary" className="h-11 w-11 min-w-0 px-0" aria-label="Smaller notes" onClick={() => setSize((n) => Math.max(MIN, n - 2))}><Minus /></Button>
-        <Button variant="secondary" className="h-11 w-11 min-w-0 px-0" aria-label="Larger notes" onClick={() => setSize((n) => Math.min(MAX, n + 2))}><Plus /></Button>
-        <Button variant="secondary" className="h-11 flex-1" aria-label={state.running ? "Pause timer" : "Start timer"} leadingIcon={state.running ? Pause : Play} onClick={() => send({ type: "timer", action: "toggle" })}>{state.running ? "Pause" : "Start"}</Button>
-        <Button variant="secondary" className="h-11 flex-1" leadingIcon={RotateCcw} onClick={reset}>{armed ? "Tap to reset" : "Reset"}</Button>
+    // 세로 폰: 한 열. 가로 폰: 왼쪽에 노트, 오른쪽에 컨트롤(높이가 낮아 한 열이면 노트가 거의 안 남는다).
+    <div className="mx-auto flex h-full max-w-xl flex-col gap-3 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] touch-manipulation landscape:max-w-none landscape:flex-row">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+        <header className="flex items-baseline gap-3">
+          <h1 className="text-subtitle font-medium tabular-nums" aria-label="Current slide">{state.slide} / {state.total}</h1>
+          <span className="min-w-0 flex-1 line-clamp-2 break-words text-body text-muted-foreground">{state.title}</span>
+          <span className="text-body tabular-nums" role="timer" aria-label="Elapsed time">{hms(state.elapsed)}</span>
+        </header>
+        {(lost || !online || err) && <p role="status" className="rounded bg-hover px-2 py-1 text-caption text-foreground">{lost ? "Connection lost. Reconnecting..." : !online ? "The presenter screen is offline." : err}</p>}
+        <section aria-label="Speaker notes" tabIndex={0} className="min-h-0 flex-1 overflow-y-auto rounded-lg bg-hover p-3" style={{ fontSize: size }}>
+          {state.notes ? <div className="space-y-2" dangerouslySetInnerHTML={{ __html: markdown(state.notes) }} /> : <p className="text-muted-foreground">No notes</p>}
+        </section>
       </div>
-      <div className="flex items-center gap-2">
-        <Button variant="secondary" className="h-11 flex-1" aria-pressed={blankOn === "black"} active={blankOn === "black"} onClick={() => send({ type: "blank", mode: blankOn === "black" ? "off" : "black" })}>Black</Button>
-        <Button variant="secondary" className="h-11 flex-1" aria-pressed={blankOn === "white"} active={blankOn === "white"} onClick={() => send({ type: "blank", mode: blankOn === "white" ? "off" : "white" })}>White</Button>
-      </div>
-      <div className="flex gap-2">
-        <Button variant="secondary" className={cn(big)} leadingIcon={ChevronLeft} aria-label="Previous slide" disabled={!online} onClick={() => send({ type: "prev" })}>Prev</Button>
-        <Button variant="primary" className={cn(big)} trailingIcon={ChevronRight} aria-label="Next slide" disabled={!online} onClick={() => send({ type: "next" })}>Next</Button>
+      <div className="flex flex-col gap-3 landscape:w-72 landscape:shrink-0 landscape:justify-end">
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" className="h-11 w-11 min-w-0 px-0" aria-label="Smaller notes" onClick={() => setSize((n) => Math.max(MIN, n - 2))}><Minus /></Button>
+          <Button variant="secondary" className="h-11 w-11 min-w-0 px-0" aria-label="Larger notes" onClick={() => setSize((n) => Math.min(MAX, n + 2))}><Plus /></Button>
+          <Button variant="secondary" className="h-11 min-w-0 flex-1" aria-label={state.running ? "Pause timer" : "Start timer"} leadingIcon={state.running ? Pause : Play} onClick={() => send({ type: "timer", action: "toggle" })}>{state.running ? "Pause" : "Start"}</Button>
+          <Button variant="secondary" className="h-11 min-w-0 flex-1" leadingIcon={RotateCcw} onClick={reset}>{armed ? "Tap again" : "Reset"}</Button>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" className="h-11 flex-1" aria-pressed={blankOn === "black"} active={blankOn === "black"} onClick={() => send({ type: "blank", mode: blankOn === "black" ? "off" : "black" })}>Black</Button>
+          <Button variant="secondary" className="h-11 flex-1" aria-pressed={blankOn === "white"} active={blankOn === "white"} onClick={() => send({ type: "blank", mode: blankOn === "white" ? "off" : "white" })}>White</Button>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="secondary" className={cn(big, "flex-1")} leadingIcon={ChevronLeft} aria-label="Previous slide" disabled={!online || lost} onClick={() => send({ type: "prev" })}>Previous</Button>
+          <Button variant="primary" className={cn(big, "flex-[2]")} trailingIcon={ChevronRight} aria-label="Next slide" disabled={!online || lost} onClick={() => send({ type: "next" })}>Next</Button>
+        </div>
       </div>
     </div>
   );

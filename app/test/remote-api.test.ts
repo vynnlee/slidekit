@@ -151,3 +151,47 @@ test("parseState: 범위 밖 값은 0으로 바꿔 통과시키지 않고 거절
   expect(parseState({ slide: 1, total: 10000 })).toBeNull();
   expect(parseState({ slide: 3, total: 3, title: "", notes: "", elapsed: 0, running: false, blank: null, target: 0 })).not.toBeNull();
 });
+
+test("티켓: 한 번만 쓰이고, 15초 뒤 만료되고, 다른 세션이나 다른 덱의 티켓은 거절한다", () => {
+  const { hub, tick } = setup();
+  const r = hub.start("d")!;
+  const { token } = hub.join("d", r.code) as { token: string };
+  expect(hub.issueTicket("d", "viewer", "bad")).toBeNull();
+  expect(hub.issueTicket("d", "host", token)).toBeNull(); // 역할과 자격이 맞아야 한다
+  expect(hub.issueTicket("d", "viewer", r.host)).toBeNull();
+  expect(hub.issueTicket("nope", "host", r.host)).toBeNull();
+  const t1 = hub.issueTicket("d", "viewer", token)!;
+  const v = sink();
+  expect(hub.attach("d", t1, v.s)).not.toBeNull();
+  expect(v.got[0]).toEqual(["presence", { online: false }]);
+  expect(hub.attach("d", t1, sink().s)).toBeNull(); // 재사용 거절
+  const t2 = hub.issueTicket("d", "host", r.host)!;
+  tick(15_001);
+  expect(hub.attach("d", t2, sink().s)).toBeNull(); // 만료
+  // 다른 덱에는 쓸 수 없고, 쓰려 한 티켓도 소모된다
+  const other = hub.start("e")!;
+  const t3 = hub.issueTicket("d", "host", r.host)!;
+  expect(hub.attach("e", t3, sink().s)).toBeNull();
+  expect(hub.attach("d", t3, sink().s)).toBeNull();
+  void other;
+  // 세션이 새로 시작되면(옛 키 무효) 옛 티켓도 무효
+  const t4 = hub.issueTicket("d", "host", r.host)!;
+  hub.stop("d", r.host);
+  tick(31_000);
+  hub.start("d");
+  expect(hub.attach("d", t4, sink().s)).toBeNull();
+});
+
+test("티켓: 발표자 티켓은 발표자 연결, 휴대폰 티켓은 휴대폰 연결로 열리고 세션당 미사용 20개까지 발급", () => {
+  const { hub } = setup();
+  const r = hub.start("d")!;
+  const { token } = hub.join("d", r.code) as { token: string };
+  const h = sink(), v = sink();
+  hub.attach("d", hub.issueTicket("d", "host", r.host)!, h.s);
+  hub.attach("d", hub.issueTicket("d", "viewer", token)!, v.s);
+  expect(v.got.at(-1)).toEqual(["presence", { online: true }]); // 발표자 연결이 보인다
+  hub.command("d", token, { type: "next" });
+  expect(h.got.some(([e]) => e === "cmd")).toBe(true);
+  for (let i = 0; i < 20; i++) expect(hub.issueTicket("d", "viewer", token)).not.toBeNull();
+  expect(hub.issueTicket("d", "viewer", token)).toBeNull();
+});

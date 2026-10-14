@@ -39,12 +39,26 @@ const until = async (fn, ms = 6000) => { const t = Date.now(); while (Date.now()
   await dlg.getByRole('button', { name: 'Close' }).click().catch(() => host.keyboard.press('Escape'));
 
   const phoneCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  // EventSource 인스턴스를 기록해 두고(연결 끊김은 error 이벤트로 흉내 낸다: 이미 열린 SSE는 오프라인 에뮬레이션으로 끊기지 않는다)
+  await phoneCtx.addInitScript(() => { const E = window.EventSource; window.__es = []; window.EventSource = class extends E { constructor(...a) { super(...a); window.__es.push(this); } }; });
   const phone = await phoneCtx.newPage();
   phone.on('pageerror', (e) => errors.push(String(e)));
+  const sseUrls = []; phone.on('request', (r) => { if (r.url().includes('/events')) sseUrls.push(r.url()); });
   await phone.goto(addr.replace(/^https?:\/\/[^/]+/, BASE), { waitUntil: 'domcontentloaded' });
   check('휴대폰에 슬라이드 번호와 노트가 보인다', await until(async () => (await counter(phone)) === `1 / ${TOTAL}` && (await phone.getByText('Notes for cover').count()) === 1));
   check('교환 뒤 주소에서 코드가 지워진다', !phone.url().includes('code='), phone.url());
   check('발표자 화면이 접속 중으로 보인다(Prev, Next 활성)', await until(async () => await phone.getByRole('button', { name: 'Next slide' }).isEnabled()));
+
+  const tok = await phone.evaluate((id) => sessionStorage.getItem(`slidekit:remote:${id}`), DECK);
+  check('SSE 주소에는 1회용 티켓만 있고 세션 토큰은 없다', sseUrls.length >= 1 && sseUrls.every((u) => /[?&]ticket=/.test(u) && !u.includes(tok) && !/[?&]t=/.test(u)), sseUrls);
+  // 연결이 끊기면 안내를 보이고 돌아오면 새 티켓으로 다시 붙는다
+  await phone.route('**/ticket', (r) => r.abort()); // 새 티켓을 못 받는 동안은 다시 붙지 못한다
+  await phone.evaluate(() => window.__es.at(-1).dispatchEvent(new Event('error')));
+  check('연결이 끊기면 Connection lost 안내', await until(async () => (await phone.getByText(/Connection lost/).count()) === 1, 10000));
+  check('끊긴 동안 Next는 비활성', await phone.getByRole('button', { name: 'Next slide' }).isDisabled());
+  await phone.unroute('**/ticket');
+  check('돌아오면 안내가 사라지고 Next가 다시 활성', await until(async () => (await phone.getByText(/Connection lost/).count()) === 0 && await phone.getByRole('button', { name: 'Next slide' }).isEnabled(), 15000));
+  check('재연결은 새 티켓(주소가 늘어남)', sseUrls.length >= 2 && new Set(sseUrls).size === sseUrls.length, sseUrls);
 
   // 이동과 동기화
   const popP = hostCtx.waitForEvent('page', { timeout: 8000 });
@@ -72,6 +86,8 @@ const until = async (fn, ms = 6000) => { const t = Date.now(); while (Date.now()
   await phone.getByRole('button', { name: 'Pause timer' }).tap();
 
   // 터치 목표와 청중 창 비노출
+  const nextColors = await phone.getByRole('button', { name: 'Next slide' }).evaluate((b) => { const cs = getComputedStyle(b); return [cs.color, cs.backgroundColor]; });
+  check('Next 버튼의 글자색이 배경과 다르다(흰 바탕에 흰 글자였던 문제)', nextColors[0] !== nextColors[1], nextColors);
   const sizes = await Promise.all(['Previous slide', 'Next slide', 'Start timer'].map(async (n) => (await phone.getByRole('button', { name: n }).boundingBox())));
   check('주요 버튼이 44px 이상', sizes.every((b) => b && b.height >= 44 && b.width >= 44), sizes);
   check('청중 창에는 리모컨 대화상자와 코드가 없다', aud && (await aud.getByText(/Phone remote|Start remote/).count()) === 0 && !(await aud.content()).includes(code.replace('-', '')));

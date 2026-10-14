@@ -54,7 +54,7 @@ export function DeckSettingsForm({ meta, onChange, error }: { meta: DeckMeta; on
   const langs = LANGS.some(([c]) => c === lang) ? LANGS : [...LANGS, [lang, lang] as [string, string]];
   const vis = meta.visibility === "password" ? "password" : "public";
   return (
-    <div className="flex flex-col gap-3 pt-2">
+    <div className="flex flex-col gap-3 pt-3">
       <TextRow field="title" label="Title (browser tab and deck list)" hint="Cover text is not changed." meta={meta} onChange={onChange} />
       <TextRow field="subtitle" label="Subtitle" meta={meta} onChange={onChange} />
       <TextRow field="author" label="Author" meta={meta} onChange={onChange} />
@@ -116,7 +116,7 @@ export function DeckSettingsDialog({ folder, title, onClose, onSaved }: { folder
       <DialogContent size="sm">
         <DialogTitle>Deck settings</DialogTitle>
         <DialogDescription>{title ?? folder}. Changes are saved as you make them.</DialogDescription>
-        {state ? <DeckSettingsForm meta={state.meta} onChange={change} error={error} /> : <p role={error ? "alert" : "status"} className="pt-2 text-caption text-muted-foreground">{error || "Loading"}</p>}
+        {state ? <DeckSettingsForm meta={state.meta} onChange={change} error={error} /> : <p role={error ? "alert" : "status"} className="pt-2 text-caption text-muted-foreground">{error || "Loading..."}</p>}
       </DialogContent>
     </Dialog>
   );

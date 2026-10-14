@@ -7,7 +7,7 @@ const labels = (m: MenuItem[]) => m.map((x) => (x.type === "separator" ? "-" : x
 
 test("덱 메뉴: 순서와 구분선, 파괴적 항목은 맨 아래 빨강", () => {
   const m = deckMenu(acts);
-  expect(labels(m)).toEqual(["Open", "Present", "-", "Rename", "Duplicate", "-", "Move to trash"]);
+  expect(labels(m)).toEqual(["Open", "Present", "-", "Rename...", "Duplicate", "-", "Move to trash"]);
   const last = m[m.length - 1];
   expect(last.type === "item" && last.destructive).toBe(true);
   expect(m.filter((x) => x.type === "item" && x.destructive).length).toBe(1);
@@ -65,14 +65,14 @@ test("코멘트 메뉴: 핀은 Open in panel이 맨 위, 해결됨이면 Reopen,
 
 test("덱 메뉴: settings를 주면 Duplicate 뒤에 Settings 항목이 생긴다", () => {
   const l = labels(deckMenu({ ...acts, settings: noop }));
-  expect(l.indexOf("Settings")).toBe(l.indexOf("Duplicate") + 1);
+  expect(l.indexOf("Settings...")).toBe(l.indexOf("Duplicate") + 1);
 });
 
 test("덱 메뉴: togglePin을 주면 Pin to top 또는 Unpin from top 항목이 Rename 위에 생긴다", () => {
   expect(labels(deckMenu({ ...acts, togglePin: noop, pinned: false }))).toContain("Pin to top");
   const l = labels(deckMenu({ ...acts, togglePin: noop, pinned: true }));
   expect(l).toContain("Unpin from top");
-  expect(l.indexOf("Unpin from top")).toBeLessThan(l.indexOf("Rename"));
+  expect(l.indexOf("Unpin from top")).toBeLessThan(l.indexOf("Rename..."));
 });
 
 test("코멘트 메뉴: Revert Claude's edit는 되돌릴 수 있을 때만 Resolve 바로 뒤에 들어간다", () => {

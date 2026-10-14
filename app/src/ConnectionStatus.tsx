@@ -41,7 +41,7 @@ export function ConnectionStatus() {
 
   const text = down ? "Server unreachable. Retrying..." : back ? "Reconnected" : "";
   return (
-    <div role="status" aria-live="polite" className="pointer-events-none fixed left-1/2 top-11 z-50 -translate-x-1/2">
+    <div role="status" aria-live="polite" className="pointer-events-none fixed left-1/2 top-11 z-[60] -translate-x-1/2">
       {text && <div className="rounded-md bg-surface-3 px-2 py-0.5 text-caption text-foreground shadow-surface-3">{text}</div>}
     </div>
   );

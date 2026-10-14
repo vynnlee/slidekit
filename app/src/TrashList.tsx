@@ -7,7 +7,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { StatusPage } from "./StatusPage";
 import { ContextMenu, useContextMenu } from "@/components/ui/context-menu";
 import { trashMenu } from "@/lib/menu-model";
-import { toast } from "./Toaster";
+import { TOAST, toast } from "./Toaster";
 import { UNREACHABLE, isDown, onReconnect } from "@/lib/connection";
 
 type Item = { entry: string; folder: string; title: string; deletedAt: string };
@@ -40,7 +40,7 @@ export function TrashList({ onRestored }: { onRestored: () => void }) {
     catch (e) { setErr((e as Error).message); return false; }
     finally { setBusy(false); }
   };
-  const restore = (i: Item) => run(async () => { const r = await call(`/api/trash/${encodeURIComponent(i.entry)}/restore`, "POST"); onRestored(); toast(`Restored ${i.title}`); return r; });
+  const restore = (i: Item) => run(async () => { const r = await call(`/api/trash/${encodeURIComponent(i.entry)}/restore`, "POST"); onRestored(); toast(`Restored ${i.title}`, { ms: TOAST.info }); return r; });
   const purge = async () => {
     const i = purging;
     if (i && (await run(() => call(`/api/trash/${encodeURIComponent(i.entry)}/purge`, "POST", { confirm: typed })))) setPurging(null);
@@ -54,6 +54,7 @@ export function TrashList({ onRestored }: { onRestored: () => void }) {
           {err}{items === null && <Button variant="ghost" size="compact" onClick={() => { setErr(""); load(); }}>Retry</Button>}
         </p>
       )}
+      {items === null && !err && <p role="status" className="text-caption text-muted-foreground">Loading...</p>}
       {items?.length === 0 && <StatusPage as="h2" title="Trash is empty">Decks you move to Trash show up here.</StatusPage>}
       <ul className="flex flex-col gap-0.5">
         {items?.map((i) => (
@@ -70,7 +71,7 @@ export function TrashList({ onRestored }: { onRestored: () => void }) {
         <DialogContent size="sm">
           <DialogTitle>Delete forever?</DialogTitle>
           <DialogDescription>This cannot be undone. Type {purging?.folder} to confirm.</DialogDescription>
-          <form className="flex flex-col gap-2 pt-2" onSubmit={(e) => { e.preventDefault(); if (typed === purging?.folder) purge(); }}>
+          <form className="flex flex-col gap-2 pt-3" onSubmit={(e) => { e.preventDefault(); if (typed === purging?.folder) purge(); }}>
             <Field autoFocus aria-label="Deck name" value={typed} onChange={(e) => setTyped(e.target.value)} />
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" size="compact" onClick={() => setPurging(null)}>Cancel</Button>

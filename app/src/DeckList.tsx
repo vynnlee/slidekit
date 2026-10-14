@@ -14,7 +14,7 @@ import { TrashList } from "./TrashList";
 import { DeckSettingsDialog } from "./DeckSettings";
 import { ShortcutHelp, type KeyGroup } from "./ShortcutHelp";
 import { StatusPage } from "./StatusPage";
-import { toast } from "./Toaster";
+import { TOAST, toast } from "./Toaster";
 import { readRecent } from "@/lib/recent";
 import { readPins, writePins } from "@/lib/pins";
 import { acquireThumb, pauseThumbs } from "@/lib/thumb-queue";
@@ -32,7 +32,7 @@ const TEMPLATE_HINT: Record<string, string> = { talk: "Cover, chapters, content,
 // 단축키 안내('?')의 내용. 이 화면의 키만 담는다.
 const KEY_GROUPS: KeyGroup[] = [
   ["Decks", [["Left, Right, Up, Down", "Move between decks"], ["Enter", "Open the deck"], ["Cmd+Enter", "Present the deck"], ["Shift+F10", "Deck menu (or right-click)"]]],
-  ["General", [["Cmd+K", "Search decks, slides and actions"], ["?", "Show this list"], ["Esc", "Close a menu or dialog"]]],
+  ["General", [["Cmd+K", "Search decks, slides, and actions"], ["?", "Show this list"], ["Esc", "Close a menu or dialog"]]],
 ];
 const FILTERS = { all: "All", pinned: "Pinned", recent: "Recent", password: "Password" } as const;
 type Filter = keyof typeof FILTERS;
@@ -282,7 +282,7 @@ export function DeckList() {
   const present = (d: DeckEntry) => go(`/present/${encodeURIComponent(d.id)}`);
   const duplicate = async (d: DeckEntry) => {
     const j = await run(() => api(`/api/decks/${encodeURIComponent(d.folder)}/duplicate`, "POST"));
-    if (j) toast(`Duplicated ${d.title}`);
+    if (j) toast(`Duplicated ${d.title}`, { ms: TOAST.info });
   };
   const [published, setPublished] = useState<string | null>(null); // 이름을 바꿀 덱이 게시되어 있으면 그 주소
   const startRename = (d: DeckEntry) => { setPublished(null); fetch(`/api/decks/${encodeURIComponent(d.folder)}/published`).then((r) => r.json()).then((j) => j?.published && typeof j.url === "string" && setPublished(j.url)).catch(() => {}); setRenameTitle(d.title); setRenameFolder(d.folder); setFolderOpen(false); setRenameErr(""); setRenaming(d); };
@@ -471,7 +471,7 @@ export function DeckList() {
       <Dialog open={!!renaming} onOpenChange={(o) => !o && setRenaming(null)}>
         <DialogContent size="sm">
           <DialogTitle>Rename deck</DialogTitle>
-          <form className="flex flex-col gap-2 pt-2" onSubmit={(e) => { e.preventDefault(); doRename(); }}>
+          <form className="flex flex-col gap-2 pt-3" onSubmit={(e) => { e.preventDefault(); doRename(); }}>
             <Field autoFocus aria-label="Title" value={renameTitle} onChange={(e) => { setRenameTitle(e.target.value); setRenameErr(""); }} />
             {folderOpen ? (
               <>
@@ -491,7 +491,7 @@ export function DeckList() {
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent size="sm">
           <DialogTitle>New deck</DialogTitle>
-          <form className="flex flex-col gap-2 pt-2" onSubmit={(e) => { e.preventDefault(); if (name.trim() && !newErr) create(); }}>
+          <form className="flex flex-col gap-2 pt-3" onSubmit={(e) => { e.preventDefault(); if (name.trim() && !newErr) create(); }}>
             <Field autoFocus aria-label="Title" placeholder="Title" maxLength={120} value={newTitle} onChange={(e) => onTitle(e.target.value)} />
             <Field aria-label="Folder" placeholder="folder-name" aria-invalid={!!newErr || undefined} value={name} onChange={(e) => { setName(e.target.value); setNameTouched(true); setErr(""); }} />
             <p role={newErr ? "alert" : undefined} className={newErr ? "text-caption text-destructive" : "text-caption text-muted-foreground"}>{newErr || (!nameTouched && /^deck-\d{4}(-\d+)?$/.test(name) ? "No Latin letters in the title, so the folder is named by date. You can edit it." : "Folder: lowercase letters and digits, separated by single hyphens")}</p>

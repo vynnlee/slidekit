@@ -10,7 +10,7 @@ import { go } from "./App";
 import { deckUrl, type DeckEntry, type Info, type Pos } from "@/lib/deck";
 import { chooseScreen, chosenScreen, listScreens, presentationOpen, startPresentation, warmScreens } from "@/lib/present";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
-import { toast } from "./Toaster";
+import { TOAST, toast } from "./Toaster";
 import { markdown } from "@/lib/markdown";
 import { saveRun, type Run } from "@/lib/rehearsals";
 import { isLocalOrigin, remoteUrl, useRemoteHost, type Cmd } from "@/lib/remote-host";
@@ -33,12 +33,12 @@ const defaultView = Object.fromEntries(Object.keys(VIEW_ITEMS).map((k) => [k, tr
 
 // 단축키 안내('?')의 내용. 이 화면의 키만 담는다.
 const KEY_GROUPS: KeyGroup[] = [
-  ["Slides", [["Left, Right", "Previous or next slide"], ["Cmd+K", "Search slides and actions"], ["?", "Show this list"]]],
+  ["Slides", [["Left, Right", "Previous or next slide"], ["Cmd+K", "Search slides, chapters, and actions"], ["?", "Show this list"]]],
   ["Notes", [["+, -", "Notes size"], ["PgUp, PgDn", "Scroll notes"]]],
   ["Timer", [["T", "Start or pause"], ["R", "Reset (press twice)"]]],
   ["Presentation window", [["F", "Full screen"], ["B, W", "Black or white screen (in its window)"]]],
 ];
-const SHORTCUTS = [["← →", "Move"], ["Cmd K", "Search slides and actions"], ["?", "All shortcuts"], ["F", "Full screen"], ["+ -", "Notes size"], ["PgUp PgDn", "Scroll notes"], ["T", "Start or pause timer"], ["R", "Reset timer"], ["B W", "Blank presentation (in its window)"]];
+const SHORTCUTS = [["← →", "Move"], ["Cmd K", "Search slides, chapters, and actions"], ["?", "All shortcuts"], ["F", "Full screen"], ["+ -", "Notes size"], ["PgUp PgDn", "Scroll notes"], ["T", "Start or pause timer"], ["R", "Reset timer"], ["B W", "Blank presentation (in its window)"]];
 const mmss = (s: number) => `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
 const pad = (n: number) => String(n).padStart(2, "0");
 const hms = (s: number) => `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
@@ -268,7 +268,7 @@ export function Presenter({ id }: { id: string }) {
     setCheck(null);
     setErr(null);
     // 성공 안내는 잠깐 토스트로만 보이고, 막힌 경우만 툴바에 남는다.
-    const note = (m: string) => toast(m, { ms: 4000 });
+    const note = (m: string) => toast(m, { ms: TOAST.long });
     const r = deck ? await startPresentation(deck.folder, pos.slide, note) : null;
     if (r === "Popup blocked") setErr("Popup blocked. Allow popups for this site, then press Present."); else if (r) note(r);
     setScreens(listScreens());
@@ -295,11 +295,11 @@ export function Presenter({ id }: { id: string }) {
   const [remoteErr, setRemoteErr] = useState("");
   // 팔레트(Cmd+K): 슬라이드(번호, 제목, 노트 글자로 찾기), 장, 발표 동작. 키 충돌은 기존 입력 포커스 규칙이 그대로 막는다(입력 칸에 있으면 단축키는 동작하지 않는다).
   const setBlankMode = (mode: "black" | "white" | "off") => {
-    if (win !== true) { toast("Open the presentation window first", { ms: 2500 }); return; }
+    if (win !== true) { toast("Open the presentation window first", { ms: TOAST.info }); return; }
     send({ type: "setblank", mode });
   };
   const paletteItems: CommandMenuItemData[] = !info ? [] : [
-    ...info.slides.map((s): CommandMenuItemData => ({ value: `slide:${s.n}`, label: `${s.n}. ${s.title ?? s.kind}`, description: info.chapters.find((c) => c.n === s.chapter)?.title, group: "Slides", keywords: [s.notes.slice(0, 400), String(s.n)], onSelect: () => goto(s.n) })),
+    ...info.slides.map((s): CommandMenuItemData => ({ value: `slide:${s.n}`, label: `${s.n}. ${s.title ?? s.kind.charAt(0).toUpperCase() + s.kind.slice(1)}`, description: info.chapters.find((c) => c.n === s.chapter)?.title, group: "Slides", keywords: [s.notes.slice(0, 400), String(s.n)], onSelect: () => goto(s.n) })),
     ...info.chapters.map((c): CommandMenuItemData => ({ value: `chapter:${c.n}`, label: c.title, description: "Chapter", group: "Chapters", onSelect: () => goto(info.slides.find((s) => s.chapter === c.n)?.n ?? 1) })),
     { value: "act-present", label: win ? "Focus presentation window" : "Present", group: "Actions", onSelect: present },
     { value: "act-remote", label: "Phone remote", description: "Use your phone as a remote", group: "Actions", onSelect: () => setRemoteOpen(true) },
@@ -487,7 +487,7 @@ export function Presenter({ id }: { id: string }) {
       </div>
       <CommandMenuDialog open={palette} onOpenChange={setPalette} title="Search" description="Go to a slide or run an action">
         <CommandMenu items={paletteItems}>
-          <CommandMenuInput placeholder="Slide number, title, notes, or action" />
+          <CommandMenuInput placeholder="Slides, chapters, notes, or actions" />
           <CommandMenuList renderItem={(item) => (
             <CommandMenuItem value={item.value}>
               <span className="flex min-w-0 flex-1 items-baseline gap-2">
@@ -506,7 +506,7 @@ export function Presenter({ id }: { id: string }) {
           <DialogTitle>Phone remote</DialogTitle>
           <DialogDescription>Control the slides from your phone. The code works once and expires in 2 hours.</DialogDescription>
           {remote.session ? (
-            <div className="flex flex-col gap-2 pt-2">
+            <div className="flex flex-col gap-2 pt-3">
               <RemoteQr text={remoteUrl(deck.folder, remote.session.code)} />
               <Field readOnly aria-label="Remote address" value={remoteUrl(deck.folder, remote.session.code)} onFocus={(e) => e.currentTarget.select()} />
               <p className="text-body tabular-nums">Code: <span aria-label="Pairing code" className="font-medium">{remote.session.code}</span></p>
@@ -517,7 +517,7 @@ export function Presenter({ id }: { id: string }) {
               </div>
             </div>
           ) : (
-            <div className="flex flex-col gap-2 pt-2">
+            <div className="flex flex-col gap-2 pt-3">
               <p role={remoteErr ? "alert" : undefined} className={remoteErr ? "text-caption text-destructive" : "text-caption text-muted-foreground"}>{remoteErr || "Anyone with the address can move the slides until you stop the remote."}</p>
               <Button variant="primary" size="compact" className="self-end" onClick={startRemote}>Start remote</Button>
             </div>

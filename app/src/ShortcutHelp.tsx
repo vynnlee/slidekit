@@ -12,7 +12,7 @@ export function Keys({ combo }: { combo: string }) {
     <span className="flex items-center gap-1">
       {combo.split(", ").map((c, ci) => (
         <span key={ci} className="flex items-center gap-0.5">
-          {c.split("+").map((k) => <kbd key={k} className="min-w-5 rounded bg-surface-3 px-1 py-0.5 text-center font-sans text-micro tabular-nums text-foreground">{k === "Cmd" && !mac ? "Ctrl" : (GLYPH[k] ?? k)}</kbd>)}
+          {(c === "+" ? ["+"] : c.split("+")).map((k) => <kbd key={k} className="min-w-5 rounded bg-surface-3 px-1 py-0.5 text-center font-sans text-micro tabular-nums text-foreground">{k === "Cmd" && !mac ? "Ctrl" : (GLYPH[k] ?? k)}</kbd>)}
         </span>
       ))}
     </span>

@@ -212,7 +212,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.getByRole('menu').waitFor();
   const mb = await menuBox();
   check('메뉴가 포인터 오른쪽 아래에서 시작한다', mb && mb.x >= px - 1 && mb.x <= px + 12 && mb.y >= py - 1 && mb.y <= py + 12, [mb, px, py]);
-  check('항목 순서', JSON.stringify(await page.getByRole('menuitem').allInnerTexts().then((a) => a.map((t) => t.split('\n')[0].trim()))) === JSON.stringify(['Open', 'Present', 'Pin to top', 'Rename', 'Duplicate', 'Settings', 'Move to trash']), await page.getByRole('menuitem').allInnerTexts());
+  check('항목 순서', JSON.stringify(await page.getByRole('menuitem').allInnerTexts().then((a) => a.map((t) => t.split('\n')[0].trim()))) === JSON.stringify(['Open', 'Present', 'Pin to top', 'Rename...', 'Duplicate', 'Settings...', 'Move to trash']), await page.getByRole('menuitem').allInnerTexts());
   check('단축키 키캡(Open과 Present)', (await page.getByRole('menuitem', { name: 'Open' }).getAttribute('data-shortcut')) === '↵' && /↵$/.test((await page.getByRole('menuitem', { name: 'Present' }).getAttribute('data-shortcut')) || ''));
   const col = await page.getByRole('menuitem', { name: 'Move to trash' }).evaluate((e) => [...e.querySelectorAll('span')].map((x) => getComputedStyle(x).color));
   check('파괴적 항목은 빨강(--destructive)', col.length > 0 && col.every((c) => c === 'rgb(248, 113, 113)'), col);
@@ -224,7 +224,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.locator('body').click({ position: { x: 5, y: 5 } });
   await page.keyboard.press('Shift+?');
   const kh = page.getByRole('dialog', { name: 'Shortcuts' });
-  check("'?'로 단축키 안내가 열린다", await until(async () => (await kh.count()) === 1 && (await kh.getByText('Search decks, slides and actions').count()) === 1));
+  check("'?'로 단축키 안내가 열린다", await until(async () => (await kh.count()) === 1 && (await kh.getByText('Search decks, slides, and actions').count()) === 1));
   await page.keyboard.press('Escape');
   check('Esc로 닫힌다(단축키 안내)', await until(async () => (await kh.count()) === 0));
   // 핀과 필터 칩: 메뉴의 Pin to top으로 맨 앞에 고정되고(정렬과 무관), 칩으로 줄이며, 새로고침해도 남는다

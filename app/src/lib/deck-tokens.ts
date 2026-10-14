@@ -49,7 +49,7 @@ function parseStyles(src: string): StyleBlock[] {
     let depth = 0;
     for (let i = 0; i < masked.length; i++) {
       if (masked[i] === "{") {
-        if (depth === 0 && /(?:^|[}\s,;])(?:html\s*)?:root\s*$/i.test(masked.slice(Math.max(0, i - 40), i))) {
+        if (depth === 0 && masked.slice(0, i).split(/[};]/).pop()!.split(",").some((sel) => /^\s*(?:html\s*)?:root\s*$/i.test(sel))) {
           let d = 1, j = i + 1;
           while (j < masked.length && d) { if (masked[j] === "{") d++; else if (masked[j] === "}") d--; j++; }
           if (!d) roots.push({ open: start + i + 1, close: start + j - 1, decls: declsOf(src, blank(src, 0, 0), 0, 0) });

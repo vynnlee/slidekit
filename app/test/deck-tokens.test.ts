@@ -38,3 +38,10 @@ test("잘못된 입력 거부", () => {
 test("왕복 안정: 같은 값으로 설정하면 글자가 그대로", () => {
   for (const [k, v] of Object.entries(readTokens(A))) expect(setToken(A, k, v)).toBe(A);
 });
+test("선택자 목록 안의 :root는 어느 자리든 잡는다(`:root, .x`, `.x, :root`, `html:root`는 제외)", () => {
+  expect(readTokens(head("    :root, .x { --a: 1; }"))).toEqual({ "--a": "1" });
+  expect(readTokens(head("    .x,\n    :root { --a: 2; }"))).toEqual({ "--a": "2" });
+  expect(readTokens(head("    .x, .y { --a: 3; }"))).toEqual({});
+  expect(readTokens(head("    h1 { color: red; } :root, .x { --a: 4; }"))).toEqual({ "--a": "4" });
+  expect(setToken(head("    :root, .x { --a: 1; }"), "--a", "9")).toContain(":root, .x { --a: 9; }");
+});

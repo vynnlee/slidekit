@@ -7,7 +7,10 @@ export type KvOps = {
   del(key: string): void;
 };
 
-/** 반환값은 종료 코드: 0 완료, 1 오류, 2 --yes 없이 목록만 보임 */
+/** 로그에 넣는 KV의 값(제목, 덱 이름)은 한 줄로 정리한다: 줄바꿈, 제어 문자, 양방향 제어 문자를 공백으로, 80자까지. 로그를 읽는 쪽이 줄 내용으로 판정을 속지 않게 한다. */
+const clean = (s: string) => s.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+
+/** 반환값은 종료 코드: 0 완료, 1 오류, 2 --yes 없이 목록만 보임, 3 게시되지 않은 덱 */
 export function runUnpublish(deck: string, o: { yes: boolean; dry: boolean }, ops: KvOps | null, log: (s: string) => void = console.log): number {
   const keys = [`meta:${deck}`, `html:${deck}`]; // meta를 먼저 지운다: 중간에 멈춰도 Worker는 meta가 없으면 404를 주므로 본문(html)이 남아도 열리지 않는다
   if (o.dry || !ops) {
@@ -17,12 +20,12 @@ export function runUnpublish(deck: string, o: { yes: boolean; dry: boolean }, op
   }
   const raw = ops.get(`meta:${deck}`);
   if (raw === null) {
-    const others = ops.list("meta:").map((k) => k.slice(5));
+    const others = ops.list("meta:").map((k) => clean(k.slice(5)));
     log(`게시된 덱이 아닙니다: ${deck}. ${others.length ? `게시된 덱: ${others.join(", ")}` : "게시된 덱이 없습니다."}`);
-    return 1;
+    return 3;
   }
   let vis = "알 수 없음", title = "";
-  try { const m = JSON.parse(raw); vis = m.visibility === "password" ? "비밀번호" : "공개"; title = typeof m.title === "string" ? m.title : ""; } catch { /* 깨진 meta도 지울 수 있다 */ }
+  try { const m = JSON.parse(raw); vis = m.visibility === "password" ? "비밀번호" : "공개"; title = typeof m.title === "string" ? clean(m.title) : ""; } catch { /* 깨진 meta도 지울 수 있다 */ }
   const counters = ops.list(`rl:${deck}:`);
   log(`게시 취소 대상: ${deck}${title ? ` ("${title}")` : ""}, 공개 범위 ${vis}`);
   log("지울 KV(DECKS) 키:");

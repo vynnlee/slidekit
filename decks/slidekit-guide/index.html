@@ -63,7 +63,7 @@
     <div class="node"><span class="t">slidekit new &lt;이름&gt;</span><span class="d">새 덱을 만든다. 덱 목록에서도 만들 수 있다</span></div>
     <div class="node"><span class="t">편집기</span><span class="d">레이어, 캔버스, 속성 패널, 노트를 한 화면에서 쓴다</span></div>
   </div>
-  <p>더블클릭하면 글자를 고친다. 입력이 1.5초 멈추면 자동 저장하고 Cmd+S로도 저장한다.</p>
+  <p>클릭은 최상위 요소, 더블클릭은 한 단계 안쪽, Cmd+클릭은 가장 안쪽을 고른다. 입력이 1.5초 멈추면 자동 저장하고 Cmd+S로도 저장한다. 저장이 실패하면 알림이 뜨고 10초마다, 네트워크가 돌아오면 다시 시도하며 Retry 단추도 있다.</p>
   <aside data-notes>앱 실행 한 줄이면 덱 목록이 열린다.
 
 **편집은 한 화면**에서 끝나고, 저장은 자동이다.</aside>
@@ -71,13 +71,23 @@
 <section data-slide="content">
 <h2>편집기의 도구를 한곳에서 쓴다</h2>
 <div class="flow">
-<div class="node"><span class="t">Cmd+K</span><span class="d">명령 팔레트에서 슬라이드로 이동하고 자주 쓰는 동작을 실행한다</span></div>
+<div class="node"><span class="t">Cmd+K</span><span class="d">명령 팔레트. 처음에는 Present, Add slide, Find, Add comment, Keyboard shortcuts를 보여 준다</span></div>
 <div class="node"><span class="t">Cmd+F</span><span class="d">찾기와 바꾸기. 슬라이드 글자를 한꺼번에 고친다</span></div>
-<div class="node"><span class="t">Cmd+G</span><span class="d">선택한 요소를 그룹으로 묶는다. 채우기와 배경에는 그라디언트도 쓴다</span></div>
+<div class="node"><span class="t">Cmd+G</span><span class="d">선택을 그룹으로 묶고 Shift+Cmd+G로 푼다. Cmd+Alt+C와 V는 스타일 복사와 붙여넣기</span></div>
 </div>
-<p>단축키 목록은 Shortcuts 패널에서 본다.</p>
+<p>우클릭 메뉴(요소, 그룹, 빈 곳, Layers, 필름스트립 타일), 글자 스타일 프리셋, 이미지 붙여넣기와 끌어 놓기도 있다. 전체 목록은 Keyboard shortcuts(Cmd+/)에서 본다.</p>
 <aside data-notes>모든 도구는 **키보드로 닿는다**. 그룹은 요소를 한 덩어리로 옮기고 자식의 스타일은 그대로 둔다.
-그라디언트는 Fill과 Background 항목에서 고른다.</aside>
+그라디언트는 색상 선택기의 Gradient 탭에서 고른다.</aside>
+</section>
+<section data-slide="content">
+<h2>색은 색상 선택기에서 고른다</h2>
+<div class="flow">
+<div class="node"><span class="t">Gradient</span><span class="d">Fill과 Background에서 스톱 2~4개의 선형 그라디언트를 만든다</span></div>
+<div class="node"><span class="t">Deck colors</span><span class="d">덱 토큰을 고르면 var()로 연결되어 토큰을 바꿀 때 함께 바뀐다</span></div>
+<div class="node"><span class="t">Recent</span><span class="d">최근 색과 글자색 대비 칩을 함께 보여 준다</span></div>
+</div>
+<p>PDF에서도 그라디언트는 벡터로 남는다.</p>
+<aside data-notes>**토큰으로 연결한 색**은 테마를 바꿀 때 같이 바뀐다. 대비 칩은 글자와 배경의 WCAG 대비를 알려 준다.</aside>
 </section>
 <section data-slide="content">
 <h2>저장하면 버전이 남는다</h2>
@@ -104,7 +114,7 @@
     <div class="key"><span class="k">F  O</span><span class="d">F는 전체화면, O는 전체 보기이다.</span></div>
     <div class="key"><span class="k">B  W</span><span class="d">화면을 검게 또는 희게 가린다.</span></div>
   </div>
-  <p>숫자를 입력하고 Enter를 누르면 그 번호의 장으로 간다. 발표자 화면은 현재와 다음 슬라이드, 노트, 타이머를 보여 주고 외장 모니터에 발표 화면을 띄운다.</p>
+  <p>편집기에서는 Cmd+Enter가 현재 슬라이드부터, Shift+Cmd+Enter가 처음부터 발표한다. 발표 중 숫자를 입력하고 Enter를 누르면 그 번호의 장으로 간다. 발표자 화면은 현재와 다음 슬라이드, 노트, 타이머를 보여 주고 외장 모니터에 발표 화면을 띄운다.</p>
   <aside data-notes>이동 수단을 방향키로 제한한 이유는 **발표 중 오작동을 막기 위해서**이다.
 
 발표자 화면의 항목은 필요한 것만 켜 둔다. 외장 모니터는 Chrome 계열 브라우저에서 쓴다.</aside>
@@ -161,7 +171,7 @@
     <div class="key"><span class="k">quote</span><span class="d">인용과 출처를 보여 준다.</span></div>
     <div class="key"><span class="k">image-full</span><span class="d">이미지가 슬라이드를 채우고 글은 아래쪽에 겹친다.</span></div>
   </div>
-  <p>본문 슬라이드에 <code>data-layout</code>을 달면 된다. 없으면 제목과 본문이다. 목록은 <code>slidekit layouts</code>로 본다.</p>
+  <p>본문 슬라이드에 <code>data-layout</code>을 달면 된다. 없으면 제목과 본문이다. 목록은 <code>slidekit layouts</code>로 보고, 편집기에서는 Add slide 메뉴, 필름스트립 타일 우클릭의 Layout(숫자 키 1~5), Inspector의 Layout 칩으로 고른다.</p>
   <aside data-notes>레이아웃은 슬라이드 **종류가 아니라 본문의 변형**이다. 종류 네 가지 규칙은 그대로이다.
 
 편집기에서는 슬라이드를 추가할 때 고르고 Inspector에서 바꾼다.</aside>
@@ -247,7 +257,7 @@
     <div class="node"><span class="t">스킬</span><span class="d">저장소의 slidekit 스킬을 읽은 AI가 규격에 맞는 덱을 새로 만든다</span></div>
     <div class="node"><span class="t">lint</span><span class="d">slidekit lint가 규격 위반을 알려 준다</span></div>
   </div>
-  <p>코멘트는 파일에도 저장된다(Claude Code Channels).</p>
+  <p>편집기에서는 C 키, 우클릭, 팔레트의 Add comment로 쓰고, 열린 코멘트가 있는 슬라이드는 필름스트립에 점이 보인다. Send all은 한 번에 10개까지 보낸다. 코멘트는 파일에도 저장된다(Claude Code Channels).</p>
   <aside data-notes>AI와의 협업은 **코멘트, 스킬, lint** 세 도구로 이루어진다.
 
 코멘트는 파일에도 남아 놓친 것을 다시 가져올 수 있다.</aside>
@@ -283,7 +293,7 @@
     <div class="node"><span class="t">slidekit doctor</span><span class="d">실행 환경을 점검하고, 덱 이름을 주면 이미지, 대비, 노트를 점검한다. --layout은 넘침과 잘림을 잰다</span></div>
     <div class="node"><span class="t">비밀번호</span><span class="d">비밀번호 덱은 8자 이상이고 링크와 따로 전달한다</span></div>
   </div>
-  <p>Export 메뉴의 Publish도 올리기 전에 같은 점검을 보여 준다.</p>
+  <p>Export 메뉴의 Publish도 올리기 전에 같은 점검을 보여 준다. 편집기도 같은 기준의 넘침을 캔버스 외곽선, Layers의 경고 삼각형, 필름스트립 표시, View의 Safe area로 보여 준다.</p>
   <aside data-notes>배포는 **공개 사이트에 올리는 일**이다. lint 경고를 모두 읽고 올린다.
 
 비밀번호는 덱 안에 넣지 않는다.</aside>

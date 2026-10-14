@@ -15,7 +15,7 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 | `bundler/` | 덱을 외부 파일 없는 단일 HTML로 묶음(이미지, srcset, 글꼴 서브셋 인라인) |
 | `deploy/` | `deploy.ts`, `unpublish.ts`와 `kv.ts`, Cloudflare Worker(`worker/`: KV, 비밀번호 쿠키, Durable Object 시도 제한) |
 | `channel/` | Claude Code Channels MCP 서버(코멘트 전달) |
-| `scripts/` | `test.ts`(`bun run test` 집계), `lib/`(Playwright 공용 `pw.cjs`와 `pw-server.cjs`, 테스트 덱 사본 `test-deck.cjs`), `preview.ts`(미리보기 감독자), 스크린샷 도구(`inspector-shots`, `ux-shots-comments*`), `scan-secrets.*` |
+| `scripts/` | `test.ts`(`bun run test` 집계), `lib/`(Playwright 공용 `pw.cjs`와 `pw-server.cjs`, 테스트 덱 사본 `test-deck.cjs`), `preview.ts`(미리보기 감독자), 스크린샷 도구(`ux-shots-comments2`; 앱 전체 화면은 `app/test/audit-shots.cjs`, 리모컨은 `app/test/remote-qa.cjs`), `scan-secrets.*` |
 | `.claude/skills/slidekit/` | AI가 덱을 만들 때 읽는 스킬(규격, 토큰, 문구 규칙, 확인 방법) |
 | `spec/` | SPEC.md, INSPECTOR.md, INTERACTION.md |
 | `decks/`, `dist/` | 덱 원본, 번들과 PDF 산출물(dist는 git 무시, `decks/_*/`도 무시) |

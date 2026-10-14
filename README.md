@@ -6,6 +6,7 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 macOS와 [Bun](https://bun.sh)이 있으면 된다(요구사항 절 참고).
 
 ```sh
+git clone git@github.com:vynnlee/slidekit.git && cd slidekit   # 이미 받았다면 그 폴더에서 시작
 bun install                              # 의존성
 bun run slidekit new my-talk             # decks/my-talk/ 를 템플릿(talk)에서 만든다
 bun run slidekit                         # 앱을 연다: http://127.0.0.1:3200

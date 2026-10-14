@@ -8,6 +8,7 @@ import { routes as versionRoutes } from "./versions";
 import { routes as exportRoutes } from "./export-api";
 import { guardHost, guardRoutes } from "./guard";
 import { remoteRoutes } from "./remote-api";
+import { META_FIELDS, validateMeta } from "../engine/deck-meta";
 import { alreadyUp, openApp } from "./launch";
 import { createDeck, routes as deckRoutes } from "./decks-api";
 import { routes as searchRoutes } from "./search-api";
@@ -52,9 +53,12 @@ async function listDecks() {
     dirs.filter((d) => d.isDirectory()).map(async (d) => {
       const html = await Bun.file(join(root, "decks", d.name, "index.html")).text().catch(() => null);
       if (html === null) return null;
-      let meta: Record<string, unknown> = {};
+      let raw: Record<string, unknown> = {};
       const m = html.match(/<script[^>]*id="deck-meta"[^>]*>([\s\S]*?)<\/script>/);
-      try { if (m) meta = JSON.parse(m[1]); } catch {}
+      try { const v = m ? JSON.parse(m[1]) : {}; if (v && typeof v === "object" && !Array.isArray(v)) raw = v; } catch {}
+      // 목록에는 스키마를 통과한 알려진 필드만 내보낸다(잘못된 값과 알 수 없는 키는 걸러진다).
+      const bad = new Set(validateMeta(raw).map((i) => i.field));
+      const meta = Object.fromEntries(META_FIELDS.filter((f) => raw[f.key] !== undefined && raw[f.key] !== null && !bad.has(f.key)).map((f) => [f.key, raw[f.key]]));
       const title = (meta.title as string) ?? html.match(/<title>([^<]*)<\/title>/)?.[1] ?? d.name;
       const slides = (html.match(/<section\b[^>]*\bdata-slide=/g) ?? []).length;
       const modified = (await stat(join(root, "decks", d.name, "index.html"))).mtime.toISOString();
@@ -78,7 +82,11 @@ async function serveStatic(pathname: string) {
   const inside = async (base: string) => real!.startsWith((await realpath(base).catch(() => base)) + sep);
   if (!real || !((await inside(root)) || (await inside(join(root, "decks"))))) return null;
   const file = Bun.file(real);
-  return (await file.exists()) ? new Response(file) : null;
+  if (!(await file.exists())) return null;
+  // 덱이 올린 파일이 이 출처에서 스크립트로 실행되지 않게: 모든 정적 응답에 nosniff, assets/ 아래는 CSP sandbox까지(새 탭에서 열어도 스크립트가 돌지 않는다).
+  const headers: Record<string, string> = { "X-Content-Type-Options": "nosniff" };
+  if (rel.split(sep).includes("assets")) headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
+  return new Response(file, { headers });
 }
 
 Bun.serve({

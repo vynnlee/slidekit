@@ -76,6 +76,10 @@ const until = async (fn, ms = 6000) => { const t = Date.now(); while (Date.now()
   check('주요 버튼이 44px 이상', sizes.every((b) => b && b.height >= 44 && b.width >= 44), sizes);
   check('청중 창에는 리모컨 대화상자와 코드가 없다', aud && (await aud.getByText(/Phone remote|Start remote/).count()) === 0 && !(await aud.content()).includes(code.replace('-', '')));
 
+  // 진행 중인 세션은 키 없이 가로챌 수 없다
+  const hijack = await phone.evaluate(async (id) => fetch(`/api/remote/${id}/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then((r) => r.status), DECK);
+  check('발표 중인 세션을 키 없이 다시 시작하면 409', hijack === 409, hijack);
+  check('가로채기 시도 뒤에도 휴대폰 명령이 동작한다', (await phone.getByRole('button', { name: 'Next slide' }).isEnabled()));
   // 거절: 코드 재사용, 틀린 코드, 허용 밖 명령
   const p2 = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
   await p2.goto(addr.replace(/^https?:\/\/[^/]+/, BASE), { waitUntil: 'domcontentloaded' });

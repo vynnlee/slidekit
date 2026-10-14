@@ -7,6 +7,9 @@ import { deckFolder } from "./folder";
 export const TTL_MS = 2 * 3600_000;
 const JOIN_FAILS = 5, JOIN_WINDOW = 60_000; // 틀린 코드는 덱마다 분당 5번까지
 const CMD_PER_SEC = 10;
+const HOST_GRACE = 30_000; // 발표자 연결이 끊긴 뒤 이 시간 안에는 다른 사람이 세션을 가로채지 못한다
+const MAX_VIEWER_SINKS = 4, MAX_HOST_SINKS = 2; // 세션당 열린 SSE 연결 상한
+const BODY_MAX = 4096, STATE_MAX = 65536;
 const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
 export type Cmd =
@@ -33,7 +36,7 @@ const text = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, ma
 export function parseState(b: unknown): RemoteState | null {
   if (!b || typeof b !== "object") return null;
   const o = b as Record<string, unknown>;
-  if (!Number.isInteger(o.slide) || !Number.isInteger(o.total) || (o.slide as number) < 1 || (o.total as number) < 1) return null;
+  if (!Number.isInteger(o.slide) || !Number.isInteger(o.total) || (o.slide as number) < 1 || (o.total as number) < 1 || (o.total as number) > 9999 || (o.slide as number) > (o.total as number)) return null;
   return {
     slide: int(o.slide, 9999), total: int(o.total, 9999), title: text(o.title, 200), notes: text(o.notes, 8000),
     elapsed: int(o.elapsed, 86400 * 7), running: o.running === true, blank: o.blank === "black" || o.blank === "white" ? o.blank : null, target: int(o.target, 999),
@@ -50,6 +53,7 @@ type Session = {
   code: Buffer | null; host: Buffer; expires: number;
   viewers: Map<string, number[]>; // 토큰 해시(hex) -> 최근 명령 시각
   state: RemoteState | null; hosts: Set<Sink>; sinks: Set<Sink>; fails: number[];
+  hostGone: number; // 발표자 연결이 마지막으로 없어진(또는 세션을 만든) 시각
 };
 
 export function createHub(now: () => number = Date.now) {
@@ -68,11 +72,23 @@ export function createHub(now: () => number = Date.now) {
   const presence = (s: Session) => { for (const v of s.sinks) v.send("presence", { online: s.hosts.size > 0 }); };
 
   return {
-    start(id: string) {
-      end(id);
+    /** 세션을 만든다. 이미 있으면 기존 발표자 키(hostKey)가 맞을 때만 코드를 새로 받아 이어 가고(휴대폰 연결은 유지), 아니면 발표자가 붙어 있는 동안 null(거절). */
+    start(id: string, hostKey?: string): { code: string; host: string; expires: number } | null {
+      const old = get(id);
+      const fmt = (c: string) => `${c.slice(0, 4)}-${c.slice(4)}`;
+      if (old) {
+        const mine = !!hostKey && same(old.host, sha(hostKey));
+        if (mine) {
+          const code = randCode();
+          old.code = sha(code); old.fails = [];
+          return { code: fmt(code), host: hostKey!, expires: old.expires };
+        }
+        if (old.hosts.size > 0 || now() - old.hostGone < HOST_GRACE) return null;
+        end(id);
+      }
       const code = randCode(), host = token();
-      sessions.set(id, { code: sha(code), host: sha(host), expires: now() + TTL_MS, viewers: new Map(), state: null, hosts: new Set(), sinks: new Set(), fails: [] });
-      return { code: `${code.slice(0, 4)}-${code.slice(4)}`, host, expires: now() + TTL_MS };
+      sessions.set(id, { code: sha(code), host: sha(host), expires: now() + TTL_MS, viewers: new Map(), state: null, hosts: new Set(), sinks: new Set(), fails: [], hostGone: now() });
+      return { code: fmt(code), host, expires: now() + TTL_MS };
     },
     stop(id: string, hostKey: string) {
       const s = get(id);
@@ -87,7 +103,12 @@ export function createHub(now: () => number = Date.now) {
       s.fails = s.fails.filter((x) => t - x < JOIN_WINDOW);
       if (s.fails.length >= JOIN_FAILS) return { error: "limit" };
       const c = normCode(code);
-      if (!s.code || c.length !== 8 || !same(s.code, sha(c))) { s.fails.push(t); return { error: "code" }; }
+      if (!s.code || c.length !== 8 || !same(s.code, sha(c))) {
+        s.fails.push(t);
+        // 틀린 시도가 한도에 이르면 지금 코드를 폐기하고 발표자에게 알린다(발표자 화면이 새 코드를 받아 보여 준다).
+        if (s.fails.length >= JOIN_FAILS) { s.code = null; for (const h of s.hosts) h.send("locked", {}); }
+        return { error: "code" };
+      }
       s.code = null; // 1회용
       const tk = token();
       s.viewers.set(sha(tk).toString("hex"), []);
@@ -115,13 +136,15 @@ export function createHub(now: () => number = Date.now) {
     subscribeHost(id: string, hostKey: string, sink: Sink): (() => void) | null {
       const s = get(id);
       if (!s || !same(s.host, sha(hostKey))) return null;
+      if (s.hosts.size >= MAX_HOST_SINKS) return null;
       s.hosts.add(sink); presence(s);
-      return () => { s.hosts.delete(sink); if (sessions.get(id) === s) presence(s); };
+      return () => { s.hosts.delete(sink); if (sessions.get(id) === s) { if (!s.hosts.size) s.hostGone = now(); presence(s); } };
     },
     /** 휴대폰이 상태를 받는 연결. 붙자마자 마지막 상태와 발표자 접속 여부를 다시 보낸다(재연결 대비). */
     subscribeViewer(id: string, tk: string, sink: Sink): (() => void) | null {
       const s = get(id);
       if (!s || !s.viewers.has(sha(tk).toString("hex"))) return null;
+      if (s.sinks.size >= MAX_VIEWER_SINKS) return null;
       s.sinks.add(sink);
       sink.send("presence", { online: s.hosts.size > 0 });
       if (s.state) sink.send("state", s.state);
@@ -140,6 +163,8 @@ type Srv = { timeout(r: Request, s: number): void };
 const bad = (error: string, status = 400) => Response.json({ error }, { status });
 const deckOf = (req: Req) => (deckFolder(req.params.id) ? req.params.id : null);
 const bearer = (req: Request) => req.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
+// 작은 본문만 받는다: Content-Length가 없거나 한도를 넘으면 읽기 전에 거절한다(인증 전에 큰 본문을 파싱하지 않게).
+const tooBig = (req: Request, max: number) => { const n = Number(req.headers.get("content-length") ?? NaN); return !Number.isFinite(n) ? bad("length", 411) : n > max ? bad("too-large", 413) : null; };
 const q = (req: Request, k: string) => new URL(req.url).searchParams.get(k) ?? "";
 
 function stream(req: Request, server: Srv, open: (sink: Sink) => (() => void) | null) {
@@ -147,7 +172,7 @@ function stream(req: Request, server: Srv, open: (sink: Sink) => (() => void) | 
   let off: (() => void) | null = null, ping: Timer;
   const body = new ReadableStream<string>({
     start(c) {
-      const sink: Sink = { send: (ev, d) => { try { c.enqueue(`event: ${ev}\ndata: ${JSON.stringify(d)}\n\n`); } catch {} }, close: () => { try { c.close(); } catch {} } };
+      const sink: Sink = { send: (ev, d) => { try { c.enqueue(`event: ${ev}\ndata: ${JSON.stringify(d)}\n\n`); } catch {} }, close: () => { clearInterval(ping); try { c.close(); } catch {} } };
       off = open(sink);
       if (!off) { sink.close(); return; }
       c.enqueue(": connected\n\n");
@@ -160,12 +185,21 @@ function stream(req: Request, server: Srv, open: (sink: Sink) => (() => void) | 
 }
 
 export const remoteRoutes = {
-  "/api/remote/:id/start": { POST: (req: Req) => { const id = deckOf(req); return id ? Response.json(hub.start(id)) : bad("deck", 404); } },
+  "/api/remote/:id/start": {
+    POST: (req: Req) => {
+      const id = deckOf(req);
+      if (!id) return bad("deck", 404);
+      const r = hub.start(id, req.headers.get("x-remote-key") ?? undefined);
+      return r ? Response.json(r) : bad("active", 409); // 다른 화면이 발표 중이면 가로채지 못한다
+    },
+  },
   "/api/remote/:id/stop": { POST: (req: Req) => { const id = deckOf(req); return id && hub.stop(id, req.headers.get("x-remote-key") ?? "") ? Response.json({ ok: true }) : bad("auth", 403); } },
   "/api/remote/:id/join": {
     POST: async (req: Req) => {
       const id = deckOf(req);
       if (!id) return bad("deck", 404);
+      const big = tooBig(req, BODY_MAX);
+      if (big) return big;
       const b = (await req.json().catch(() => null)) as { code?: unknown } | null;
       const r = hub.join(id, b?.code);
       if ("token" in r) return Response.json(r);
@@ -174,6 +208,8 @@ export const remoteRoutes = {
   },
   "/api/remote/:id/state": {
     POST: async (req: Req) => {
+      const big = tooBig(req, STATE_MAX);
+      if (big) return big;
       const id = deckOf(req), st = parseState(await req.json().catch(() => null));
       if (!id || !st) return bad("state");
       return hub.setState(id, req.headers.get("x-remote-key") ?? "", st) ? Response.json({ ok: true }) : bad("auth", 403);
@@ -181,6 +217,8 @@ export const remoteRoutes = {
   },
   "/api/remote/:id/cmd": {
     POST: async (req: Req) => {
+      const big = tooBig(req, BODY_MAX);
+      if (big) return big;
       const id = deckOf(req), cmd = parseCmd(await req.json().catch(() => null));
       if (!id) return bad("deck", 404);
       if (!cmd) return bad("cmd");

@@ -10,6 +10,9 @@ export type RemoteState = { slide: number; total: number; title: string; notes: 
 export type RemoteSession = { code: string; host: string; expires: number };
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
+// 발표자 키는 이 탭의 sessionStorage에만 둔다(새로고침해도 같은 세션을 이어 가고, 다른 탭이나 사람은 세션을 가로채지 못한다).
+const keyName = (folder: string) => `slidekit:remote-host:${folder}`;
+const storedKey = (folder: string) => { try { return sessionStorage.getItem(keyName(folder)) ?? undefined; } catch { return undefined; } };
 
 /** 휴대폰이 열 주소. 코드는 해시(#)에 둬서 서버 로그와 Referer에 남지 않는다. */
 export const remoteUrl = (folder: string, code: string, origin = location.origin) => `${origin}/remote/${encodeURIComponent(folder)}#code=${code.replace("-", "")}`;
@@ -30,9 +33,12 @@ export function useRemoteHost(folder: string | undefined, state: RemoteState | n
 
   const start = useCallback(async () => {
     if (!folder) return;
-    const r = await fetch(`/api/remote/${encodeURIComponent(folder)}/start`, { method: "POST", headers: JSON_HEADERS, body: "{}" });
+    const key = storedKey(folder);
+    const r = await fetch(`/api/remote/${encodeURIComponent(folder)}/start`, { method: "POST", headers: key ? { ...JSON_HEADERS, "X-Remote-Key": key } : JSON_HEADERS, body: "{}" });
+    if (r.status === 409) throw new Error("active");
     if (!r.ok) throw new Error(String(r.status));
     const s = (await r.json()) as RemoteSession;
+    try { sessionStorage.setItem(keyName(folder), s.host); } catch {}
     close();
     sess.current = s; setSession(s);
     const src = new EventSource(`/api/remote/${encodeURIComponent(folder)}/events?role=host&t=${encodeURIComponent(s.host)}`);
@@ -41,11 +47,14 @@ export function useRemoteHost(folder: string | undefined, state: RemoteState | n
     src.onerror = () => { if (src.readyState === EventSource.CLOSED) { setSession(null); sess.current = null; } };
     src.addEventListener("cmd", (e) => { try { cmd.current(JSON.parse((e as MessageEvent).data)); } catch {} });
     src.addEventListener("end", () => { src.close(); setSession(null); sess.current = null; });
+    // 틀린 코드가 한도에 이르러 서버가 코드를 폐기하면 새 코드를 받아 대화상자를 갱신한다(휴대폰 연결은 유지된다).
+    src.addEventListener("locked", () => { void start().catch(() => {}); });
   }, [folder, close, push]);
 
   const stop = useCallback(async () => {
     const s = sess.current;
     close(); setSession(null); sess.current = null;
+    try { if (folder) sessionStorage.removeItem(keyName(folder)); } catch {}
     if (folder && s) await fetch(`/api/remote/${encodeURIComponent(folder)}/stop`, { method: "POST", headers: { ...JSON_HEADERS, "X-Remote-Key": s.host }, body: "{}" }).catch(() => {});
   }, [folder, close]);
 
@@ -53,7 +62,7 @@ export function useRemoteHost(folder: string | undefined, state: RemoteState | n
   useEffect(() => { push(); }, [state, push, session]);
   // 발표자 화면을 닫거나 떠나면 세션을 폐기한다(헤더가 필요해 keepalive fetch를 쓴다).
   useEffect(() => {
-    const bye = () => { const s = sess.current; if (folder && s) fetch(`/api/remote/${encodeURIComponent(folder)}/stop`, { method: "POST", headers: { ...JSON_HEADERS, "X-Remote-Key": s.host }, body: "{}", keepalive: true }).catch(() => {}); };
+    const bye = () => { const s = sess.current; try { if (folder && s) sessionStorage.removeItem(keyName(folder)); } catch {} if (folder && s) fetch(`/api/remote/${encodeURIComponent(folder)}/stop`, { method: "POST", headers: { ...JSON_HEADERS, "X-Remote-Key": s.host }, body: "{}", keepalive: true }).catch(() => {}); };
     window.addEventListener("pagehide", bye);
     return () => { window.removeEventListener("pagehide", bye); bye(); es.current?.close(); };
   }, [folder]);

@@ -24,7 +24,7 @@ test("parseState: 길이와 범위를 자르고 잘못된 값은 거절", () => 
 
 test("페어링: 코드는 1회용이고 대소문자와 하이픈을 무시한다", () => {
   const { hub } = setup();
-  const r = hub.start("d");
+  const r = hub.start("d")!;
   expect(r.code).toMatch(/^[A-Z2-7]{4}-[A-Z2-7]{4}$/);
   const j = hub.join("d", code(r.code).toLowerCase());
   expect("token" in j).toBe(true);
@@ -32,18 +32,19 @@ test("페어링: 코드는 1회용이고 대소문자와 하이픈을 무시한�
   expect(hub.join("nope", r.code)).toEqual({ error: "none" });
 });
 
-test("틀린 코드는 분당 5번까지, 그 뒤엔 맞는 코드도 잠기고 1분 뒤 풀린다", () => {
+test("틀린 코드는 분당 5번까지, 그 뒤엔 맞는 코드도 거절하고 폐기된 코드는 1분 뒤에도 못 쓴다", () => {
   const { hub, tick } = setup();
-  const r = hub.start("d");
+  const r = hub.start("d")!;
   for (let i = 0; i < 5; i++) expect(hub.join("d", "AAAA-AAAA")).toEqual({ error: "code" });
   expect(hub.join("d", r.code)).toEqual({ error: "limit" });
   tick(61_000);
-  expect("token" in hub.join("d", r.code)).toBe(true);
+  expect(hub.join("d", r.code)).toEqual({ error: "code" }); // 한도에서 코드가 폐기됐다
+  expect("token" in hub.join("d", hub.start("d", r.host)!.code)).toBe(true); // 발표자 키로 새 코드
 });
 
 test("명령: 토큰 검사, 발표자가 없으면 offline, 초당 10회 제한", () => {
   const { hub, tick } = setup();
-  const r = hub.start("d");
+  const r = hub.start("d")!;
   const { token } = hub.join("d", r.code) as { token: string };
   expect(hub.command("d", "bad", { type: "next" })).toBe("auth");
   expect(hub.command("d", token, { type: "next" })).toBe("offline");
@@ -59,7 +60,7 @@ test("명령: 토큰 검사, 발표자가 없으면 offline, 초당 10회 제한
 
 test("상태: 발표자 키만 보낼 수 있고, 휴대폰은 붙자마자 마지막 상태와 접속 여부를 받는다", () => {
   const { hub } = setup();
-  const r = hub.start("d");
+  const r = hub.start("d")!;
   const { token } = hub.join("d", r.code) as { token: string };
   const st = parseState({ slide: 3, total: 9, title: "t", notes: "n", elapsed: 5, running: true, blank: null, target: 0 })!;
   expect(hub.setState("d", "wrong", st)).toBe(false);
@@ -78,7 +79,7 @@ test("상태: 발표자 키만 보낼 수 있고, 휴대폰은 붙자마자 마�
 
 test("종료: stop과 새 start와 2시간 만료가 세션과 토큰을 폐기하고 연결에 end를 보낸다", () => {
   const { hub, tick } = setup();
-  let r = hub.start("d");
+  let r = hub.start("d")!;
   let { token } = hub.join("d", r.code) as { token: string };
   const v = sink();
   hub.subscribeViewer("d", token, v.s);
@@ -87,8 +88,10 @@ test("종료: stop과 새 start와 2시간 만료가 세션과 토큰을 폐기�
   expect(v.got.at(-1)![0]).toBe("end"); expect(v.closed).toBe(true);
   expect(hub.command("d", token, { type: "next" })).toBe("auth");
   // 새 start는 옛 세션 토큰을 무효로 한다
-  r = hub.start("d"); token = (hub.join("d", r.code) as { token: string }).token;
-  const r2 = hub.start("d");
+  tick(31_000);
+  r = hub.start("d")!; token = (hub.join("d", r.code) as { token: string }).token;
+  tick(31_000); // 발표자 연결이 없고 유예(30초)가 지나야 키 없이 새로 시작할 수 있다
+  const r2 = hub.start("d")!;
   expect(hub.command("d", token, { type: "next" })).toBe("auth");
   // 만료
   const j = hub.join("d", r2.code) as { token: string };
@@ -97,4 +100,54 @@ test("종료: stop과 새 start와 2시간 만료가 세션과 토큰을 폐기�
   tick(2);
   expect(hub.command("d", j.token, { type: "next" })).toBe("auth");
   expect(hub.size()).toBe(0);
+});
+
+test("start: 발표 중인 세션은 키 없이 가로챌 수 없고, 키가 맞으면 코드만 새로 받으며 휴대폰은 유지된다", () => {
+  const { hub, tick } = setup();
+  const r = hub.start("d")!;
+  const { token } = hub.join("d", r.code) as { token: string };
+  const h = sink();
+  hub.subscribeHost("d", r.host, h.s);
+  expect(hub.start("d")).toBeNull();
+  expect(hub.start("d", "wrong")).toBeNull();
+  const again = hub.start("d", r.host)!;
+  expect(again.host).toBe(r.host);
+  expect(again.code).not.toBe(r.code);
+  expect(hub.command("d", token, { type: "next" })).toBe("ok"); // 이어 간 세션의 토큰은 그대로 유효
+  expect("token" in hub.join("d", again.code)).toBe(true); // 새 코드는 쓸 수 있다
+  // 발표자 연결이 끊겨도 유예 동안은 가로챌 수 없다
+  const off = hub.subscribeHost("d", r.host, sink().s)!; off();
+  hub.subscribeHost("d", "x", sink().s);
+  h.s.close();
+  tick(10_000);
+  expect(hub.start("d")).toBeNull();
+});
+
+test("틀린 코드가 한도에 이르면 코드를 폐기하고 발표자에게 locked를 알린다(재발급은 키로)", () => {
+  const { hub } = setup();
+  const r = hub.start("d")!;
+  const h = sink();
+  hub.subscribeHost("d", r.host, h.s);
+  for (let i = 0; i < 5; i++) hub.join("d", "AAAA-AAAA");
+  expect(h.got.some(([e]) => e === "locked")).toBe(true);
+  expect(hub.join("d", r.code)).toEqual({ error: "limit" });
+  const fresh = hub.start("d", r.host)!;
+  expect("token" in hub.join("d", fresh.code)).toBe(true); // 실패 기록도 새 코드와 함께 초기화
+});
+
+test("SSE 연결 상한: 세션당 발표자 2개, 휴대폰 4개", () => {
+  const { hub } = setup();
+  const r = hub.start("d")!;
+  const { token } = hub.join("d", r.code) as { token: string };
+  expect(hub.subscribeHost("d", r.host, sink().s)).not.toBeNull();
+  expect(hub.subscribeHost("d", r.host, sink().s)).not.toBeNull();
+  expect(hub.subscribeHost("d", r.host, sink().s)).toBeNull();
+  for (let i = 0; i < 4; i++) expect(hub.subscribeViewer("d", token, sink().s)).not.toBeNull();
+  expect(hub.subscribeViewer("d", token, sink().s)).toBeNull();
+});
+
+test("parseState: 범위 밖 값은 0으로 바꿔 통과시키지 않고 거절한다", () => {
+  expect(parseState({ slide: 5, total: 3 })).toBeNull();
+  expect(parseState({ slide: 1, total: 10000 })).toBeNull();
+  expect(parseState({ slide: 3, total: 3, title: "", notes: "", elapsed: 0, running: false, blank: null, target: 0 })).not.toBeNull();
 });

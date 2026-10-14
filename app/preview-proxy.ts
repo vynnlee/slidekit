@@ -15,7 +15,9 @@ Bun.serve<Data>({
     const u = new URL(req.url);
     // Origin을 지우기 전에 확인한다. 다른 사이트가 이 프록시를 통해 앱 API를 부르지 못하게 한다.
     const host = req.headers.get("host") ?? "", origin = req.headers.get("origin");
-    if (!allowedHosts.has(host.replace(/:\d+$/, "")) || (origin && new URL(origin).host !== host)) return new Response("forbidden", { status: 403 });
+    let originHost = "";
+    if (origin) { try { originHost = new URL(origin).host; } catch { return new Response("forbidden", { status: 403 }); } } // Origin: null 같은 깨진 값은 403
+    if (!allowedHosts.has(host.replace(/:\d+$/, "")) || (origin && originHost !== host)) return new Response("forbidden", { status: 403 });
     if (req.headers.get("upgrade") === "websocket") {
       return server.upgrade(req, { data: { url: `ws://${local}${u.pathname}${u.search}`, queue: [] } })
         ? undefined

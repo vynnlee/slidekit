@@ -356,6 +356,8 @@ const settled = async (...ps) => { await Promise.all(ps.map(settledOne)); if (ps
     check('setblank: other roles and unknown modes are ignored', (await mode()) === 'white', await mode());
     await send({ type: 'setblank', role: 'presenter', mode: 'off' }); await settled(A, S);
     check('setblank: off clears the blank', (await mode()) === null, await mode());
+    await send({ type: 'setblank', role: 'presenter', mode: 'black' }); await send({ type: 'setblank', role: 'presenter', mode: null }); await settled(A, S);
+    check('setblank: null clears the blank too', (await mode()) === null, await mode());
     await A.close(); await S.close(); }
   /* layout presets (data-layout, spec 2.1): the CSS gives each preset its shape; broken markup falls back to a stacked slide */
   page('lay', [

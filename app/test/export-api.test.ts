@@ -93,3 +93,21 @@ test("cancel: 돌고 있는 것이 없으면 canceled false", async () => {
   const j = (await (await r["/api/export/cancel"].POST()).json()) as any;
   expect(j).toEqual({ ok: true, canceled: false });
 });
+
+test("pdf 옵션: 잘못된 mode나 per는 실행 없이 400, 올바른 값은 engine/pdf.ts에 인자로 넘어간다", async () => {
+  const calls: string[][] = [];
+  const r = makeRoutes(async (_s, _i, _e, _l, args) => { calls.push(args ?? []); return { code: 0, lines: [] }; });
+  for (const b of [{ mode: "x" }, { mode: "handout", per: 5 }, { mode: "handout", per: "3" }, { mode: 7 }]) {
+    const res = await r["/api/decks/:id/pdf"].POST(req("vibe-coding-workshop", b));
+    expect(res.status, JSON.stringify(b)).toBe(400);
+    expect(((await res.json()) as any).code).toBe("pdf-options");
+  }
+  expect(calls.length).toBe(0);
+  await r["/api/decks/:id/pdf"].POST(req("vibe-coding-workshop", {}));
+  await r["/api/decks/:id/pdf"].POST(req("vibe-coding-workshop", { mode: "notes" }));
+  await r["/api/decks/:id/pdf"].POST(req("vibe-coding-workshop", { mode: "handout", per: 4 }));
+  await r["/api/decks/:id/pdf"].POST(req("vibe-coding-workshop", { mode: "handout" }));
+  expect(calls).toEqual([[], ["--notes"], ["--handout", "4"], ["--handout", "3"]]);
+  const dl = r["/api/decks/:id/download"].GET;
+  expect((await dl(req("vibe-coding-workshop", undefined, "http://x/?kind=zip"))).status).toBe(400);
+});

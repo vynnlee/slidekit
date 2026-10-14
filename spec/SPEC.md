@@ -34,7 +34,7 @@
 - 슬라이드는 `<body>`의 직계 자식 `<section data-slide>`이다. 문서 순서가 슬라이드 순서다. 엔진이 `#sk-stage`를 만들어 슬라이드를 옮겨 담으므로 덱은 `viewport`나 `stage` 래퍼를 쓰지 않는다.
 - 엔진 스크립트는 덱 스크립트보다 앞에 둔다. 엔진은 `DOMContentLoaded`에서 시작한다.
 - 글꼴은 `<head>`의 `<link>`로 불러도 된다(`slidekit bundle`이 덱이 쓰는 글자만 남긴 woff2로 내장한다).
-- 명령: `slidekit new <이름> [--template <id>]`는 `engine/templates.ts`의 템플릿(`talk` 기본, `blank`, `workshop`, 목록은 `slidekit templates`)으로 새 덱을 만들고, `slidekit lint <덱>`은 이 문서의 형식 위반을 규칙별로 출력하며(오류가 있으면 종료 코드 1), `slidekit bundle <덱>`은 단독 파일 하나로 묶고, `slidekit pdf <덱>`은 슬라이드당 한 페이지의 PDF로 내보내고, `slidekit deploy <덱>`은 배포하고, `slidekit doctor`는 환경을 점검한다.
+- 명령: `slidekit new <이름> [--template <id>]`는 `engine/templates.ts`의 템플릿(`talk` 기본, `blank`, `workshop`, 목록은 `slidekit templates`)으로 새 덱을 만들고, `slidekit lint <덱>`은 이 문서의 형식 위반을 규칙별로 출력하며(오류가 있으면 종료 코드 1), `slidekit bundle <덱>`은 단독 파일 하나로 묶고, `slidekit pdf <덱>`은 슬라이드당 한 페이지의 PDF로 내보내고(`--notes`는 A4 세로 쪽마다 슬라이드 한 장과 마크다운으로 렌더한 노트, `--handout [2|3|4|6]`은 쪽마다 그 수만큼의 슬라이드 격자, 파일은 `dist/<덱>.notes.pdf`와 `dist/<덱>.handout.pdf`), `slidekit deploy <덱>`은 배포하고, `slidekit doctor`는 환경을 점검한다.
 
 ## 2. 슬라이드
 
@@ -230,14 +230,14 @@ JS 없이 슬라이드 안 요소를 단계마다 나타나게 한다(Keynote의
 |---|---|---|
 | `state` | `slide`, `step` | 사용자 입력으로 위치가 바뀐 직후 |
 | `hello` | 없음 | 인스턴스가 시작할 때(발표자 화면은 이후 1초마다 다시 보낸다) |
-| `setblank` | `mode`(`"black"`, `"white"`, `"off"`), `role: "presenter"` | 발표자 화면이 청중 창의 가리기를 원격으로 켜고 끌 때(휴대폰 리모컨 등) |
+| `setblank` | `mode`(`"black"`, `"white"`, `"off"` 또는 `null`), `role: "presenter"` | 발표자 화면이 청중 창의 가리기를 원격으로 켜고 끌 때(휴대폰 리모컨 등) |
 | `blank` | `mode`(`"black"`, `"white"`, `null`) | 가리기(B, W)를 켜거나 끌 때, `hello`를 받았을 때 가리기가 켜져 있으면 |
 
 - `state`를 받으면 `enter(true)`와 `goto(step)` 규칙(6.3)으로 이동한다. 받아서 이동한 경우에는 다시 보내지 않는다. 자기 `from`의 메시지는 무시한다.
 - 앱 쪽 메시지(발표자 화면)에는 `role: "presenter"`가 붙는다. 엔진은 이 필드를 읽지 않고, 앱은 `role`이 없는 메시지가 오면 발표 창이 살아 있다고 보고 3.5초 안에 답이 없으면 닫힘으로 본다. 앱은 `hello` 뒤 800ms 안에 사용자가 직접 움직였으면 늦게 온 `state`를 따르지 않는다.
 - `state`는 사용자 입력 외에 `hashchange`와 전체 보기에서 슬라이드를 고를 때도 보낸다. 시작 때의 초기 위치와 `state`를 받아 이동한 경우는 보내지 않는다.
 - `hello`를 받으면 현재 위치를 `state`로 답한다. 가리기가 켜져 있으면 `blank`도 보낸다(재연결 때 상태 복원).
-- `blank`는 알림일 뿐이다. 받은 인스턴스는 자기 화면을 가리지 않는다(가리기는 창별 독립). 발표자 화면이 상태를 보이는 데 쓴다. 가리기를 원격으로 바꾸려면 `setblank`(명령)를 보낸다: `role`이 `"presenter"`이고 `mode`가 `black`, `white`, `off` 중 하나일 때만 받은 인스턴스가 자기 가리기를 그 값으로 바꾸고(그 밖의 `role`과 값은 무시), 바뀐 상태를 `blank`로 다시 알린다.
+- `blank`는 알림일 뿐이다. 받은 인스턴스는 자기 화면을 가리지 않는다(가리기는 창별 독립). 발표자 화면이 상태를 보이는 데 쓴다. 가리기를 원격으로 바꾸려면 `setblank`(명령)를 보낸다: `role`이 `"presenter"`이고 `mode`가 `black`, `white`, `off`(또는 `null`) 중 하나일 때만 받은 인스턴스가 자기 가리기를 그 값으로 바꾸고(그 밖의 `role`과 값은 무시), 바뀐 상태를 `blank`로 다시 알린다.
 - 동시에 입력이 오면 나중에 도착한 `state`가 이긴다.
 - 앱 페이지는 이 채널에 직접 참여하고, 자기 iframe은 postMessage로 조종한다(6.6).
 

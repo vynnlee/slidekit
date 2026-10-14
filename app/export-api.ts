@@ -14,7 +14,8 @@ const WORDS: Record<string, string> = {
   confirm: "Confirm the publish first.",
   password: "Enter a password of at least 8 characters.",
   "deck-meta": "The deck's deck-meta block could not be read, so its visibility is unknown. Fix it before publishing.",
-  kind: "Choose html or pdf.",
+  kind: "Choose html, pdf, notes-pdf or handout-pdf.",
+  "pdf-options": "Choose slides, notes or handout. A handout puts 2, 3, 4 or 6 slides on a page.",
   "not built": "Nothing to download yet. Build the file first.",
   "bundle-failed": "The HTML bundle could not be built. Run lint on the deck or see Details.",
   "pdf-failed": "The PDF could not be made. See Details.",
@@ -31,7 +32,7 @@ const why = (lines: string[]) => {
   return "";
 };
 
-type Run = (script: string, id: string, env?: Record<string, string>, onLine?: (l: string) => void) => Promise<{ code: number; lines: string[] }>;
+type Run = (script: string, id: string, env?: Record<string, string>, onLine?: (l: string) => void, args?: string[]) => Promise<{ code: number; lines: string[] }>;
 
 // 실제 실행: bun <script> <id>. stdout과 stderr 줄을 모은다.
 let active: ReturnType<typeof Bun.spawn> | null = null;
@@ -43,8 +44,8 @@ export function cancelExport(): boolean {
   active.kill();
   return true;
 }
-const spawnRun: Run = async (script, id, env = {}, onLine) => {
-  const p = Bun.spawn(["bun", join(root, script), id], { cwd: root, env: { ...process.env, ...env }, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+const spawnRun: Run = async (script, id, env = {}, onLine, args = []) => {
+  const p = Bun.spawn(["bun", join(root, script), id, ...args], { cwd: root, env: { ...process.env, ...env }, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
   active = p;
   const kill = setTimeout(() => p.kill(), 5 * 60_000);
   const lines: string[] = [];
@@ -93,6 +94,27 @@ export function makeRoutes(run: Run = spawnRun) {
       return Response.json({ path: `dist/${id}.${ext}`, bytes: statSync(dist(id, ext)).size, pages });
     } finally { busy = false; }
   };
+  // PDF는 선택 옵션을 받는다: 본문 {"mode": "slides" | "notes" | "handout", "per": 2 | 3 | 4 | 6}(per는 handout만, 기본 3). 없으면 슬라이드 PDF.
+  // 파일: dist/<id>.pdf, <id>.notes.pdf(쪽마다 슬라이드 한 장과 노트), <id>.handout.pdf(쪽마다 여러 장).
+  const pdf = async (req: Req) => {
+    const id = deckId(req);
+    if (!id) return bad("deck", 404);
+    const b = (await req.json().catch(() => ({}))) as { mode?: unknown; per?: unknown } | null;
+    const mode = b?.mode ?? "slides", per = b?.per ?? 3;
+    if (mode !== "slides" && mode !== "notes" && mode !== "handout") return bad("pdf-options");
+    if (mode === "handout" && ![2, 3, 4, 6].includes(per as number)) return bad("pdf-options");
+    const ext = mode === "slides" ? "pdf" : `${mode}.pdf`;
+    const args = mode === "notes" ? ["--notes"] : mode === "handout" ? ["--handout", String(per)] : [];
+    if (busy) return bad("busy", 409);
+    busy = true; canceled = false;
+    try {
+      const r = await run("engine/pdf.ts", id, {}, undefined, args);
+      if (canceled) return bad("canceled", 499);
+      if (r.code !== 0 || !existsSync(dist(id, ext))) return bad("pdf-failed", 500, r.lines.slice(-3).join("\n"));
+      const pages = +(r.lines.join("\n").match(/(\d+)페이지/)?.[1] ?? 0);
+      return Response.json({ path: `dist/${id}.${ext}`, bytes: statSync(dist(id, ext)).size, pages });
+    } finally { busy = false; }
+  };
   // 배포 전 점검: lint 결과, 큰 이미지, 공개 범위, 번들 크기 추정. 읽기만 하고 아무것도 만들지 않는다.
   const check = (req: Req) => {
     const id = deckId(req);
@@ -124,18 +146,20 @@ export function makeRoutes(run: Run = spawnRun) {
     "/api/decks/:id/check": { GET: check },
     "/api/export/cancel": { POST: () => Response.json({ ok: true, canceled: cancelExport() }) },
     "/api/decks/:id/bundle": { POST: quick("bundler/bundle.ts", "html") },
-    "/api/decks/:id/pdf": { POST: quick("engine/pdf.ts", "pdf") },
+    "/api/decks/:id/pdf": { POST: pdf },
     "/api/decks/:id/download": {
       GET: (req: Req) => {
         const id = deckId(req);
         if (!id) return bad("deck", 404);
         const kind = new URL(req.url).searchParams.get("kind");
-        if (kind !== "html" && kind !== "pdf") return bad("kind");
-        const f = Bun.file(dist(id, kind));
-        if (!existsSync(dist(id, kind))) return bad("not built", 404);
+        const EXT: Record<string, string> = { html: "html", pdf: "pdf", "notes-pdf": "notes.pdf", "handout-pdf": "handout.pdf" };
+        const ext = kind ? EXT[kind] : undefined;
+        if (!ext) return bad("kind");
+        const f = Bun.file(dist(id, ext));
+        if (!existsSync(dist(id, ext))) return bad("not built", 404);
         return new Response(f, { headers: {
-          "Content-Type": kind === "pdf" ? "application/pdf" : "text/html; charset=utf-8",
-          "Content-Disposition": `attachment; filename="${id}.${kind}"`, "Cache-Control": "no-store",
+          "Content-Type": ext.endsWith("pdf") ? "application/pdf" : "text/html; charset=utf-8",
+          "Content-Disposition": `attachment; filename="${id}.${ext}"`, "Cache-Control": "no-store",
         } });
       },
     },

@@ -1,0 +1,19 @@
+/* PDF 유인물 모드 CSS(engine/pdf.ts가 인쇄용 사본에만 넣는다). 종이는 흰색이라 슬라이드만 테두리로 구분한다. */
+@page { size: A4 portrait; margin: 12mm; }
+html[data-sk-handout], html[data-sk-handout] body { background: #fff !important; } /* 글자색은 건드리지 않는다: 슬라이드는 body의 --sk-fg를 이어받는다 */
+html[data-sk-handout] #sk-stage { display: none !important; }
+#sk-hd { font-family: var(--sk-font); color: #111; }
+#sk-hd .hd-sl { color: var(--sk-fg); position: relative; overflow: hidden; border: 1px solid #b5b5ba; box-sizing: content-box; background: #000; }
+#sk-hd .hd-sl > [data-slide] { position: absolute !important; left: 0; top: 0; inset: auto; break-after: auto !important; transform-origin: 0 0; }
+#sk-hd .hd-card { break-after: page; padding-bottom: 8px; }
+#sk-hd .hd-card:last-child, #sk-hd .hd-page:last-child { break-after: auto; }
+#sk-hd .hd-head { font-size: 13px; color: #55555b; margin: 0 0 8px; }
+#sk-hd .hd-notes { margin-top: 14px; font-size: 14px; line-height: 1.65; color: #222; }
+#sk-hd .hd-notes p, #sk-hd .hd-notes ul, #sk-hd .hd-notes ol, #sk-hd .hd-notes pre { margin: 0 0 8px; max-width: none; font-size: inherit; color: inherit; }
+#sk-hd .hd-notes h1, #sk-hd .hd-notes h2, #sk-hd .hd-notes h3 { font-size: 15px; margin: 8px 0 4px; color: #111; }
+#sk-hd .hd-notes code { font-family: var(--sk-font-mono); font-size: 12px; background: #f0f0f2; border: 0; padding: 1px 4px; }
+#sk-hd .hd-notes pre { background: #f0f0f2; padding: 8px; white-space: pre-wrap; }
+#sk-hd .hd-empty { color: #8a8a90; }
+#sk-hd .hd-page { display: grid; gap: 16px; height: 1030px; align-content: space-evenly; break-after: page; overflow: hidden; }
+#sk-hd .hd-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+#sk-hd .hd-label { font-size: 11px; line-height: 14px; color: #55555b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

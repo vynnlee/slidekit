@@ -98,3 +98,13 @@ test("templates: 목록을 사람 글과 JSON으로 낸다", () => {
   const j = JSON.parse(run("templates", "--json").out);
   expect(j.map((x: { id: string; default: boolean }) => [x.id, x.default])).toEqual([["talk", true], ["blank", false], ["workshop", false]]);
 });
+
+test("pdf 옵션 오류: --notes와 --handout 동시, 쪽당 장 수는 2, 3, 4, 6만(브라우저를 띄우기 전에 거부)", () => {
+  const both = run("pdf", "slidekit-guide", "--notes", "--handout");
+  expect(both.code).toBe(1);
+  expect(both.err).toContain("함께 쓸 수 없다");
+  const bad = run("pdf", "slidekit-guide", "--handout", "5");
+  expect(bad.code).toBe(1);
+  expect(bad.err).toContain("2, 3, 4, 6");
+  expect(run("pdf").err).toContain("--notes");
+});

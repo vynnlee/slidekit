@@ -132,7 +132,9 @@ export function ContextMenu({ menu }: { menu: ContextMenuController }) {
     const inMenu = (t: EventTarget | null) => t instanceof HTMLElement && !!t.closest("[role=menu]");
     // 휠(Cmd+휠 줌 포함)과 메뉴 밖으로 가는 포커스 이동, 줌 키(Cmd 또는 Ctrl과 + - 0)에서도 닫는다.
     const onWheel = (e: WheelEvent) => { if (!inMenu(e.target)) close(); };
-    const onFocusIn = (e: FocusEvent) => { if (!inMenu(e.target)) close(); };
+    // 교체로 열린 직후에는 옛 메뉴의 포커스 복귀가 늦게 도착할 수 있어(부하) 잠깐 무시한다.
+    const openedAt = Date.now();
+    const onFocusIn = (e: FocusEvent) => { if (!inMenu(e.target) && Date.now() - openedAt > 400) close(); };
     const onKey = (e: globalThis.KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && /^[=+\-_0]$/.test(e.key)) close(); };
     window.addEventListener("scroll", onScroll, true);
     window.addEventListener("wheel", onWheel, { capture: true, passive: true });

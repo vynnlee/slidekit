@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { ArrowDownUp, Copy, LayoutGrid, List, MonitorPlay, MoreHorizontal, Pencil, Plus, Presentation, Search, TextCursorInput, Trash2 } from "lucide-react";
+import { ArrowDownUp, Copy, LayoutGrid, List, MonitorPlay, MoreHorizontal, Pencil, Pin, PinOff, Plus, Presentation, Search, TextCursorInput, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardGroup, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -14,6 +14,7 @@ import { TrashList } from "./TrashList";
 import { StatusPage } from "./StatusPage";
 import { toast } from "./Toaster";
 import { readRecent } from "@/lib/recent";
+import { readPins, writePins } from "@/lib/pins";
 import { acquireThumb, pauseThumbs } from "@/lib/thumb-queue";
 import { FOLDER_RE, slugify } from "@/lib/slug";
 import { UNREACHABLE, isDown, onReconnect } from "@/lib/connection";
@@ -24,6 +25,9 @@ import { cn } from "@/lib/utils";
 const SORTS = { date: "Date", title: "Name", recent: "Recent" } as const;
 const ORDER = ["date", "title", "recent"] as const;
 type Sort = keyof typeof SORTS;
+const FILTERS = { all: "All", pinned: "Pinned", recent: "Recent", password: "Password" } as const;
+type Filter = keyof typeof FILTERS;
+const PinMark = () => <Pin role="img" aria-label="Pinned" className="mr-1 inline size-3 -translate-y-px text-muted-foreground" />;
 // 표지 썸네일: 1920x1080 임베드 iframe을 축소한다. 화면에 들어오면 잠깐 뒤 한 번만 만들고 유지한다.
 function Thumb({ deck, width: fixed }: { deck: DeckEntry; width?: number }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -203,17 +207,21 @@ export function DeckList() {
   useEffect(() => { localStorage.setItem("slidekit:list-view", view); localStorage.setItem("slidekit:list-sort", sort); }, [view, sort]);
 
   const recent = useMemo(readRecent, []);
+  const [pins, setPins] = useState(readPins);
+  const [filter, setFilter] = useState<Filter>("all");
+  const isPinned = (d: DeckEntry) => pins.includes(d.id);
+  const togglePin = (d: DeckEntry) => setPins((p) => { const n = p.includes(d.id) ? p.filter((x) => x !== d.id) : [...p, d.id]; writePins(n); return n; });
   // 마지막으로 연 덱: 지금 있는 덱 중 가장 최근 것(지워졌거나 없는 덱의 기록은 건너뛴다).
   const lastOpened = useMemo(() => recent.find((r) => decks?.some((d) => d.id === r.id || d.folder === r.id)), [recent, decks]);
+  // 핀한 덱은 어떤 정렬에서도 맨 위(안에서는 선택한 정렬 순서). 칩 필터는 목록만 줄인다.
   const sorted = useMemo(() => {
-    const l = [...(decks ?? [])];
-    if (sort === "title") return l.sort((a, b) => a.title.localeCompare(b.title, "ko"));
-    if (sort === "recent") {
-      const at = (d: DeckEntry) => recent.find((r) => r.id === d.id || r.id === d.folder)?.t ?? 0;
-      return l.sort((a, b) => at(b) - at(a) || (b.date ?? "").localeCompare(a.date ?? ""));
-    }
-    return l.sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
-  }, [decks, sort, recent]);
+    const at = (d: DeckEntry) => recent.find((r) => r.id === d.id || r.id === d.folder)?.t ?? 0;
+    const l = (decks ?? []).filter((d) => filter === "all" || (filter === "pinned" ? pins.includes(d.id) : filter === "recent" ? at(d) > 0 : d.visibility === "password"));
+    const by = sort === "title" ? (a: DeckEntry, b: DeckEntry) => a.title.localeCompare(b.title, "ko")
+      : sort === "recent" ? (a: DeckEntry, b: DeckEntry) => at(b) - at(a) || (b.date ?? "").localeCompare(a.date ?? "")
+      : (a: DeckEntry, b: DeckEntry) => (b.date ?? "").localeCompare(a.date ?? "");
+    return l.sort((a, b) => Number(pins.includes(b.id)) - Number(pins.includes(a.id)) || by(a, b));
+  }, [decks, sort, recent, filter, pins]);
 
   const open = (d: DeckEntry) => go(`/edit/${encodeURIComponent(d.id)}`);
   const cycleSort = () => setSort((s) => ORDER[(ORDER.indexOf(s) + 1) % ORDER.length]);
@@ -222,7 +230,14 @@ export function DeckList() {
   const known = useMemo(() => new Set((decks ?? []).map((d) => d.folder)), [decks]);
   const folderError = (f: string, self?: string) => !f ? "" : !FOLDER_RE.test(f) ? "Use lowercase letters, digits and -" : f !== self && known.has(f) ? `A deck named ${f} already exists` : "";
   const newErr = err || folderError(name);
-  const onTitle = (v: string) => { setNewTitle(v); setErr(""); if (!nameTouched) setName(v.trim() ? slugify(v) : ""); };
+  const onTitle = (v: string) => {
+    setNewTitle(v); setErr("");
+    if (nameTouched) return;
+    // 영문이 없는 제목은 날짜 이름(deck-MMDD)이 되므로, 같은 날 둘째부터는 -2, -3을 붙여 제안한다.
+    let n = v.trim() ? slugify(v) : "";
+    if (/^deck-\d{4}$/.test(n)) { const b = n; for (let i = 2; known.has(n); i++) n = `${b}-${i}`; }
+    setName(n);
+  };
   const create = async () => {
     if (busy) return;
     setBusy(true);
@@ -265,8 +280,8 @@ export function DeckList() {
   };
   // 카드와 행의 메뉴 항목은 한 곳(menu-model)에서 만들고, ... 버튼과 우클릭과 ContextMenu 키가 같은 목록을 쓴다.
   const menuFor = (d: DeckEntry) => deckMenu(
-    { open: () => open(d), present: () => present(d), rename: () => startRename(d), duplicate: () => { duplicate(d); }, trash: () => { trash(d); } },
-    { open: Pencil, present: MonitorPlay, rename: TextCursorInput, duplicate: Copy, trash: Trash2 },
+    { open: () => open(d), present: () => present(d), rename: () => startRename(d), duplicate: () => { duplicate(d); }, trash: () => { trash(d); }, togglePin: () => togglePin(d), pinned: isPinned(d) },
+    { open: Pencil, present: MonitorPlay, rename: TextCursorInput, duplicate: Copy, trash: Trash2, pin: Pin, unpin: PinOff },
   );
   const menu = (d: DeckEntry, cls = "absolute right-2 top-2 z-30") => (
     <div className={cn(cls, "flex items-center gap-0.5")}>
@@ -361,8 +376,19 @@ export function DeckList() {
           {decks?.length === 0 && (
             <StatusPage as="h2" title="No decks yet" actions={<Button variant="primary" size="compact" leadingIcon={Plus} onClick={startCreate}>New deck</Button>}>
               Create a deck to start, or run slidekit new in a terminal.
+              <span className="mt-3 block text-caption text-muted-foreground">
+                Search with <kbd className="rounded bg-hover px-1">{mac ? "Cmd" : "Ctrl"} K</kbd>. Move between decks with the arrow keys, open one with Enter, present it with <kbd className="rounded bg-hover px-1">{mac ? "Cmd" : "Ctrl"} Enter</kbd>.
+              </span>
             </StatusPage>
           )}
+          {!!decks?.length && (
+            <div role="group" aria-label="Filter decks" className="mb-3 flex gap-1">
+              {(Object.keys(FILTERS) as Filter[]).map((f) => (
+                <Button key={f} variant="ghost" size="compact" active={filter === f} aria-pressed={filter === f} onClick={() => setFilter(f)}>{FILTERS[f]}</Button>
+              ))}
+            </div>
+          )}
+          {!!decks?.length && !sorted.length && <p className="text-caption text-muted-foreground">No {FILTERS[filter].toLowerCase()} decks.</p>}
           {view === "grid" ? (
             <CardGroup columns={cols} separated>
               {sorted.map((d) => (
@@ -370,7 +396,7 @@ export function DeckList() {
                   {menu(d)}
                   <Thumb deck={d} />
                   <CardHeader>
-                    <CardTitle>{d.title}</CardTitle>
+                    <CardTitle>{isPinned(d) && <PinMark />}{d.title}</CardTitle>
                     <CardDescription><Meta d={d} opened={lastOpened && (lastOpened.id === d.id || lastOpened.id === d.folder) ? lastOpened.t : undefined} /></CardDescription>
                   </CardHeader>
                 </Card>
@@ -383,7 +409,7 @@ export function DeckList() {
                   <div className="flex items-center gap-3 pr-16">
                     <Thumb deck={d} width={56} />
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-3">
-                      <span className="min-w-0 truncate text-body sm:flex-1">{d.title}</span>
+                      <span className="min-w-0 truncate text-body sm:flex-1">{isPinned(d) && <PinMark />}{d.title}</span>
                       <span className="flex items-center gap-2 text-caption text-muted-foreground"><Badge deck={d} /><Meta d={d} opened={lastOpened && (lastOpened.id === d.id || lastOpened.id === d.folder) ? lastOpened.t : undefined} /></span>
                     </span>
                   </div>
@@ -437,9 +463,9 @@ export function DeckList() {
         <DialogContent size="sm">
           <DialogTitle>New deck</DialogTitle>
           <form className="flex flex-col gap-2 pt-2" onSubmit={(e) => { e.preventDefault(); if (name.trim() && !newErr) create(); }}>
-            <Field autoFocus aria-label="Title" placeholder="Title" value={newTitle} onChange={(e) => onTitle(e.target.value)} />
+            <Field autoFocus aria-label="Title" placeholder="Title" maxLength={120} value={newTitle} onChange={(e) => onTitle(e.target.value)} />
             <Field aria-label="Folder" placeholder="folder-name" aria-invalid={!!newErr || undefined} value={name} onChange={(e) => { setName(e.target.value); setNameTouched(true); setErr(""); }} />
-            <p role={newErr ? "alert" : undefined} className={newErr ? "text-caption text-destructive" : "text-caption text-muted-foreground"}>{newErr || "Folder: lowercase letters, digits and -"}</p>
+            <p role={newErr ? "alert" : undefined} className={newErr ? "text-caption text-destructive" : "text-caption text-muted-foreground"}>{newErr || (!nameTouched && /^deck-\d{4}(-\d+)?$/.test(name) ? "No Latin letters in the title, so the folder is named by date. You can edit it." : "Folder: lowercase letters and digits, separated by single hyphens")}</p>
             <Button type="submit" variant="primary" size="compact" disabled={!name.trim() || !!newErr || busy} className="self-end">Create</Button>
           </form>
         </DialogContent>

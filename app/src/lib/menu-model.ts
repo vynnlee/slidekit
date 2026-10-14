@@ -42,12 +42,15 @@ export type DeckMenuActions = {
   open(): void; present(): void; rename(): void; duplicate(): void; trash(): void;
   /** 게시한 적이 있는 덱만 준다. 없으면 항목이 빠진다. */
   copyLink?(): void;
+  /** 핀 고정 토글. pinned는 지금 고정되어 있는지. */
+  togglePin?(): void; pinned?: boolean;
 };
-export function deckMenu(a: DeckMenuActions, icons: { open?: IconComponent; present?: IconComponent; duplicate?: IconComponent; rename?: IconComponent; link?: IconComponent; trash?: IconComponent } = {}): MenuItem[] {
+export function deckMenu(a: DeckMenuActions, icons: { open?: IconComponent; present?: IconComponent; duplicate?: IconComponent; rename?: IconComponent; link?: IconComponent; trash?: IconComponent; pin?: IconComponent; unpin?: IconComponent } = {}): MenuItem[] {
   return tidy([
     item("open", "Open", a.open, { shortcut: "enter", icon: icons.open }),
     item("present", "Present", a.present, { shortcut: "mod+enter", icon: icons.present }),
     separator,
+    a.togglePin && item("pin", a.pinned ? "Unpin from top" : "Pin to top", a.togglePin, { icon: a.pinned ? icons.unpin : icons.pin }),
     item("rename", "Rename", a.rename, { icon: icons.rename }),
     item("duplicate", "Duplicate", a.duplicate, { icon: icons.duplicate }),
     a.copyLink && item("copy-link", "Copy published link", a.copyLink, { icon: icons.link }),

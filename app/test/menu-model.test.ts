@@ -62,3 +62,15 @@ test("코멘트 메뉴: 핀은 Open in panel이 맨 위, 해결됨이면 Reopen,
   expect(labels(commentMenu({ ...cacts, trust: noop }))).not.toContain("Trust"); // 서명이 있으면 뺀다
   expect(commentMenu({ ...cacts, openInPanel: noop, unverified: true, trust: noop }).filter((x) => x.type !== "separator").length).toBeLessThanOrEqual(12);
 });
+
+test("덱 메뉴: togglePin을 주면 Pin to top 또는 Unpin from top 항목이 Rename 위에 생긴다", () => {
+  expect(labels(deckMenu({ ...acts, togglePin: noop, pinned: false }))).toContain("Pin to top");
+  const l = labels(deckMenu({ ...acts, togglePin: noop, pinned: true }));
+  expect(l).toContain("Unpin from top");
+  expect(l.indexOf("Unpin from top")).toBeLessThan(l.indexOf("Rename"));
+});
+
+test("코멘트 메뉴: Revert Claude's edit는 되돌릴 수 있을 때만 Resolve 바로 뒤에 들어간다", () => {
+  expect(labels(commentMenu({ ...cacts, revert: noop }))).toEqual(["Resolve", "Revert Claude's edit", "Copy text", "-", "Delete"]);
+  expect(labels(commentMenu(cacts))).not.toContain("Revert Claude's edit");
+});

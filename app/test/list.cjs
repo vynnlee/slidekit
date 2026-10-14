@@ -204,7 +204,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.getByRole('menu').waitFor();
   const mb = await menuBox();
   check('메뉴가 포인터 오른쪽 아래에서 시작한다', mb && mb.x >= px - 1 && mb.x <= px + 12 && mb.y >= py - 1 && mb.y <= py + 12, [mb, px, py]);
-  check('항목 순서', JSON.stringify(await page.getByRole('menuitem').allInnerTexts().then((a) => a.map((t) => t.split('\n')[0].trim()))) === JSON.stringify(['Open', 'Present', 'Rename', 'Duplicate', 'Move to trash']), await page.getByRole('menuitem').allInnerTexts());
+  check('항목 순서', JSON.stringify(await page.getByRole('menuitem').allInnerTexts().then((a) => a.map((t) => t.split('\n')[0].trim()))) === JSON.stringify(['Open', 'Present', 'Pin to top', 'Rename', 'Duplicate', 'Move to trash']), await page.getByRole('menuitem').allInnerTexts());
   check('단축키 키캡(Open과 Present)', (await page.getByRole('menuitem', { name: 'Open' }).getAttribute('data-shortcut')) === '↵' && /↵$/.test((await page.getByRole('menuitem', { name: 'Present' }).getAttribute('data-shortcut')) || ''));
   const col = await page.getByRole('menuitem', { name: 'Move to trash' }).evaluate((e) => [...e.querySelectorAll('span')].map((x) => getComputedStyle(x).color));
   check('파괴적 항목은 빨강(--destructive)', col.length > 0 && col.every((c) => c === 'rgb(248, 113, 113)'), col);
@@ -212,6 +212,22 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.keyboard.press('Escape');
   check('Esc로 닫힌다', await until(async () => (await page.getByRole('menu').count()) === 0));
   check('닫힌 뒤 포커스가 카드로 돌아간다', await until(async () => (await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label'))) === 'zz-e2e-k1'), await page.evaluate(() => document.activeElement && document.activeElement.outerHTML.slice(0, 100)));
+  // 핀과 필터 칩: 메뉴의 Pin to top으로 맨 앞에 고정되고(정렬과 무관), 칩으로 줄이며, 새로고침해도 남는다
+  await cardBtn('zz-e2e-k2').click({ button: 'right', position: { x: 40, y: 40 } });
+  await page.getByRole('menuitem', { name: 'Pin to top' }).click();
+  const firstDeck = () => page.evaluate(() => document.querySelector('[data-deck] button')?.getAttribute('aria-label'));
+  check('Pin to top으로 맨 앞에 고정된다', await until(async () => (await firstDeck()) === 'zz-e2e-k2'), await firstDeck());
+  check('고정된 덱에 Pinned 표시', (await page.getByRole('img', { name: 'Pinned' }).count()) === 1);
+  await page.getByRole('button', { name: 'Pinned', exact: true }).click();
+  check('Pinned 칩은 고정한 덱만 보인다', await until(async () => (await page.locator('[data-deck]').count()) === 1));
+  await page.getByRole('button', { name: 'Password', exact: true }).click();
+  check('결과가 없으면 안내', await until(async () => (await page.getByText('No password decks.').count()) === 1));
+  await page.getByRole('button', { name: 'All', exact: true }).click();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  check('새로고침해도 고정이 남는다', await until(async () => (await firstDeck()) === 'zz-e2e-k2'), await firstDeck());
+  await cardBtn('zz-e2e-k2').click({ button: 'right', position: { x: 40, y: 40 } });
+  await page.getByRole('menuitem', { name: 'Unpin from top' }).click();
+  check('Unpin으로 해제된다', await until(async () => (await page.getByRole('img', { name: 'Pinned' }).count()) === 0));
   // 닫는 조건: 휠(줌 포함), 줌 키. 드래그 중(왼쪽 버튼을 누른 채)에는 열리지 않는다
   await cardBtn('zz-e2e-k1').click({ button: 'right', position: { x: 40, y: 40 } });
   await page.getByRole('menu').waitFor();
@@ -278,8 +294,9 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'zz-e2e-k2', exact: true }).waitFor();
   check('가장 최근에 연 덱에 Opened 표시', (await page.getByText(/^Opened /).count()) === 1);
-  for (let i = 0; i < 2; i++) await page.getByRole('button', { name: /^(Date|Name|Recent)$/ }).click();
-  check('Recent 정렬 이름', (await page.getByRole('button', { name: 'Recent', exact: true }).count()) === 1);
+  const sortBtn = page.locator('button:not([aria-pressed])').filter({ hasText: /^(Date|Name|Recent)$/ }); // 칩(aria-pressed)과 구분
+  for (let i = 0; i < 2; i++) await sortBtn.click();
+  check('Recent 정렬 이름', (await sortBtn.innerText()) === 'Recent');
   const order = await page.evaluate(() => [...document.querySelectorAll('[data-deck]')].map((r) => r.querySelector('button')?.getAttribute('aria-label')));
   const recent0 = await page.evaluate(() => JSON.parse(localStorage.getItem('slidekit:recent') || '[]')[0]?.id);
   check('최근 연 덱이 맨 앞', order[0] === recent0, [order[0], recent0]);

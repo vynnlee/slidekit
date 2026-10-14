@@ -61,6 +61,7 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 - 2026-10-13에 Worker(`slidekit-static`)와 워크숍 덱(public)을 배포했다: https://static.vynnlee.com/vibe-coding-workshop . mac-cloud의 로컬 DNS 캐시가 실패 결과를 들고 있어 `curl`이 000(DNS 실패)일 수 있다. 그때는 `dig +short @1.1.1.1 static.vynnlee.com`의 IP로 `curl --resolve static.vynnlee.com:443:<IP> ...`로 확인한다(캐시 비우기는 sudo 필요). 응답 없음을 미배포로 판단하지 않는다.
 - 배포 순서: meta를 먼저, html을 나중에 올린다(공개에서 비밀번호로 바꿀 때 노출 방지).
 - **미배포(승인 대기)**: 2026-10-14에 Worker 안내 페이지(비밀번호, 잠금, 404 통일, 덱 제목 표시, 로딩 상태)와 `deploy`가 meta에 `title`을 올리는 변경, 번들 head 변경을 코드와 테스트까지만 했다. 반영하려면 사용자 승인 뒤 `bun run deploy --worker`를 실행한다(이미 올린 덱은 다시 `slidekit deploy <덱>`으로 올려야 제목이 보인다).
+  - 승인 때 함께 사용자에게 물을 것: Worker 로그인 시도 제한은 KV 읽기와 쓰기라 원자적이지 않고(동시 요청과 IP 회전에 뚫림) 덱 단위 총량 제한이 없다. 선택지는 Durable Object(덱별 원자적 카운터, 정확하지만 구성과 플랜 요건 확인 필요) 또는 Rate Limiting 바인딩(설정이 간단하고 덱과 IP 키로 근사 제한, 정확한 횟수는 보장하지 않음)이다. 같은 배포에 Worker 보안 변경(쿠키에 salt 바인딩, 보호된 덱은 문서 요청에만 서빙, COOP, HSTS, 입력 폼 nonce CSP, 비밀번호 덱 제목은 `lockTitle` 옵트인)도 들어 있어 비밀번호 덱의 기존 쿠키는 모두 무효가 된다.
 
 ## 알려진 한계
 
@@ -71,6 +72,13 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 - 발표 동기화는 같은 출처의 BroadcastChannel 전용(기기 간 동기화 없음). 세로나 좁은 창은 무대 비율을 유지하고 남는 영역을 배경색으로 채운다.
 - 편집기는 슬라이드 단위 원문 보존(`app/src/lib/deck-source.ts`)을 전제로 한다. 인라인 편집은 글자만 담은 요소 중심.
 - Chrome 계열 전용(Window Management API). mac-cloud에는 화면이 없어 외장 모니터 기능은 검증하지 못한다.
+
+## 알려진 위험 (2026-10-14 보안 감사, 결정 보류)
+
+- 앱 API에는 인증 토큰이 없다. 127.0.0.1 바인딩, Host와 Origin 검사, 프록시(tailnet)에만 의존하며 사용자 기기만 접근한다는 전제다.
+- 덱은 앱과 같은 출처에서 열려 덱 스크립트가 앱 API를 부를 수 있다(출처 분리나 iframe sandbox는 편집기가 contentDocument를 직접 다뤄 보류). 완화: lint가 덱 스크립트의 fetch, XMLHttpRequest, WebSocket, EventSource, `/api/`를 경고하고 SPEC 7절에 신뢰된 콘텐츠 규칙이 있다. 남에게 받은 덱은 열기 전에 스크립트를 읽는다.
+- `/deploy`(Export 메뉴)는 `confirm` 플래그 하나로 동작한다. 공개 범위와 비밀번호는 서버가 덱 원본 `deck-meta`로만 판단하고 읽지 못하면 거부한다. 별도 nonce는 없다.
+- 이미 반영한 수정: 채널 입력 정제와 로컬 URL 제한, 번들러가 덱 폴더와 `engine/`만 읽음(.git, .env, comments.json 거부)과 외부 글꼴 SSRF 방어, 비밀번호 8자 이상, wrangler와 fonttools 버전 고정(`deploy/deploy.ts`, `bundler/fonts.ts`의 숫자를 올릴 때는 의도적으로 바꾼다).
 
 ## mac-local에서 사용자가 직접 확인할 것
 

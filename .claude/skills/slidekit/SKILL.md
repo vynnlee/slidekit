@@ -267,6 +267,7 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
 - 슬라이드를 다섯 번째 종류로 만들지 않는다. `data-slide` 값은 `cover`, `chapter`, `content`, `end`만 쓴다.
 - 엔진 파일(`engine/slidekit.js`, `engine/slidekit.css`)과 `spec/SPEC.md`를 덱 작업 중에 고치지 않는다.
 - 비밀 값(비밀번호, 토큰)을 덱에 넣지 않는다.
+- 덱 스크립트에서 `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `/api/` 호출을 하지 않는다. 덱은 외부 호출 없이 동작해야 한다(lint가 경고한다).
 - 사용자가 요청하지 않으면 배포(`deploy`, 편집기 Publish)를 하지 않는다. 배포는 공개 사이트에 올리는 일이다.
 
 ## 9. 만든 뒤 확인

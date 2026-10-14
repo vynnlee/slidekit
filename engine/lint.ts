@@ -109,6 +109,8 @@ export function lint(html: string): Issue[] {
   if (/\d(?:\.\d+)?\s*(?:vw|vh)\b/i.test(css)) add("error", "units", "vw, vh 단위를 px로 바꾼다. 슬라이드는 1920x1080 고정이다");
   const js = scripts.filter((s) => !/slidekit\.js|application\/json/.test(s.attrs)).map((s) => s.body).join("\n");
   if (/addEventListener\(\s*['"](?:wheel|touchstart|touchend|pointerdown|click)['"]/.test(js) || /\bonclick=/.test(rest)) add("warn", "nav", "슬라이드 이동은 방향키만 쓴다. click, wheel, touch 핸들러를 이동에 쓰지 않는다");
+  // 덱은 앱과 같은 출처에서 열리는 신뢰된 콘텐츠다. 외부나 앱 API 호출은 앱의 덱, 휴지통, 배포 API를 부를 수 있어 쓰지 않는다.
+  if (/\b(?:fetch\s*\(|XMLHttpRequest|WebSocket|EventSource|navigator\.sendBeacon)/.test(js) || /['"`]\/api\//.test(js)) add("warn", "network", "덱 스크립트가 네트워크를 호출한다(fetch, XMLHttpRequest, WebSocket, EventSource, /api/). 덱은 외부 호출 없이 동작해야 하고 앱 API를 부르면 안 된다");
   if (/['"](?:Space|PageDown|PageUp)['"]|key\s*===?\s*['"] ['"]/.test(js)) add("error", "nav", "스페이스와 PageUp, PageDown 이동은 쓰지 않는다. 방향키만 쓴다");
   for (const m of rest.matchAll(/\b(?:src|href)=["'](https?:\/\/[^"']+)/g)) if (!/fonts\.(?:googleapis|gstatic)\.com|font|pretendard|woff/i.test(m[1])) add("warn", "external", `외부 리소스: ${m[1].slice(0, 60)}. 파일을 덱 폴더에 내려받아 상대 경로로 쓴다(글꼴 CSS는 번들 때 인라인된다)`);
   for (const m of css.matchAll(/url\(\s*["']?(https?:\/\/[^)"']+)/g)) if (!/fonts\.(?:googleapis|gstatic)\.com/.test(m[1])) add("warn", "external", `외부 리소스: ${m[1].slice(0, 60)}. 파일을 덱 폴더에 내려받아 상대 경로로 쓴다`);

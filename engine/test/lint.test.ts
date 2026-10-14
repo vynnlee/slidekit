@@ -41,3 +41,13 @@ test("data-step: 정수 2 이상만 허용하고 빈 단계는 경고", () => {
   expect(gap.map((i) => i.level)).toEqual(["warn"]);
   expect(rules(slide('<h1 data-step="2">a</h1><p data-step="4">b</p>'))).not.toContain("data-step");
 });
+
+test("덱 스크립트의 네트워크 호출은 경고(fetch, XMLHttpRequest, WebSocket, /api/)", () => {
+  const withJs = (js: string) => ok.replace("</body>", `<script>${js}</script></body>`);
+  for (const js of ["fetch('/x')", "new XMLHttpRequest()", "new WebSocket('ws://x')", "new EventSource('/e')", "const u = '/api/decks'"]) {
+    const w = lint(withJs(js)).filter((i) => i.rule === "network");
+    expect(w.length, js).toBe(1);
+    expect(w[0].level).toBe("warn");
+  }
+  expect(lint(withJs("const a = 1; // fetched later")).filter((i) => i.rule === "network")).toEqual([]);
+});

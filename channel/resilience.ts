@@ -53,7 +53,7 @@ try {
   const before = got.length;
   app.kill(); await app.exited;
   await Bun.sleep(1500);
-  assert((await client.listTools()).tools.length === 2, "서버가 없어도 채널(MCP)은 살아 있다");
+  assert((await client.listTools()).tools.length === 3, "서버가 없어도 채널(MCP)은 살아 있다");
   app = spawnApp(); await up();
   let ok = false;
   for (let i = 0; i < 40 && !ok; i++) { ok = await connected().catch(() => false); if (!ok) await Bun.sleep(500); }

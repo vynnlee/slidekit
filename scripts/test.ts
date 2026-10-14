@@ -42,6 +42,7 @@ const steps: Step[] = [
   bun("deploy-worker", "test", "deploy/worker"),
   { name: "channel", cmd: ["bun", "channel/test.ts"], env: { TEST_PORT: "3242" } },
   { name: "channel-resilience", cmd: ["bun", "channel/resilience.ts"], env: { TEST_PORT: "3247" } },
+  { name: "channel-trust", cmd: ["bun", "channel/trust.ts"], env: { TEST_PORT: "3248" } },
   browser("engine-verify", "engine/test/verify.cjs", "static", STATIC),
   { ...browser("engine-moved", "engine/test/moved.cjs", "static", STATIC), server: undefined }, // file:// 로 연다
   browser("routes", "app/test/routes.cjs", "app", APP),
@@ -152,7 +153,7 @@ async function ensure(kind: "app" | "dry" | "static") {
   const log = Bun.file("/tmp/sk-eng-srv.log");
   const p = Bun.spawn(["taskpolicy", "-b", "bun", "run", "app/server.ts"], {
     cwd: root, stdout: log, stderr: log, detached: true,
-    env: { ...process.env, PORT: "3245", SLIDEKIT_STABLE: "1", SLIDEKIT_READONLY_DECKS: READONLY, SLIDEKIT_DEPLOY_DRY_RUN: "1" },
+    env: { ...process.env, PORT: "3245", SLIDEKIT_STABLE: "1", SLIDEKIT_READONLY_DECKS: READONLY, SLIDEKIT_DEPLOY_DRY_RUN: "1", SLIDEKIT_KEY_FILE: "/tmp/slidekit-test.key" },
   });
   servers.set(kind, () => killTree(p.pid));
   await waitUp(DRY);

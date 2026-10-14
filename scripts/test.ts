@@ -66,7 +66,12 @@ const steps: Step[] = [
 {
   const used = steps.flatMap((st) => st.cmd);
   const extra = globSync("{app,engine,bundler,channel,scripts,deploy}/**/*.test.ts", { cwd: root }).filter((f) => !f.includes("node_modules") && !used.includes(f) && !used.some((u) => f.startsWith(u + "/")));
-  if (extra.length) steps.splice(steps.findIndex((st) => st.name === "channel"), 0, { name: "unit-other", cmd: ["bun", "test", ...extra] });
+  // SLIDEKIT_DECKS를 임시 폴더로 바꾸는 테스트는 folder.ts 같은 모듈이 처음 불러올 때 그 값을 굳혀서, 한 프로세스에 섞이면 서로를 깨뜨린다. 그런 파일은 따로따로 돈다.
+  const isolated = extra.filter((f) => readFileSync(join(root, f), "utf8").includes("SLIDEKIT_DECKS"));
+  const shared = extra.filter((f) => !isolated.includes(f));
+  const at = steps.findIndex((st) => st.name === "channel");
+  if (isolated.length) steps.splice(at, 0, { name: "unit-isolated", cmd: ["sh", "-c", isolated.map((f) => `bun test ${f}`).join(" && ")] });
+  if (shared.length) steps.splice(at, 0, { name: "unit-other", cmd: ["bun", "test", ...shared] });
 }
 if (flag("--list")) { console.log(steps.map((s) => s.name + (s.slow ? " (slow)" : "")).join("\n")); process.exit(0); }
 // 변경 파일 -> 단계 매핑표(여기 한 곳). 규칙은 모두 적용해 단계를 합친다. 문서만 바뀌면 단계가 없다.
@@ -92,7 +97,7 @@ const MAP: [RegExp, string[]][] = [
   [/^app\/(remote-api\.ts|src\/(Remote|lib\/remote-host))|^app\/test\/remote/, ["remote", "unit-other"]],
   [/^app\/src\//, BROWSER_APP],
   [/^scripts\/(test\.ts|scan-secrets)/, ["scan-secrets"]],
-  [/\.test\.ts$/, ["unit-other"]],
+  [/\.test\.ts$/, ["unit-other", "unit-isolated"]],
 ];
 function changedSteps(): { names: string[]; files: string[]; unknown: string[] } {
   const base = args.includes("--base") ? args[args.indexOf("--base") + 1] : Bun.spawnSync(["git", "rev-parse", "--verify", "-q", "origin/main"], { cwd: root }).exitCode === 0 ? "origin/main" : "HEAD";

@@ -4,6 +4,7 @@ import { TEMPLATES, TEMPLATE_IDS } from "../engine/templates";
 import { readMeta, safeJson, setMeta } from "./src/lib/deck-meta";
 import { AssetError, MAX_BYTES, saveAsset } from "../engine/assets";
 import { readOnlyDeck, withDeckLock } from "./deck-lock";
+import { readPublish } from "../engine/publish-record";
 import { cp, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 
 const root = join(import.meta.dir, "..");
@@ -174,8 +175,9 @@ export async function trashDeck(req: Request & { params: { folder: string } }) {
   const trash = join(decks, ".trash");
   await mkdir(trash, { recursive: true });
   const entry = `${folder}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+  const published = readPublish(from).current?.url ?? null; // 휴지통으로 옮겨도 게시본은 계속 열려 있다: 화면이 알릴 수 있게 주소를 돌려준다
   await withDeckLock(folder, () => rename(from, join(trash, entry)));
-  return Response.json({ ok: true, entry });
+  return Response.json({ ok: true, entry, published });
 }
 
 // ---- 휴지통(decks/.trash/<이름>-<타임스탬프>) ----
@@ -194,7 +196,7 @@ export async function listTrash() {
     if (!p) return null;
     const html = await Bun.file(join(trashDir, entry, "index.html")).text().catch(() => "");
     const title = html.match(/<title>([^<]*)<\/title>/)?.[1] ?? p.folder;
-    return { entry, ...p, title };
+    return { entry, ...p, title, published: readPublish(join(trashDir, entry)).current?.url ?? null };
   }));
   return Response.json(items.filter(Boolean).sort((a, b) => b!.deletedAt.localeCompare(a!.deletedAt)));
 }

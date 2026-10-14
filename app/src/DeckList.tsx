@@ -112,7 +112,7 @@ const Meta = ({ d, opened }: { d: DeckEntry; opened?: number }) => (
   <span className="flex min-w-0 flex-wrap gap-x-2 tabular-nums" title={[d.date, d.folder].filter(Boolean).join("  ")}>
     {d.slides != null && <span>{d.slides} slides</span>}
     {d.modified && <span>Edited {ago(d.modified)}</span>}
-    {d.author && <span className="truncate">{d.author}</span>}
+    {d.author && <span className="min-w-0 max-w-full truncate">{d.author}</span>}
     {opened && <span className="flex items-center gap-1"><span aria-hidden className="size-1.5 rounded-full bg-focus-ring" />Opened {ago(new Date(opened).toISOString())}</span>}
   </span>
 );
@@ -304,7 +304,7 @@ export function DeckList() {
   // 휴지통으로 보내는 것은 확인 없이 바로 하고, 되돌리기는 토스트의 Undo로 한다.
   const trash = async (d: DeckEntry) => {
     const j = await run(() => api(`/api/decks/${encodeURIComponent(d.folder)}/trash`, "POST"));
-    if (j) toast(`Moved ${d.title} to Trash`, { action: { label: "Undo", onClick: () => { run(() => api(`/api/trash/${encodeURIComponent((j as { entry: string }).entry)}/restore`, "POST")); } } });
+    if (j) toast(`Moved ${d.title} to Trash${(j as { published?: string | null }).published ? `. Still published at ${(j as { published: string }).published}. Unpublish with slidekit unpublish ${d.folder}` : ""}`, { ms: (j as { published?: string | null }).published ? 12000 : TOAST.undo, action: { label: "Undo", onClick: () => { run(() => api(`/api/trash/${encodeURIComponent((j as { entry: string }).entry)}/restore`, "POST")); } } });
   };
   // 카드와 행의 메뉴 항목은 한 곳(menu-model)에서 만들고, ... 버튼과 우클릭과 ContextMenu 키가 같은 목록을 쓴다.
   const menuFor = (d: DeckEntry) => deckMenu(
@@ -406,7 +406,7 @@ export function DeckList() {
           {decks?.length === 0 && (
             <StatusPage as="h2" title="No decks yet" actions={<Button variant="primary" size="compact" leadingIcon={Plus} onClick={startCreate}>New deck</Button>}>
               Create a deck to start, or run slidekit new in a terminal.
-              <span className="mt-3 block text-caption text-muted-foreground">
+              <span className="mt-3 block text-caption text-muted-foreground [@media(hover:none)]:hidden">
                 Search with <kbd className="rounded bg-hover px-1">{mac ? "Cmd" : "Ctrl"} K</kbd>. Move between decks with the arrow keys, open one with Enter, present it with <kbd className="rounded bg-hover px-1">{mac ? "Cmd" : "Ctrl"} Enter</kbd>.
               </span>
             </StatusPage>

@@ -10,7 +10,7 @@ import { trashMenu } from "@/lib/menu-model";
 import { TOAST, toast } from "./Toaster";
 import { UNREACHABLE, isDown, onReconnect } from "@/lib/connection";
 
-type Item = { entry: string; folder: string; title: string; deletedAt: string };
+type Item = { entry: string; folder: string; title: string; deletedAt: string; published?: string | null };
 
 const call = async (path: string, method: string, body: object = {}) => {
   if (isDown()) throw new Error(UNREACHABLE);
@@ -60,6 +60,7 @@ export function TrashList({ onRestored }: { onRestored: () => void }) {
         {items?.map((i) => (
           <li key={i.entry} className="flex h-9 items-center gap-3 px-2 text-body" {...cm.bind(() => trashMenu({ restore: () => { restore(i); }, purge: () => { setTyped(""); setErr(""); setPurging(i); } }, { restore: RotateCcw, purge: Trash2 }))}>
             <span className="min-w-0 flex-1 truncate">{i.title}</span>
+            {i.published && <Tooltip content={`Still published at ${i.published}`} side="top"><span className="shrink-0 rounded bg-hover px-1.5 text-caption text-foreground">Published</span></Tooltip>}
             <span className="shrink-0 text-caption text-muted-foreground">{i.folder}</span>
             <span className="shrink-0 text-caption text-muted-foreground tabular-nums">{when(i.deletedAt)}</span>
             <Tooltip content="Restore" side="top"><Button variant="ghost" size="icon-compact" aria-label={`Restore ${i.title}`} disabled={busy} onClick={() => restore(i)}><RotateCcw /></Button></Tooltip>

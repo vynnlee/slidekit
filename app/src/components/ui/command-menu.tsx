@@ -1321,7 +1321,7 @@ const CommandMenuItem = memo(forwardRef<HTMLDivElement, CommandMenuItemProps>(
           // py-1/-my-1 keeps truncate's overflow:hidden from clipping
           // ascenders and descenders outside the trimmed box.
           <span className="flex min-w-0 flex-1 items-baseline gap-2">
-            <span className="truncate [text-box:trim-both_cap_alphabetic] py-1 -my-1">
+            <span className="max-w-full shrink-0 truncate [text-box:trim-both_cap_alphabetic] py-1 -my-1">
               {item.label}
             </span>
             {/* The description shares the label's size, muted on both

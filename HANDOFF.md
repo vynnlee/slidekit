@@ -41,6 +41,7 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 - `bun run test [--only <이름|글로브|그룹>] [--changed] [--list] [--bail] [--slow] [--trace]`. 공정 큐(`/tmp/slidekit-heavy.queue`)로 잠금 `/tmp/slidekit-heavy.lock`을 순서대로 잡고, 단계 로그는 `/tmp/slidekit-test-logs/`, 단계당 상한 900초(`SLIDEKIT_STEP_TIMEOUT`). 실패한 브라우저 단계는 트레이스를 켜고 한 번 더 돈다. **단계 이름은 위치 인자가 아니라 `--only`로 준다**(위치 인자는 무시되고 전체가 돈다). `--only editor`는 editor 단계 하나만(정확 일치), 여럿은 글로브 `--only 'editor*'`, 그룹 별칭은 `unit`, `channel`, `ux-shots`, `bundler`(`scripts/lib/select-steps.ts`). 시작 줄의 `선택:`으로 고른 단계를 확인한다.
 - 집계 단계 33개(약 880초): roundtrip, deck-source.fuzz, deck-tokens, deck-fonts, editor-readonly, export-api, comments, lint, bundler-bundle, bundler-fonts, scan-secrets, deploy-worker, unit-other, unit-isolated, channel, channel-resilience, channel-trust, engine-verify(약 75초, 145검사), engine-moved, engine-gradient, routes, list, present, remote, responsive, inspector, inspector-a11y, editor, editor-assets, editor-multi, comments-e2e, versions-e2e, tokens, export. `--slow`나 `--only`로만 도는 단계: ux-shots-1440, ux-shots-390, bundler-fonts-e2e(인터넷과 uv 필요).
 - 덱 60개 성능(2026-10-15, 격리 worktree, 덱 20개는 53장 워크숍 사본, mac-cloud `taskpolicy -b`): `/api/decks` 15~22ms(12.5KB), `/api/search-index` 첫 호출 57ms와 이후 4~6ms(653KB), 목록 카드 60개 표시 1.4~2.3초, 썸네일 로드가 메인 스레드를 400~800ms 점유하는 긴 작업이 몇 번 생긴다(같은 출처 iframe, 동시 3개 상한). 병목은 서버가 아니라 팔레트였고 입력 상태를 별도 컴포넌트(`DeckPalette.tsx`)로 빼고 줄 수를 제한해 글자당 입력 지연 264~304ms에서 128ms(일반 우선순위)로, 팔레트 열기 923ms에서 542ms로 줄었다. 캐시는 필요 없었다.
+- 큰 덱 편집기 성능(2026-10-15, dev 서버, mac-cloud `taskpolicy -b`, `bun scripts/test.ts --only editor-perf`, 80장 덱에 한 장 요소 1000개): 열기 3.5~4.5초, 요소 선택 응답 0.5~1초, 드래그 프레임 간격 최대 0.4~0.9초, Layers 150행 2.6초와 1000행 8.6초(dev 빌드 React 비용이 지배적, 가상화는 하지 않음), 찾기 3.6초(경로 계산 제곱 비용 제거 전 5~12초), 넘침 검사는 느린 슬라이드에서 간격을 10배로 물려 CPU 10% 이내.
 - 수동 도구(집계 밖): `app/test/list-load.cjs`(덱 30개 합성 부하), `app/test/a11y-app.cjs`(axe와 스크린샷), `app/test/remote-qa.cjs`(폰 4종 크기).
 - 시간은 sleep이 아니라 낮은 우선순위(`taskpolicy -b`)에서의 페이지 로드와 렌더 CPU가 지배한다(sleep 정리와 가짜 시계의 효과는 약 4%). 남은 고정 sleep(editor.cjs 약 137곳, inspector-a11y.cjs 약 32곳)은 시간 단축보다 흔들림 감소 목적으로만 조건 대기로 바꾼다. `[느림 +N초]` 표시로 찾는다.
 
@@ -96,9 +97,9 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 
 ## 사용자 확인이 필요한 것
 
-1. **Worker 배포 승인**: 위 미배포 변경 전부. 실행 순서는 `deploy/README.md`.
 실기기 확인은 한 장짜리 [docs/DEVICE-CHECKLIST.md](docs/DEVICE-CHECKLIST.md)에 방법, 기대, 실패 시 알려 줄 정보와 함께 모아 두었다(자동 검증된 것은 빼고 사람이 봐야 할 것만).
 
+1. **Worker 배포 승인**: 위 미배포 변경 전부. 실행 순서는 `deploy/README.md`.
 2. **실기기 iPhone 리모컨**: Safari에서 QR 스캔, 화면 잠금 뒤 재연결, Wake Lock, 지연 체감(두 컨텍스트 e2e와 QR 디코드는 통과).
 3. **mac-local 첫 실행**: 새 clone에서 `bun install`, `bun run slidekit doctor`, 한글 IME 편집, Cmd 단축키, 드래그 체감, 외장 모니터 발표(권한 팝업, 창 배치, 두 창 동기화). 시스템 Chrome 경로의 PDF는 headless shell로만 검증했다.
 4. **맥 미리보기에서 그라디언트 PDF가 검게 보임**: macOS 미리보기와 Quick Look(CoreGraphics)이 Chrome의 PDF 셰이딩을 검게 그린다. PDF 자체는 정상(셰이딩과 SMask가 들어 있음)이고 Chrome이나 Acrobat에서는 맞게 보이는 것으로 추정하며, 사용자의 Chrome에서 한 번 확인해 달라.

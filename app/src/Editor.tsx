@@ -853,7 +853,7 @@ export function Editor({ id }: { id: string }) {
       </Shell>
       <ReplyToasts comments={comments} onView={jump} />
       <CommandMenuDialog open={palette} onOpenChange={setPalette} title="Search" description="Go to a slide or run an action">
-        <CommandMenu items={paletteItems}>
+        <CommandMenu items={paletteItems} suggestions={["act-present", "act-add", "act-find", "act-comment", "act-keys"]} suggestionsLabel="Try" /* 처음 연 팔레트가 슬라이드 목록으로 시작하지 않게 핵심 동작 5개를 앞에 둔다 */>
           <CommandMenuInput placeholder="Slides or actions" />
           <CommandMenuList />
           <CommandMenuEmpty>No results</CommandMenuEmpty>

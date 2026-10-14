@@ -32,6 +32,9 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   const missingP = [];
   await page.keyboard.press('Meta+k'); await settle(); // 팔레트를 한 번 열어 두고 검색어만 바꿔 가며 본다
   const palIn = page.getByPlaceholder('Slides or actions');
+  // 처음 연 팔레트(빈 검색어)는 슬라이드 목록이 아니라 핵심 동작 다섯 개(Try)로 시작한다
+  const tryRows = await page.getByRole('option').allTextContents();
+  check('빈 팔레트는 Try 다섯 개로 시작', tryRows.slice(0, 5).map((t) => t.replace(/\s+/g, ' ')).every((t, i) => [/Present from this slide/, /Add slide after/, /Find and replace/, /Add comment/, /Keyboard shortcuts/][i].test(t)) && (await page.getByText('Try', { exact: true }).count()) >= 1, tryRows.slice(0, 6));
   for (const q of inPalette) {
     await palIn.fill(q);
     await cond(() => true, null, 50); // 목록 갱신 한 프레임

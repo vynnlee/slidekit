@@ -154,8 +154,10 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await post('/api/decks', { name: 'zz-e2e-k1', title: 'zz-e2e-k1' });
   await post('/api/decks', { name: 'zz-e2e-k2', title: 'zz-e2e-k2' });
   await page.goto(BASE + '/');
-  await page.evaluate(() => localStorage.setItem('slidekit:list-view', 'grid')); // 앞 단계가 목록 보기로 남겼을 수 있다
-  await page.goto(BASE + '/');
+  // 앞 단계가 목록 보기로 남겼을 수 있으니 화면의 토글로 그리드를 확실히 맞춘다(저장소 값을 직접 쓰면 마운트 효과와 경합한다)
+  await page.getByRole('button', { name: 'Toggle view' }).waitFor();
+  await sleep(500);
+  if ((await page.evaluate(() => localStorage.getItem('slidekit:list-view'))) !== 'grid') await page.getByRole('button', { name: 'Toggle view' }).click();
   await page.getByRole('button', { name: 'zz-e2e-k1', exact: true }).waitFor();
   await sleep(1000); // 썸네일 iframe이 붙는 동안 포커스가 흔들리지 않게 잠깐 둔다
   const activeLabel = () => page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label'));
@@ -175,6 +177,17 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.getByRole('button', { name: 'Present zz-e2e-k2' }).waitFor();
   await page.getByRole('button', { name: 'Present zz-e2e-k2' }).click({ force: true });
   check('카드의 Present 버튼', await until(async () => new URL(page.url()).pathname === '/present/zz-e2e-k2'), page.url());
+  // 보안: 제목의 </script>는 deck-meta를 빠져나가지 않고, 덱 안의 링크로 저장소 밖 파일을 읽을 수 없다
+  const evil = '</script><script>window.__pwned=1</script>';
+  check('위험한 제목으로 덱 생성', (await post('/api/decks', { name: 'zz-e2e-xss', title: evil })).status() === 201);
+  const xssHtml = fs.readFileSync(path.join(DECKS, 'zz-e2e-xss', 'index.html'), 'utf8');
+  check('파일에 스크립트 탈출이 없다', !xssHtml.includes('</script><script>window.__pwned'), xssHtml.slice(0, 400));
+  check('목록 API는 같은 제목을 돌려준다', (await (await ctx.request.get(BASE + '/api/decks')).json()).some((d) => d.folder === 'zz-e2e-xss' && d.title === evil));
+  const linkDir = path.join(DECKS, 'zz-e2e-ln'); fs.mkdirSync(linkDir, { recursive: true });
+  fs.writeFileSync(path.join(linkDir, 'ok.txt'), 'ok'); try { fs.symlinkSync('/etc/hosts', path.join(linkDir, 'leak.txt')); } catch {}
+  check('저장소 안 파일은 서빙한다', (await ctx.request.get(BASE + '/decks/zz-e2e-ln/ok.txt')).status() === 200);
+  check('저장소 밖을 가리키는 링크는 404', (await ctx.request.get(BASE + '/decks/zz-e2e-ln/leak.txt')).status() === 404);
+  check('링크는 덱으로 취급하지 않는다(복제 404)', (await post('/api/decks/zz-e2e-ln/duplicate', {})).status() === 404);
   // 최근 연 덱: 가장 최근 하나에 Opened 표시, Recent 정렬은 최근 순
   await page.goto(BASE + '/');
   await page.getByRole('button', { name: 'zz-e2e-k2', exact: true }).waitFor();

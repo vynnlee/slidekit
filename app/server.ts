@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { join, normalize, sep } from "node:path";
-import { readdir, stat } from "node:fs/promises";
+import { readdir, realpath, stat } from "node:fs/promises";
 import index from "./index.html";
 import { routes as commentRoutes } from "./comments";
 import { routes as editorRoutes } from "./editor-api";
@@ -65,7 +65,11 @@ async function serveStatic(pathname: string) {
   if (rel.includes("\0") || rel.split(sep).some((s) => s.startsWith("."))) return null; // 점 파일과 임시 파일 제외
   const top = rel.split(sep).filter(Boolean)[0];
   if (top !== "decks" && top !== "engine") return null;
-  const file = Bun.file(join(root, rel));
+  const full = join(root, rel);
+  // 덱 안의 심볼릭 링크가 저장소 밖(예: ~/.ssh)을 가리켜도 읽히지 않게, 실제 경로가 저장소 안인지 확인한다.
+  const real = await realpath(full).catch(() => null);
+  if (!real || !real.startsWith((await realpath(root)) + sep)) return null;
+  const file = Bun.file(real);
   return (await file.exists()) ? new Response(file) : null;
 }
 
@@ -73,6 +77,8 @@ Bun.serve({
   hostname: "127.0.0.1", // 0.0.0.0은 LAN 전체에 열린다
   port,
   maxRequestBodySize: 8 << 20, // 덱 원문(이미지 포함 가능)보다 넉넉하게
+  // 테스트 서버는 SLIDEKIT_STABLE=1로 띄운다: HMR을 꺼서 팀원이 파일을 저장해도 열린 페이지가 다시 로드되지 않는다.
+  ...(process.env.SLIDEKIT_STABLE ? { development: { hmr: false, console: false } } : {}),
   routes: guardRoutes({
     "/": index,
     "/present/:id": index,

@@ -1,12 +1,20 @@
-import { join } from "node:path";
+import { join, sep } from "node:path";
+import { deckFolder, decksDir } from "./folder";
 import { cp, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 
 const root = join(import.meta.dir, "..");
-const decks = join(root, "decks");
+const decks = decksDir; // 테스트는 SLIDEKIT_DECKS로 임시 폴더를 쓴다
 const NAME = /^[a-z0-9][a-z0-9-]*$/; // 새 이름 규칙
 const SRC = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/; // 기존 폴더 이름(점으로 시작하는 폴더는 제외)
 const err = (error: string, status: number) => Response.json({ error }, { status });
 const exists = (p: string) => stat(p).then(() => true, () => false);
+
+// 같은 폴더의 임시 파일에 쓴 뒤 rename한다(중간 상태가 남지 않는다).
+async function writeAtomic(file: string, text: string) {
+  const tmp = `${file}.tmp-${crypto.randomUUID()}`;
+  await Bun.write(tmp, text);
+  await rename(tmp, file);
+}
 
 // 새 덱: engine/new.ts(slidekit new)를 그대로 실행해 규칙(이름 형식, 중복 거부)을 한 곳에 둔다.
 export async function createDeck(req: Request) {
@@ -32,8 +40,7 @@ async function setTitle(folder: string, title: string) {
   html = html.replace(/<title>[^<]*<\/title>/, () => `<title>${esc(title)}</title>`);
   // 표지 h1이 옛 제목과 같을 때만 바꾼다(손으로 고친 표지는 건드리지 않는다).
   if (old !== undefined) html = html.replace(new RegExp(`(<h1[^>]*>)${old.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(</h1>)`), (_, a, b) => `${a}${esc(title)}${b}`);
-  await Bun.write(file, html);
-  await patchMeta(folder, (m) => { m.title = title; });
+  await writeAtomic(file, withMeta(html, (m) => { m.title = title; }));
 }
 
 export async function retitleDeck(req: Request & { params: { folder: string } }) {
@@ -47,20 +54,30 @@ export async function retitleDeck(req: Request & { params: { folder: string } })
 }
 
 // #deck-meta JSON을 고쳐 다시 쓴다. 메타가 없으면 그대로 둔다(id는 폴더 이름이 된다).
+// <script> 안에 JSON을 넣을 때 </script>로 빠져나가거나 줄 구분자로 깨지지 않게 <, U+2028, U+2029를 이스케이프한다(JSON.parse는 그대로 복원한다).
+export const safeJson = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+
+// 문서의 #deck-meta를 고친 새 문서를 돌려준다. 메타가 없거나 JSON이 깨졌으면 그대로 둔다.
+export function withMeta(html: string, fn: (m: Record<string, unknown>) => void): string {
+  const re = /(<script[^>]*id="deck-meta"[^>]*>)([\s\S]*?)(<\/script>)/;
+  const m = html.match(re);
+  if (!m) return html;
+  let meta: Record<string, unknown>;
+  try { meta = JSON.parse(m[2]); } catch { return html; }
+  fn(meta);
+  return html.replace(re, (_, a, _b, c) => `${a}\n    ${safeJson(meta)}\n  ${c}`);
+}
+
 async function patchMeta(folder: string, fn: (m: Record<string, unknown>) => void) {
   const file = join(decks, folder, "index.html");
   const html = await Bun.file(file).text();
-  const re = /(<script[^>]*id="deck-meta"[^>]*>)([\s\S]*?)(<\/script>)/;
-  const m = html.match(re);
-  if (!m) return;
-  const meta = JSON.parse(m[2]);
-  fn(meta);
-  await Bun.write(file, html.replace(re, (_, a, _b, c) => `${a}\n    ${JSON.stringify(meta)}\n  ${c}`));
+  const next = withMeta(html, fn);
+  if (next !== html) await writeAtomic(file, next);
 }
 
+// 덱 폴더 검증은 folder.ts 한 곳의 규칙을 쓴다(형식, 디렉터리, index.html, 심볼릭 링크로 밖을 가리키지 않기).
 async function source(folder: string) {
-  if (!SRC.test(folder) || !(await exists(join(decks, folder, "index.html")))) return null;
-  return join(decks, folder);
+  return deckFolder(folder);
 }
 
 export async function duplicateDeck(req: Request & { params: { folder: string } }) {
@@ -69,7 +86,9 @@ export async function duplicateDeck(req: Request & { params: { folder: string } 
   if (!from) return err("Deck not found", 404);
   let name = `${folder}-copy`;
   for (let i = 2; await exists(join(decks, name)); i++) name = `${folder}-copy-${i}`;
-  await cp(from, join(decks, name), { recursive: true, filter: (p) => !p.startsWith(join(from, "history")) && p !== join(from, "comments.json") }); // 코멘트는 복제하지 않는다
+  // history/와 comments.json(코멘트는 복제하지 않는다)은 빼고 복사한다. history-notes.md 같은 형제 이름은 남긴다.
+  const hist = join(from, "history");
+  await cp(from, join(decks, name), { recursive: true, filter: (p) => p !== hist && !p.startsWith(hist + sep) && p !== join(from, "comments.json") });
   await patchMeta(name, (m) => { if ("id" in m) m.id = name; if (typeof m.title === "string") m.title += " copy"; });
   return Response.json({ id: name, folder: name }, { status: 201 });
 }
@@ -81,7 +100,8 @@ export async function renameDeck(req: Request & { params: { folder: string } }) 
   const from = await source(folder);
   if (!from) return err("Deck not found", 404);
   if (name === folder) return Response.json({ id: name, folder: name });
-  if (await exists(join(decks, name))) return err("Name already exists", 409);
+  // 대상 폴더를 먼저 만들어 선점한다(rename은 빈 폴더 위로 옮겨 쓴다).
+  if (!(await mkdir(join(decks, name)).then(() => true, () => false))) return err("Name already exists", 409);
   await rename(from, join(decks, name));
   await patchMeta(name, (m) => { if ("id" in m) m.id = name; });
   return Response.json({ id: name, folder: name });

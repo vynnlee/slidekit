@@ -4,6 +4,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
+import { editsBetween, hash, noteFileChanged, restore } from "./versions";
 
 const decksDir = process.env.SLIDEKIT_DECKS ?? join(import.meta.dir, "..", "decks");
 
@@ -20,6 +21,10 @@ export type Comment = {
   slideDeleted?: boolean; // 저장 때 슬라이드가 지워진 코멘트. 지우지 않고 표시만 한다
   deliveredAt?: string; // 채널이 Claude 세션에 전달한 시각
   ackAt?: string; // Claude가 작업을 시작했다고 알린 시각
+  editBase?: string; // 답이 달릴 때 찾은, Claude 수정 직전 버전 id(되돌릴 지점)
+  editHash?: string; // Claude 수정 뒤 덱 내용의 해시. 덱이 그 뒤로 바뀌었는지 보는 데 쓴다
+  revertedAt?: string;
+  revertUndo?: string; // 되돌리기 직전 상태의 버전 id(되돌리기 취소용)
   sig?: string; // 이 기기의 키로 만든 서명(작성 때 채워진다). 없거나 틀리면 검증 안 됨
   trusted?: boolean; // 읽을 때 계산한다(저장하지 않는다)
   resolved?: boolean; // 사용자가 해결로 표시
@@ -82,7 +87,9 @@ export function sanitize(list: unknown[]): Comment[] {
     };
     const reply = str(c.reply, 2000); if (reply !== undefined) s.reply = reply;
     if (typeof c.sig === "string" && /^[0-9a-f]{64}$/.test(c.sig)) s.sig = c.sig;
-    for (const k of ["repliedAt", "deliveredAt", "resolvedAt", "ackAt"] as const) { const v = str(c[k], 40); if (v && !Number.isNaN(Date.parse(v))) s[k] = v; }
+    for (const k of ["editBase", "revertUndo"] as const) if (typeof c[k] === "string" && ID.test(c[k] as string)) s[k] = c[k] as string;
+    if (typeof c.editHash === "string" && /^[0-9a-f]{40}$/.test(c.editHash)) s.editHash = c.editHash;
+    for (const k of ["repliedAt", "deliveredAt", "resolvedAt", "ackAt", "revertedAt"] as const) { const v = str(c[k], 40); if (v && !Number.isNaN(Date.parse(v))) s[k] = v; }
     if (c.resolved === true) s.resolved = true;
     if (c.slideDeleted === true) s.slideDeleted = true;
     out.push(s);
@@ -125,9 +132,9 @@ try {
   watch(decksDir, { recursive: true }, (_e, name) => {
     if (!name) return;
     const [deck, ...rest] = name.split(/[\\/]/);
-    if (!rest.length || rest.at(-1) === "comments.json" || rest.at(-1)!.startsWith(".")) return;
+    if (!rest.length || rest.at(-1) === "comments.json" || rest.some((s) => s.startsWith("."))) return; // .versions 같은 점 폴더 안의 파일도 무시
     clearTimeout(timers.get(deck));
-    timers.set(deck, setTimeout(() => { timers.delete(deck); emit("deck-changed", { deck }); }, 250));
+    timers.set(deck, setTimeout(() => { timers.delete(deck); noteFileChanged(deck); emit("deck-changed", { deck }); }, 250));
   });
 } catch {}
 
@@ -167,7 +174,11 @@ export const routes = {
       const comment = list.find((c) => c.id === req.params.id);
       if (!comment) return bad("not found", 404);
       if (comment.status !== "open") return bad("already replied", 409); // 이미 답한 코멘트를 덮어쓰지 못하게 한다
-      Object.assign(comment, { status: "done", reply: b.reply, repliedAt: new Date().toISOString() });
+      const repliedAt = new Date().toISOString();
+      Object.assign(comment, { status: "done", reply: b.reply, repliedAt });
+      // Claude가 그 사이에 덱을 고쳤다면 되돌릴 지점과 수정 뒤 해시를 코멘트에 연결한다(Revert Claude's edit).
+      const edit = editsBetween(b.deck, comment.ackAt ?? comment.deliveredAt ?? comment.createdAt, repliedAt);
+      if (edit) { comment.editBase = edit.base; comment.editHash = edit.hash; }
       save(b.deck, list);
       emit("reply", { deck: b.deck, comment });
       return Response.json({ ok: true });
@@ -188,6 +199,35 @@ export const routes = {
     },
   },
   // Claude가 작업을 시작했다고 알린다("처리 중" 표시). 열린 코멘트에만 적용한다.
+  // Claude의 수정 되돌리기. 덱이 그 수정 뒤로 더 바뀌었으면 409(changed)로 거절하고 사용자가 버전 기록에서 고르게 한다.
+  // {undo:true}는 되돌리기를 취소한다(되돌리기 직전 상태로 복원하고 다시 되돌릴 수 있게 한다).
+  "/api/comments/:id/revert": {
+    POST: async (req: Request & { params: { id: string } }) => {
+      const b = await body(req);
+      if (!b || !validDeck(b.deck)) return bad("deck");
+      if ((process.env.SLIDEKIT_READONLY_DECKS ?? "").split(",").some((f) => f.trim() === b.deck)) return bad("read-only deck", 403);
+      const list = load(b.deck);
+      const comment = list.find((c) => c.id === req.params.id);
+      if (!comment) return bad("not found", 404);
+      const file = join(decksDir, b.deck, "index.html");
+      if (b.undo === true) {
+        if (!comment.revertedAt || !comment.revertUndo) return bad("nothing to undo", 409);
+        const r = restore(b.deck, comment.revertUndo);
+        if (!r.ok) return bad(r.error, r.status);
+        delete comment.revertedAt; delete comment.revertUndo;
+      } else {
+        if (!comment.editBase || comment.revertedAt) return bad("nothing to revert", 409);
+        if (hash(readFileSync(file, "utf8")) !== comment.editHash) return Response.json({ error: "changed" }, { status: 409 });
+        const r = restore(b.deck, comment.editBase);
+        if (!r.ok) return bad(r.error, r.status);
+        comment.revertedAt = new Date().toISOString();
+        if (r.undo) comment.revertUndo = r.undo;
+      }
+      save(b.deck, list);
+      emit("reply", { deck: b.deck, comment });
+      return Response.json({ ok: true });
+    },
+  },
   "/api/comments/:id/ack": {
     POST: async (req: Request & { params: { id: string } }) => {
       const b = await body(req);

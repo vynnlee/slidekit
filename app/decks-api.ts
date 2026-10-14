@@ -88,7 +88,7 @@ export async function duplicateDeck(req: Request & { params: { folder: string } 
   for (let i = 2; await exists(join(decks, name)); i++) name = `${folder}-copy-${i}`;
   // history/와 comments.json(코멘트는 복제하지 않는다)은 빼고 복사한다. history-notes.md 같은 형제 이름은 남긴다.
   const hist = join(from, "history");
-  await cp(from, join(decks, name), { recursive: true, filter: (p) => p !== hist && !p.startsWith(hist + sep) && p !== join(from, "comments.json") });
+  await cp(from, join(decks, name), { recursive: true, filter: (p) => p !== hist && !p.startsWith(hist + sep) && p !== join(from, "comments.json") && !p.startsWith(join(from, ".versions")) });
   await patchMeta(name, (m) => { if ("id" in m) m.id = name; if (typeof m.title === "string") m.title += " copy"; });
   return Response.json({ id: name, folder: name }, { status: 201 });
 }

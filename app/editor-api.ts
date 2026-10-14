@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { remap } from "./comments";
+import { afterSave } from "./versions";
 import { deckFolder } from "./folder";
 import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 
@@ -31,8 +32,10 @@ export const routes = {
       const file = join(decksDir, folder, "index.html");
       if (!b.force && statSync(file).mtimeMs !== b.base) return bad("changed", 409);
       const tmp = `${file}.tmp-${crypto.randomUUID()}`;
+      const prev = readFileSync(file, "utf8"); // 버전 기록: 덮어쓰기 전 내용
       writeFileSync(tmp, b.source);
       renameSync(tmp, file);
+      afterSave(folder, prev, b.source);
       // 순서 변경과 삭제를 코멘트의 슬라이드 번호에 반영한다(옛 번호 -> 새 번호)
       if (b.slideMap && typeof b.slideMap === "object") remap(folder, b.slideMap as Record<string, number>);
       return Response.json({ mtime: statSync(file).mtimeMs });

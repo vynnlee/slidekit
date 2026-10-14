@@ -4,6 +4,7 @@ import { readdir, realpath, stat } from "node:fs/promises";
 import index from "./index.html";
 import { routes as commentRoutes } from "./comments";
 import { routes as editorRoutes } from "./editor-api";
+import { routes as versionRoutes } from "./versions";
 import { routes as exportRoutes } from "./export-api";
 import { guardHost, guardRoutes } from "./guard";
 import { alreadyUp, openApp } from "./launch";
@@ -97,6 +98,7 @@ Bun.serve({
     ...searchRoutes,
     ...commentRoutes,
     ...editorRoutes,
+    ...versionRoutes,
     ...exportRoutes,
   }),
   async fetch(req) {

@@ -9,3 +9,4 @@ decks/zz-e2e*/
 .env.*
 decks/**/*.tmp-*
 decks/.vibe-test-backup.html
+decks/*/.versions/

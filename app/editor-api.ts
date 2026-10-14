@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { readOnlyDeck, withDeckLock } from "./deck-lock";
 import { remap } from "./comments";
 import { afterSave } from "./versions";
 import { deckFolder } from "./folder";
@@ -23,22 +24,25 @@ export const routes = {
     PUT: async (req: Request & { params: { folder: string } }) => {
       const { folder } = req.params;
       if (!folderOk(folder)) return bad("deck", 404);
-      // 테스트 서버 전용 가드: SLIDEKIT_READONLY_DECKS=폴더,폴더를 주고 띄운 서버만 막는다. 사용자가 쓰는 서버에는 설정하지 않는다.
-      if ((process.env.SLIDEKIT_READONLY_DECKS ?? "").split(",").some((f) => f.trim() === folder)) return bad("read-only deck", 403);
+      // 테스트 서버 전용 가드(SLIDEKIT_READONLY_DECKS, 사용자가 쓰는 서버에는 설정하지 않는다)
+      if (readOnlyDeck(folder)) return bad("read-only deck", 403);
       const b = (await req.json().catch(() => null)) as { source?: unknown; base?: unknown; force?: unknown; slideMap?: unknown } | null;
       if (!b || typeof b.source !== "string") return bad("source");
       if (!/data-slidekit=/.test(b.source) || !/<section\b[^>]*\bdata-slide\b/.test(b.source)) return bad("not a slidekit deck");
       if (typeof b.base !== "number") return bad("base");
-      const file = join(decksDir, folder, "index.html");
-      if (!b.force && statSync(file).mtimeMs !== b.base) return bad("changed", 409);
-      const tmp = `${file}.tmp-${crypto.randomUUID()}`;
-      const prev = readFileSync(file, "utf8"); // 버전 기록: 덮어쓰기 전 내용
-      writeFileSync(tmp, b.source);
-      renameSync(tmp, file);
-      afterSave(folder, prev, b.source);
-      // 순서 변경과 삭제를 코멘트의 슬라이드 번호에 반영한다(옛 번호 -> 새 번호)
-      if (b.slideMap && typeof b.slideMap === "object") remap(folder, b.slideMap as Record<string, number>);
-      return Response.json({ mtime: statSync(file).mtimeMs });
+      const file = join(decksDir, folder, "index.html"), source = b.source, force = b.force, base = b.base, slideMap = b.slideMap;
+      // 설정, 제목 변경 같은 다른 쓰기와 겹치지 않게 덱 단위로 차례로 실행한다(mtime 비교부터 rename까지)
+      return withDeckLock(folder, async () => {
+        if (!force && statSync(file).mtimeMs !== base) return bad("changed", 409);
+        const tmp = `${file}.tmp-${crypto.randomUUID()}`;
+        const prev = readFileSync(file, "utf8"); // 버전 기록: 덮어쓰기 전 내용
+        writeFileSync(tmp, source);
+        renameSync(tmp, file);
+        afterSave(folder, prev, source);
+        // 순서 변경과 삭제를 코멘트의 슬라이드 번호에 반영한다(옛 번호 -> 새 번호)
+        if (slideMap && typeof slideMap === "object") remap(folder, slideMap as Record<string, number>);
+        return Response.json({ mtime: statSync(file).mtimeMs });
+      });
     },
   },
 };

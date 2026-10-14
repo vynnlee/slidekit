@@ -33,6 +33,34 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   const fr = () => page.frames().find((f) => f.url().startsWith('blob:'));
   await page.waitForFunction(() => { const f = document.querySelector('iframe[title="Canvas"]'); return f && f.contentDocument && f.contentDocument.querySelector('#sk-stage') && f.contentDocument.querySelector('[data-active]'); });
   await settle();
+  // 첫 열기 안내 카드: 카드가 열린 첫 상태에서 필름스트립 타일, Layers 행, 줌 단추, 노트, Inspector 탭과 겹치지 않는다(상자 교차와 중심점 hit-test 둘 다)
+  {
+    const ctxT = await browser.newContext({ viewport: { width: 1440, height: 900 } }); // 카드를 닫아 두지 않은 새 컨텍스트
+    await ctxT.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+    const pt = await ctxT.newPage();
+    await pt.goto(BASE + '/edit/' + T.id);
+    await pt.getByRole('region', { name: 'Editor tips' }).waitFor({ timeout: 10000 }).catch(() => {});
+    await pt.locator('[data-testid=layer-row]').first().waitFor({ timeout: 10000 }).catch(() => {});
+    const tipRes = await pt.evaluate(() => {
+      const tip = document.querySelector('[aria-label="Editor tips"]');
+      if (!tip) return { shown: false };
+      const tr = tip.getBoundingClientRect();
+      const targets = { 'filmstrip tile': '[data-testid=filmstrip] [role=option]', 'layers row': '[data-testid=layer-row]', 'zoom in': '[aria-label="Zoom in"]', 'zoom to fit': '[aria-label="Zoom to fit"]', notes: '[placeholder="Speaker notes (Markdown)"]', 'inspector tab': '[role=tab]' };
+      const out = { shown: true, overlap: [], covered: [] };
+      for (const [name, sel] of Object.entries(targets)) {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        if (r.left < tr.right && tr.left < r.right && r.top < tr.bottom && tr.top < r.bottom) out.overlap.push(name);
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        if (hit && tip.contains(hit)) out.covered.push(name);
+      }
+      return out;
+    });
+    check('첫 열기 안내 카드가 보임', tipRes.shown, tipRes);
+    check('안내 카드가 필름스트립, Layers, 줌, 노트, Inspector와 겹치지 않음', tipRes.shown && tipRes.overlap.length === 0 && tipRes.covered.length === 0, tipRes);
+    await ctxT.close();
+  }
   // 레이어 썸네일 첫 3개가 그려지기까지: 레이어 목록이 보인 때부터 잰다(목표 1초)
   const p2 = await ctx.newPage();
   await p2.goto(BASE + '/edit/' + TL.id);

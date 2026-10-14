@@ -7,7 +7,7 @@ import { DropdownMenu, DropdownTrigger, DropdownContent } from "@/components/ui/
 import { MenuItem } from "@/components/ui/menu-item";
 import { Field } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
-import { CommandMenu, CommandMenuDialog, useIsMac, CommandMenuEmpty, CommandMenuFooter, CommandMenuInput, CommandMenuList, type CommandMenuItemData } from "@/components/ui/command-menu";
+import { CommandMenu, CommandMenuDialog, CommandMenuItem, useIsMac, CommandMenuEmpty, CommandMenuFooter, CommandMenuInput, CommandMenuList, type CommandMenuItemData } from "@/components/ui/command-menu";
 import { Shell } from "./Shell";
 import { TrashList } from "./TrashList";
 import { StatusPage } from "./StatusPage";
@@ -117,6 +117,12 @@ const snippet = (text: string, words: string[]) => {
   const at = words.map((w) => low.indexOf(w)).filter((i) => i >= 0).sort((a, b) => a - b)[0];
   if (at === undefined) return "";
   return `${at > 24 ? "..." : ""}${text.slice(Math.max(0, at - 24), at + 56).trim()}${text.length > at + 56 ? "..." : ""}`;
+};
+// 검색어와 일치한 부분을 굵게 보인다(Fluid 행의 기본 레이아웃을 같은 모양으로 직접 그린다).
+const Hl = ({ text, q }: { text: string; q: string }) => {
+  const words = q.split(/\s+/).filter(Boolean).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  if (!words.length) return <>{text}</>;
+  return <>{text.split(new RegExp(`(${words.join("|")})`, "gi")).map((part, i) => (i % 2 ? <mark key={i} className="bg-transparent font-semibold text-foreground">{part}</mark> : part))}</>;
 };
 const pref = <T extends string>(k: string, ok: readonly T[], d: T) => { const v = localStorage.getItem(k) as T; return ok.includes(v) ? v : d; };
 
@@ -365,7 +371,14 @@ export function DeckList() {
       <CommandMenuDialog open={palette} onOpenChange={setPalette} title="Search" description="Open a deck or run an action">
         <CommandMenu items={items} query={q} onQueryChange={setQ}>
           <CommandMenuInput placeholder="Decks, slides, or actions" />
-          <CommandMenuList />
+          <CommandMenuList renderItem={(item) => (
+            <CommandMenuItem value={item.value}>
+              <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                <span className="truncate [text-box:trim-both_cap_alphabetic] py-1 -my-1"><Hl text={item.label} q={q} /></span>
+                {item.description && <span className="min-w-0 truncate [text-box:trim-both_cap_alphabetic] py-1 -my-1 text-muted-foreground"><Hl text={item.description} q={q} /></span>}
+              </span>
+            </CommandMenuItem>
+          )} />
           <CommandMenuEmpty>No results</CommandMenuEmpty>
           <CommandMenuFooter />
         </CommandMenu>

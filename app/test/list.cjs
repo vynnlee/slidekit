@@ -146,6 +146,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.goto(BASE + '/');
   await page.getByRole('button', { name: /^Search/ }).click();
   await page.getByRole('dialog').getByRole('combobox').fill('zebra quartz');
+  check('일치한 글자를 굵게 보인다', await until(async () => (await page.getByRole('dialog').locator('mark').count()) >= 1 && (await page.getByRole('dialog').locator('mark').first().innerText()).toLowerCase() === 'zebra'));
   check('슬라이드 그룹이 나온다', await until(async () => (await page.getByRole('dialog').getByText('Slides', { exact: true }).count()) >= 1));
   const hit = page.getByRole('dialog').getByRole('option').filter({ hasText: 'slide 1' }).first();
   check('결과에 덱 제목과 슬라이드 번호', (await hit.count()) === 1 && (await hit.innerText()).includes('Zebra Quartz'));

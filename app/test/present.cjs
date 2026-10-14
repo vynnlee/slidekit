@@ -11,7 +11,7 @@ fs.writeFileSync(path.join(DIR, 'index.html'), `<!doctype html><html lang="en" d
 <script type="application/json" id="deck-meta">{ "title": "${ID}", "id": "${ID}" }</script>
 <link rel="stylesheet" href="../../engine/slidekit.css"></head><body>
 <section data-slide="cover"><h1>Cover</h1><aside data-notes>Notes for cover</aside></section>
-${Array.from({ length: TOTAL - 1 }, (_, i) => `<section data-slide="content"><h2>Slide ${i + 2}</h2></section>`).join('\n')}
+${Array.from({ length: TOTAL - 1 }, (_, i) => i === 3 ? '<section data-slide="chapter" data-title="Middle"><h1>Middle</h1></section>' : `<section data-slide="content"><h2>Slide ${i + 2}</h2></section>`).join('\n')}
 <script src="../../engine/slidekit.js"></script></body></html>`);
 // 노트가 하나도 없는 덱: 발표 전 점검이 한 번 묻는다.
 const DECK2 = '_e2e-present-nonotes', ID2 = 'e2e-present-nonotes', DIR2 = path.join(__dirname, '..', '..', 'decks', DECK2);
@@ -119,7 +119,7 @@ const MOCKS = {
     check('보기를 꺼도 방향키 이동이 유지된다', await until(async () => (await counter()) === `13 / ${TOTAL}`), await counter());
     check('보기를 꺼도 발표 창과 동기화된다', await until(async () => new URL(pop.url()).hash === '#13'), pop.url());
     await page.keyboard.down('ArrowRight'); await page.keyboard.down('ArrowRight'); await page.keyboard.down('ArrowRight'); await page.keyboard.up('ArrowRight');
-    await until(async () => (await counter()) !== `13 / ${TOTAL}`);
+    await until(async () => (await counter()) !== `13 / ${TOTAL}`, 10000); // 부하 때 iframe 왕복이 늦을 수 있다
     await sleep(300); // 반복 입력이 더 넘기지 않는지 보려고 짧게 둔다(일어나지 않음 확인)
     check('방향키 반복 입력은 한 장만 넘긴다', (await counter()) === `14 / ${TOTAL}`, await counter());
     await page.keyboard.down('t'); await page.keyboard.down('t'); await page.keyboard.up('t');
@@ -171,6 +171,15 @@ const MOCKS = {
     await openPal('Notes for cover');
     await page.keyboard.press('Enter');
     check('노트 글자로 찾아 이동한다', await until(async () => (await counter()) === `1 / ${TOTAL}`), await counter());
+    await openPal('Middle');
+    check('팔레트: 장 제목으로 찾는다(그룹 Chapters)', await until(async () => (await pal.getByRole('option', { name: /^Middle\s*Chapter/ }).count()) >= 1));
+    await pal.getByRole('option', { name: /^Middle\s*Chapter/ }).first().click();
+    check('장을 고르면 그 장의 슬라이드(5번)로 간다', await until(async () => (await counter()) === `5 / ${TOTAL}`), await counter());
+    await openPal('Content');
+    check('슬라이드 항목에는 속한 장 이름이 붙는다', await until(async () => (await pal.getByRole('option', { name: /^6\. Content\s*Middle/ }).count()) >= 1));
+    await page.keyboard.press('Escape');
+    await until(async () => (await pal.count()) === 0);
+    await openPal('cover'); await pal.getByRole('option', { name: /^1\./ }).first().click();
     await openPal('Hide notes'); await pal.getByRole('option', { name: /^Hide notes/ }).first().click();
     check('보기 토글: 노트 숨김', await until(async () => (await page.locator('[aria-label="Speaker notes"]').count()) === 0));
     await openPal('Show notes'); await pal.getByRole('option', { name: /^Show notes/ }).first().click();

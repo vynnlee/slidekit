@@ -8,7 +8,7 @@ const KEY = "slidekit.tip.editor";
 const seen = () => { try { return localStorage.getItem(KEY) === "1"; } catch { return true; } };
 
 export function EditorTip({ sample = false }: { sample?: boolean }) {
-  const [open, setOpen] = useState(() => !seen());
+  const [open, setOpen] = useState(() => !seen() && !matchMedia("(pointer: coarse)").matches); // 터치 기기에는 마우스와 키보드 안내가 맞지 않아 보이지 않는다
   const mac = useIsMac();
   const close = () => { try { localStorage.setItem(KEY, "1"); } catch {} setOpen(false); };
   // 첫 상호작용(아무 클릭이나 키 입력)이나 15초 뒤에 스스로 닫힌다. 카드는 포인터를 받지 않아 그 클릭은 아래 요소에 그대로 간다.

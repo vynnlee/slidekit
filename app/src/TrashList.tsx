@@ -61,7 +61,7 @@ export function TrashList({ onRestored }: { onRestored: () => void }) {
           <li key={i.entry} className="flex h-9 items-center gap-3 px-2 text-body" {...cm.bind(() => trashMenu({ restore: () => { restore(i); }, purge: () => { setTyped(""); setErr(""); setPurging(i); } }, { restore: RotateCcw, purge: Trash2 }))}>
             <span className="min-w-0 flex-1 truncate">{i.title}</span>
             {i.published && <Tooltip content={`Still published at ${i.published}`} side="top"><span className="shrink-0 rounded bg-hover px-1.5 text-caption text-foreground">Published</span></Tooltip>}
-            <span className="shrink-0 text-caption text-muted-foreground">{i.folder}</span>
+            {i.folder !== i.title && <span className="max-w-[30%] shrink-0 truncate text-caption text-muted-foreground max-[640px]:hidden">{i.folder}</span>}
             <span className="shrink-0 text-caption text-muted-foreground tabular-nums">{when(i.deletedAt)}</span>
             <Tooltip content="Restore" side="top"><Button variant="ghost" size="icon-compact" aria-label={`Restore ${i.title}`} disabled={busy} onClick={() => restore(i)}><RotateCcw /></Button></Tooltip>
             <Tooltip content="Delete forever" side="top"><Button variant="ghost" size="icon-compact" aria-label={`Delete ${i.title} forever`} onClick={() => { setTyped(""); setErr(""); setPurging(i); }}><Trash2 /></Button></Tooltip>

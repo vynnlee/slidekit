@@ -36,7 +36,7 @@ const log = [];
     await state('list-search', async () => { await page.keyboard.press('Control+k'); await page.getByRole('dialog').waitFor(); });
     await state('list-keys', async () => { await page.locator('body').click({ position: { x: 3, y: 3 } }); await page.keyboard.press('Shift+?'); await page.getByRole('dialog').waitFor(); });
     await state('list-newdeck', async () => { await page.getByRole('button', { name: 'New deck' }).click(); await page.getByRole('dialog').waitFor(); });
-    await state('list-menu', async () => { await page.getByRole('button', { name: ID, exact: true }).click({ button: 'right', position: { x: 30, y: 30 } }); await page.getByRole('menu').waitFor(); });
+    await state('list-menu', async () => { await page.getByRole('button', { name: 'Audit deck', exact: true }).click({ button: 'right', position: { x: 30, y: 30 } }); await page.getByRole('menu').waitFor(); });
     await state('list-settings', async () => { await page.getByRole('button', { name: `Actions for Audit deck` }).click(); await page.getByRole('menuitem', { name: 'Settings' }).click(); await page.getByRole('dialog').waitFor(); });
     await state('list-trash', async () => { await page.keyboard.press('Escape'); await page.getByRole('button', { name: 'Trash', exact: true }).click(); await sleep(600); });
     // 발表자

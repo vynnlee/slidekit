@@ -111,7 +111,7 @@ const Badge = ({ deck }: { deck: DeckEntry }) =>
 // 메타는 단위별 span으로 나눠 위계를 만든다: 슬라이드 수, 수정 시각, 작성자.
 const Meta = ({ d, opened }: { d: DeckEntry; opened?: number }) => (
   <span className="flex min-w-0 flex-wrap gap-x-2 tabular-nums" title={[d.date, d.folder].filter(Boolean).join("  ")}>
-    {d.slides != null && <span>{d.slides} slides</span>}
+    {d.slides != null && <span>{d.slides} {d.slides === 1 ? "slide" : "slides"}</span>}
     {d.modified && <span>Edited {ago(d.modified)}</span>}
     {d.author && <span className="min-w-0 max-w-full truncate">{d.author}</span>}
     {opened && <span className="flex items-center gap-1"><span aria-hidden className="size-1.5 rounded-full bg-focus-ring" />Opened {ago(new Date(opened).toISOString())}</span>}
@@ -338,11 +338,9 @@ export function DeckList() {
       >
         <div ref={body} onKeyDownCapture={onKeys} className="p-4">
           {trashView ? <TrashList onRestored={load} /> : <>
-          {loadErr && (
-            <p role="alert" className="flex items-center gap-2 text-caption text-muted-foreground">
-              Could not load decks.<Button variant="ghost" size="compact" onClick={load}>Retry</Button>
-            </p>
-          )}
+          {loadErr && (decks === null
+            ? <StatusPage role="alert" title="Could not load decks" actions={<Button variant="primary" size="compact" onClick={() => { setLoadErr(false); load(); }}>Retry</Button>}>Check that the slidekit server is running.</StatusPage>
+            : <p role="alert" className="flex items-center gap-2 text-caption text-muted-foreground">Could not refresh the list<Button variant="ghost" size="compact" onClick={load}>Retry</Button></p>)}
           {actionErr && <p role="alert" className="mb-2 text-caption text-destructive">{actionErr}</p>}
           {decks === null && !loadErr && (
             <div aria-hidden className="grid gap-4" style={{ gridTemplateColumns: `repeat(${view === "grid" ? cols : 1}, minmax(0, 1fr))` }}>
@@ -371,7 +369,7 @@ export function DeckList() {
                 <Card key={d.id} onClick={() => open(d)} label={d.title} className="group/deck" data-deck="" {...cm.bind(() => menuFor(d))}>
                   {menu(d)}
                   <Thumb deck={d} />
-                  <CardHeader>
+                  <CardHeader className="grid-cols-[minmax(0,1fr)]"> {/* 긴 제목이 카드 폭을 넘어 옆 카드를 덮지 않게 */}
                     <CardTitle>{isPinned(d) && <PinMark />}{d.title}</CardTitle>
                     <CardDescription><Meta d={d} opened={lastOpened && (lastOpened.id === d.id || lastOpened.id === d.folder) ? lastOpened.t : undefined} /></CardDescription>
                   </CardHeader>

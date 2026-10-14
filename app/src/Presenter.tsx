@@ -38,7 +38,7 @@ const KEY_GROUPS: KeyGroup[] = [
   ["Timer", [["T", "Start or pause"], ["R", "Reset (press twice)"]]],
   ["Presentation window", [["F", "Full screen"], ["B, W", "Black or white screen (in its window)"]]],
 ];
-const SHORTCUTS = [["← →", "Move"], ["Cmd K", "Search slides, chapters, and actions"], ["?", "All shortcuts"], ["F", "Full screen"], ["+ -", "Notes size"], ["PgUp PgDn", "Scroll notes"], ["T", "Start or pause timer"], ["R", "Reset timer"], ["B W", "Blank presentation (in its window)"]];
+const SHORTCUTS = [["← →", "Move"], ["Cmd K", "Search slides, chapters, and actions"], ["?", "Keyboard shortcuts"], ["F", "Full screen"], ["+ -", "Notes size"], ["PgUp PgDn", "Scroll notes"], ["T", "Start or pause timer"], ["R", "Reset timer"], ["B W", "Black or white screen (in its window)"]];
 const mmss = (s: number) => `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
 const pad = (n: number) => String(n).padStart(2, "0");
 const hms = (s: number) => `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
@@ -314,8 +314,8 @@ export function Presenter({ id }: { id: string }) {
     send({ type: "setblank", mode });
   };
   const paletteItems: CommandMenuItemData[] = !info ? [] : [
-    ...info.slides.map((s): CommandMenuItemData => ({ value: `slide:${s.n}`, label: `${s.n}. ${s.title ?? s.kind.charAt(0).toUpperCase() + s.kind.slice(1)}`, description: info.chapters.find((c) => c.n === s.chapter)?.title, group: "Slides", keywords: [s.notes.slice(0, 400), String(s.n)], onSelect: () => goto(s.n) })),
-    ...info.chapters.map((c): CommandMenuItemData => ({ value: `chapter:${c.n}`, label: c.title, description: "Chapter", group: "Chapters", onSelect: () => goto(info.slides.find((s) => s.chapter === c.n)?.n ?? 1) })),
+    ...info.slides.map((s): CommandMenuItemData => ({ value: `slide:${s.n}`, label: `${s.n}. ${s.title ?? s.kind.charAt(0).toUpperCase() + s.kind.slice(1)}`, description: s.chapter > 0 ? info.chapters[s.chapter - 1]?.title : undefined, group: "Slides", keywords: [s.notes.slice(0, 400), String(s.n)], onSelect: () => goto(s.n) })),
+    ...info.chapters.map((c): CommandMenuItemData => ({ value: `chapter:${c.n}`, label: c.title, description: "Chapter", group: "Chapters", onSelect: () => goto(c.n) })),
     { value: "act-present", label: win ? "Focus presentation window" : "Present", group: "Actions", onSelect: present },
     { value: "act-remote", label: "Phone remote", description: "Use your phone as a remote", group: "Actions", onSelect: () => setRemoteOpen(true) },
     { value: "act-timer", label: running ? "Pause timer" : "Start timer", group: "Timer", shortcut: "t", onSelect: () => setRunning((r) => !r) },
@@ -341,11 +341,11 @@ export function Presenter({ id }: { id: string }) {
     const back = <Button variant="secondary" size="compact" leadingIcon={ArrowLeft} onClick={() => go("/")}>Back to decks</Button>;
     return load === "error"
       ? <StatusPage role="alert" title="Could not load decks" actions={<>{back}<Button variant="primary" size="compact" onClick={() => location.reload()}>Retry</Button></>}>Check that the slidekit server is running.</StatusPage>
-      : <StatusPage role="alert" title="Deck not found" actions={back}>No deck named {id} exists.</StatusPage>;
+      : <StatusPage role="alert" title="Deck not found" actions={back}>This deck does not exist or was moved to the trash.</StatusPage>;
   }
   // 슬라이드가 0장인 덱: 빈 칸 대신 이유와 다음 동작을 보인다.
   if (deck.slides === 0 || (info && info.slides.length === 0)) { // 슬라이드가 없으면 엔진이 준비 신호를 내지 않을 수 있어 목록의 슬라이드 수로도 판단한다
-    return <StatusPage role="status" title="This deck has no slides" actions={<><Button variant="secondary" size="compact" leadingIcon={ArrowLeft} onClick={() => go("/")}>Back to decks</Button><Button variant="primary" size="compact" onClick={() => go(`/edit/${encodeURIComponent(id)}`)}>Open in editor</Button></>}>Add a slide in the editor, then present again.</StatusPage>;
+    return <StatusPage role="status" title="This deck has no slides yet" actions={<><Button variant="secondary" size="compact" leadingIcon={ArrowLeft} onClick={() => go("/")}>Back to decks</Button><Button variant="primary" size="compact" onClick={() => go(`/edit/${encodeURIComponent(id)}`)}>Open in editor</Button></>}>Add a slide in the editor, then present again.</StatusPage>;
   }
   if (stalled && !info) {
     return <StatusPage role="alert" title="This deck did not respond" actions={<><Button variant="secondary" size="compact" leadingIcon={ArrowLeft} onClick={() => go("/")}>Back to decks</Button><Button variant="primary" size="compact" onClick={() => location.reload()}>Reload</Button></>}>The slides did not load. The deck file may have an error.</StatusPage>;

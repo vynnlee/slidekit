@@ -76,7 +76,7 @@ export function DeckSettingsForm({ meta, onChange, error }: { meta: DeckMeta; on
       </Row>
       <Switch label="Page numbers" checked={meta.pageNumber === true} onToggle={() => onChange({ pageNumber: meta.pageNumber !== true })} />
       <Switch label="Progress bar" checked={meta.progress === true} onToggle={() => onChange({ progress: meta.progress !== true })} />
-      {typeof meta.id === "string" && <p className="text-caption text-muted-foreground">Deck id: <span className="tabular-nums">{meta.id}</span> (follows the folder name)</p>}
+      {typeof meta.id === "string" && <p className="text-caption text-muted-foreground">Deck ID: <span className="tabular-nums">{meta.id}</span> (follows the folder name)</p>}
       <p role={error ? "alert" : undefined} className="min-h-4 text-caption text-destructive">{error}</p>
     </div>
   );

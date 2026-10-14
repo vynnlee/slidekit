@@ -638,7 +638,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
             ))}
           </div>
           <svg ref={guideSvg} aria-hidden="true" className="absolute inset-0 size-full overflow-visible" />
-          <div ref={sizeTag} aria-hidden="true" className="absolute left-0 top-0 hidden whitespace-nowrap rounded bg-focus-ring px-1.5 py-0.5 text-micro tabular-nums text-white" />
+          <div ref={sizeTag} aria-hidden="true" className="absolute left-0 top-0 hidden whitespace-nowrap rounded bg-foreground px-1.5 py-0.5 text-micro tabular-nums text-background" />
           <div ref={markers}>
             {here.map((c, ci) => (
               <div key={c.id} data-path={c.path} data-off={here.slice(0, ci).filter((o) => o.path === c.path).length} className="pointer-events-auto absolute left-0 top-0 hidden">
@@ -689,7 +689,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     )}
     <div role="group" aria-label="Zoom" className="absolute bottom-3 right-3 flex items-center gap-0.5 rounded-lg bg-surface-3 p-0.5 shadow-surface-3">
       <Tooltip content="Zoom out (Cmd+-)" side="top"><Button aria-label="Zoom out" variant="ghost" size="icon-compact" onClick={() => zoomBy(-1)}><Minus /></Button></Tooltip>
-      <Tooltip content="Zoom to fit (Cmd+0, Shift+1)" side="top"><Button aria-label="Zoom to fit" variant="ghost" size="compact" className="min-w-12 tabular-nums" onClick={() => zoomBy(0)}>{pct}%</Button></Tooltip>
+      <Tooltip content="Zoom to fit (Cmd+0, Shift+1)" side="top"><Button aria-label={`Zoom to fit, ${pct}%`} variant="ghost" size="compact" className="min-w-12 tabular-nums" onClick={() => zoomBy(0)}>{pct}%</Button></Tooltip>
       <Tooltip content="Safe area (80px margin)" side="top"><Button aria-label="Safe area" aria-pressed={p.safeArea} variant="ghost" size="icon-compact" onClick={() => p.onToggleGuide("safe")}><ScanLine /></Button></Tooltip>
       <Tooltip content="Show overflow" side="top"><Button aria-label="Show overflow" aria-pressed={p.overflowOn} variant="ghost" size="icon-compact" onClick={() => p.onToggleGuide("overflow")}><TriangleAlert /></Button></Tooltip>
       <Tooltip content="Zoom in (Cmd+=)" side="top"><Button aria-label="Zoom in" variant="ghost" size="icon-compact" onClick={() => zoomBy(1)}><Plus /></Button></Tooltip>

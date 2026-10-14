@@ -294,7 +294,7 @@ export function Editor({ id }: { id: string }) {
     sel.after(c); pickSel(c); commit();
   };
 
-  // 선택 이동(SPEC 9.4): Tab은 같은 범위의 형제를 돌고, Enter는 첫 자식(글자면 편집), Shift+Enter는 부모.
+  // 선택 이동(SPEC 9.5): Tab은 같은 범위의 형제를 돌고, Enter는 첫 자식(글자면 편집), Shift+Enter는 부모.
   const cycle = (dir: 1 | -1) => {
     const s = canvas.current?.slide(indexRef.current);
     if (!s) return;

@@ -210,7 +210,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   useEffect(() => { goto(); hover.current = null; }, [p.index, goto]);
 
   // 요소 하나를 고른다. SVG 안쪽은 가장 바깥 svg로 올린다.
-  // 클릭으로 선택될 요소(SPEC 9.4). 호버 외곽선도 같은 규칙으로 "지금 누르면 선택될 요소"를 보인다.
+  // 클릭으로 선택될 요소(SPEC 9.5). 호버 외곽선도 같은 규칙으로 "지금 누르면 선택될 요소"를 보인다.
   const selRef = useRef<Element | null>(null);
   useEffect(() => { selRef.current = p.sel; }, [p.sel]);
   const pick = (e: Event): Element | null => {

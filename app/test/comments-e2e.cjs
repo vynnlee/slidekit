@@ -27,7 +27,7 @@ const json = { 'Content-Type': 'application/json' };
     page.on('pageerror', (e) => errors.push(String(e)));
     await page.goto(`${BASE}/edit/${t.id}`);
     await page.waitForFunction(() => { const f = document.querySelector('iframe[title="Canvas"]'); return f && f.contentDocument && f.contentDocument.querySelector('[data-active]'); });
-    await sleep(800);
+    await page.getByTestId('filmstrip').waitFor(); // 편집기 화면이 그려졌다
     const fr = () => page.frames().find((f) => f.url().startsWith('blob:'));
     const panel = page.getByTestId('comments-panel');
     const items = panel.locator('li[data-comment-id]');
@@ -41,10 +41,11 @@ const json = { 'Content-Type': 'application/json' };
 
     // C 키로 작성창을 열고 Cmd+Enter로 전송
     await fr().locator('[data-active] h1, [data-active] h2').first().click({ modifiers: ['Meta'] });
-    await sleep(400);
-    await page.keyboard.press('c'); await sleep(300);
+    await page.getByRole('button', { name: 'Show in layers' }).waitFor({ timeout: 5000 }).catch(() => {}); // 선택 헤더가 보이면 선택 완료
+    await page.keyboard.press('c');
     let box = page.getByRole('textbox', { name: 'Comment' });
-    if (!(await box.count())) { await page.getByRole('button', { name: 'Comment', exact: true }).click(); await sleep(300); box = page.getByRole('textbox', { name: 'Comment' }); }
+    await box.waitFor({ timeout: 1500 }).catch(() => {});
+    if (!(await box.count())) { await page.getByRole('button', { name: 'Comment', exact: true }).click(); await box.waitFor({ timeout: 3000 }).catch(() => {}); box = page.getByRole('textbox', { name: 'Comment' }); }
     check('C 키(또는 툴바 버튼)로 작성창이 열린다', (await box.count()) === 1);
     check('연결 안 됨 안내가 작성창에도 보인다', /not connected/i.test(await page.getByRole('group', { name: 'New comment' }).textContent()));
     await box.fill('E2E 코멘트입니다');
@@ -54,7 +55,7 @@ const json = { 'Content-Type': 'application/json' };
     check('Cmd+Enter가 POST /api/comments를 보낸다(200)', resp.status() === 200, resp.status());
     const reqBody = JSON.parse(resp.request().postData());
     check('요청에 덱, 슬라이드, 경로, 본문', reqBody.deck === DECK && reqBody.slide >= 1 && !!reqBody.path && reqBody.text === 'E2E 코멘트입니다', reqBody);
-    await sleep(500);
+    await page.getByRole('group', { name: 'New comment' }).waitFor({ state: 'detached', timeout: 3000 }).catch(() => {});
     check('전송 뒤 작성창이 닫힌다', (await page.getByRole('group', { name: 'New comment' }).count()) === 0);
     check('Waiting 상태로 목록에 나타난다', await stateIs('waiting'));
     const pin = page.locator('[data-comment-pin]');
@@ -68,7 +69,7 @@ const json = { 'Content-Type': 'application/json' };
         if (deck !== DECK || delivered.includes(c.id)) return;
         delivered.push(c.id);
         await fetch(`${BASE}/api/comments/${c.id}/delivered`, { method: 'POST', headers: json, body: JSON.stringify({ deck }) });
-        await sleep(2500);
+        await sleep(1200); // Sent to Claude 상태를 관찰할 수 있게 전달 표시와 답 사이에 둔 간격(조건 대기는 폴링이라 이보다 짧으면 놓칠 수 있다)
         await fetch(`${BASE}/api/comments/${c.id}/reply`, { method: 'POST', headers: json, body: JSON.stringify({ deck, reply: 'E2E 답변입니다' }) });
       };
       for (const c of await (await fetch(`${BASE}/api/comments?deck=${DECK}`)).json()) if (c.status === 'open' && !c.deliveredAt) handle(DECK, c);
@@ -111,7 +112,8 @@ const json = { 'Content-Type': 'application/json' };
     check('Reopen 하면 Replied로 돌아온다', await stateIs('replied'));
 
     // 호버 양방향 하이라이트: 목록에 올리면 핀이 커진다
-    await items.first().hover(); await sleep(300);
+    await items.first().hover();
+    await page.waitForFunction(() => /scale-125/.test(document.querySelector('[data-comment-pin]')?.className ?? ''), null, { timeout: 2000 }).catch(() => {});
     check('목록 호버가 핀을 강조한다', /scale-125/.test((await pin.getAttribute('class')) ?? ''));
 
     // 키보드: J/K와 화살표로 코멘트 사이를 옮기고 E로 해결과 되돌리기
@@ -167,7 +169,7 @@ const json = { 'Content-Type': 'application/json' };
     let refreshed = false;
     for (let i = 0; i < 80 && !refreshed; i++) {
       refreshed = await page.evaluate(() => { const f = document.querySelector('iframe[title="Canvas"]'); return !!(f && f.contentDocument && /E2E 외부 수정/.test(f.contentDocument.body.textContent)); }).catch(() => false);
-      if (!refreshed) await sleep(300);
+      if (!refreshed) await sleep(100);
     }
     check('deck-changed로 캔버스가 새로고침', refreshed, { title, fileHas: fs.readFileSync(t.file, 'utf8').includes('E2E 외부 수정') });
     check('페이지 오류 없음', errors.length === 0, errors);

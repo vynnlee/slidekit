@@ -17,23 +17,30 @@ async function run(label, prep, expectDiff) {
   const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx.route(/fonts\.(googleapis|gstatic)/, (r) => r.abort());
   const p = await ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(String(e)));
-  await p.goto(BASE + '/dev/tokens?deck=_qa-tok'); await p.getByLabel('Accent hex').waitFor(); await sleep(800);
+  await p.goto(BASE + '/dev/tokens?deck=_qa-tok'); await p.getByLabel('Accent hex').waitFor();
+  await p.waitForFunction(() => { const f = document.querySelector('iframe'); return !!(f && f.contentDocument && f.contentDocument.readyState === 'complete'); }); // 캔버스가 로드됐다
   const fr = () => p.frames().find((f) => f.url().includes('/decks/_qa-tok/'));
-  const accent = p.getByLabel('Accent hex'); await accent.fill('#ff5500'); await accent.press('Enter'); await sleep(200);
+  const accent = p.getByLabel('Accent hex'); const previewed = () => p.waitForFunction(() => { const f = document.querySelector('iframe'); return !!(f && f.contentDocument && /ff5500/i.test(f.contentDocument.documentElement.style.getPropertyValue('--sk-accent'))); }, null, { timeout: 5000 }).catch(() => {});
+  await accent.fill('#ff5500'); await accent.press('Enter'); await previewed();
   check(label + ': 입력 즉시 캔버스에 반영(미리보기)', (await fr().evaluate(() => document.documentElement.style.getPropertyValue('--sk-accent'))) === '#ff5500' || /ff5500/i.test(await fr().evaluate(() => document.documentElement.style.getPropertyValue('--sk-accent'))));
-  await sleep(600);
+  await p.getByRole('button', { name: 'Reset Accent to default' }).waitFor({ timeout: 5000 }).catch(() => {});
   check(label + ': 바뀐 토큰에만 Reset 점', (await p.getByRole('button', { name: 'Reset Accent to default' }).count()) === 1 && (await p.getByRole('button', { name: /^Reset Text to default/ }).count()) === 0);
   const hexOf = async () => (await accent.inputValue()).toLowerCase();
-  await p.getByRole('button', { name: 'Reset Accent to default' }).click(); await sleep(300);
+  await p.getByRole('button', { name: 'Reset Accent to default' }).click();
+  await p.waitForFunction(() => document.querySelector('input[aria-label="Accent hex"]').value.toLowerCase() === '#a78bfa', null, { timeout: 5000 }).catch(() => {});
   check(label + ': Reset이 기본값으로 되돌림', (await hexOf()) === '#a78bfa' && (await p.getByRole('button', { name: 'Reset Accent to default' }).count()) === 0, await hexOf());
-  await accent.fill('#ff5500'); await accent.press('Enter'); await sleep(200);
-  await p.getByTestId('panel').evaluate((e) => { e.style.width = '240px'; }); await sleep(200);
+  await accent.fill('#ff5500'); await accent.press('Enter'); await previewed();
+  await p.getByTestId('panel').evaluate((e) => { e.style.width = '240px'; });
+  await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))); // 폭 변경이 레이아웃에 반영될 때까지
   const clipped = await p.evaluate(() => [...document.querySelectorAll('input[aria-label$=" hex"]')].filter((e) => e.scrollWidth > e.clientWidth + 1).map((e) => e.getAttribute('aria-label')));
   check(label + ': 패널 240px에서도 hex가 잘리지 않음', clipped.length === 0, clipped);
   check(label + ': 불투명한 색은 투명도 칸을 숨김', (await p.getByLabel('Accent opacity percent').isVisible()) === false);
-  const padx = p.getByLabel('Padding X', { exact: true }); await padx.fill('120'); await padx.press('Enter'); await sleep(700);
+  const padx = p.getByLabel('Padding X', { exact: true }); await padx.fill('120'); await padx.press('Enter');
+  await sleep(500); // 패널이 변경을 400ms 디바운스로 모아 한 번에 커밋한다. 이 사이에 Save를 누르면 pad-x가 빠지고, 상태 문구는 accent 변경으로 이미 Unsaved라 조건으로 볼 수 없다.
+  await p.waitForFunction(() => document.querySelector('[data-testid="status"]')?.textContent === 'Unsaved', null, { timeout: 5000 }).catch(() => {});
   check(label + ': 입력 뒤 Unsaved', (await p.getByTestId('status').textContent()) === 'Unsaved');
-  await p.getByRole('button', { name: 'Save' }).click(); await sleep(800);
+  await p.getByRole('button', { name: 'Save' }).click();
+  await p.waitForFunction(() => document.querySelector('[data-testid="status"]')?.textContent === 'Saved', null, { timeout: 8000 }).catch(() => {});
   check(label + ': Saved', (await p.getByTestId('status').textContent()) === 'Saved');
   const after = fs.readFileSync(FILE, 'utf8');
   fs.writeFileSync('/tmp/qa-tok.before', before);

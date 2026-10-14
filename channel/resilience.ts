@@ -33,7 +33,9 @@ try {
   client = new Client({ name: "test", version: "0" });
   client.fallbackNotificationHandler = async (n) => { got.push(n); };
   await client.connect(new StdioClientTransport({ command: "bun", args: [join(root, "channel/index.ts")], env: { ...(process.env as any), SLIDEKIT_URL: url } }));
-  await Bun.sleep(3000);
+  // 알림 10개와 "더 있다" 알림이 모이면 바로 진행한다(최대 8초).
+  for (let i = 0; i < 80 && !(got.filter((g) => g.params?.meta?.comment_id).length >= 10 && got.some((g) => g.params?.meta?.kind === "backlog")); i++) await Bun.sleep(100);
+  await Bun.sleep(300); // 상한을 넘겨 더 오는 알림이 없는지 보기 위한 짧은 여유
 
   const pushedIds = got.filter((g) => g.params?.meta?.comment_id).map((g) => g.params.meta.comment_id);
   assert(pushedIds.length === 10, `묶음 상한 10개: ${pushedIds.length}`);
@@ -52,19 +54,19 @@ try {
   // 앱 서버를 죽였다 다시 띄운다: 채널은 살아 있고 자동 재연결, 중복 전달 없음
   const before = got.length;
   app.kill(); await app.exited;
-  await Bun.sleep(1500);
+  await Bun.sleep(500); // 채널이 끊김을 알아채고 재연결 루프에 들어갈 시간
   assert((await client.listTools()).tools.length === 3, "서버가 없어도 채널(MCP)은 살아 있다");
   app = spawnApp(); await up();
   let ok = false;
-  for (let i = 0; i < 40 && !ok; i++) { ok = await connected().catch(() => false); if (!ok) await Bun.sleep(500); }
+  for (let i = 0; i < 40 && !ok; i++) { ok = await connected().catch(() => false); if (!ok) await Bun.sleep(250); }
   assert(ok, "재시작 뒤 20초 안에 채널이 다시 연결");
-  await Bun.sleep(1500);
+  await Bun.sleep(800); // 재연결 직후 따라잡기(backfill)가 중복을 보낸다면 이 안에 온다
   assert(got.length === before, `재연결 뒤 중복 전달 없음(${got.length - before}개 추가)`);
 
   // 재연결 뒤 새 코멘트는 바로 전달
   const r = await fetch(`${url}/api/comments`, { method: "POST", headers: json, body: JSON.stringify({ deck: t.folder, slide: 2, path: "h2", excerpt: "y", text: "재연결 뒤 코멘트" }) });
   const newId = ((await r.json()) as any).id;
-  await Bun.sleep(1200);
+  for (let i = 0; i < 50 && !got.some((g) => g.params?.meta?.comment_id === newId); i++) await Bun.sleep(100);
   assert(got.some((g) => g.params?.meta?.comment_id === newId), "재연결 뒤 새 코멘트가 전달된다");
   console.log("channel resilience ok");
 } finally {

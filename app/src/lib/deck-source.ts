@@ -65,7 +65,10 @@ export function compose(doc: Doc, units = doc.units) {
 
 // 캔버스와 썸네일용 문서. 상대 경로가 깨지지 않게 base를 넣고, 임베드 표시를 단다.
 export function previewHtml(doc: Doc, units: Unit[], folder: string, opts: { embed?: boolean; thumb?: boolean; showSteps?: boolean }) {
-  let s = compose(doc, units);
+  // 썸네일은 첫 단위만 무대에 직접 놓는다. head(prefix) 안 주석이나 style, script 글자에 든 "<section"을 슬라이드로 오인하지 않게 글자 치환이 아니라 구간으로 짠다.
+  let s = opts.thumb && units[0]
+    ? doc.prefix + '<div id="sk-stage" style="transform:none">' + units[0].html.replace(/^<section\b([^>]*)>/i, "<section data-active $1>") + "</div>" + doc.suffix
+    : compose(doc, units);
   const base = `<base href="${location.origin}/decks/${folder}/">`;
   s = s.replace(/<html\b/i, opts.embed ? (opts.showSteps ? "<html data-sk-embed data-sk-show-steps" : "<html data-sk-embed") : "<html");
   s = s.replace(/<head[^>]*>/i, (h) => h + base);
@@ -74,8 +77,6 @@ export function previewHtml(doc: Doc, units: Unit[], folder: string, opts: { emb
     s = s.replace(/<link\b[^>]*href=["']https?:[^>]*>/gi, "");
     // 스크립트를 쓰지 않는 정적 썸네일: 엔진 대신 무대를 직접 만든다.
     s = s.replace(/<script\b(?![^>]*application\/json)[^>]*>[\s\S]*?<\/script>/gi, "");
-    s = s.replace(/<section\b/i, '<div id="sk-stage" style="transform:none"><section').replace(/<\/section>(?![\s\S]*<\/section>)/i, "</section></div>");
-    s = s.replace(/<section\b([^>]*)>/i, "<section data-active $1>");
   }
   return s;
 }

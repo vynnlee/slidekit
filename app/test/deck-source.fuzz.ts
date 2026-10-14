@@ -48,6 +48,16 @@ for (const b of between) {
   if (n !== 2) console.log(`SINGLE FAIL (between ${n} units): ${b.trim().slice(0, 40)}`);
 }
 
+// head(prefix) 안의 리터럴 "<section data-slide>"는 슬라이드가 아니다: 주석, style, script, 속성 값
+for (const head of [
+  '<!-- <section data-slide="content"> -->', '<style>/* <section data-slide="content"> */ x{}</style>', '<script>var s = \'<section data-slide="content">\';</script>',
+  '<meta name="x" content=\'<section data-slide="content">\'>',
+]) {
+  const src = `<!doctype html><html><head>${head}</head><body><section data-slide="content"><p>a</p></section></body></html>`;
+  let ok = false; try { const d = splitDeck(src); ok = d.units.length === 1 && d.prefix === src.slice(0, src.indexOf('<section data-slide="content"><p>a')) && compose(d) === src; } catch {}
+  if (!ok) console.log(`SINGLE FAIL (head literal): ${head.slice(0, 50)}`);
+}
+
 let fail = 0;
 const bad = (why: string, src: string) => { if (fail++ < 8) console.log(`FAIL ${why}\n${src}\n---`); };
 const N = Number(process.env.N ?? 3000);

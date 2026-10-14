@@ -1,4 +1,5 @@
 // /dev/tokens?deck=<폴더>: TokensPanel을 편집기 없이 검증하는 개발용 페이지. 저장은 편집기와 같은 PUT 흐름.
+import { splitDeck } from "@/lib/deck-source";
 import { useEffect, useRef, useState } from "react";
 import { TokensPanel } from "@/TokensPanel";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,7 @@ export function TokensDemo() {
   };
   if (src === null) return null;
   // 슬라이드 단위 쪼개기는 편집기의 일이라, 데모는 head 구간만 바꾸고 나머지는 그대로 둔다.
-  const cut = src.search(/<section\b[^>]*\bdata-slide/i);
+  const cut = splitDeck(src).prefix.length; // 주석이나 style 안의 "<section" 글자는 토크나이저가 건너뛴다
   const prefix = src.slice(0, cut);
   return (
     <div className="flex h-screen bg-background text-foreground">

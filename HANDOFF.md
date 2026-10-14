@@ -1,40 +1,47 @@
-# slidekit 핸드오프 (2026-10-14 갱신)
+# slidekit 핸드오프 (2026-10-15 갱신)
 
-새 세션은 이 문서를 먼저 읽는다. 기획은 `PLAN.md`, 덱 규격은 `spec/SPEC.md`(9절은 편집), 속성 패널 설계는 `spec/INSPECTOR.md`, 사용법은 `README.md`.
+새 세션은 이 문서를 먼저 읽는다. 기획은 `PLAN.md`(초기 기획, 일부 낡음), 덱 규격은 `spec/SPEC.md`(9절은 편집), 속성 패널 설계는 `spec/INSPECTOR.md`, 컨텍스트 메뉴와 커서는 `spec/INTERACTION.md`, 사용법은 `README.md`, 배포는 `deploy/README.md`.
 
 ## 목적
 
-HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 도구. 덱은 폴더 하나(`decks/<이름>/index.html`)이고, 엔진이 1920x1080 맞춤, 방향키 이동, F 전체화면, O 전체 보기, 발표 동기화를 맡는다. 앱은 덱 목록, 발표자 화면, 편집기, 코멘트 UI를 준다. 첫 예제는 워크숍 덱(53장, `decks/vibe-coding-workshop`).
+HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 도구. 덱은 폴더 하나(`decks/<이름>/index.html`)이고, 엔진이 1920x1080 맞춤, 방향키 이동, F 전체화면, O 전체 보기, 발표 동기화를 맡는다. 예제 덱은 워크숍 덱(53장, `decks/vibe-coding-workshop`)과 기능 안내 덱(25장, `decks/slidekit-guide`).
 
 ## 구성
 
 | 경로 | 내용 |
 |---|---|
-| `engine/` | `slidekit.js`, `slidekit.css`(인쇄 CSS 포함), `new.ts`, `lint.ts`, `pdf.ts`, `doctor.ts`, `template/`, `test/verify.cjs`, `test/lint.test.ts`, `test/cli.test.ts` |
-| `app/` | Bun 서버(`server.ts`, `guard.ts`, `comments.ts`, `editor-api.ts`, `decks-api.ts`, `export-api.ts`(번들, PDF, 게시 API), `launch.ts`, `preview-proxy.ts`), React 앱(`src/`), 테스트(`test/`) |
+| `engine/` | 런타임 `slidekit.js`와 `slidekit.css`(인쇄 CSS 포함), 단계 효과 목록 `steps.ts`, 레이아웃 `layouts.ts`, 템플릿 `templates.ts`와 `template/`, CLI(`new`, `lint`, `pdf`와 `handout.*`, `doctor`와 `deck-check.ts`와 `layout-check.ts`, `image-cli`와 `assets.ts`, `outline`), `deck-meta.ts`, `publish-record.ts`, `chrome.ts`, 테스트 `test/` |
+| `app/` | Bun 서버(`server.ts`, `guard.ts`, `deck-lock.ts`, `decks-api.ts`, `editor-api.ts`, `comments.ts`, `versions.ts`, `export-api.ts`, `remote-api.ts`, `search-api.ts`, `folder.ts`, `preview-proxy.ts`), React 앱(`src/`), 테스트(`test/`) |
 | `bundler/` | 덱을 외부 파일 없는 단일 HTML로 묶음(이미지, srcset, 글꼴 서브셋 인라인) |
-| `deploy/` | `deploy.ts`와 Cloudflare Worker(`worker/`, KV, 비밀번호 쿠키) |
+| `deploy/` | `deploy.ts`, `unpublish.ts`와 `kv.ts`, Cloudflare Worker(`worker/`: KV, 비밀번호 쿠키, Durable Object 시도 제한) |
 | `channel/` | Claude Code Channels MCP 서버(코멘트 전달) |
-| `scripts/` | `test.ts`(`bun run test` 집계), `lib/test-deck.cjs`(테스트 덱 사본 `decks/_e2e-*`), `inspector-shots.cjs`와 `ux-shots-comments.cjs`(UX 리뷰용 스크린샷 도구, 사용법 주석 참조), `scan-secrets.*` |
+| `scripts/` | `test.ts`(`bun run test` 집계), `lib/`(Playwright 공용 `pw.cjs`와 `pw-server.cjs`, 테스트 덱 사본 `test-deck.cjs`), `preview.ts`(미리보기 감독자), 스크린샷 도구(`inspector-shots`, `ux-shots-comments*`), `scan-secrets.*` |
 | `.claude/skills/slidekit/` | AI가 덱을 만들 때 읽는 스킬(규격, 토큰, 문구 규칙, 확인 방법) |
-| `spec/` | SPEC.md, INSPECTOR.md |
+| `spec/` | SPEC.md, INSPECTOR.md, INTERACTION.md |
 | `decks/`, `dist/` | 덱 원본, 번들과 PDF 산출물(dist는 git 무시, `decks/_*/`도 무시) |
 
-## 2026-10-14 UX 라운드 요약 (코드와 git log 기준)
+## 현재 기능 (코드와 git log 기준, 상세는 SPEC과 README)
 
-- **편집기**: 요소 선택은 Figma식 계층(클릭은 최상위, 더블클릭은 한 단계 안쪽, Cmd+클릭은 가장 안쪽, Enter는 첫 자식, Shift+Enter는 부모, Tab은 같은 범위 형제, SPEC 9.5). 요소 트리(Layers: 숨김, 잠금, 이름 바꾸기, 드래그 순서), 슬라이드는 캔버스 위 가로 필름스트립. 줌 25~400%(Cmd+휠, Cmd+=, Cmd+-, Cmd+0 맞춤), Space 드래그로 이동, 선택 크기 칩. Cmd+K 명령 팔레트(슬라이드 이동, 발표, 추가, 복제, 삭제, 저장 등), Cmd+/ 단축키 안내. 코멘트는 요소를 고르고 `C`(전송 Cmd+Enter): 상태 Waiting, Sent to Claude, Replied, Resolved, 패널 필터, 캔버스 핀, 답이 오면 토스트. Inspector는 설정됨 점과 Reset, 크기 모드 추정, 단계 등장 편집(Appears at step), 덱 토큰 패널(Deck styles), Export 메뉴(번들, PDF, 게시). 자동 저장은 편집 뒤 1.5초, Cmd+S, 충돌 시 Reload 또는 Overwrite.
-- **발표자 화면**: 현재와 다음 슬라이드, 노트(마크다운, 14~56px), 타이머와 목표 시간(분, 초과는 빨강), 장 위치, 항목별 토글. 키는 방향키, F, T(타이머), R(리셋), + -(노트 크기), PageUp과 PageDown(노트 스크롤). 현재 슬라이드부터 발표는 Cmd+Enter, 처음부터는 Shift+Cmd+Enter, `?from=N`도 된다.
-- **덱 목록**: 검색 팔레트, 날짜 또는 이름 정렬, 그리드와 리스트, 카드 키보드 이동과 Cmd+Enter 빠른 발표, 새 덱(폴더명 자동 제안과 실시간 검사), 복제, 이름 바꾸기, 휴지통(Undo 토스트, 영구 삭제는 폴더명 입력).
-- **청중 화면(엔진)**: 방향키 이동은 크로스페이드, O 전체 보기는 반응형 격자와 선택 윤곽과 현재 점, 마우스는 2초 뒤 숨김, 숫자 입력은 장 제목을 보여 주는 알약, B와 W는 검은 화면과 흰 화면(창별), 단계 등장은 `data-step`(JS 없이). 진행 막대는 2px.
-- **CLI와 DX**: `slidekit help`, 알 수 없는 명령은 사용법과 함께 종료 코드 1, `new`는 다음 단계를 안내, lint와 doctor와 bundle 메시지는 고치는 방법을 말한다. 새 덱 템플릿과 `slidekit-guide` 덱(12장, 기능 데모)과 SKILL.md 6-1 디자인 가이드.
-- **번들**: head에 파비콘, og:title, description, 비밀번호 덱 noindex, lang을 채우고 큰 이미지(400KB 초과)를 경고한다.
+- **편집**: Figma식 계층 선택, Layers(숨김, 잠금, 이름, 드래그 순서), 필름스트립, 줌, Cmd+K 팔레트, 찾기와 바꾸기(Cmd+F), 그룹(Cmd+G), 스타일 복사와 붙여넣기, 텍스트 스타일 프리셋, 레이아웃 5종 추가와 변경, 이미지 붙여넣기와 끌어 놓기(`assets/`), 컨텍스트 메뉴(`spec/INTERACTION.md`), 덱 설정(제목, 부제, 작성자, 날짜, 언어, 공개 범위), 덱 토큰과 테마 6종, 채우기와 배경 그라디언트(스톱 2~4개, `var()` 허용), 단계 등장 편집(효과 6종은 `engine/steps.ts`), 넘침 표시, 자동 저장(1.5초)과 충돌 처리.
+- **발표**: 청중 화면(크로스페이드, 전체 보기, 숫자 이동, B와 W 가리기, `data-step` 단계 등장, 스크린리더 안내), 발표자 화면(노트, 타이머와 목표, 장 위치, 리허설 요약, Cmd+K 팔레트), 외장 모니터 배치, `?debug=1` 진단.
+- **휴대폰 리모컨**: 발표자 화면에서 코드와 QR, 이동과 가리기와 타이머, 세션 2시간, 코드 1회용, SSE는 1회용 티켓.
+- **버전 기록**: 저장 직전과 편집기 밖 수정 직전 스냅샷, 비교, 새 탭 sandbox 미리보기, 복원(현재를 먼저 남기고 Undo). 덱당 50개와 30MB, restore 종류는 10개 상한.
+- **코멘트**: 요소 코멘트를 Claude Code 세션에 전달하고 답과 해결까지 추적(아래 결정 절).
+- **내보내기와 게시**: HTML 번들, PDF(`--notes`, `--handout 2|3|4|6`), `deploy`(공개 또는 비밀번호), `unpublish`(확인 뒤 KV 삭제, 이름이 다르면 이름 입력), 게시 기록 `.publish.json`, `deploy --smoke`.
+- **CLI**: `new --template talk|blank|workshop`, `templates`, `layouts`, `lint`, `doctor [덱] [--layout]`, `image`, `bundle`, `pdf`, `deploy`, `unpublish`.
 
 ## 실행과 명령
 
-- 앱: `bun run slidekit`(127.0.0.1:3200, `PORT`로 변경). tailnet 미리보기는 개발 서버가 Host를 막으므로 `PORT=3220 bun run app/server.ts`와 `UP=3220 PORT=3221 bun app/preview-proxy.ts`를 띄우고 https://mac-cloud.tail5a652b.ts.net:3221 로 연다(tailscale serve --https=3221, 끝나면 off). 3221은 사용자가 쓰는 포트라 임의로 끄지 않는다.
-- `slidekit new <이름>`: 템플릿에서 덱 생성. `lint <덱>`: SPEC 위반을 규칙별로 출력(오류 시 종료 코드 1). `bundle <덱>`: `dist/<덱>.html`. `pdf <덱>`: `dist/<덱>.pdf`(Chrome은 `SLIDEKIT_CHROME` 또는 ms-playwright 캐시). `deploy <덱>`: Cloudflare 업로드(`deploy/README.md`). `doctor`: 환경 점검. 모두 `bun app/server.ts <하위 명령>` 또는 `bun run slidekit <하위 명령>`.
-- 테스트: `bun run test`(왕복, 워커, 채널, 엔진 verify.cjs, 편집기 등 전체. 잠금을 잡고 돈다). 개별: `bun test engine bundler`, `bun app/test/deck-source.fuzz.ts`, `node app/test/inspector.cjs`(PW, CHROME, BASE 환경 변수).
-- Playwright: `/tmp/claude-501/sp/pw`의 playwright-core, `~/Library/Caches/ms-playwright/chromium_headless_shell-1243/*/chrome-headless-shell`(args `--disable-gpu`). verify.cjs는 정적 서버 3150에서 덱이 바뀌지 않게 git HEAD 사본을 서빙해 돌린다.
+- 앱: `bun run slidekit`(127.0.0.1:3200, `PORT`로 변경). tailnet 미리보기는 개발 서버가 Host를 막으므로 `PORT=3220 bun run app/server.ts`와 `UP=3220 PORT=3221 bun app/preview-proxy.ts`를 띄우고 https://mac-cloud.tail5a652b.ts.net:3221 로 연다(열고 닫는 일은 미리보기 도구 `/preview`로 한다). 3221은 사용자가 쓰는 포트라 임의로 끄지 않는다. 안정 미리보기와 라이브 미리보기를 함께 관리하는 감독자는 `scripts/preview.ts`.
+- 모든 하위 명령은 `bun app/server.ts <하위 명령>` 또는 `bun run slidekit <하위 명령>`. 사용법은 README.
+- Playwright: `/tmp/claude-501/sp/pw`의 playwright-core, `~/Library/Caches/ms-playwright/chromium_headless_shell-*/*/chrome-headless-shell`(args `--disable-gpu`). 러너가 공용 서버와 브라우저를 `scripts/lib/pw*.cjs`로 띄운다.
+
+## 테스트
+
+- `bun run test [--only <이름 일부>] [--changed] [--list] [--bail] [--slow] [--trace]`. 공정 큐(`/tmp/slidekit-heavy.queue`)로 잠금 `/tmp/slidekit-heavy.lock`을 순서대로 잡고, 단계 로그는 `/tmp/slidekit-test-logs/`, 단계당 상한 900초(`SLIDEKIT_STEP_TIMEOUT`). 실패한 브라우저 단계는 트레이스를 켜고 한 번 더 돈다. **단계 이름은 위치 인자가 아니라 `--only`로 준다**(위치 인자는 무시되고 전체가 돈다).
+- 집계 단계 33개(약 880초): roundtrip, deck-source.fuzz, deck-tokens, deck-fonts, editor-readonly, export-api, comments, lint, bundler-bundle, bundler-fonts, scan-secrets, deploy-worker, unit-other, unit-isolated, channel, channel-resilience, channel-trust, engine-verify(약 75초, 145검사), engine-moved, engine-gradient, routes, list, present, remote, responsive, inspector, inspector-a11y, editor, editor-assets, editor-multi, comments-e2e, versions-e2e, tokens, export. `--slow`나 `--only`로만 도는 단계: ux-shots-1440, ux-shots-390, bundler-fonts-e2e(인터넷과 uv 필요).
+- 수동 도구(집계 밖): `app/test/list-load.cjs`(덱 30개 합성 부하), `app/test/a11y-app.cjs`(axe와 스크린샷), `app/test/remote-qa.cjs`(폰 4종 크기).
+- 시간은 sleep이 아니라 낮은 우선순위(`taskpolicy -b`)에서의 페이지 로드와 렌더 CPU가 지배한다(sleep 정리와 가짜 시계의 효과는 약 4%). 남은 고정 sleep(editor.cjs 약 137곳, inspector-a11y.cjs 약 32곳)은 시간 단축보다 흔들림 감소 목적으로만 조건 대기로 바꾼다. `[느림 +N초]` 표시로 찾는다.
 
 ## 팀 운영 규칙
 
@@ -54,57 +61,45 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
   - 흐름: 편집기에서 C 키(또는 우클릭, 툴바)로 요소나 슬라이드 전체(path가 빈 값)에 코멘트, 빠른 문구 칩 3개, Cmd+Enter 전송 -> 서버가 이 기기 키(`~/.config/slidekit/comments.key`, 0600)의 HMAC 서명을 달아 저장 -> 채널(SSE `?client=channel`)이 서명 검증된 코멘트만 Claude 세션에 전달(연결 때 못 받은 것은 오래된 순 10개 + "더 있다" 알림, `get_pending`) -> Claude가 `ack`, 수정, `reply` -> 패널 상태(Waiting, Sent to Claude, Claude is working, Replied, Resolved, Unverified), 번호 핀, 답 토스트. 해결(E), 삭제(Delete, Undo 토스트), 우클릭 메뉴, J/K 이동.
   - 서명 없는(또는 본문이 바뀐) 코멘트는 Unverified로 보이고 전달되지 않는다. 사용자가 Trust 하면 이 기기 키로 다시 서명한다. 키 파일을 지우면 기존 코멘트는 모두 Unverified가 된다.
   - Revert Claude's edit: 답이 달릴 때 서버가 그 사이의 편집기 밖 수정(`.versions`의 external 스냅샷)을 코멘트에 연결한다. 덱이 그 수정 뒤로 더 바뀌지 않았을 때만(해시 비교) 한 번에 되돌리고, 바뀌었으면 거절하고 Version history를 안내한다. 수정 연결은 ack부터 reply 사이의 시간 창 기준이라 그 사이 사용자가 직접 고친 것도 같은 수정으로 묶일 수 있다(해시 검사가 막아 준다).
-  - Version history(Export 메뉴): `decks/<덱>/.versions/`에 index.html 스냅샷(save, external, restore)을 최근 50개와 30MB까지 둔다(.gitignore, 복제 제외). 복원은 현재를 먼저 스냅샷으로 남기고 Undo 토스트로 취소한다. HTML만 기록하고 이미지 변경은 기록하지 않으며, 복원하면 코멘트의 슬라이드 번호가 어긋날 수 있다.
+  - Version history(Export 메뉴): 위 기능 절 참조. `decks/<덱>/.versions/`는 .gitignore이고 복제에서 제외된다. HTML만 기록하고 이미지 변경은 기록하지 않는다. 복원 뒤 발췌문이 그 슬라이드에 없는 열린 코멘트는 확인 필요로 표시된다.
 - 사용자는 오케스트레이터 방식을 선호한다: 큰 일은 팀원과 서브에이전트에 나누고 결과를 직접 검증한 뒤 보고한다. 선택지가 있는 결정은 AskUserQuestion.
 - 보안: Host와 Origin 검사(`app/guard.ts`, 모든 메서드), 입력 크기 제한, 127.0.0.1에만 바인딩, 공개 노출(Funnel, 포트포워딩) 금지.
 
 ## 배포 상태
 
-- 주소 `static.vynnlee.com/<덱>`, 덱마다 공개 또는 비밀번호. Worker와 KV(`DECKS`, id는 `deploy/worker/wrangler.toml`), 비밀번호는 PBKDF2 해시로 KV meta에 두고 쿠키 서명, 시도 제한은 덱과 IP별 15분 5회.
-- Cloudflare 토큰은 키체인 `slidekit-cloudflare-token`(2026-10-13 생성, 이름 slidekit-static-deploy, 값은 출력 금지). 쓰는 법과 범위는 `deploy/README.md`. `COOKIE_SECRET`은 `wrangler secret`.
-- 2026-10-13에 Worker(`slidekit-static`)와 워크숍 덱(public)을 배포했다: https://static.vynnlee.com/vibe-coding-workshop . mac-cloud의 로컬 DNS 캐시가 실패 결과를 들고 있어 `curl`이 000(DNS 실패)일 수 있다. 그때는 `dig +short @1.1.1.1 static.vynnlee.com`의 IP로 `curl --resolve static.vynnlee.com:443:<IP> ...`로 확인한다(캐시 비우기는 sudo 필요). 응답 없음을 미배포로 판단하지 않는다.
-- 배포 순서: meta를 먼저, html을 나중에 올린다(공개에서 비밀번호로 바꿀 때 노출 방지).
-- **미배포(승인 대기)**: 2026-10-14에 Worker 안내 페이지(비밀번호, 잠금, 404 통일, 덱 제목 표시, 로딩 상태)와 `deploy`가 meta에 `title`을 올리는 변경, 번들 head 변경을 코드와 테스트까지만 했다. 반영하려면 사용자 승인 뒤 `bun run deploy --worker`를 실행한다(이미 올린 덱은 다시 `slidekit deploy <덱>`으로 올려야 제목이 보인다).
-  - 배포 준비는 `deploy/README.md` 마지막 절에 있다(드라이런 결과, 구버전과의 차이, 사용자에게 보일 변화, 롤백). 배포 뒤 `bun run deploy --smoke [공개덱 [비밀번호덱]]`로 점검한다(GET만).
-  - 로그인 시도 제한은 Durable Object `Limiter`로 구현했다(코드, 바인딩, 마이그레이션 v1, 동시 요청 단위 테스트, 드라이런 통과, KV 폴백 유지). Worker 배포는 사용자 방향 결정 대기이며, 실행 순서와 한도 근거 URL은 `deploy/README.md` 마지막 절에 있다. 같은 배포에 Worker 보안 변경(쿠키에 salt 바인딩, 보호된 덱은 문서 요청에만 서빙, COOP, HSTS, 입력 폼 nonce CSP, 비밀번호 덱 제목은 `lockTitle` 옵트인)도 들어 있어 비밀번호 덱의 기존 쿠키는 모두 무효가 된다.
+- 주소 `static.vynnlee.com/<덱>`, 덱마다 공개 또는 비밀번호. Worker(`slidekit-static`)와 KV(`DECKS`, id는 `deploy/worker/wrangler.toml`). Cloudflare 토큰은 키체인 `slidekit-cloudflare-token`(값은 출력 금지), `COOKIE_SECRET`은 `wrangler secret`. 배포 순서는 meta 먼저, html 나중(공개에서 비밀번호로 바꿀 때 노출 방지).
+- 2026-10-13에 Worker와 워크숍 덱(public)을 배포했다: https://static.vynnlee.com/vibe-coding-workshop . mac-cloud의 로컬 DNS 캐시가 실패를 들고 있어 `curl`이 000일 수 있다. 그때는 `dig +short @1.1.1.1 static.vynnlee.com`의 IP로 `curl --resolve static.vynnlee.com:443:<IP> ...`로 확인한다. 응답 없음을 미배포로 판단하지 않는다.
+- **미배포(사용자 승인 대기)**: 2026-10-13 이후의 Worker 변경 전부(안내 페이지, Durable Object 시도 제한 `Limiter`, 쿠키 salt 바인딩, 보호된 덱은 문서 요청에만 서빙, COOP와 HSTS와 CORP, nonce CSP, `lockTitle`, 405와 Origin 검사, 캐시 `must-revalidate`). 비밀번호 덱의 기존 쿠키는 모두 무효가 된다. 실행 순서, 롤백, 구버전과의 차이는 `deploy/README.md`. 배포와 `unpublish --yes`의 실제 실행은 개발 중에 한 번도 하지 않았다(드라이런과 가짜 KV 단위 테스트만).
+- 게시 기록(`.publish.json`)의 `url`은 `https://static.vynnlee.com/<name>`만 받는다. 취소 라우트는 기록의 name이 폴더와 다르면 이름 직접 입력(`confirmName`)을 요구한다.
 
 ## 알려진 한계
 
-- 번들러 글꼴: 원격 글꼴 CSS(Google Fonts, jsdelivr 등)와 로컬 `@font-face` 파일을 덱이 쓰는 글자만 남긴 woff2로 인라인한다(`uv`와 인터넷 필요, 받은 파일은 `~/.cache/slidekit/fonts`에만 캐시하고 저장소에 글꼴 파일을 커밋하지 않는다). 시스템 글꼴만 쓰는 덱은 아무것도 받지 않는다. `<video>` 파일과 글꼴이 아닌 외부 CDN 자원은 인라인하지 않는다. 종단 검증: `node bundler/test/fonts.cjs`.
-- 인쇄(PDF)는 `data-step` 요소를 모두 보인다. 전체 보기 축소판과 편집기 필름스트립은 1단계 모습이다.
-- 화면별 lazy import(`App.tsx`)가 있지만 Bun.serve HTML 번들은 코드 분할을 하지 않아 production JS가 단일 청크(약 1MB, 2026-10-13 측정). 필요하면 서버 시작 때 Bun.build splitting 사용.
-- lint는 정규식 기반이라 아주 특이한 마크업에서 오탐이 있을 수 있다. error만 종료 코드에 반영한다.
-- 발표 동기화는 같은 출처의 BroadcastChannel 전용(기기 간 동기화 없음). 세로나 좁은 창은 무대 비율을 유지하고 남는 영역을 배경색으로 채운다.
+- 번들러 글꼴: 원격 글꼴 CSS와 로컬 `@font-face`를 덱이 쓰는 글자만 남긴 woff2로 인라인한다(`uv`와 인터넷 필요, `~/.cache/slidekit/fonts` 캐시). 시스템 글꼴만 쓰면 아무것도 받지 않는다. `<video>` 파일과 글꼴이 아닌 외부 CDN 자원은 인라인하지 않는다.
+- 인쇄(PDF)는 `data-step` 요소를 모두 보인다. 전체 보기 축소판과 필름스트립은 1단계 모습이다. 그라디언트는 PDF에 벡터 셰이딩으로 들어가고 투명도 스톱은 SMask다(`engine-gradient`가 PDF 바이트로 확인).
+- production JS는 단일 청크(약 1MB, 2026-10-13 측정). Bun.serve HTML 번들이 코드 분할을 하지 않는다.
+- lint는 정규식 기반이라 특이한 마크업에서 오탐이 있을 수 있다. error만 종료 코드에 반영한다.
+- 발표 동기화는 같은 출처의 BroadcastChannel 전용. Chrome 계열 전용(Window Management API). mac-cloud에는 화면이 없어 외장 모니터는 검증하지 못한다.
 - 편집기는 슬라이드 단위 원문 보존(`app/src/lib/deck-source.ts`)을 전제로 한다. 인라인 편집은 글자만 담은 요소 중심.
-- 휴대폰 리모컨(`app/remote-api.ts`, `/remote/<덱>`): 서버 메모리에만 세션을 두고(재시작하면 사라짐), 명령은 next, prev, goto, blank, timer로 제한한다. 코드는 1회용이고 2시간 뒤 만료된다. **리모컨은 tailnet 안의 기기가 앱 전체 API에 닿을 수 있다는 한계를 넓히지도 좁히지도 않는다**(휴대폰이 미리보기 프록시를 통과하므로 코드가 지키는 것은 리모컨 명령뿐). 휴대폰이 편집 API에 닿지 못하게 하려면 `/remote/*`와 `/api/remote/*`만 허용하는 전용 프록시를 별도 포트에 두는 후속 작업이 필요하다. 발표자 화면을 127.0.0.1로 열면 휴대폰이 닿을 수 없어 대화상자가 안내한다(tailnet 주소로 열 것).
-- Chrome 계열 전용(Window Management API). mac-cloud에는 화면이 없어 외장 모니터 기능은 검증하지 못한다.
+- 리모컨은 서버 메모리에만 세션을 두고(재시작하면 사라짐) 명령을 next, prev, goto, blank, timer로 제한한다. **tailnet 안의 기기가 앱 전체 API에 닿을 수 있다는 한계를 넓히지도 좁히지도 않는다.** 휴대폰이 편집 API에 닿지 못하게 하려면 `/remote/*`와 `/api/remote/*`만 허용하는 전용 프록시를 별도 포트에 두는 후속 작업이 필요하다.
+- 번들에는 노트(`aside[data-notes]`)가 그대로 남는다. 청중에게 노트가 새는 것을 막으려면 게시 전에 지우는 옵션이 필요하다(후속 후보).
+- SVG 업로드 검사(`engine/assets.ts`)는 정규식 금지 목록이라 완전하지 않다. 정적 서빙이 `assets/` 응답에 sandbox CSP와 `nosniff`를 붙이는 것이 두 번째 방어선이다.
 
-## 테스트 후속 후보
+## 알려진 위험 (보안 감사 1차 2026-10-14, 2차 2026-10-15)
 
-- 풀 게이트(`bun run test`)는 약 550초다. 오래 걸리는 단계는 editor 174초, engine-verify 59초, list 56초, inspector-a11y 51초.
-- 2026-10-14 실측: editor.cjs의 저장, 복제, 삭제, 순서 변경 뒤 고정 sleep 약 14초를 조건 대기(Saved 상태, 슬라이드 수, 제목 위치)로 바꿨지만 단계 시간은 197초에서 207초로 줄지 않았다. 시간은 sleep이 아니라 낮은 우선순위(`taskpolicy -b`)에서의 페이지 로드와 렌더 CPU 시간이다. 남은 sleep 교체는 시간 단축보다 흔들림 감소가 목적이다.
-- 후속 후보(측정 미실시, 2026-10-14 사용자 지시로 중단): `taskpolicy -b` 유무, Chrome 플래그(`--disable-extensions`, `--disable-renderer-backgrounding` 등)와 작은 뷰포트가 단계 시간에 주는 영향 A/B. 벤치 스크립트 초안은 세션 스크래치패드(bench.cjs)에만 있다. 발열 규칙상 `taskpolicy` 변경은 사용자 승인이 필요하다. 이미 알려진 값: sleep 정리와 가짜 시계의 효과는 약 4%이고 시간은 페이지 로드와 렌더 CPU가 지배한다.
-- `scripts/test.ts`가 출력 사이가 3초 넘게 벌어지면 `[느림 +N초]` 줄을 넣는다. 이 표시로 고정 sleep이 있는 검사를 찾아 조건 대기(waitForFunction)로 바꾸면 줄어든다. editor.cjs에 sleep 137곳(합계 약 68초), inspector-a11y.cjs에 32곳(약 13초)이 있다. 디바운스처럼 일어나지 않음을 보는 대기와 애니메이션 종료 대기는 남긴다. list.cjs는 이미 조건 대기 위주다.
-- 코멘트와 내보내기 후속 후보: 코멘트 패널의 R(답 보기) 단축키, 앱에서 공개 범위(public, password) 바꾸기(지금은 deck-meta 안내만, 편집기 자동 저장과의 충돌을 먼저 정해야 함), 서명 키 교체와 여러 기기 공유, 버전 기록의 이미지 포함과 앱 안 미리보기(지금은 새 탭 sandbox 미리보기), `ack`는 모델이 호출해야 보이는 상태라 호출하지 않으면 Sent to Claude에서 Replied로 바로 간다.
-- 수동 점검 도구(집계 단계에는 넣지 않았다. 시간 부담): `app/test/list-load.cjs`(덱 30개 합성 사본으로 스크롤 중 iframe 수와 동시 로드 수, 검색 반응을 잰다. `CHECK=1`이면 검증), `app/test/a11y-app.cjs`(덱 목록과 발표자 화면의 axe 점검과 1440, 1024, 390 스크린샷. `AXE=<axe.min.js> SHOTS=<폴더>`). 둘 다 테스트 덱을 `decks/_e2e-*`와 `zz-e2e-qa-*`로 만들고 끝나면 지운다. Fluid SidebarMenu의 `ul` 안 `div`(axe list 규칙)는 레지스트리 파일 한계로 예외 처리했다.
-
-## 알려진 위험 (2026-10-14 보안 감사, 결정 보류)
-
-- 앱 API에는 인증 토큰이 없다. 127.0.0.1 바인딩, Host와 Origin 검사, 프록시(tailnet)에만 의존하며 사용자 기기만 접근한다는 전제다.
+- 앱 API에는 인증 토큰이 없다. 127.0.0.1 바인딩, Host와 Origin 검사(`app/guard.ts`), 프록시(tailnet)에만 의존하며 사용자 기기만 접근한다는 전제다.
 - 덱은 앱과 같은 출처에서 열려 덱 스크립트가 앱 API를 부를 수 있다(출처 분리나 iframe sandbox는 편집기가 contentDocument를 직접 다뤄 보류). 완화: lint가 덱 스크립트의 fetch, XMLHttpRequest, WebSocket, EventSource, `/api/`를 경고하고 SPEC 7절에 신뢰된 콘텐츠 규칙이 있다. 남에게 받은 덱은 열기 전에 스크립트를 읽는다.
-- `/deploy`(Export 메뉴)는 `confirm` 플래그 하나로 동작한다. 공개 범위와 비밀번호는 서버가 덱 원본 `deck-meta`로만 판단하고 읽지 못하면 거부한다. 별도 nonce는 없다.
-- 이미 반영한 수정: 채널 입력 정제와 로컬 URL 제한, 번들러가 덱 폴더와 `engine/`만 읽음(.git, .env, comments.json 거부)과 외부 글꼴 SSRF 방어, 비밀번호 8자 이상, wrangler와 fonttools 버전 고정(`deploy/deploy.ts`, `bundler/fonts.ts`의 숫자를 올릴 때는 의도적으로 바꾼다).
+- `/deploy`와 게시 취소(Export 메뉴)는 `confirm` 플래그 하나로 동작한다. 공개 범위와 비밀번호는 서버가 덱 원본 `deck-meta`로만 판단하고 읽지 못하면 거부한다.
+- 반영 완료: 채널 입력 정제, 번들러 읽기 범위 제한과 외부 글꼴 SSRF 방어, 비밀번호 8자 이상, wrangler와 fonttools 버전 고정(`deploy/deploy.ts`, `bundler/fonts.ts`의 숫자를 올릴 때는 의도적으로 바꾼다), 덱 단위 잠금(저장과 설정과 복원 경합), 리모컨 세션 가로채기 차단과 SSE 티켓, 버전 기록 상한, 정적 응답 `nosniff`.
+- 후속 후보: 코멘트 패널 R(답 보기) 단축키, 앱에서 공개 범위 바꾸기, 서명 키 교체와 여러 기기 공유, 버전 기록의 이미지 포함, 설치 때 npm `bun`이 중복으로 깔리는 문제(76MB, `bun-plugin-tailwind`의 peer) 정리, `bun audit` 정기 실행(2026-10-15 기준 0건).
 
-## mac-local에서 사용자가 직접 확인할 것
+## 사용자 확인이 필요한 것
 
-1. 외장 모니터 발표 시작: 권한 팝업, 창 배치, 전체화면(F), 두 창 동기화.
-2. 한글 IME로 편집기에서 텍스트 입력(조합 중 단축키 충돌, 저장 결과).
-3. Cmd 단축키(저장, 되돌리기, 복제), 드래그와 스크럽 체감, 패널 폭 조절.
-4. 비밀번호 덱의 실제 배포 후 접근과 시도 제한.
-5. 확인 완료: 코멘트 채널의 실제 Claude 세션 연결.
-6. 휴대폰 리모컨 실기기: iPhone Safari에서 QR 스캔, 화면 잠금 뒤 자동 재연결, Wake Lock, 지연 체감(CoreImage 디코드와 두 컨텍스트 e2e는 통과).
+1. **Worker 배포 승인**: 위 미배포 변경 전부. 실행 순서는 `deploy/README.md`.
+2. **실기기 iPhone 리모컨**: Safari에서 QR 스캔, 화면 잠금 뒤 재연결, Wake Lock, 지연 체감(두 컨텍스트 e2e와 QR 디코드는 통과).
+3. **mac-local 첫 실행**: 새 clone에서 `bun install`, `bun run slidekit doctor`, 한글 IME 편집, Cmd 단축키, 드래그 체감, 외장 모니터 발표(권한 팝업, 창 배치, 두 창 동기화). 시스템 Chrome 경로의 PDF는 headless shell로만 검증했다.
+4. **맥 미리보기에서 그라디언트 PDF가 검게 보임**: macOS 미리보기와 Quick Look(CoreGraphics)이 Chrome의 PDF 셰이딩을 검게 그린다. PDF 자체는 정상(셰이딩과 SMask가 들어 있음)이고 Chrome이나 Acrobat에서는 맞게 보이는 것으로 추정하며, 사용자의 Chrome에서 한 번 확인해 달라.
+5. 비밀번호 덱의 실제 배포 뒤 접근과 시도 제한(5회 뒤 429와 `Retry-After`).
 
 ## 환경 메모
 
-- 경로 `~/Developer/slidekit`(mac-local과 mac-cloud 동일). 상세한 기계 지침은 `~/.claude/CLAUDE.md`.
-- 점검은 `bun app/server.ts doctor`.
+- 경로 `~/Developer/slidekit`(mac-local과 mac-cloud 동일). 기계 지침은 `~/.claude/CLAUDE.md`. 점검은 `bun app/server.ts doctor`.

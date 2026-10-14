@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Comment } from "@/lib/deck";
+import { toast } from "@/Toaster";
 
 // 한 덱의 코멘트와 Claude 채널 연결 상태를 서버(SSE)와 맞춰 둔다.
 //  - comment(새 코멘트), reply(갱신: 답, 전달됨, 해결), comments(전체 교체), channel({connected})
@@ -49,5 +50,16 @@ export function useCommentsLive(folder: string | null) {
     } catch { setError("Could not trust the comment"); }
   }, [folder]);
 
-  return { comments, setComments, channel, error, upsert, resolve, trust };
+  /** 삭제하고 Undo 토스트를 띄운다. Undo는 서버가 보관한 코멘트를 되살린다. */
+  const remove = useCallback(async (c: Comment) => {
+    const post = (path: string) => fetch(`/api/comments/${c.id}/${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deck: folder }) });
+    try {
+      const r = await post("delete");
+      if (!r.ok) throw new Error(String(r.status));
+    } catch { setError("Could not delete the comment"); return; }
+    setComments((l) => l.filter((x) => x.id !== c.id));
+    toast("Comment deleted", { action: { label: "Undo", onClick: () => { post("restore").catch(() => setError("Could not restore the comment")); } } });
+  }, [folder]);
+
+  return { comments, setComments, channel, error, upsert, resolve, trust, remove };
 }

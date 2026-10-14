@@ -52,6 +52,7 @@ export function verify(deck: string, c: Comment): boolean {
 // 채널 MCP 서버는 /api/events?client=channel 로 연결하므로 그 연결이 있으면 Claude 세션이 열려 있는 것이다.
 const clients = new Set<ReadableStreamDefaultController<string>>();
 const channelClients = new Set<ReadableStreamDefaultController<string>>();
+const removed = new Map<string, Comment>(); // 삭제 되돌리기용 보관함
 function emit(event: string, data: unknown) {
   const chunk = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const c of clients) {
@@ -199,6 +200,38 @@ export const routes = {
         save(b.deck, list);
         emit("reply", { deck: b.deck, comment });
       }
+      return Response.json({ ok: true });
+    },
+  },
+  // 삭제와 되돌리기: 지운 코멘트는 서버 메모리에 잠깐(최근 50개) 보관하고, restore는 그 보관본만 되살린다(클라이언트가 내용을 보내지 않는다).
+  "/api/comments/:id/delete": {
+    POST: async (req: Request & { params: { id: string } }) => {
+      const b = await body(req);
+      if (!b || !validDeck(b.deck)) return bad("deck");
+      const list = load(b.deck);
+      const at = list.findIndex((c) => c.id === req.params.id);
+      if (at < 0) return bad("not found", 404);
+      const [gone] = list.splice(at, 1);
+      removed.set(`${b.deck}/${gone.id}`, gone);
+      if (removed.size > 50) removed.delete(removed.keys().next().value!);
+      save(b.deck, list);
+      emit("comments", { deck: b.deck, comments: list });
+      return Response.json({ ok: true });
+    },
+  },
+  "/api/comments/:id/restore": {
+    POST: async (req: Request & { params: { id: string } }) => {
+      const b = await body(req);
+      if (!b || !validDeck(b.deck)) return bad("deck");
+      const k = `${b.deck}/${req.params.id}`;
+      const gone = removed.get(k);
+      if (!gone) return bad("nothing to restore", 404);
+      const list = load(b.deck);
+      if (!list.some((c) => c.id === gone.id)) list.push(gone);
+      list.sort((x, y) => x.createdAt.localeCompare(y.createdAt));
+      removed.delete(k);
+      save(b.deck, list);
+      emit("comments", { deck: b.deck, comments: list.map((c) => ({ ...c, trusted: verify(b.deck as string, c) })) });
       return Response.json({ ok: true });
     },
   },

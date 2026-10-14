@@ -73,12 +73,14 @@ interface CommentsPanelProps {
   onResolve(c: Comment, resolved: boolean): void;
   /** 검증 안 된 코멘트를 사용자가 믿기로 한다(이 기기의 키로 다시 서명). 없으면 Trust 버튼을 보이지 않는다. */
   onTrust?(c: Comment): void;
+  /** 삭제(Delete 키). 되돌리기 토스트는 부른 쪽(useCommentsLive.remove)이 띄운다. */
+  onRemove?(c: Comment): void;
   /** 캔버스 핀과 목록이 서로를 강조하도록 마우스나 포커스가 올라간 코멘트 id를 맞춘다. */
   hoverId?: string | null;
   onHover?(id: string | null): void;
 }
 
-export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, hoverId, onHover }: CommentsPanelProps) {
+export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, onRemove, hoverId, onHover }: CommentsPanelProps) {
   const [filter, setFilter] = useState<Filter>("all");
   const [open, setOpen] = useState<Set<string>>(new Set()); // 길어서 펼친 코멘트
   const root = useRef<HTMLDivElement>(null);
@@ -103,6 +105,14 @@ export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, h
       e.preventDefault(); e.stopPropagation(); // 편집기 전역 위아래 화살표(슬라이드 이동)와 겹치지 않게 한다
       const down = k === "j" || k === "arrowdown";
       mains[Math.max(0, Math.min(mains.length - 1, cur < 0 ? (down ? 0 : mains.length - 1) : cur + (down ? 1 : -1)))]?.focus();
+    } else if ((e.key === "Delete" || e.key === "Backspace") && li && onRemove) {
+      const c = comments.find((x) => x.id === li.getAttribute("data-comment-id"));
+      if (c) {
+        e.preventDefault(); e.stopPropagation();
+        // 지운 뒤에도 키보드 흐름이 이어지게 다음(없으면 이전) 코멘트로 포커스를 옮긴다.
+        (mains[cur + 1] ?? mains[cur - 1])?.focus();
+        onRemove(c);
+      }
     } else if (k === "e" && li) {
       const c = comments.find((x) => x.id === li.getAttribute("data-comment-id"));
       if (c) { e.preventDefault(); e.stopPropagation(); onResolve(c, stateOf(c) !== "resolved"); }
@@ -121,7 +131,7 @@ export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, h
           ))}
         </div>
       )}
-      {comments.length > 1 && <p className="px-1 text-micro text-muted-foreground">J and K move between comments, E resolves.</p>}
+      {comments.length > 1 && <p className="px-1 text-micro text-muted-foreground">J and K move between comments, E resolves, Delete removes.</p>}
       {comments.length === 0 && (
         <p className="text-caption text-muted-foreground">No comments yet. Select an element and press C, or use the comment button in its toolbar.</p>
       )}
@@ -149,7 +159,7 @@ export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, h
                     aria-keyshortcuts="J K E"
                     onClick={() => onJump(c)}
                     aria-label={`Comment ${nums.get(c.id)}, ${STATE_LABEL[st]}: ${c.text.slice(0, 60)}`}
-                    className="flex flex-col gap-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+                    className="flex cursor-default flex-col gap-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
                   >
                     <span className="flex items-center gap-2">
                       <span aria-hidden="true" className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-black/40 px-1 text-micro tabular-nums">{nums.get(c.id)}</span>

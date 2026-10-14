@@ -1,5 +1,6 @@
 import { Check, ShieldAlert } from "lucide-react";
 import type { Comment } from "@/lib/deck";
+import type { CommentActions } from "@/lib/comment-actions";
 import { STATE_LABEL, stateOf, type CommentState } from "@/lib/comment-state";
 
 // 캔버스 위 코멘트 핀. 번호는 목록과 같고(lib/comment-state numbering), 상태는 색과 모양으로 함께 구분한다.
@@ -27,9 +28,11 @@ interface CommentPinProps {
   highlighted?: boolean;
   onClick(): void;
   onHover?(on: boolean): void;
+  /** 있으면 핀에 포커스가 있을 때 E(해결)와 Delete(삭제)가 동작한다. */
+  actions?: Pick<CommentActions, "resolve" | "remove">;
 }
 
-export function CommentPin({ comment, number, highlighted, onClick, onHover }: CommentPinProps) {
+export function CommentPin({ comment, number, highlighted, onClick, onHover, actions }: CommentPinProps) {
   const st = stateOf(comment);
   return (
     <button
@@ -38,12 +41,17 @@ export function CommentPin({ comment, number, highlighted, onClick, onHover }: C
       data-state={st}
       aria-label={`Comment ${number}, ${STATE_LABEL[st]}: ${comment.text.slice(0, 60)}`}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (!actions || e.metaKey || e.ctrlKey || e.altKey) return;
+        if (e.key.toLowerCase() === "e") { e.preventDefault(); e.stopPropagation(); actions.resolve(comment, st !== "resolved"); }
+        else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); e.stopPropagation(); actions.remove(comment); }
+      }}
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
       onFocus={() => onHover?.(true)}
       onBlur={() => onHover?.(false)}
       // cn은 text-micro를 글자색으로 보고 지우므로 클래스를 일반 문자열로 잇고, 링 색은 한 곳에서만 정한다.
-      className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-micro tabular-nums ring-2 outline-none transition-transform focus-visible:ring-focus-ring ${FILL[st]} ${highlighted ? "scale-125 ring-focus-ring" : OUTLINE[st]}`}
+      className={`flex h-5 min-w-5 cursor-default items-center justify-center rounded-full px-1 text-micro tabular-nums ring-2 outline-none transition-transform focus-visible:ring-focus-ring ${FILL[st]} ${highlighted ? "scale-125 ring-focus-ring" : OUTLINE[st]}`}
     >
       {st === "resolved" ? <Check className="h-3 w-3" aria-hidden="true" /> : st === "unverified" ? <ShieldAlert className="h-3 w-3" aria-hidden="true" /> : number}
     </button>

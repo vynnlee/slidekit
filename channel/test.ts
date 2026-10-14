@@ -44,6 +44,16 @@ try {
   await client.callTool({ name: "reply", arguments: { id, text: "완료" } });
   const list = await (await fetch(`${url}/api/comments?deck=${deck}`)).json() as any[];
   assert(list.find((c) => c.id === id)?.status === "done", "done");
+  // 삭제와 되돌리기: restore는 서버가 보관한 코멘트만 되살린다(없는 id는 404)
+  const delPost = (path: string, body: unknown) => fetch(`${url}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const before = ((await (await fetch(`${url}/api/comments?deck=${deck}`)).json()) as any[]).length;
+  assert((await delPost(`/api/comments/${id}/delete`, { deck })).ok, "delete ok");
+  assert(((await (await fetch(`${url}/api/comments?deck=${deck}`)).json()) as any[]).length === before - 1, "deleted");
+  assert((await delPost(`/api/comments/nope1/restore`, { deck })).status === 404, "restore unknown 404");
+  assert((await delPost(`/api/comments/${id}/restore`, { deck })).ok, "restore ok");
+  const restored = ((await (await fetch(`${url}/api/comments?deck=${deck}`)).json()) as any[]).find((c) => c.id === id);
+  assert(restored?.trusted === true && restored?.status === "done", "restored comment keeps trust and state");
+  assert((await delPost(`/api/comments/${id}/restore`, { deck })).status === 404, "restore only once");
   // 해결 표시와 되돌리기
   const post = (path: string, body: unknown) => fetch(`${url}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   assert((await post(`/api/comments/${id}/resolve`, { deck, resolved: true })).ok, "resolve ok");

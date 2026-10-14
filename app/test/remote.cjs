@@ -35,6 +35,7 @@ const until = async (fn, ms = 6000) => { const t = Date.now(); while (Date.now()
   const addr = await dlg.getByLabel('Remote address').inputValue();
   const code = await dlg.getByLabel('Pairing code').innerText();
   check('주소에 코드는 해시로만 들어간다', /\/remote\/_e2e-remote#code=[A-Z2-7]{8}$/.test(addr) && /^[A-Z2-7]{4}-[A-Z2-7]{4}$/.test(code), [addr, code]);
+  check('이 컴퓨터 주소(127.0.0.1)에서는 QR 대신 안내를 보인다', (await dlg.getByRole('img', { name: /QR code/ }).count()) === 0 && (await dlg.getByText(/open on this computer only/).count()) === 1);
   await dlg.getByRole('button', { name: 'Close' }).click().catch(() => host.keyboard.press('Escape'));
 
   const phoneCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
@@ -56,6 +57,13 @@ const until = async (fn, ms = 6000) => { const t = Date.now(); while (Date.now()
   check('청중 창도 같이 넘어간다', aud && (await until(async () => new URL(aud.url()).hash === '#2')), aud && aud.url());
   await phone.getByRole('button', { name: 'Previous slide' }).tap();
   check('Prev가 되돌린다', await until(async () => (await counter(host)) === `1 / ${TOTAL}`), await counter(host));
+
+  // 가리기: 휴대폰의 Black이 청중 창을 가리고(엔진 setblank), 발표자 화면이 Blanked로 표시하며, 다시 누르면 풀린다
+  await phone.getByRole('button', { name: 'Black' }).tap();
+  check('Black이 청중 창을 가린다', aud && (await until(async () => (await aud.locator('[data-blank="black"]').count()) === 1)));
+  check('휴대폰 Black 버튼이 눌림 상태로 바뀐다', await until(async () => (await phone.getByRole('button', { name: 'Black' }).getAttribute('aria-pressed')) === 'true'));
+  await phone.getByRole('button', { name: 'Black' }).tap();
+  check('다시 누르면 풀린다', aud && (await until(async () => (await aud.locator('[data-blank]').count()) === 0)));
 
   // 타이머 상태 공유
   await phone.getByRole('button', { name: 'Start timer' }).tap();

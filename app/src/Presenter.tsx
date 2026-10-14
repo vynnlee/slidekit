@@ -14,6 +14,7 @@ import { toast } from "./Toaster";
 import { markdown } from "@/lib/markdown";
 import { saveRun, type Run } from "@/lib/rehearsals";
 import { isLocalOrigin, remoteUrl, useRemoteHost, type Cmd } from "@/lib/remote-host";
+import { qrMatrix, qrPath } from "@/lib/qr";
 import { cn } from "@/lib/utils";
 import { Field } from "@/components/ui/field";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -40,6 +41,19 @@ const rid = () => Math.random().toString(36).slice(2, 8);
 
 // 발표 창 생존 확인 간격과 판정 창(SPEC 6.5). 하트비트는 1초마다, 답이 PEER_HEARD_MS 안에 있으면 열려 있다고 본다.
 const HEARTBEAT_MS = 1000, PEER_RECENT_MS = 1600, PEER_HEARD_MS = 3500;
+// 리모컨 주소의 QR. 이 컴퓨터에서만 열린 주소(127.0.0.1)이거나 너무 길면 그리지 않는다(주소와 코드는 항상 아래에 있다).
+function RemoteQr({ text }: { text: string }) {
+  if (isLocalOrigin()) return null;
+  let m: boolean[][];
+  try { m = qrMatrix(text); } catch { return null; }
+  const n = m.length + 8; // 사방 4칸의 여백(quiet zone)
+  return (
+    <svg role="img" aria-label="QR code for the remote address" viewBox={`0 0 ${n} ${n}`} className="mx-auto size-44 rounded bg-white" shapeRendering="crispEdges">
+      <path transform="translate(4 4)" d={qrPath(m)} fill="#000" />
+    </svg>
+  );
+}
+
 export function Presenter({ id }: { id: string }) {
   const [deck, setDeck] = useState<DeckEntry | null>(null);
   const [info, setInfo] = useState<Info | null>(null);
@@ -444,6 +458,7 @@ export function Presenter({ id }: { id: string }) {
           <DialogDescription>Control the slides from your phone. The code works once and expires in 2 hours.</DialogDescription>
           {remote.session ? (
             <div className="flex flex-col gap-2 pt-2">
+              <RemoteQr text={remoteUrl(deck.folder, remote.session.code)} />
               <Field readOnly aria-label="Remote address" value={remoteUrl(deck.folder, remote.session.code)} onFocus={(e) => e.currentTarget.select()} />
               <p className="text-body tabular-nums">Code: <span aria-label="Pairing code" className="font-medium">{remote.session.code}</span></p>
               {isLocalOrigin() && <p className="text-caption text-muted-foreground">This page is open on this computer only. Open slidekit through your tailnet address so the phone can reach it.</p>}

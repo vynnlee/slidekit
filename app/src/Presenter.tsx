@@ -365,7 +365,7 @@ export function Presenter({ id }: { id: string }) {
             <Button variant="ghost" size="compact" leadingIcon={Smartphone} aria-pressed={!!remote.session} onClick={() => setRemoteOpen(true)}><span className="max-[900px]:sr-only">Remote</span></Button>
           </Tooltip>
           <Tooltip content={readyNote} side="bottom">
-            <Button variant={win ? "secondary" : "primary"} size="compact" leadingIcon={MonitorPlay} onClick={present}>{win ? "Focus presentation" : "Present"}</Button>
+            <Button variant={win ? "secondary" : "primary"} size="compact" leadingIcon={MonitorPlay} className="pointer-coarse:h-9" onClick={present}>{win ? "Focus presentation" : "Present"}</Button>
           </Tooltip>
         </>
       }

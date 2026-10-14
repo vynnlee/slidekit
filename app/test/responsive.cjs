@@ -136,7 +136,8 @@ const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.
     const diff = a1.length !== a2.length ? 'count ' + a1.length + ' vs ' + a2.length : a1.filter((r, i) => r.join() !== a2[i].join()).slice(0, 3);
     check('[터치] 터치 기기에서도 버튼 위치와 크기가 마우스 기기와 같다(레이아웃 불변)', Array.isArray(diff) ? diff.length === 0 : false, diff);
     const btnH = await touch.page.evaluate(() => Math.round(document.querySelector('button[aria-label="Toggle view"]').getBoundingClientRect().height));
-    check('[터치] 보이는 크기는 그대로(28px)인데 위아래 20px, 옆 17px 떨어진 곳도 그 버튼이 눌린다', btnH <= 30 && (await hit(touch.page, 20)) && (await hit(touch.page, -20)) && (await hit(touch.page, 0, 17)) && !(await hit(touch.page, 30)), btnH);
+    const probes = { btnH, down17: await hit(touch.page, 17), up17: await hit(touch.page, -17), right17: await hit(touch.page, 0, 17), far30: await hit(touch.page, 30) };
+    check('[터치] 보이는 크기는 그대로(28px)인데 위아래 17px, 옆 17px 떨어진 곳도 그 버튼이 눌리고 30px 밖은 아니다(툴바 높이 40px 안에서 확인)', btnH <= 30 && probes.down17 && probes.up17 && probes.right17 && !probes.far30, probes);
     await mouse.ctx.close(); await touch.ctx.close();
   }
   // 큰 화면 스모크: 1440x900과 같은 넓은 레이아웃이라 전체 검사는 생략하고 첫 로드에서 핵심 세 가지만 본다.

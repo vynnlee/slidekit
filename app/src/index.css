@@ -325,3 +325,18 @@
 kbd { font-family: var(--font-keys); }
 html, body, #root { height: 100%; }
 body { margin: 0; font-family: var(--font-sans); background: var(--background); color: var(--foreground); overflow: hidden; -webkit-font-smoothing: antialiased; }
+
+/* 터치 기기(pointer: coarse): 보이는 크기와 레이아웃은 그대로 두고 눌리는 영역만 44px로 넓힌다(투명 ::after).
+   세로는 44px까지, 가로는 인접 버튼과 겹치지 않게 4px까지만 넓힌다. 메뉴 항목은 키캡이 ::after를 쓰고 이미 행 전체가 눌리므로 뺀다.
+   @layer base 안이라 absolute, fixed, sticky 같은 유틸리티 클래스가 position을 정하면 그쪽이 이긴다. 마우스 기기에는 아무 영향이 없다. */
+@layer base {
+  @media (pointer: coarse) {
+    :where(button, [role="button"], [role="tab"], [role="switch"]):not(:disabled, [aria-disabled="true"]) { position: relative; }
+    :where(button, [role="button"], [role="tab"], [role="switch"]):not(:disabled, [aria-disabled="true"])::after {
+      content: "";
+      position: absolute;
+      inset-block: min(0px, calc((100% - 44px) / 2));
+      inset-inline: min(0px, max(-4px, calc((100% - 44px) / 2)));
+    }
+  }
+}

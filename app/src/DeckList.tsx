@@ -131,7 +131,7 @@ function DeckMenu({ deck, items }: { deck: DeckEntry; items: MenuItem[] }) {
   return (
     <DropdownMenu>
       <DropdownTrigger render={
-        <Button variant="ghost" size="icon-compact" aria-label={`Actions for ${deck.title}`} className={cn(hoverShow, "opacity-0 data-[state=open]:opacity-100")}>
+        <Button variant="ghost" size="icon-compact" aria-label={`Actions for ${deck.title}`} className={cn(hoverShow, "opacity-0 data-[state=open]:opacity-100 pointer-coarse:h-11 pointer-coarse:w-11")}>
           <MoreHorizontal />
         </Button>
       } />
@@ -311,7 +311,7 @@ export function DeckList() {
   const menu = (d: DeckEntry, cls = "absolute right-2 top-2 z-30") => (
     <div className={cn(cls, "flex items-center gap-0.5")}>
       <Tooltip content="Present" side="top">
-        <Button variant="ghost" size="icon-compact" aria-label={`Present ${d.title}`} className={cn(hoverShow, "opacity-0")} onClick={() => present(d)}><MonitorPlay /></Button>
+        <Button variant="ghost" size="icon-compact" aria-label={`Present ${d.title}`} className={cn(hoverShow, "opacity-0 pointer-coarse:h-11 pointer-coarse:w-11")} onClick={() => present(d)}><MonitorPlay /></Button>
       </Tooltip>
       <DeckMenu deck={d} items={menuFor(d)} />
     </div>
@@ -382,7 +382,7 @@ export function DeckList() {
             <Tooltip content={view === "grid" ? "View as list" : "View as grid"} side="bottom">
               <Button variant="ghost" size="icon-compact" aria-label="Toggle view" onClick={() => setView(view === "grid" ? "list" : "grid")}>{view === "grid" ? <List /> : <LayoutGrid />}</Button>
             </Tooltip>
-            <Button variant="primary" size="compact" leadingIcon={Plus} onClick={startCreate}><span className="max-[640px]:sr-only">New deck</span></Button>
+            <Button variant="primary" size="compact" leadingIcon={Plus} className="pointer-coarse:h-9" onClick={startCreate}><span className="max-[640px]:sr-only">New deck</span></Button>
           </>
         }
       >
@@ -496,7 +496,7 @@ export function DeckList() {
             <Field aria-label="Folder" placeholder="folder-name" aria-invalid={!!newErr || undefined} value={name} onChange={(e) => { setName(e.target.value); setNameTouched(true); setErr(""); }} />
             <p role={newErr ? "alert" : undefined} className={newErr ? "text-caption text-destructive" : "text-caption text-muted-foreground"}>{newErr || (!nameTouched && /^deck-\d{4}(-\d+)?$/.test(name) ? "No Latin letters in the title, so the folder is named by date. You can edit it." : "Folder: lowercase letters and digits, separated by single hyphens")}</p>
             <div role="group" aria-label="Template" className="flex gap-1 pt-1">
-              {templates.map((t) => <Button key={t.id} type="button" variant="ghost" size="compact" active={template === t.id} aria-pressed={template === t.id} onClick={() => setTemplate(t.id)}>{t.label}</Button>)}
+              {templates.map((t) => <Button key={t.id} type="button" variant="ghost" size="compact" className="text-foreground" active={template === t.id} aria-pressed={template === t.id} onClick={() => setTemplate(t.id)}>{t.label}</Button>)}
             </div>
             <p className="text-caption text-muted-foreground">{TEMPLATE_HINT[template]}</p>
             <Button type="submit" variant="primary" size="compact" disabled={!name.trim() || !!newErr || busy} className="self-end">Create</Button>

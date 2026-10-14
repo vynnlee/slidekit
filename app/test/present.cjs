@@ -46,7 +46,7 @@ const MOCKS = {
       check('방향키로 이동', await until(async () => (await counter()) === `3 / ${TOTAL}`), await counter());
       await page.keyboard.press('ArrowLeft');
       check('왼쪽 키로 되돌아감', await until(async () => (await counter()) === `2 / ${TOTAL}`));
-      const timer = () => page.locator('span.ml-auto.flex').first().innerText();
+      const timer = () => page.locator('[role=timer]').first().innerText();
       await page.keyboard.press('t'); await sleep(2300); await page.keyboard.press('t');
       const t1 = await timer();
       check('T로 타이머 시작과 정지', /^00:00:0[12]$/.test(t1), t1);
@@ -108,7 +108,7 @@ const MOCKS = {
     check('방향키 반복 입력은 한 장만 넘긴다', (await counter()) === `14 / ${TOTAL}`, await counter());
     await page.keyboard.down('t'); await page.keyboard.down('t'); await page.keyboard.up('t');
     await sleep(1600);
-    check('T 반복 입력은 한 번만 토글한다', (await page.locator('span.ml-auto.flex').first().innerText()) !== '00:00:00');
+    check('T 반복 입력은 한 번만 토글한다', (await page.locator('[role=timer]').first().innerText()) !== '00:00:00');
     await ctx.close();
   }
   // ?from=N: 그 장에서 시작, 범위 밖은 가장 가까운 장. 발표 시작은 현재 장부터.
@@ -129,6 +129,32 @@ const MOCKS = {
     await big.close(); await p20.close(); // 열린 발표자 화면끼리도 동기화되므로 닫고 확인한다
     const zero = await open('?from=0');
     check('범위 밖(0)은 첫 장', await until(async () => (await cnt(zero)) === `1 / ${TOTAL}`), await cnt(zero).catch(() => null));
+    await ctx.close();
+  }
+  // 목표 시간, 초과 경고, 진행 바, 노트 크기 버튼, 라벨, 마지막 장 표시, 창 상태에 따른 버튼 이름
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+    const page = await ctx.newPage();
+    await page.clock.install();
+    await page.goto(`${BASE}/present/${ID}`);
+    const counter = () => page.getByText(/^\d+ \/ \d+$/).first().innerText();
+    await until(async () => (await counter()) === `1 / ${TOTAL}`);
+    check('Current와 Next 라벨', (await page.getByText('Current', { exact: true }).count()) === 1 && (await page.getByText(/^Next/).count()) >= 1);
+    check('슬라이드 진행 바', (await page.getByRole('progressbar', { name: 'Slide progress' }).getAttribute('aria-valuenow')) === '1');
+    await page.getByLabel('Target minutes').fill('1');
+    await page.keyboard.press('Tab');
+    await page.mouse.click(640, 780);
+    await page.keyboard.press('t');
+    await page.clock.runFor(10000);
+    check('목표 시간이 있으면 남은 시간', await until(async () => /^00:5\d left$/.test(await page.getByText(/ left$/).first().innerText())), await page.getByText(/ left$/).first().innerText().catch(() => null));
+    await page.clock.runFor(60000);
+    check('초과하면 over 문구', await until(async () => /^\+00:\d\d over$/.test(await page.getByText(/ over$/).first().innerText())), await page.getByText(/ over$/).count());
+    const size0 = await page.locator('[aria-label="Speaker notes"]').evaluate((e) => parseFloat(getComputedStyle(e).fontSize));
+    await page.getByRole('button', { name: 'Larger notes' }).click();
+    check('노트 A+ 버튼', (await page.locator('[aria-label="Speaker notes"]').evaluate((e) => parseFloat(getComputedStyle(e).fontSize))) === size0 + 2);
+    for (let i = 0; i < TOTAL - 1; i++) await page.keyboard.press('ArrowRight');
+    check('마지막 장에서 End of deck 표시', await until(async () => (await page.getByText('End of deck').count()) === 1));
     await ctx.close();
   }
   // 깨진 localStorage

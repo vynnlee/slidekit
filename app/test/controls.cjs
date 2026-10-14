@@ -35,15 +35,18 @@ const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' 
   const ring = async (locator) => {
     const before = await locator.boundingBox();
     await locator.focus();
+    await sleep(250); // transition-all(80ms)이 끝난 뒤 읽는다
     const sh = await locator.evaluate((e) => getComputedStyle(e).boxShadow);
     const after = await locator.boundingBox();
     return { sh, same: JSON.stringify(before) === JSON.stringify(after) };
   };
   const rs = await ring(page.locator('[data-state=Default] input[aria-label=Field]'));
   const rn = await ring(page.locator('[data-state=Default] input[aria-label=Number]'));
+  await sleep(250);
   const rn2 = await page.locator('[data-state=Default] input[aria-label=Number]').evaluate((e) => getComputedStyle(e.parentElement).boxShadow);
-  await page.keyboard.press('Shift+Tab'); // 키보드로 이동해 :focus-visible을 만든다
-  await page.locator('[data-state=Default] [role=combobox]').focus(); await page.keyboard.press('Tab'); await page.keyboard.press('Shift+Tab');
+  // Select 트리거에는 실제 키보드 이동(Shift+Tab 반복)으로 도달해 :focus-visible을 만든다.
+  for (let i = 0; i < 14 && !(await page.evaluate(() => document.activeElement === document.querySelectorAll('[role=combobox]')[0])); i++) await page.keyboard.press('Shift+Tab');
+  await sleep(250);
   const rc = await page.locator('[data-state=Default] [role=combobox]').evaluate((e) => getComputedStyle(e).boxShadow);
   const one = (s) => /0px 0px 0px 1px/.test(s);
   check('Field 포커스 링은 1px box-shadow', one(rs.sh), rs.sh);

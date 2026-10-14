@@ -20,6 +20,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.goto(BASE + '/');
   await page.getByRole('button', { name: 'New deck' }).waitFor();
   for (const combo of ['Control+k', 'Meta+k']) {
+    await sleep(400); // 앞 팔레트의 닫힘 애니메이션이 끝난 뒤 다음 단축키를 누른다
     await page.keyboard.press(combo);
     check(`${combo}로 검색이 열린다`, await until(async () => (await page.getByRole('dialog').count()) === 1));
     await page.keyboard.press('Escape');
@@ -120,6 +121,37 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   check('경로 이탈 entry 거부', (await post('/api/trash/..%2F..%2Fapp/purge', { confirm: 'app' })).status() === 404);
   check('없는 entry 복구는 404', (await post('/api/trash/nope-2026-01-01T00-00-00-000Z/restore', {})).status() === 404);
   check('이름과 일치하면 purge', (await post(`/api/trash/${e2.entry}/purge`, { confirm: 'zz-e2e-p2' })).status() === 200);
+  cleanup();
+
+  // 키보드 이동, 빠른 발표 버튼, 메타 위계, Public 칩 숨김, 없는 덱 화면
+  await post('/api/decks', { name: 'zz-e2e-k1' });
+  await post('/api/decks', { name: 'zz-e2e-k2' });
+  await page.goto(BASE + '/');
+  await page.evaluate(() => localStorage.setItem('slidekit:list-view', 'grid')); // 앞 단계가 목록 보기로 남겼을 수 있다
+  await page.goto(BASE + '/');
+  await page.getByRole('button', { name: 'zz-e2e-k1', exact: true }).waitFor();
+  await sleep(1000); // 썸네일 iframe이 붙는 동안 포커스가 흔들리지 않게 잠깐 둔다
+  const activeLabel = () => page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label'));
+  await page.getByRole('button', { name: 'zz-e2e-k1', exact: true }).focus();
+  const first = await activeLabel();
+  await page.keyboard.press('ArrowRight'); await sleep(300);
+  const second = await activeLabel();
+  check('화살표로 다음 카드에 포커스가 간다', !!second && second !== first && !/^(Actions|Present) /.test(second), [first, second, await page.evaluate(() => [localStorage.getItem('slidekit:list-view'), document.querySelectorAll('[data-deck]').length, [...document.querySelectorAll('[data-deck]')].map((r) => r.getBoundingClientRect().x | 0).join(',')])]);
+  await page.keyboard.press('ArrowLeft'); await sleep(300);
+  check('왼쪽 화살표로 되돌아간다', (await activeLabel()) === first, await activeLabel());
+  check('Public 칩은 보이지 않는다', (await page.getByText('Public', { exact: true }).count()) === 0);
+  check('메타는 슬라이드 수와 수정 시각으로 나뉜다', (await page.getByText(/^\d+ slides$/).count()) >= 1 && (await page.getByText(/^Edited /).count()) >= 1);
+  await page.getByRole('button', { name: 'zz-e2e-k1', exact: true }).focus();
+  await page.keyboard.press('Control+Enter');
+  check('Ctrl+Enter로 발표자 화면', await until(async () => new URL(page.url()).pathname === '/present/zz-e2e-k1'), page.url());
+  await page.goto(BASE + '/');
+  await page.getByRole('button', { name: 'Present zz-e2e-k2' }).waitFor();
+  await page.getByRole('button', { name: 'Present zz-e2e-k2' }).click({ force: true });
+  check('카드의 Present 버튼', await until(async () => new URL(page.url()).pathname === '/present/zz-e2e-k2'), page.url());
+  await page.goto(BASE + '/present/nope-nope');
+  check('없는 덱은 안내와 돌아가기', await until(async () => (await page.getByText('Deck not found').count()) === 1));
+  await page.getByRole('button', { name: 'Back to decks' }).click();
+  check('Back to decks로 목록 복귀', await until(async () => new URL(page.url()).pathname === '/'));
   cleanup();
 
   // 연결 상태 표시와 렌더 오류 경계

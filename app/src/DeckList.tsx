@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { ArrowDownUp, Copy, LayoutGrid, List, MonitorPlay, MoreHorizontal, Pencil, Plus, Search, TextCursorInput, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardGroup, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -7,9 +7,10 @@ import { DropdownMenu, DropdownTrigger, DropdownContent } from "@/components/ui/
 import { MenuItem } from "@/components/ui/menu-item";
 import { Field } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
-import { CommandMenu, CommandMenuDialog, CommandMenuEmpty, CommandMenuFooter, CommandMenuInput, CommandMenuList, type CommandMenuItemData } from "@/components/ui/command-menu";
+import { CommandMenu, CommandMenuDialog, useIsMac, CommandMenuEmpty, CommandMenuFooter, CommandMenuInput, CommandMenuList, type CommandMenuItemData } from "@/components/ui/command-menu";
 import { Shell } from "./Shell";
 import { TrashList } from "./TrashList";
+import { StatusPage } from "./StatusPage";
 import { go } from "./App";
 import { deckUrl, type DeckEntry } from "@/lib/deck";
 import { cn } from "@/lib/utils";
@@ -57,10 +58,17 @@ const ago = (iso?: string) => {
   const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto", style: "narrow" });
   return m < 60 ? rtf.format(-m, "minute") : m < 1440 ? rtf.format(-Math.round(m / 60), "hour") : rtf.format(-Math.round(m / 1440), "day");
 };
-const Badge = ({ deck }: { deck: DeckEntry }) => (
-  <span className="shrink-0 rounded bg-hover px-1.5 text-caption text-muted-foreground">{deck.visibility === "password" ? "Password" : "Public"}</span>
+// 공개 덱이 기본이라 Public은 표시하지 않고, 예외인 Password만 칩으로 보인다.
+const Badge = ({ deck }: { deck: DeckEntry }) =>
+  deck.visibility === "password" ? <span className="shrink-0 rounded bg-hover px-1.5 text-caption text-muted-foreground">Password</span> : null;
+// 메타는 단위별 span으로 나눠 위계를 만든다: 슬라이드 수, 수정 시각, 작성자.
+const Meta = ({ d }: { d: DeckEntry }) => (
+  <span className="flex min-w-0 flex-wrap gap-x-2 tabular-nums" title={[d.date, d.folder].filter(Boolean).join("  ")}>
+    {d.slides != null && <span>{d.slides} slides</span>}
+    {d.modified && <span>Edited {ago(d.modified)}</span>}
+    {d.author && <span className="truncate">{d.author}</span>}
+  </span>
 );
-const meta = (d: DeckEntry) => [d.slides != null && `${d.slides} slides`, ago(d.modified)].filter(Boolean).join("  ");
 
 const api = async (path: string, method: string, body: object = {}) => {
   const r = await fetch(path, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -70,6 +78,7 @@ const api = async (path: string, method: string, body: object = {}) => {
 };
 
 // 카드와 행의 ... 메뉴. 우클릭도 같은 메뉴를 연다(메뉴는 ... 버튼 자리에 뜬다).
+const hoverShow = "transition-opacity group-hover/deck:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100";
 function DeckMenu({ deck, open, onOpenChange, onRename, onTrash, onDuplicate, onPresent, onOpen }: {
   deck: DeckEntry; open: boolean; onOpenChange: (o: boolean) => void;
   onRename: () => void; onTrash: () => void; onDuplicate: () => void; onPresent: () => void; onOpen: () => void;
@@ -77,7 +86,7 @@ function DeckMenu({ deck, open, onOpenChange, onRename, onTrash, onDuplicate, on
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownTrigger render={
-        <Button variant="ghost" size="icon-compact" aria-label={`Actions for ${deck.title}`} className={cn("transition-opacity group-hover/deck:opacity-100 focus-visible:opacity-100", open ? "opacity-100" : "opacity-0")}>
+        <Button variant="ghost" size="icon-compact" aria-label={`Actions for ${deck.title}`} className={cn(hoverShow, open ? "opacity-100" : "opacity-0")}>
           <MoreHorizontal />
         </Button>
       } />
@@ -135,7 +144,6 @@ export function DeckList() {
   }, [decks, sort]);
 
   const open = (d: DeckEntry) => go(`/edit/${encodeURIComponent(d.id)}`);
-  const sub = (d: DeckEntry) => [d.date, d.author].filter(Boolean).join("  ") || d.folder;
   const cycleSort = () => setSort((s) => (s === "date" ? "title" : "date"));
 
   const create = async () => {
@@ -169,7 +177,10 @@ export function DeckList() {
   };
   const doTrash = async () => { const d = trashing; if (d && (await run(() => api(`/api/decks/${encodeURIComponent(d.folder)}/trash`, "POST")))) setTrashing(null); };
   const menu = (d: DeckEntry, cls = "absolute right-2 top-2 z-30") => (
-    <div className={cls}>
+    <div className={cn(cls, "flex items-center gap-0.5")}>
+      <Tooltip content="Present" side="top">
+        <Button variant="ghost" size="icon-compact" aria-label={`Present ${d.title}`} className={cn(hoverShow, "opacity-0")} onClick={() => present(d)}><MonitorPlay /></Button>
+      </Tooltip>
       <DeckMenu
         deck={d} open={menuId === d.id} onOpenChange={(o) => setMenuId(o ? d.id : null)}
         onOpen={() => open(d)} onPresent={() => present(d)} onDuplicate={() => duplicate(d)} onRename={() => startRename(d)} onTrash={() => setTrashing(d)}
@@ -182,6 +193,20 @@ export function DeckList() {
     onMouseUp: (e: MouseEvent) => { if (e.button === 2) setMenuId(d.id); },
   });
 
+  // 카드 사이 키보드 이동: 화살표(그리드는 열 수만큼 위아래), Cmd 또는 Ctrl+Enter로 발표. Enter는 카드 버튼의 기본 동작(열기).
+  const onKeys = (e: KeyboardEvent<HTMLDivElement>) => {
+    const roots = [...(body.current?.querySelectorAll<HTMLElement>("[data-deck]") ?? [])];
+    const cur = roots.findIndex((r) => r.contains(document.activeElement));
+    if (cur < 0) return;
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); e.stopPropagation(); present(sorted[cur]); return; }
+    const d = (view === "grid" ? { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols } : { ArrowDown: 1, ArrowUp: -1 })[e.key as "ArrowDown"];
+    const next = d && roots[cur + d];
+    if (!next) return;
+    e.preventDefault(); e.stopPropagation(); // CardGroup의 자체 화살표 처리보다 먼저 받는다
+    [...next.querySelectorAll("button")].find((b) => !/^(Actions for|Present) /.test(b.getAttribute("aria-label") ?? ""))?.focus();
+  };
+
+  const mac = useIsMac();
   const startCreate = () => { setPalette(false); setErr(""); setCreating(true); };
 
   const items: CommandMenuItemData[] = useMemo(() => [
@@ -201,7 +226,7 @@ export function DeckList() {
         toolbar={
           <>
             <span className="px-2 text-subtitle font-medium">slidekit</span>
-            <Button variant="ghost" size="compact" leadingIcon={Search} className="ml-auto text-muted-foreground" onClick={() => setPalette(true)}><span className="max-[640px]:sr-only">Search <span className="max-[900px]:hidden">⌘K</span></span></Button>
+            <Button variant="ghost" size="compact" leadingIcon={Search} className="ml-auto text-muted-foreground" onClick={() => setPalette(true)}><span className="max-[640px]:sr-only">Search <span className="max-[900px]:hidden">{mac ? "⌘K" : "Ctrl K"}</span></span></Button>
             <Button variant="ghost" size="compact" leadingIcon={ArrowDownUp} onClick={cycleSort}><span className="max-[640px]:sr-only">{SORTS[sort]}</span></Button>
             <Button variant="ghost" size="compact" leadingIcon={Trash2} active={trashView} aria-pressed={trashView} onClick={() => setTrashView((t) => !t)}><span className="max-[640px]:sr-only">Trash</span></Button>
             <Tooltip content={view === "grid" ? "View as list" : "View as grid"} side="bottom">
@@ -211,7 +236,7 @@ export function DeckList() {
           </>
         }
       >
-        <div ref={body} className="p-4">
+        <div ref={body} onKeyDownCapture={onKeys} className="p-4">
           {trashView ? <TrashList onRestored={load} /> : <>
           {loadErr && (
             <p role="alert" className="flex items-center gap-2 text-caption text-muted-foreground">
@@ -219,16 +244,25 @@ export function DeckList() {
             </p>
           )}
           {actionErr && <p role="alert" className="mb-2 text-caption text-destructive">{actionErr}</p>}
-          {decks?.length === 0 && <p className="text-caption text-muted-foreground">No decks yet</p>}
+          {decks === null && !loadErr && (
+            <div aria-hidden className="grid gap-4" style={{ gridTemplateColumns: `repeat(${view === "grid" ? cols : 1}, minmax(0, 1fr))` }}>
+              {[0, 1, 2].slice(0, view === "grid" ? Math.min(3, cols) : 3).map((i) => <div key={i} className="aspect-video rounded-md bg-hover motion-safe:animate-pulse" style={view === "grid" ? undefined : { aspectRatio: "16 / 1.5" }} />)}
+            </div>
+          )}
+          {decks?.length === 0 && (
+            <StatusPage title="No decks yet" actions={<Button variant="primary" size="compact" leadingIcon={Plus} onClick={startCreate}>New deck</Button>}>
+              Create a deck to start, or run slidekit new in a terminal.
+            </StatusPage>
+          )}
           {view === "grid" ? (
             <CardGroup columns={cols} separated>
               {sorted.map((d) => (
-                <Card key={d.id} onClick={() => open(d)} label={d.title} className="group/deck" {...ctx(d)}>
+                <Card key={d.id} onClick={() => open(d)} label={d.title} className="group/deck" data-deck="" {...ctx(d)}>
                   {menu(d)}
                   <Thumb deck={d} />
                   <CardHeader>
                     <CardTitle>{d.title}</CardTitle>
-                    <CardDescription>{sub(d)}  {meta(d)}</CardDescription>
+                    <CardDescription><Meta d={d} /></CardDescription>
                   </CardHeader>
                 </Card>
               ))}
@@ -236,13 +270,13 @@ export function DeckList() {
           ) : (
             <CardGroup columns={1} separated>
               {sorted.map((d) => (
-                <Card key={d.id} onClick={() => open(d)} label={d.title} className="group/deck" {...ctx(d)}>
-                  <div className="flex items-center gap-3 pr-8">
+                <Card key={d.id} onClick={() => open(d)} label={d.title} className="group/deck" data-deck="" {...ctx(d)}>
+                  <div className="flex items-center gap-3 pr-16">
                     <Thumb deck={d} width={56} />
-                    <span className="min-w-0 flex-1 truncate text-body">{d.title}</span>
-                    <Badge deck={d} />
-                    <span className="shrink-0 text-caption text-muted-foreground tabular-nums">{meta(d)}</span>
-                    <span className="hidden shrink-0 text-caption text-muted-foreground tabular-nums sm:inline">{sub(d)}</span>
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-3">
+                      <span className="min-w-0 truncate text-body sm:flex-1">{d.title}</span>
+                      <span className="flex items-center gap-2 text-caption text-muted-foreground"><Badge deck={d} /><Meta d={d} /></span>
+                    </span>
                   </div>
                   {menu(d, "absolute right-2 top-1/2 z-30 -translate-y-1/2")}
                 </Card>
@@ -276,7 +310,7 @@ export function DeckList() {
       <Dialog open={!!trashing} onOpenChange={(o) => !o && setTrashing(null)}>
         <DialogContent size="sm">
           <DialogTitle>Move to trash?</DialogTitle>
-          <DialogDescription>{trashing?.title} moves to decks/.trash and can be restored from there.</DialogDescription>
+          <DialogDescription>{trashing?.title} moves to Trash. You can restore it from the Trash view.</DialogDescription>
           <div className="flex justify-end gap-2 pt-3">
             <Button variant="ghost" size="compact" onClick={() => setTrashing(null)}>Cancel</Button>
             <Button variant="primary" size="compact" disabled={busy} onClick={doTrash}>Move to trash</Button>

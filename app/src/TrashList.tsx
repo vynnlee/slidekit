@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
+import { StatusPage } from "./StatusPage";
 
 type Item = { entry: string; folder: string; title: string; deletedAt: string };
 
@@ -41,8 +42,12 @@ export function TrashList({ onRestored }: { onRestored: () => void }) {
 
   return (
     <>
-      {err && <p role="alert" className="mb-2 text-caption text-destructive">{err}</p>}
-      {items?.length === 0 && <p className="text-caption text-muted-foreground">Trash is empty</p>}
+      {err && (
+        <p role="alert" className="mb-2 flex items-center gap-2 text-caption text-destructive">
+          {err}{items === null && <Button variant="ghost" size="compact" onClick={() => { setErr(""); load(); }}>Retry</Button>}
+        </p>
+      )}
+      {items?.length === 0 && <StatusPage title="Trash is empty">Decks you move to Trash show up here.</StatusPage>}
       <ul className="flex flex-col gap-0.5">
         {items?.map((i) => (
           <li key={i.entry} className="flex h-9 items-center gap-3 px-2 text-body">

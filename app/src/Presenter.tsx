@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, MonitorPlay, Pause, Play, RotateCcw } from "lucide-react";
+import { ArrowLeft, Minus, MonitorPlay, Pause, Play, Plus, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabItem, TabPanel } from "@/components/ui/tabs";
@@ -11,15 +11,19 @@ import { deckUrl, type DeckEntry, type Info, type Pos } from "@/lib/deck";
 import { presentationOpen, startPresentation, warmScreens } from "@/lib/present";
 import { markdown } from "@/lib/markdown";
 import { cn } from "@/lib/utils";
+import { Field } from "@/components/ui/field";
+import { StatusPage } from "./StatusPage";
 
 const VIEW_KEY = "slidekit:view";
 const NOTES_KEY = "slidekit:notes-size";
+const TARGET_KEY = "slidekit:target-min";
 const NOTES_MIN = 14, NOTES_MAX = 56;
 const VIEW_ITEMS = { current: "Current slide", next: "Next slide", notes: "Notes", timer: "Timer", clock: "Clock", chapters: "Chapters" } as const;
 type View = Record<keyof typeof VIEW_ITEMS, boolean>;
 const defaultView = Object.fromEntries(Object.keys(VIEW_ITEMS).map((k) => [k, true])) as View;
 
 const SHORTCUTS = [["← →", "Move"], ["F", "Full screen"], ["+ -", "Notes size"], ["PgUp PgDn", "Scroll notes"], ["T", "Start or pause timer"], ["R", "Reset timer"], ["B W", "Blank presentation (in its window)"]];
+const mmss = (s: number) => `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
 const pad = (n: number) => String(n).padStart(2, "0");
 const hms = (s: number) => `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
 // 깨진 localStorage 값은 기본값으로 대체한다(흰 화면 방지).
@@ -38,6 +42,8 @@ export function Presenter({ id }: { id: string }) {
   const [now, setNow] = useState(() => new Date());
   const [elapsed, setElapsed] = useState(0);
   const [running, setRunning] = useState(false);
+  const [target, setTarget] = useState(() => { const n = Number(localStorage.getItem(TARGET_KEY)); return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0; });
+  const [stalled, setStalled] = useState(false);
   const [full, setFull] = useState(() => !!document.fullscreenElement);
   const [win, setWin] = useState<boolean | null>(presentationOpen);
   const [notesSize, setNotesSize] = useState(() => Math.min(NOTES_MAX, Math.max(NOTES_MIN, Number(localStorage.getItem(NOTES_KEY)) || 20)));
@@ -64,6 +70,13 @@ export function Presenter({ id }: { id: string }) {
   useEffect(() => { warmScreens(); }, []);
   useEffect(() => { localStorage.setItem(VIEW_KEY, JSON.stringify(view)); }, [view]);
   useEffect(() => { localStorage.setItem(NOTES_KEY, String(notesSize)); }, [notesSize]);
+  useEffect(() => { localStorage.setItem(TARGET_KEY, String(target)); }, [target]);
+  // 덱 iframe이 8초 안에 ready를 보내지 않으면 멈춘 것으로 알린다.
+  useEffect(() => {
+    if (!deck || info) return;
+    const t = setTimeout(() => setStalled(true), 8000);
+    return () => clearTimeout(t);
+  }, [deck, info]);
   useEffect(() => {
     const on = () => setFull(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", on);
@@ -161,14 +174,26 @@ export function Presenter({ id }: { id: string }) {
 
   const present = async () => { setErr(null); if (deck) setErr(await startPresentation(deck.folder, pos.slide, setErr)); };
 
-  if (!deck) return load === "loading" ? null : <p role="alert" className="p-4 text-body text-muted-foreground">{load === "error" ? "Could not load decks. Is the server running?" : "Deck not found."}</p>;
+  if (!deck) {
+    if (load === "loading") return null;
+    const back = <Button variant="secondary" size="compact" leadingIcon={ArrowLeft} onClick={() => go("/")}>Back to decks</Button>;
+    return load === "error"
+      ? <StatusPage role="alert" title="Could not load decks" actions={<>{back}<Button variant="primary" size="compact" onClick={() => location.reload()}>Retry</Button></>}>Check that the slidekit server is running.</StatusPage>
+      : <StatusPage role="alert" title="Deck not found" actions={back}>No deck named {id} exists.</StatusPage>;
+  }
+  if (stalled && !info) {
+    return <StatusPage role="alert" title="This deck did not respond" actions={<><Button variant="secondary" size="compact" leadingIcon={ArrowLeft} onClick={() => go("/")}>Back to decks</Button><Button variant="primary" size="compact" onClick={() => location.reload()}>Reload</Button></>}>The slides did not load. The deck file may have an error.</StatusPage>;
+  }
   const slide = info?.slides[pos.slide - 1];
   const chapterNo = slide?.chapter ?? 0;
   const chapter = info?.chapters[chapterNo - 1];
   const src = deckUrl(deck.folder, "?embed=1");
     // 부모 칸의 폭과 화면 높이 58vh 안에서 16:9 상자를 가능한 크게 잡는다. 남는 높이는 노트가 쓴다.
-  const frame = "aspect-video w-[min(100cqw,calc(var(--sh)*16/9))] overflow-hidden rounded-lg bg-black shadow-surface-3";
-  const cell = "flex min-h-0 min-w-0 items-start justify-center [container-type:inline-size]";
+  const frame = "relative aspect-video w-[min(100cqw,calc(var(--sh)*16/9))] overflow-hidden rounded-lg bg-black shadow-surface-3";
+  const cell = "flex min-h-0 min-w-0 flex-col items-center gap-1 [container-type:inline-size]";
+  const cap = "self-start text-caption text-muted-foreground";
+  const steps = slide?.steps ?? 1;
+  const remain = target ? target * 60 - elapsed : 0;
 
   return (
     <Shell
@@ -179,11 +204,10 @@ export function Presenter({ id }: { id: string }) {
       toolbar={
         <>
           <Tooltip content="All decks" side="bottom"><Button variant="ghost" size="icon-compact" aria-label="All decks" onClick={() => go("/")}><ArrowLeft /></Button></Tooltip>
-          <span className="truncate text-subtitle font-medium">{deck.title}</span>
-          <span className="ml-auto text-caption text-muted-foreground tabular-nums">{info ? `${pos.slide} / ${total}` : ""}</span>
+          <span className="mr-auto truncate text-subtitle font-medium">{deck.title}</span>
           {err && <span role="status" className="truncate text-caption text-muted-foreground">{err}</span>}
           {win !== null && <span className="flex items-center gap-1.5 text-caption text-muted-foreground"><span className={`size-1.5 rounded-full ${win ? "bg-green-500" : "bg-red-500"}`} />{win ? "Presentation window open" : "Presentation window closed"}</span>}
-          <Button variant="primary" size="compact" leadingIcon={MonitorPlay} onClick={present}>Present</Button>
+          <Button variant={win ? "secondary" : "primary"} size="compact" leadingIcon={MonitorPlay} onClick={present}>{win ? "Focus presentation" : "Present"}</Button>
         </>
       }
       left={
@@ -197,7 +221,7 @@ export function Presenter({ id }: { id: string }) {
               <SidebarMenu>
                 {info.chapters.map((c, i) => (
                   <SidebarMenuItem key={c.n}>
-                    <SidebarMenuButton isActive={i + 1 === chapterNo} onClick={() => goto(c.n)}>{c.title}</SidebarMenuButton>
+                    <SidebarMenuButton isActive={i + 1 === chapterNo} aria-current={i + 1 === chapterNo ? "step" : undefined} onClick={() => goto(c.n)}>{c.title}</SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
               </SidebarMenu>
@@ -234,34 +258,64 @@ export function Presenter({ id }: { id: string }) {
         {/* 넓으면 [현재 | 다음] 아래에 상태 줄, 900px 이하에서는 현재 위, 다음과 상태 줄이 그 아래 나란히 */}
         <div className="grid shrink-0 grid-cols-[5fr_2fr] gap-x-4 gap-y-3 [--sh:58vh] max-[900px]:grid-cols-2 max-[900px]:[--sh:34vh]">
           <div className={cn(cell, view.current ? "max-[900px]:col-span-2" : "hidden")}>
+            <span className={cap}>Current</span>
             <div className={frame}><iframe ref={curRef} src={src} title="Current slide" className="pointer-events-none h-full w-full border-0" /></div>
           </div>
           <div className={cn(cell, view.next ? "" : "hidden")}>
-            <div className={frame}><iframe ref={nextRef} src={src} title="Next slide" className="pointer-events-none h-full w-full border-0" /></div>
+            <span className={cap}>Next{steps > 1 ? `, step ${pos.step} / ${steps}` : ""}</span>
+            <div className={frame}>
+              <iframe ref={nextRef} src={src} title="Next slide" className="pointer-events-none h-full w-full border-0" />
+              {info && pos.slide >= total && <div className="absolute inset-0 flex items-center justify-center bg-black text-caption text-muted-foreground">End of deck</div>}
+            </div>
           </div>
-        {(view.timer || view.clock || (view.chapters && chapter)) && (
-          <div className="col-span-2 flex items-center gap-6 text-body tabular-nums max-[900px]:col-span-1 max-[900px]:flex-col max-[900px]:items-end max-[900px]:justify-center max-[900px]:gap-1">
-            {view.chapters && <span>{chapterNo > 0 && info ? `Chapter ${chapterNo} / ${info.chapters.length}  ${chapter?.title}` : ""}</span>}
-            {view.timer && (
-              <span className="ml-auto flex items-center gap-1">
-                {hms(elapsed)}
-                <Tooltip content="Start or pause (T)" side="top"><Button variant="ghost" size="icon-compact" aria-label="Start or pause timer" onClick={() => setRunning((r) => !r)}>{running ? <Pause /> : <Play />}</Button></Tooltip>
-                <Tooltip content="Reset (R)" side="top"><Button variant="ghost" size="icon-compact" aria-label="Reset timer" onClick={() => { setRunning(false); setElapsed(0); }}><RotateCcw /></Button></Tooltip>
-              </span>
-            )}
-            {view.clock && <span className={view.timer ? "" : "ml-auto"}>{`${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`}</span>}
-          </div>
-        )}
+          {(info || view.timer || view.clock || (view.chapters && chapter)) && (
+            <div className="col-span-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-body tabular-nums">
+              {info && <span className="text-subtitle font-medium">{pos.slide} / {total}</span>}
+              {view.chapters && chapterNo > 0 && info && (
+                <span className="flex min-w-0 items-baseline gap-2 text-muted-foreground max-[900px]:hidden">
+                  <span className="shrink-0">Chapter {chapterNo} / {info.chapters.length}</span>
+                  <span className="truncate">{chapter?.title}</span>
+                </span>
+              )}
+              {view.timer && (
+                <span className="ml-auto flex items-center gap-1">
+                  <span role="timer" className="text-title font-medium">{hms(elapsed)}</span>
+                  {target > 0 && <span className={cn("text-caption", remain < 0 ? "text-destructive" : "text-muted-foreground")}>{remain < 0 ? `+${mmss(-remain)} over` : `${mmss(remain)} left`}</span>}
+                  <Tooltip content="Start or pause (T)" side="top"><Button variant="ghost" size="icon-compact" aria-label="Start or pause timer" onClick={() => setRunning((r) => !r)}>{running ? <Pause /> : <Play />}</Button></Tooltip>
+                  <Tooltip content="Reset (R)" side="top"><Button variant="ghost" size="icon-compact" aria-label="Reset timer" onClick={() => { setRunning(false); setElapsed(0); }}><RotateCcw /></Button></Tooltip>
+                  <Tooltip content="Target time in minutes" side="top">
+                    <Field aria-label="Target minutes" inputMode="numeric" placeholder="Goal" className="w-14 px-1.5 text-right" value={target ? String(target) : ""}
+                      onChange={(e) => setTarget(Math.min(999, Math.floor(Number(e.target.value.replace(/\D/g, "")) || 0)))} />
+                  </Tooltip>
+                </span>
+              )}
+              {view.clock && <span className={cn("text-muted-foreground", !view.timer && "ml-auto")}>{`${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`}</span>}
+            </div>
+          )}
+          {info && total > 1 && (
+            <div role="progressbar" aria-label="Slide progress" aria-valuemin={1} aria-valuemax={total} aria-valuenow={pos.slide} className="col-span-2 h-1 overflow-hidden rounded-full bg-hover">
+              <div className="h-full rounded-full bg-foreground/60 transition-[width] duration-200" style={{ width: `${(pos.slide / total) * 100}%` }} />
+            </div>
+          )}
         </div>
         {view.notes && (
-          <div
-            ref={notesRef}
-            tabIndex={0}
-            aria-label="Speaker notes"
-            style={{ fontSize: notesSize, lineHeight: 1.5 }}
-            className="min-h-0 flex-1 overflow-auto rounded-lg text-muted-foreground outline-none focus-visible:ring-1 focus-visible:ring-focus-ring [&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_h1]:text-[1.4em] [&_h1]:font-semibold [&_h2]:text-[1.2em] [&_h2]:font-semibold [&_h3]:font-semibold [&_a]:text-foreground [&_li]:ml-5 [&_ol]:list-decimal [&_p+*]:mt-2 [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-hover [&_pre]:p-2 [&_strong]:text-foreground [&_ul]:list-disc"
-            dangerouslySetInnerHTML={{ __html: slide?.notes ? markdown(slide.notes) : '<p class="text-caption">No notes</p>' }}
-          />
+          <div className="flex min-h-0 flex-1 flex-col gap-1">
+            <div className="flex items-center justify-between">
+              <span className="text-caption text-muted-foreground">Notes</span>
+              <span className="flex items-center">
+                <Tooltip content="Smaller notes (-)" side="top"><Button variant="ghost" size="icon-compact" aria-label="Smaller notes" disabled={notesSize <= NOTES_MIN} onClick={() => setNotesSize((n) => Math.max(NOTES_MIN, n - 2))}><Minus /></Button></Tooltip>
+                <Tooltip content="Larger notes (+)" side="top"><Button variant="ghost" size="icon-compact" aria-label="Larger notes" disabled={notesSize >= NOTES_MAX} onClick={() => setNotesSize((n) => Math.min(NOTES_MAX, n + 2))}><Plus /></Button></Tooltip>
+              </span>
+            </div>
+            <div
+              ref={notesRef}
+              tabIndex={0}
+              aria-label="Speaker notes"
+              style={{ fontSize: notesSize, lineHeight: 1.5 }}
+              className="min-h-0 flex-1 overflow-auto rounded-lg text-foreground outline-none focus-visible:ring-1 focus-visible:ring-focus-ring [&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_h1]:text-[1.4em] [&_h1]:font-semibold [&_h2]:text-[1.2em] [&_h2]:font-semibold [&_h3]:font-semibold [&_a]:underline [&_li]:ml-5 [&_ol]:list-decimal [&_p+*]:mt-2 [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-hover [&_pre]:p-2 [&_ul]:list-disc"
+              dangerouslySetInnerHTML={{ __html: slide?.notes ? markdown(slide.notes) : '<p class="text-caption text-muted-foreground">No notes</p>' }}
+            />
+          </div>
         )}
       </div>
     </Shell>

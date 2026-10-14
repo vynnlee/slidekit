@@ -63,6 +63,10 @@ const picked = steps.filter((s) => (only.length ? only.some((o) => s.name.includ
 if (!picked.length) { console.error("맞는 단계가 없음. --list로 확인"); process.exit(2); }
 if (picked.some((s) => s.cmd[0] === "node") && (!PW || !CHROME)) { console.error("playwright-core 또는 headless shell을 찾지 못함"); process.exit(2); }
 
+// 프로세스 그룹 전체를 종료한다. 단계가 띄운 서버가 남아 출력 파이프를 붙들면 러너가 잠금을 쥔 채 멈추기 때문이다.
+// 단계와 서버는 detached(새 세션, 그룹 리더)로 띄워 -pid로 자손까지 한 번에 보낸다. 리더가 먼저 죽어도 그룹은 남아 있어 신호가 간다.
+const killTree = (pid: number) => { try { process.kill(-pid, "SIGKILL"); } catch { try { process.kill(pid, "SIGKILL"); } catch {} } };
+let running = 0; // 지금 도는 단계의 pid(종료 신호 때 같이 정리)
 const servers = new Map<string, () => void>();
 // 공정한 대기열: /tmp/slidekit-heavy.queue/<시각>-<pid> 표를 받고, 살아 있는 표 중 가장 앞일 때만 잠금을 시도한다.
 // 손으로 mkdir 하는 팀원과도 같은 잠금 디렉터리를 공유한다(pid 파일에는 보유자 이름을 적는다).
@@ -74,7 +78,7 @@ const ticket = join(queue, `${Date.now().toString().padStart(14, "0")}-${process
 writeFileSync(ticket, "");
 let held = false;
 const release = () => { rmSync(ticket, { force: true }); if (held) { held = false; try { rmSync(lock, { recursive: true }); } catch {} } };
-for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => { for (const stop of servers.values()) stop(); release(); process.exit(130); });
+for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => { if (running) killTree(running); for (const stop of servers.values()) stop(); release(); process.exit(130); });
 {
   let lastMsg = "", lastAt = 0;
   for (;;) {
@@ -94,13 +98,18 @@ for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => { for (c
   }
 }
 console.log(`잠금 획득 (pid ${process.pid})`);
+let current = "시작";
+const heldAt = Date.now();
+// 잠금을 오래 쥐고 있으면 10분마다 알린다(멈춘 러너를 다른 팀원이 알아채도록).
+setInterval(() => console.log(`[잠금 ${Math.round((Date.now() - heldAt) / 60000)}분째 보유 중, 현재 단계 ${current}, pid ${process.pid}]`), 600_000).unref();
 
 // 단계 출력은 화면과 /tmp/slidekit-test-logs/<단계>.log에 함께 남긴다(실패 때 다시 볼 수 있게).
 const logDir = "/tmp/slidekit-test-logs";
 mkdirSync(logDir, { recursive: true });
+const STEP_TIMEOUT = Number(process.env.SLIDEKIT_STEP_TIMEOUT ?? 900) * 1000; // 단계 하나의 상한(초). 가장 긴 editor가 약 200초다.
 async function run(name: string, cmd: string[], env: Record<string, string> = {}) {
   const out = createWriteStream(join(logDir, `${name}.log`));
-  const p = Bun.spawn(["taskpolicy", "-b", ...cmd], { cwd: root, env: { ...process.env, ...env }, stdout: "pipe", stderr: "pipe" });
+  const p = Bun.spawn(["taskpolicy", "-b", ...cmd], { cwd: root, env: { ...process.env, ...env }, stdout: "pipe", stderr: "pipe", detached: true }); running = p.pid;
   // 출력 사이가 3초 넘게 벌어지면 "[느림 +N초]" 줄을 넣는다. 고정 sleep과 긴 대기가 어느 검사 앞에 있는지 찾는 용도다.
   let prev = Date.now();
   const pump = async (s: ReadableStream<Uint8Array>, to: NodeJS.WriteStream) => {
@@ -110,9 +119,16 @@ async function run(name: string, cmd: string[], env: Record<string, string> = {}
       to.write(c); out.write(c);
     }
   };
-  await Promise.all([pump(p.stdout, process.stdout), pump(p.stderr, process.stderr)]);
+  const pumps = Promise.all([pump(p.stdout, process.stdout), pump(p.stderr, process.stderr)]);
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; const m = `\n[시간 초과 ${STEP_TIMEOUT / 1000}초: 단계와 자식 프로세스를 종료합니다]\n`; process.stdout.write(m); out.write(m); killTree(p.pid); }, STEP_TIMEOUT);
+  const code = await p.exited; // 종료 코드는 프로세스 종료로 정한다(출력 파이프가 닫히기를 기다리지 않는다)
+  clearTimeout(timer);
+  running = 0;
+  killTree(p.pid); // 단계가 끝났는데 남은 자식(테스트가 띄운 서버 등)을 정리한다
+  await Promise.race([pumps, Bun.sleep(2000)]); // 남은 출력은 2초만 기다린다
   out.end();
-  return p.exited;
+  return timedOut ? 124 : code;
 }
 const waitUp = async (url: string) => {
   for (let i = 0; i < 75; i++) { if (await fetch(`${url}/api/decks`).then((r) => r.ok).catch(() => false)) return; await Bun.sleep(200); }
@@ -135,10 +151,10 @@ async function ensure(kind: "app" | "dry" | "static") {
   // export.cjs가 서버 로그(/tmp/sk-eng-srv.log)에 비밀번호가 없는지 검사하므로 dry-run 서버의 출력을 거기에 남긴다.
   const log = Bun.file("/tmp/sk-eng-srv.log");
   const p = Bun.spawn(["taskpolicy", "-b", "bun", "run", "app/server.ts"], {
-    cwd: root, stdout: log, stderr: log,
+    cwd: root, stdout: log, stderr: log, detached: true,
     env: { ...process.env, PORT: "3245", SLIDEKIT_STABLE: "1", SLIDEKIT_READONLY_DECKS: READONLY, SLIDEKIT_DEPLOY_DRY_RUN: "1" },
   });
-  servers.set(kind, () => p.kill());
+  servers.set(kind, () => killTree(p.pid));
   await waitUp(DRY);
 }
 
@@ -166,6 +182,7 @@ const warned: string[] = [];
 const results: [string, boolean, number][] = [];
 try {
   for (const s of picked) {
+    current = s.name;
     console.log(`\n== ${s.name}`);
     const t0 = Date.now();
     let before = fingerprint();

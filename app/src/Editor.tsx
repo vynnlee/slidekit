@@ -493,7 +493,7 @@ export function Editor({ id }: { id: string }) {
         }
         right={
           <Inspector sel={sel} slide={canvas.current?.slide(index) ?? null} selId={selId} tab={tab} onTab={setTab}
-            comments={comments} channel={live.channel} onResolve={live.resolve} hoverId={hoverId} onHover={setHoverId} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
+            comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} hoverId={hoverId} onHover={setHoverId} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
         }
       >
         <div className="flex h-full flex-col">

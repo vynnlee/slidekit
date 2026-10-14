@@ -23,6 +23,8 @@ import { Card, CardGroup, CardHeader, CardTitle, CardDescription } from "@/compo
 import { textual } from "./Canvas";
 import { iconOf, nameOf } from "./LayerTree";
 import { readTranslate } from "@/lib/move";
+import { parseGradient, serializeGradient, type Gradient } from "@/lib/gradient";
+import { GradientEditor } from "@/components/ui/gradient-editor";
 import { LAYOUTS } from "../../engine/layouts";
 import { TokensPanel } from "./TokensPanel";
 import { CommentsPanel } from "./CommentsPanel";
@@ -133,7 +135,6 @@ const parseShadows = (raw: string): Shadow[] | null => {
   return out;
 };
 const fmtShadow = (s: Shadow) => `${s.color} ${s.x}px ${s.y}px ${s.b}px ${s.s}px${s.inset ? " inset" : ""}`;
-const GRAD = /^linear-gradient\(\s*(?:(-?[\d.]+)deg,\s*)?(.+?)\s+([\d.]+)%,\s*(.+?)\s+([\d.]+)%\s*\)$/;
 const SIDES = ["top", "right", "bottom", "left"] as const;
 export function Inspector(p: Props) {
   const el = p.sel as HTMLElement | null;
@@ -168,6 +169,7 @@ export function Inspector(p: Props) {
     }
     return "#000000";
   })();
+  const slideGrad = parseGradient(p.slide?.style.getPropertyValue("background-image") ?? "");
   const [tx, ty] = el ? readTranslate(el) : [0, 0];
   const setOffset = (x: number, y: number) => set("translate", !x && !y ? "" : `${x}px ${y}px`);
   const isText = !!el && textual(el);
@@ -243,9 +245,8 @@ export function Inspector(p: Props) {
   const bg = val("background-color");
   const hasStroke = SIDES.some((x) => px(val(`border-${x}-width`)) > 0 && val(`border-${x}-style`) !== "none");
   const bgImg = inl("background-image");
-  const gm = GRAD.exec(bgImg);
-  const grad = gm ? { angle: gm[1] ?? "180", a: gm[2], pa: gm[3], b: gm[4], pb: gm[5] } : null;
-  const setGrad = (g: NonNullable<typeof grad>) => set("background-image", `linear-gradient(${g.angle}deg, ${g.a} ${g.pa}%, ${g.b} ${g.pb}%)`);
+  const grad = parseGradient(bgImg);
+  const setGrad = (g: Gradient) => set("background-image", serializeGradient(g));
   const hasFill = !!grad || (!!bg && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent");
   const shadows = parseShadows(val("box-shadow"));
   const setShadows = (l: Shadow[]) => set("box-shadow", l.length ? l.map(fmtShadow).join(", ") : "none");
@@ -295,10 +296,18 @@ export function Inspector(p: Props) {
               </div>
             </InspectorSection>
             <InspectorSection id="slide-bg" title="Background">
-              <ColorField aria-label="Background" allowNone
-                className={bgNone ? "[&_input[aria-label$='opacity_percent']]:hidden" : undefined}
-                value={p.slide?.style.getPropertyValue("background-color") ?? ""}
-                onChange={(v) => p.onSlideStyle("background-color", v)} />
+              <SegmentedControl aria-label="Background type" value={slideGrad ? "linear" : "solid"}
+                onChange={(v) => {
+                  if (v === "solid") p.onSlideStyle("background-image", "");
+                  else if (!slideGrad) p.onSlideStyle("background-image", serializeGradient({ angle: 180, stops: [{ color: p.slide?.style.getPropertyValue("background-color") || "#000000", pos: 0 }, { color: "#ffffff", pos: 100 }] }));
+                }}
+                options={[opt("solid", Square, "Solid"), opt("linear", Spline, "Linear gradient")]} />
+              {slideGrad
+                ? <GradientEditor label="Background gradient" value={slideGrad} onChange={(g) => p.onSlideStyle("background-image", serializeGradient(g))} onScrub={p.onScrub} />
+                : <ColorField aria-label="Background" allowNone
+                    className={bgNone ? "[&_input[aria-label$='opacity_percent']]:hidden" : undefined}
+                    value={p.slide?.style.getPropertyValue("background-color") ?? ""}
+                    onChange={(v) => p.onSlideStyle("background-color", v)} />}
             </InspectorSection>
             <TokensPanel prefix={p.prefix} onPrefixChange={p.onPrefixChange} canvas={p.canvasDoc} />
           </div>
@@ -460,24 +469,13 @@ export function Inspector(p: Props) {
                     <SegmentedControl aria-label="Fill type" className="flex-1" value={grad ? "linear" : "solid"}
                       onChange={(v) => {
                         if (v === "solid") set("background-image", "");
-                        else if (!grad) setGrad({ angle: "180", a: hasFill && bg !== "rgba(0, 0, 0, 0)" ? bg : "#ffffff", pa: "0", b: "#000000", pb: "100" });
+                        else if (!grad) setGrad({ angle: 180, stops: [{ color: hasFill && bg !== "rgba(0, 0, 0, 0)" ? bg : "#ffffff", pos: 0 }, { color: "#000000", pos: 100 }] });
                       }}
                       options={[opt("solid", Square, "Solid"), opt("linear", Spline, "Linear gradient")]} />
                     <Tooltip content="Remove fill" side="top"><Button aria-label="Remove fill" variant="ghost" size="icon-compact" onClick={() => { set("background-image", ""); set("background-color", "transparent"); }}><Minus /></Button></Tooltip>
                   </div>
                   {!grad && <ColorField aria-label="Fill" value={bg} onChange={(v) => set("background-color", v)} />}
-                  {grad && (
-                    <>
-                      <Grid>
-                        <NumberField label={<RotateCw />} aria-label="Gradient angle" unit="" min={0} max={360} value={grad.angle} onChange={(v) => setGrad({ ...grad, angle: v })} {...scrub} />
-                        <span />
-                        <NumberField label="A" aria-label="First stop" unit="" min={0} max={100} value={grad.pa} onChange={(v) => setGrad({ ...grad, pa: v })} {...scrub} />
-                        <NumberField label="B" aria-label="Second stop" unit="" min={0} max={100} value={grad.pb} onChange={(v) => setGrad({ ...grad, pb: v })} {...scrub} />
-                      </Grid>
-                      <ColorField aria-label="Gradient first color" value={grad.a} onChange={(v) => setGrad({ ...grad, a: v })} />
-                      <ColorField aria-label="Gradient second color" value={grad.b} onChange={(v) => setGrad({ ...grad, b: v })} />
-                    </>
-                  )}
+                  {grad && <GradientEditor label="Fill gradient" value={grad} onChange={setGrad} onScrub={p.onScrub} />}
                 </>
               )}
             </InspectorSection>

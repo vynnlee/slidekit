@@ -5,6 +5,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hashPassword } from "./worker/src/index";
+import { WRANGLER } from "./kv";
 
 const root = join(import.meta.dir, "..");
 const workerDir = join(import.meta.dir, "worker");
@@ -56,7 +57,7 @@ const MIN_PW = 8;
 
 function wrangler(...args: string[]) {
   // 버전을 고정한다. 최신 패키지를 토큰이 있는 환경에서 실행하지 않는다(올릴 때는 이 숫자를 의도적으로 바꾼다).
-  const r = Bun.spawnSync(["bunx", "wrangler@4.150.0", ...args], { cwd: workerDir, env, stdout: "inherit", stderr: "inherit" });
+  const r = Bun.spawnSync(["bunx", WRANGLER, ...args], { cwd: workerDir, env, stdout: "inherit", stderr: "inherit" });
   if (r.exitCode !== 0) throw new Error(`wrangler 실패 (종료 코드 ${r.exitCode})`); // finally가 임시 폴더를 지우도록 throw
 }
 

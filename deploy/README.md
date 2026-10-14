@@ -38,3 +38,19 @@
 4. `bun run deploy --smoke vibe-coding-workshop`: 모두 PASS여야 한다.
 5. 비밀번호 덱을 올릴 때: `bun run deploy <덱>`(비밀번호는 숨김 입력), 이어서 `bun run deploy --smoke vibe-coding-workshop <덱>`, 그리고 손으로 틀린 비밀번호 한 번과 맞는 비밀번호 한 번을 확인한다. 같은 IP로 틀린 비밀번호를 5번 보내면 6번째가 429이고 `Retry-After`가 붙는지도 한 번 본다.
 6. 문제가 있으면 `cd deploy/worker && bunx wrangler@4.150.0 rollback`. 코드만 이전 버전으로 돌아가고 마이그레이션과 Durable Object 클래스는 남지만, 구코드가 쓰지 않으므로 해가 없다(KV 카운터로 돌아간다).
+
+## 게시 취소: slidekit unpublish
+
+배포한 덱을 Worker의 KV(`DECKS`)에서 지운다. 지우는 키는 `html:<덱>`(본문), `meta:<덱>`(공개 범위와 비밀번호 해시), `rl:<덱>:*`(로그인 시도 제한 카운터, 있으면)이다. html을 먼저 지우므로 중간에 멈춰도 공개 범위가 풀린 채 본문이 남지 않는다. 로컬 덱과 `dist/` 파일은 그대로다. Durable Object 시도 제한(`LIMITER`)을 쓰는 경우 카운터는 15분 뒤 알람으로 스스로 비워진다.
+
+```
+bun run slidekit unpublish <덱>          # 지울 목록만 보인다. 종료 코드 2
+bun run slidekit unpublish <덱> --yes    # 실제로 지운다
+SLIDEKIT_DEPLOY_DRY_RUN=1 bun run slidekit unpublish <덱>   # 지울 키만 출력한다. Cloudflare에 접속하지 않는다
+```
+
+- `--yes`가 없으면 게시된 덱인지 확인(읽기)하고 공개 범위, 제목, 지울 키 목록을 보인 뒤 종료 코드 2로 끝난다. 게시되지 않은 덱이면 종료 코드 1과 게시된 덱 목록을 보인다.
+- 토큰은 환경 변수 `CLOUDFLARE_API_TOKEN`이나 키체인 `slidekit-cloudflare-token`에서만 읽고 출력하지 않는다. wrangler는 `deploy/kv.ts`에 고정된 버전만 쓴다.
+- 이미 퍼진 링크와 브라우저 캐시는 지울 수 없다. 공개 덱은 `max-age=0, must-revalidate`라 지운 뒤 다음 요청부터 404다.
+- 이 명령의 실제 삭제는 사용자 승인 뒤에만 실행한다(개발 중에는 dry-run과 가짜 KV 단위 테스트만 돌렸다).
+

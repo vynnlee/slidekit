@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Minus, MonitorPlay, Pause, Play, Plus, RotateCcw } from "lucide-react";
+import { ArrowLeft, ChevronsDown, Minus, MonitorPlay, Pause, Play, Plus, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabItem, TabPanel } from "@/components/ui/tabs";
@@ -12,11 +12,13 @@ import { presentationOpen, startPresentation, warmScreens } from "@/lib/present"
 import { markdown } from "@/lib/markdown";
 import { cn } from "@/lib/utils";
 import { Field } from "@/components/ui/field";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { StatusPage } from "./StatusPage";
 
 const VIEW_KEY = "slidekit:view";
 const NOTES_KEY = "slidekit:notes-size";
 const TARGET_KEY = "slidekit:target-min";
+const AUTO_KEY = "slidekit:notes-auto";
 const NOTES_MIN = 14, NOTES_MAX = 56;
 const VIEW_ITEMS = { current: "Current slide", next: "Next slide", notes: "Notes", timer: "Timer", clock: "Clock", chapters: "Chapters" } as const;
 type View = Record<keyof typeof VIEW_ITEMS, boolean>;
@@ -44,6 +46,10 @@ export function Presenter({ id }: { id: string }) {
   const [running, setRunning] = useState(false);
   const [target, setTarget] = useState(() => { const n = Number(localStorage.getItem(TARGET_KEY)); return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0; });
   const [stalled, setStalled] = useState(false);
+  // 리허설: 타이머가 도는 동안 슬라이드별 체류 시간을 메모리에만 센다(새로고침하면 사라진다).
+  const dwell = useRef<Record<number, number>>({});
+  const [summary, setSummary] = useState(false);
+  const [auto, setAuto] = useState(() => localStorage.getItem(AUTO_KEY) === "1");
   const [full, setFull] = useState(() => !!document.fullscreenElement);
   const [win, setWin] = useState<boolean | null>(presentationOpen);
   const [notesSize, setNotesSize] = useState(() => Math.min(NOTES_MAX, Math.max(NOTES_MIN, Number(localStorage.getItem(NOTES_KEY)) || 20)));
@@ -71,6 +77,13 @@ export function Presenter({ id }: { id: string }) {
   useEffect(() => { localStorage.setItem(VIEW_KEY, JSON.stringify(view)); }, [view]);
   useEffect(() => { localStorage.setItem(NOTES_KEY, String(notesSize)); }, [notesSize]);
   useEffect(() => { localStorage.setItem(TARGET_KEY, String(target)); }, [target]);
+  useEffect(() => { localStorage.setItem(AUTO_KEY, auto ? "1" : "0"); }, [auto]);
+  // 텔레프롬프터식: 켜 두면 타이머가 도는 동안 노트가 천천히 내려간다(초당 30px). 슬라이드를 넘기면 맨 위로 돌아간다.
+  useEffect(() => {
+    if (!auto || !running) return;
+    const t = setInterval(() => notesRef.current?.scrollBy({ top: 3 }), 100);
+    return () => clearInterval(t);
+  }, [auto, running]);
   // 덱 iframe이 8초 안에 ready를 보내지 않으면 멈춘 것으로 알린다.
   useEffect(() => {
     if (!deck || info) return;
@@ -84,7 +97,7 @@ export function Presenter({ id }: { id: string }) {
   }, []);
   useEffect(() => { notesRef.current?.scrollTo({ top: 0 }); }, [pos.slide]);
   useEffect(() => {
-    const t = setInterval(() => { setNow(new Date()); setWin(presentationOpen()); if (running) setElapsed((e) => e + 1); }, 1000);
+    const t = setInterval(() => { setNow(new Date()); setWin(presentationOpen()); if (running) { setElapsed((e) => e + 1); const n = posRef.current.slide; dwell.current[n] = (dwell.current[n] ?? 0) + 1; } }, 1000);
     return () => clearInterval(t);
   }, [running]);
 
@@ -167,7 +180,7 @@ export function Presenter({ id }: { id: string }) {
       else if (e.key === "+" || e.key === "=") setNotesSize((n) => Math.min(NOTES_MAX, n + 2));
       else if (e.key === "-" || e.key === "_") setNotesSize((n) => Math.max(NOTES_MIN, n - 2));
       else if (e.key === "t" || e.key === "T") setRunning((r) => !r);
-      else if (e.key === "r" || e.key === "R") { setRunning(false); setElapsed(0); }
+      else if (e.key === "r" || e.key === "R") { setRunning(false); setElapsed(0); dwell.current = {}; }
       else if (e.key === "PageDown" || e.key === "PageUp") {
         e.preventDefault();
         const el = notesRef.current;
@@ -288,7 +301,8 @@ export function Presenter({ id }: { id: string }) {
                   <span role="timer" aria-label="Elapsed time" className="text-title font-medium">{hms(elapsed)}</span>
                   {target > 0 && <span className={cn("text-caption", remain < 0 ? "text-destructive" : "text-muted-foreground")}>{remain < 0 ? `+${mmss(-remain)} over` : `${mmss(remain)} left`}</span>}
                   <Tooltip content="Start or pause (T)" side="top"><Button variant="ghost" size="icon-compact" aria-label="Start or pause timer" onClick={() => setRunning((r) => !r)}>{running ? <Pause /> : <Play />}</Button></Tooltip>
-                  <Tooltip content="Reset (R)" side="top"><Button variant="ghost" size="icon-compact" aria-label="Reset timer" onClick={() => { setRunning(false); setElapsed(0); }}><RotateCcw /></Button></Tooltip>
+                  <Tooltip content="Reset (R)" side="top"><Button variant="ghost" size="icon-compact" aria-label="Reset timer" onClick={() => { setRunning(false); setElapsed(0); dwell.current = {}; }}><RotateCcw /></Button></Tooltip>
+                  {elapsed > 0 && <Button variant="ghost" size="compact" onClick={() => { setRunning(false); setSummary(true); }}>Summary</Button>}
                   <Tooltip content="Target time in minutes" side="top">
                     <Field aria-label="Target minutes" inputMode="numeric" placeholder="Goal" className="w-14 px-1.5 text-right" value={target ? String(target) : ""}
                       onChange={(e) => setTarget(Math.min(999, Math.floor(Number(e.target.value.replace(/\D/g, "")) || 0)))} />
@@ -309,6 +323,7 @@ export function Presenter({ id }: { id: string }) {
             <div className="flex items-center justify-between">
               <span className="text-caption text-muted-foreground">Notes</span>
               <span className="flex items-center">
+                <Tooltip content="Auto-scroll while the timer runs" side="top"><Button variant="ghost" size="icon-compact" aria-label="Auto-scroll notes" aria-pressed={auto} active={auto} onClick={() => setAuto((a) => !a)}><ChevronsDown /></Button></Tooltip>
                 <Tooltip content="Smaller notes (-)" side="top"><Button variant="ghost" size="icon-compact" aria-label="Smaller notes" disabled={notesSize <= NOTES_MIN} onClick={() => setNotesSize((n) => Math.max(NOTES_MIN, n - 2))}><Minus /></Button></Tooltip>
                 <Tooltip content="Larger notes (+)" side="top"><Button variant="ghost" size="icon-compact" aria-label="Larger notes" disabled={notesSize >= NOTES_MAX} onClick={() => setNotesSize((n) => Math.min(NOTES_MAX, n + 2))}><Plus /></Button></Tooltip>
               </span>
@@ -325,6 +340,27 @@ export function Presenter({ id }: { id: string }) {
           </div>
         )}
       </div>
+      <Dialog open={summary} onOpenChange={setSummary}>
+        <DialogContent size="sm">
+          <DialogTitle>Rehearsal summary</DialogTitle>
+          <DialogDescription>Time per slide while the timer was running.</DialogDescription>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 pt-2 text-body tabular-nums">
+            <dt className="text-muted-foreground">Total</dt><dd>{hms(elapsed)}</dd>
+            {target > 0 && (<><dt className="text-muted-foreground">Target</dt><dd>{mmss(target * 60)}, {elapsed > target * 60 ? `${mmss(elapsed - target * 60)} over` : `${mmss(target * 60 - elapsed)} under`}</dd></>)}
+            <dt className="text-muted-foreground">Slides</dt><dd>{Object.keys(dwell.current).length} of {total} visited</dd>
+          </dl>
+          <p className="pt-3 text-caption text-muted-foreground">Longest</p>
+          <ol className="flex flex-col gap-1 text-body tabular-nums">
+            {Object.entries(dwell.current).map(([n, sec]) => ({ n: Number(n), sec })).sort((a, b) => b.sec - a.sec).slice(0, 3).map(({ n, sec }) => (
+              <li key={n} className="flex justify-between gap-4"><span className="truncate">{n}. {info?.slides[n - 1]?.title ?? info?.slides[n - 1]?.kind ?? `Slide ${n}`}</span><span>{mmss(sec)}</span></li>
+            ))}
+          </ol>
+          <div className="flex justify-end gap-2 pt-3">
+            <Button variant="ghost" size="compact" onClick={() => { dwell.current = {}; setElapsed(0); setSummary(false); }}>Clear</Button>
+            <Button variant="primary" size="compact" onClick={() => setSummary(false)}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Shell>
   );
 }

@@ -159,6 +159,16 @@ const MOCKS = {
     check('목표 시간이 있으면 남은 시간', await until(async () => /^00:5\d left$/.test(await page.getByText(/ left$/).first().innerText())), await page.getByText(/ left$/).first().innerText().catch(() => null));
     await page.clock.runFor(60000);
     check('초과하면 over 문구', await until(async () => /^\+00:\d\d over$/.test(await page.getByText(/ over$/).first().innerText())), await page.getByText(/ over$/).count());
+    // 리허설 요약: 슬라이드별 체류 시간(타이머가 돈 시간만)
+    await page.getByRole('button', { name: 'Summary' }).click();
+    const sd = page.getByRole('dialog');
+    check('요약 다이얼로그', await until(async () => (await sd.getByText('Rehearsal summary').count()) === 1));
+    check('총 시간과 목표 대비', (await sd.innerText()).includes('00:01:10') && /00:10 over|01:10/.test(await sd.innerText()), await sd.innerText());
+    check('가장 길었던 슬라이드', /1\.\s*cover[\s\S]*01:10/i.test(await sd.innerText()), await sd.innerText());
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Auto-scroll notes' }).click();
+    check('자동 스크롤 토글', (await page.getByRole('button', { name: 'Auto-scroll notes' }).getAttribute('aria-pressed')) === 'true');
+    await page.getByRole('button', { name: 'Auto-scroll notes' }).click();
     const size0 = await page.locator('[aria-label="Speaker notes"]').evaluate((e) => parseFloat(getComputedStyle(e).fontSize));
     await page.getByRole('button', { name: 'Larger notes' }).click();
     check('노트 A+ 버튼', (await page.locator('[aria-label="Speaker notes"]').evaluate((e) => parseFloat(getComputedStyle(e).fontSize))) === size0 + 2);

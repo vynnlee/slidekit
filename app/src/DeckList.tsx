@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { ArrowDownUp, Copy, LayoutGrid, List, MonitorPlay, MoreHorizontal, Pencil, Pin, PinOff, Plus, Settings2, Presentation, Search, TextCursorInput, Trash2 } from "lucide-react";
+import { ArrowDownUp, Copy, Keyboard, LayoutGrid, List, MonitorPlay, MoreHorizontal, Pencil, Pin, PinOff, Plus, Settings2, Presentation, Search, TextCursorInput, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardGroup, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -12,6 +12,7 @@ import { CommandMenu, CommandMenuDialog, CommandMenuItem, useIsMac, CommandMenuE
 import { Shell } from "./Shell";
 import { TrashList } from "./TrashList";
 import { DeckSettingsDialog } from "./DeckSettings";
+import { ShortcutHelp, type KeyGroup } from "./ShortcutHelp";
 import { StatusPage } from "./StatusPage";
 import { toast } from "./Toaster";
 import { readRecent } from "@/lib/recent";
@@ -28,6 +29,11 @@ const ORDER = ["date", "title", "recent"] as const;
 type Sort = keyof typeof SORTS;
 // 템플릿 id와 라벨은 서버(/api/templates, 엔진 목록)에서 오고, 힌트는 UI가 영어로 따로 둔다.
 const TEMPLATE_HINT: Record<string, string> = { talk: "Cover, chapters, content, two columns, end", blank: "A cover and one slide", workshop: "Chapters, steps, big numbers, notes on every slide" };
+// 단축키 안내('?')의 내용. 이 화면의 키만 담는다.
+const KEY_GROUPS: KeyGroup[] = [
+  ["Decks", [["Left, Right, Up, Down", "Move between decks"], ["Enter", "Open the deck"], ["Cmd+Enter", "Present the deck"], ["Shift+F10", "Deck menu (or right-click)"]]],
+  ["General", [["Cmd+K", "Search decks, slides and actions"], ["?", "Show this list"], ["Esc", "Close a menu or dialog"]]],
+];
 const FILTERS = { all: "All", pinned: "Pinned", recent: "Recent", password: "Password" } as const;
 type Filter = keyof typeof FILTERS;
 const PinMark = () => <Pin role="img" aria-label="Pinned" className="mr-1 inline size-3 -translate-y-px text-muted-foreground" />;
@@ -168,6 +174,7 @@ export function DeckList() {
   const [view, setView] = useState(() => pref("slidekit:list-view", ["grid", "list"], "grid"));
   const [sort, setSort] = useState<Sort>(() => pref("slidekit:list-sort", ORDER, "date"));
   const [palette, setPalette] = useState(false);
+  const [help, setHelp] = useState(false);
   // 전체 검색: 팔레트를 열 때 슬라이드 제목, 본문, 노트 색인을 받아 둔다(서버는 파일이 안 바뀌면 캐시를 쓴다).
   const [q, setQ] = useState("");
   const [index, setIndex] = useState<SearchEntry[] | null>(null);
@@ -230,6 +237,17 @@ export function DeckList() {
   }, [decks, sort, recent, filter, pins]);
 
   const open = (d: DeckEntry) => go(`/edit/${encodeURIComponent(d.id)}`);
+  // '?'로 단축키 안내를 연다(입력 칸이나 다른 대화상자가 열려 있을 때는 쓰지 않는다).
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== "?" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest("input,textarea,select,[contenteditable]") || document.querySelector("[role=dialog]")) return;
+      e.preventDefault(); setHelp(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const cycleSort = () => setSort((s) => ORDER[(ORDER.indexOf(s) + 1) % ORDER.length]);
 
   // 새 덱: 폴더 이름은 제목에서 제안하고, 형식과 중복은 입력하는 동안 바로 알린다.
@@ -342,6 +360,7 @@ export function DeckList() {
   const items: CommandMenuItemData[] = useMemo(() => [
     { value: "new", label: "New deck", icon: Plus, group: "Actions", onSelect: startCreate },
     { value: "view", label: view === "grid" ? "View as list" : "View as grid", icon: view === "grid" ? List : LayoutGrid, group: "Actions", onSelect: () => setView(view === "grid" ? "list" : "grid") },
+    { value: "keys", label: "Keyboard shortcuts", icon: Keyboard, group: "Actions", keywords: ["help", "keys"], onSelect: () => setHelp(true) },
     { value: "sort", label: `Sort by ${SORTS[ORDER[(ORDER.indexOf(sort) + 1) % ORDER.length]]}`, icon: ArrowDownUp, group: "Actions", onSelect: cycleSort },
     ...sorted.flatMap((d): CommandMenuItemData[] => [
       { value: `edit:${d.id}`, label: d.title, description: "Edit", icon: Pencil, group: "Decks", keywords: [d.folder, d.author ?? ""], onSelect: () => open(d) },
@@ -430,6 +449,7 @@ export function DeckList() {
       </Shell>
 
       <ContextMenu menu={cm} />
+      <ShortcutHelp open={help} onOpenChange={setHelp} groups={KEY_GROUPS} description="Keyboard shortcuts for the deck list" />
       <DeckSettingsDialog folder={settingsFor?.folder ?? null} title={settingsFor?.title} onClose={() => setSettingsFor(null)} onSaved={load} />
 
       <CommandMenuDialog open={palette} onOpenChange={setPalette} title="Search" description="Open a deck or run an action">

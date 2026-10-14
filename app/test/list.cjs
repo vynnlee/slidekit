@@ -220,6 +220,13 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.keyboard.press('Escape');
   check('Esc로 닫힌다', await until(async () => (await page.getByRole('menu').count()) === 0));
   check('닫힌 뒤 포커스가 카드로 돌아간다', await until(async () => (await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label'))) === 'zz-e2e-k1'), await page.evaluate(() => document.activeElement && document.activeElement.outerHTML.slice(0, 100)));
+  // 단축키 안내: '?'로 열고 Esc로 닫으며, 입력 칸에서는 열리지 않는다
+  await page.locator('body').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('Shift+?');
+  const kh = page.getByRole('dialog', { name: 'Shortcuts' });
+  check("'?'로 단축키 안내가 열린다", await until(async () => (await kh.count()) === 1 && (await kh.getByText('Search decks, slides and actions').count()) === 1));
+  await page.keyboard.press('Escape');
+  check('Esc로 닫힌다(단축키 안내)', await until(async () => (await kh.count()) === 0));
   // 핀과 필터 칩: 메뉴의 Pin to top으로 맨 앞에 고정되고(정렬과 무관), 칩으로 줄이며, 새로고침해도 남는다
   await cardBtn('zz-e2e-k2').click({ button: 'right', position: { x: 40, y: 40 } });
   await page.getByRole('menuitem', { name: 'Pin to top' }).click();

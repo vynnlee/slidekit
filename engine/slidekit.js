@@ -112,6 +112,19 @@
       progEl = make('div', 'sk-progress'); progEl.appendChild(document.createElement('i')); stage.appendChild(progEl);
     }
 
+    /* screen reader announcements: a visually hidden polite live region (nothing is drawn) */
+    var live = null, lastSlide = -1, lastStep = 0, en = meta.lang === 'en';
+    if (!embed) {
+      live = make('div', 'sk-live');
+      live.setAttribute('role', 'status'); live.setAttribute('aria-live', 'polite'); live.setAttribute('aria-atomic', 'true');
+      document.body.appendChild(live);
+    }
+    function say(t) { if (live) { live.textContent = ''; live.textContent = t; } }
+    function nameOf(s) {
+      if (s.title) return s.title;
+      var h = s.el.querySelector('h1, h2'); return h ? h.textContent.replace(/\s+/g, ' ').trim().slice(0, 80) : '';
+    }
+
     /* position */
     var cur = -1, step = 1, started = false;
     var me = Math.random().toString(36).slice(2, 8);
@@ -155,6 +168,11 @@
       if (pageEl) { pageEl.textContent = s.n + ' / ' + slides.length; pageEl.hidden = edge; }
       if (progEl) { progEl.firstChild.style.width = (s.n / slides.length * 100) + '%'; progEl.hidden = edge; }
       if (!embed) { try { history.replaceState(null, '', '#' + s.n); } catch (err) { /* ignore */ } }
+      if (live && (s.n !== lastSlide || step !== lastStep)) {
+        var nm = nameOf(s);
+        say((en ? 'Slide ' : '슬라이드 ') + s.n + ' / ' + slides.length + (nm ? ', ' + nm : '') + (s.steps > 1 ? (en ? ', step ' : ', 단계 ') + step + ' / ' + s.steps : ''));
+        lastSlide = s.n; lastStep = step;
+      }
       if (!quiet && bc) bc.postMessage({ v: 1, type: 'state', from: me, slide: s.n, step: step });
       if (embed && started) toParent('state', { slide: s.n, step: step });
     }
@@ -246,6 +264,7 @@
       inner.appendChild(copy); box.appendChild(inner);
       if (window.ResizeObserver) fitThumbs.observe(box);
       lab.textContent = s.n + (s.title ? '  ' + s.title : '');
+      cell.setAttribute('role', 'button'); cell._skName = s.n + (nameOf(s) ? ' ' + nameOf(s) : '');
       cell.appendChild(box); cell.appendChild(lab);
       cell.addEventListener('click', function () { closeOv(); show(i, 'jump', 1); });
       grid.appendChild(cell);
@@ -256,9 +275,10 @@
     function isOpen() { return ov.hasAttribute('data-open'); }
     function mark() {
       thumbs.forEach(function (t, i) { t.toggleAttribute('data-sel', i === sel); });
+      say((en ? 'Overview, ' : '전체 보기, ') + thumbs[sel]._skName);
       thumbs[sel].scrollIntoView({ block: 'nearest' });
     }
-    function openOv() { sel = cur; thumbs.forEach(function (t, i) { t.toggleAttribute('data-cur', i === cur); }); ov.setAttribute('data-open', ''); mark(); }
+    function openOv() { sel = cur; thumbs.forEach(function (t, i) { t.toggleAttribute('data-cur', i === cur); }); ov.setAttribute('data-open', ''); ov.focus({ preventScroll: true }); mark(); }
     function closeOv() { ov.removeAttribute('data-open'); }
     function ovMove(key) {
       if (key === 'ArrowLeft' || key === 'ArrowRight') {

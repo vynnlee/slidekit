@@ -347,6 +347,28 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const w = await o.evaluate(() => { const b = document.querySelectorAll('.sk-thumb-box'); const r = b[0].getBoundingClientRect(); return { w: r.width, h: r.height, t: document.querySelector('.sk-thumb-in').style.transform, cur: document.querySelectorAll('.sk-thumb[data-cur]').length }; });
     check('overview: thumbnails fill the grid and scale to the box, one current marker', w.w > 250 && Math.abs(w.w / w.h - 16 / 9) < 0.05 && /scale\(0\.1[3-9]|scale\(0\.[2-9]/.test(w.t) && w.cur === 1, w); await o.close(); }
 
+  /* accessibility: live region, overview focus */
+  page('a11y', '<section data-slide="cover"><h1>첫 장</h1></section><section data-slide="chapter" data-title="둘째 장"><h1>둘째 장</h1></section><section data-slide="content"><h2>셋째 제목</h2></section>');
+  { const a = await ctx.newPage(); await a.goto(BASE + '/__t/a11y#1'); await a.waitForSelector('#sk-stage'); await sleep(200);
+    const live = () => a.evaluate(() => { const l = document.getElementById('sk-live'); return { role: l.getAttribute('role'), atomic: l.getAttribute('aria-live'), text: l.textContent, px: l.getBoundingClientRect().width }; });
+    let l1 = await live();
+    check('a11y: a polite status region announces slide n / N and the name', l1.role === 'status' && l1.atomic === 'polite' && l1.text === '슬라이드 1 / 3, 첫 장' && l1.px <= 1, l1);
+    await a.keyboard.press('ArrowRight'); l1 = await live();
+    check('a11y: moving announces the chapter title', l1.text === '슬라이드 2 / 3, 둘째 장', l1);
+    await a.keyboard.press('ArrowRight'); l1 = await live();
+    check('a11y: moving announces a content slide by its heading', l1.text === '슬라이드 3 / 3, 셋째 제목', l1);
+    await a.keyboard.press('o'); await sleep(200);
+    check('a11y: opening the overview moves focus into it and announces the selection', await a.evaluate(() => document.getElementById('sk-overview').contains(document.activeElement) && /^전체 보기, 3 /.test(document.getElementById('sk-live').textContent)));
+    await a.keyboard.press('ArrowLeft'); await sleep(100);
+    check('a11y: overview selection changes are announced', /^전체 보기, 2 /.test(await a.evaluate(() => document.getElementById('sk-live').textContent)));
+    await a.keyboard.press('Escape'); await sleep(100);
+    check('a11y: closing the overview releases focus', await a.evaluate(() => !document.getElementById('sk-overview').contains(document.activeElement)));
+    await a.close(); }
+  await ctx.route(BASE + '/__ea', (r) => r.fulfill({ contentType: 'text/html', body: '<iframe id="f" src="/__t/a11y?embed=1" style="width:800px;height:450px"></iframe>' }));
+  { const e = await ctx.newPage(); await e.goto(BASE + '/__ea'); await sleep(800);
+    const fr = e.frames().find((f) => f !== e.mainFrame());
+    check('a11y: embed mode has no live region', await fr.evaluate(() => !document.getElementById('sk-live')), null); await e.close(); }
+
   /* blank screen (B, W) */
   page('blank', sec(3) + '<input id="inp">');
   { const k = await ctx.newPage(); const ke = []; k.on('pageerror', (e) => ke.push(String(e)));

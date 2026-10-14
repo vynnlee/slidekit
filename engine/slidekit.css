@@ -60,6 +60,9 @@ aside[data-notes] { display: none; }
 /* the editor canvas can show every step while editing */
 html[data-sk-show-steps] [data-step] { visibility: visible !important; opacity: 1 !important; transform: none !important; }
 
+/* screen reader live region: not drawn */
+#sk-live { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+
 /* page number, progress, number entry: quiet, aligned to the slide grid */
 #sk-page, #sk-num { position: absolute; z-index: 3; font-variant-numeric: tabular-nums; }
 #sk-page { right: var(--sk-pad-x); bottom: 56px; font-size: 24px; color: var(--sk-faint); }

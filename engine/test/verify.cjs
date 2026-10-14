@@ -315,6 +315,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await N.goto(BASE + '/__t/dstep?sync=1#1'); await N.waitForSelector('#sk-stage'); await sleep(500);
     check('blank: hello restores the state for a reconnecting window', JSON.stringify(await N.evaluate(() => window.__bm)) === '["black"]', await N.evaluate(() => window.__bm));
     await L.close(); await A.close(); await N.close(); }
+  /* data-step="1" and invalid values are ignored with the element visible from the start (6.3) */
+  page('ds1', '<section data-slide="content"><p id="one" data-step="1">x</p><p id="bad" data-step="abc">y</p><p id="two" data-step="2">z</p></section>');
+  { const q = await ctx.newPage(); await q.goto(BASE + '/__t/ds1#1'); await q.waitForSelector('#sk-stage'); await sleep(300);
+    const v = await q.evaluate(() => ['one', 'bad', 'two'].map((i) => getComputedStyle(document.getElementById(i)).visibility));
+    check('data-step: 1 and invalid values are visible from the start, 2 waits', JSON.stringify(v) === '["visible","visible","hidden"]', v);
+    await q.close(); }
   { const m = await ctx.newPage(); await m.goto(BASE + '/__t/dstep-more#1'); await m.waitForSelector('#sk-stage');
     let n = 0; while ((await hash(m)) === '#1' && n < 10) { await m.keyboard.press('ArrowRight'); await sleep(60); n++; }
     check('data-step: data-steps larger than the max N wins (4 steps)', n === 4, n); await m.close(); }

@@ -90,6 +90,7 @@
         var n = Number(x.getAttribute('data-step'));
         if (n >= 2 && Math.floor(n) === n) return true;
         if (n !== 1) console.warn('[slidekit] invalid data-step "' + x.getAttribute('data-step') + '"', x);
+        x.setAttribute('data-shown', ''); /* 1 and invalid values are ignored: the element stays visible from the start */
         return false;
       });
       stepEls.forEach(function (x) { steps = Math.max(steps, Number(x.getAttribute('data-step'))); });
@@ -281,7 +282,7 @@
       say((en ? 'Overview, ' : '전체 보기, ') + thumbs[sel]._skName);
       thumbs[sel].scrollIntoView({ block: 'nearest' });
     }
-    function openOv() { sel = cur; thumbs.forEach(function (t, i) { t.toggleAttribute('data-cur', i === cur); }); ov.setAttribute('data-open', ''); ov.focus({ preventScroll: true }); mark(); }
+    function openOv() { root.removeAttribute('data-idle'); sel = cur; thumbs.forEach(function (t, i) { t.toggleAttribute('data-cur', i === cur); }); ov.setAttribute('data-open', ''); ov.focus({ preventScroll: true }); mark(); }
     function closeOv() { ov.removeAttribute('data-open'); }
     function ovMove(key) {
       if (key === 'ArrowLeft' || key === 'ArrowRight') {

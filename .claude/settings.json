@@ -1,5 +1,9 @@
 {
   "permissions": {
-    "allow": ["mcp__slidekit__reply", "mcp__slidekit__get_pending"]
+    "allow": [
+      "mcp__slidekit__reply",
+      "mcp__slidekit__get_pending",
+      "mcp__slidekit__ack"
+    ]
   }
 }

@@ -1,6 +1,6 @@
 import { deckFolder } from "./folder";
 import { join } from "node:path";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, watch, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, watch, writeFileSync } from "node:fs";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
@@ -37,12 +37,22 @@ export type Comment = {
 // 키는 저장소 밖(~/.config/slidekit/comments.key, 0600)에 둔다. 서명 대상은 작성 때 정해지는 값(덱, id, 슬라이드, 경로, 요소 글자, 본문, 작성 시각)이다.
 const keyFile = process.env.SLIDEKIT_KEY_FILE ?? join(homedir(), ".config", "slidekit", "comments.key");
 let keyCache: Buffer | null = null;
+/** 서명 키를 쓸 수 없을 때(읽기 불가, 내용 손상). 파일을 덮어쓰지 않고 사람이 읽는 안내를 낸다. */
+export class KeyError extends Error {}
 function key(): Buffer {
   if (keyCache) return keyCache;
-  try {
-    const k = Buffer.from(readFileSync(keyFile, "utf8").trim(), "hex");
-    if (k.length >= 32) return (keyCache = k);
-  } catch { /* 없으면 만든다 */ }
+  let text: string | null = null;
+  try { text = readFileSync(keyFile, "utf8"); }
+  catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") throw new KeyError(`Cannot read the comment signing key ${keyFile} (${code ?? "error"}). Fix its permissions, or delete it to create a new key. Existing comments will then need Trust.`);
+  }
+  if (text !== null) {
+    const k = Buffer.from(text.trim(), "hex");
+    if (k.length < 32) throw new KeyError(`The comment signing key ${keyFile} is damaged. Delete it to create a new key. Existing comments will then need Trust.`);
+    try { if (statSync(keyFile).mode & 0o077) chmodSync(keyFile, 0o600); } catch { /* 소유자가 아니면 그대로 둔다 */ }
+    return (keyCache = k);
+  }
   mkdirSync(dirname(keyFile), { recursive: true, mode: 0o700 });
   keyCache = randomBytes(32);
   writeFileSync(keyFile, keyCache.toString("hex") + "\n", { mode: 0o600 });
@@ -52,7 +62,8 @@ const canon = (deck: string, c: Comment) => JSON.stringify([deck, c.id, c.slide,
 export const sign = (deck: string, c: Comment) => createHmac("sha256", key()).update(canon(deck, c)).digest("hex");
 export function verify(deck: string, c: Comment): boolean {
   if (typeof c.sig !== "string" || !/^[0-9a-f]{64}$/.test(c.sig)) return false;
-  return timingSafeEqual(Buffer.from(c.sig, "hex"), Buffer.from(sign(deck, c), "hex"));
+  try { return timingSafeEqual(Buffer.from(c.sig, "hex"), Buffer.from(sign(deck, c), "hex")); }
+  catch (e) { if (e instanceof KeyError) return false; throw e; } // 키를 못 읽으면 목록은 열리고 모두 Unverified로 보인다
 }
 
 // SSE 구독자. 이벤트는 comment(새 코멘트), reply(코멘트가 갱신됨: 답, 전달됨, 해결), deck-changed, channel({connected}).
@@ -162,7 +173,7 @@ export const routes = {
         status: "open",
         createdAt: new Date().toISOString(),
       };
-      comment.sig = sign(b.deck, comment);
+      try { comment.sig = sign(b.deck, comment); } catch (e) { if (e instanceof KeyError) return bad(e.message, 500); throw e; }
       save(b.deck, [...load(b.deck), comment]);
       emit("comment", { deck: b.deck, comment: { ...comment, trusted: true } });
       return Response.json({ id: comment.id });
@@ -195,7 +206,8 @@ export const routes = {
       const list = load(b.deck);
       const comment = list.find((c) => c.id === req.params.id);
       if (!comment) return bad("not found", 404);
-      comment.sig = sign(b.deck, comment); comment.trusted = true;
+      try { comment.sig = sign(b.deck, comment); } catch (e) { if (e instanceof KeyError) return bad(e.message, 500); throw e; }
+      comment.trusted = true;
       save(b.deck, list);
       emit(comment.status === "open" && !comment.deliveredAt ? "comment" : "reply", { deck: b.deck, comment });
       return Response.json({ ok: true });

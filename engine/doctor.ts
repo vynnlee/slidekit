@@ -1,10 +1,28 @@
-/* slidekit doctor: 환경 점검을 한 화면에 OK/WARN으로. 비밀 값은 출력하지 않는다. */
+/* slidekit doctor [<덱>]: 환경 점검(인자 없음)이나 덱 하나의 점검(lint, 크기, 이미지, 노트, 색 대비)을 한 화면에 OK/WARN으로. 비밀 값은 출력하지 않는다. */
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { lint } from "./lint";
 
 const root = join(import.meta.dir, "..");
+// 덱 하나의 점검: slidekit doctor <덱>. 같은 근거를 앱의 게시 전 점검도 쓴다(engine/deck-check.ts).
+const deckArg = process.argv[2];
+if (deckArg) {
+  const dir = join(root, "decks", deckArg);
+  if (!/^[\w-]+$/.test(deckArg) || !existsSync(join(dir, "index.html"))) {
+    const have = existsSync(join(root, "decks")) ? readdirSync(join(root, "decks")).filter((d) => !d.startsWith(".") && !d.startsWith("_")) : [];
+    console.error(`없는 덱: ${deckArg}. 있는 덱: ${have.join(", ") || "(없음)"}. 환경 점검은 slidekit doctor`);
+    process.exit(1);
+  }
+  const { deckCheck, formatCheck } = await import("./deck-check");
+  const c = deckCheck(dir, deckArg);
+  const lines = formatCheck(c);
+  console.log(lines.join("\n"));
+  const w = lines.filter((l) => l.startsWith("WARN")).length;
+  console.log(w ? `\n${w}건 확인 필요` : "\n모두 정상");
+  process.exit(c.lint.errors ? 1 : 0);
+}
+
 let warns = 0;
 const row = (ok: boolean, name: string, msg: string) => { if (!ok) warns++; console.log(`${ok ? "OK  " : "WARN"} ${name.padEnd(8)} ${msg}`); };
 

@@ -133,3 +133,13 @@ test("image: 덱 assets/에 저장하고 상대 경로를 출력, 잘못된 입�
     expect(readFileSync(join(deckDir, "assets", "my-photo.png")).length).toBe(png.length);
   } finally { rmSync(deckDir, { recursive: true, force: true }); rmSync(tmp, { recursive: true, force: true }); }
 });
+
+test("doctor <덱>: 덱 점검 요약과 종료 코드, 없는 덱은 목록과 종료 코드 1", () => {
+  const ok = run("doctor", "slidekit-guide");
+  expect(ok.code).toBe(0);
+  expect(ok.out).toContain("덱 slidekit-guide");
+  for (const k of ["lint", "크기", "이미지", "노트", "대비"]) expect(ok.out).toContain(k);
+  const no = run("doctor", "no-such-deck-xyz");
+  expect(no.code).toBe(1);
+  expect(no.err).toContain("있는 덱");
+});

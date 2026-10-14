@@ -4,7 +4,7 @@
    필터와 해결, 파일 변경에 따른 캔버스 새로고침을 확인한다.
    덱은 decks/_e2e-comments로 복사해 쓰고 끝나면 지운다. 실행 전에 앱 서버가 떠 있어야 한다.
    Usage: PW=<playwright-core> CHROME=<headless shell> BASE=http://127.0.0.1:3244 node comments-e2e.cjs */
-const { chromium } = require(process.env.PW || 'playwright-core');
+const { launch } = require('../../scripts/lib/pw.cjs'); // 러너의 공용 브라우저 서버에 연결한다(없으면 직접 띄운다)
 const fs = require('fs');
 const BASE = process.env.BASE || 'http://127.0.0.1:3244';
 const { makeTestDeck } = require('../../scripts/lib/test-deck.cjs');
@@ -19,7 +19,7 @@ const json = { 'Content-Type': 'application/json' };
   const abort = new AbortController();
   let browser;
   try {
-    browser = await chromium.launch({ executablePath: process.env.CHROME, args: ['--disable-gpu'] });
+    browser = await launch();
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
     const page = await ctx.newPage();

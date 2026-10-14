@@ -1,8 +1,10 @@
 /* Export 메뉴 검증. 서버를 SLIDEKIT_DEPLOY_DRY_RUN=1로 띄워야 한다(실제 배포 금지).
    사용: SLIDEKIT_DEPLOY_DRY_RUN=1 PORT=3250 bun app/server.ts  /  PW=<playwright-core> CHROME=<headless shell> BASE=http://127.0.0.1:3250 node app/test/export.cjs */
-const { chromium } = require(process.env.PW || 'playwright-core');
+const { launch } = require('../../scripts/lib/pw.cjs'); // 러너의 공용 브라우저 서버에 연결한다(없으면 직접 띄운다)
 const fs = require('fs'), path = require('path'), cp = require('child_process');
 const BASE = process.env.BASE || 'http://127.0.0.1:3250', ROOT = path.join(__dirname, '..', '..');
+// 공용 브라우저 서버에 원격으로 연결하면 dl.path()를 쓸 수 없어 saveAs로 로컬 복사본을 받는다.
+const saveDl = async (dl) => { const f = path.join(require('os').tmpdir(), `sk-exp-${process.pid}-${dl.suggestedFilename()}`); await dl.saveAs(f); return f; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fail = 0; const check = (n, ok, x) => { if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + n + (ok ? '' : '  ' + JSON.stringify(x).slice(0, 300))); };
 const sh = (c) => cp.spawnSync('sh', ['-c', c], { cwd: ROOT, encoding: 'utf8' });
@@ -11,7 +13,7 @@ const rm = (n) => { fs.rmSync(path.join(ROOT, 'decks', n), { recursive: true, fo
 const PW = 'S3cret-pass-ZZ';
 (async () => {
   mk('qa-exp-pub', 'public'); mk('qa-exp-pw', 'password');
-  const b = await chromium.launch({ executablePath: process.env.CHROME, args: ['--disable-gpu'] });
+  const b = await launch();
   const ctx = await b.newContext({ viewport: { width: 1000, height: 700 }, acceptDownloads: true });
   await ctx.route(/fonts\.(googleapis|gstatic)/, (r) => r.abort());
   const p = await ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(String(e)));
@@ -20,10 +22,10 @@ const PW = 'S3cret-pass-ZZ';
   const menu = async (name) => { await p.getByRole('button', { name: 'Export' }).click(); await p.getByRole('menuitem', { name }).click(); };
   // 다운로드
   let [dl] = await Promise.all([p.waitForEvent('download'), menu('Download HTML')]);
-  let f = await dl.path(); let txt = fs.readFileSync(f, 'utf8');
+  let f = await saveDl(dl); let txt = fs.readFileSync(f, 'utf8');
   check('Download HTML: 파일명과 단독 HTML', dl.suggestedFilename() === 'qa-exp-pub.html' && /^<!doctype html>/i.test(txt) && !/\.\.\/\.\.\/engine/.test(txt), dl.suggestedFilename());
   [dl] = await Promise.all([p.waitForEvent('download'), menu('Download PDF')]);
-  f = await dl.path(); const pdf = fs.readFileSync(f);
+  f = await saveDl(dl); const pdf = fs.readFileSync(f);
   check('Download PDF: 실제 PDF, 5쪽', dl.suggestedFilename() === 'qa-exp-pub.pdf' && pdf.slice(0, 5).toString() === '%PDF-' && (pdf.toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length === 5, pdf.length);
   // API 검증
   check('confirm 없이 deploy는 400', (await api('POST', '/api/decks/qa-exp-pub/deploy', {})).s === 400);

@@ -1,6 +1,6 @@
 /* TokensPanel 검증: /dev/tokens에서 accent와 pad-x를 바꿔 저장하고 파일의 :root만 바뀌었는지 본다.
    덱 decks/_qa-tok을 만들고 끝나면 지운다. 사용: PW=<playwright-core> CHROME=<headless shell> BASE=http://127.0.0.1:3250 node app/test/tokens.cjs */
-const { chromium } = require(process.env.PW || 'playwright-core');
+const { launch } = require('../../scripts/lib/pw.cjs'); // 러너의 공용 브라우저 서버에 연결한다(없으면 직접 띄운다)
 const fs = require('fs'), path = require('path'), cp = require('child_process');
 const BASE = process.env.BASE || 'http://127.0.0.1:3250', ROOT = path.join(__dirname, '..', '..');
 const DIR = path.join(ROOT, 'decks', '_qa-tok'), FILE = path.join(DIR, 'index.html');
@@ -13,7 +13,7 @@ async function run(label, prep, expectDiff) {
   sh('bun app/server.ts new qa-tok'); fs.renameSync(path.join(ROOT, 'decks', 'qa-tok'), DIR);
   let src = fs.readFileSync(FILE, 'utf8'); src = prep(src); fs.writeFileSync(FILE, src);
   const before = src;
-  const b = await chromium.launch({ executablePath: process.env.CHROME, args: ['--disable-gpu'] });
+  const b = await launch();
   const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx.route(/fonts\.(googleapis|gstatic)/, (r) => r.abort());
   const p = await ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(String(e)));

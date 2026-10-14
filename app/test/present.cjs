@@ -13,7 +13,11 @@ fs.writeFileSync(path.join(DIR, 'index.html'), `<!doctype html><html lang="en" d
 <section data-slide="cover"><h1>Cover</h1><aside data-notes>Notes for cover</aside></section>
 ${Array.from({ length: TOTAL - 1 }, (_, i) => `<section data-slide="content"><h2>Slide ${i + 2}</h2></section>`).join('\n')}
 <script src="../../engine/slidekit.js"></script></body></html>`);
-process.on('exit', () => fs.rmSync(DIR, { recursive: true, force: true }));
+// 노트가 하나도 없는 덱: 발표 전 점검이 한 번 묻는다.
+const DECK2 = '_e2e-present-nonotes', ID2 = 'e2e-present-nonotes', DIR2 = path.join(__dirname, '..', '..', 'decks', DECK2);
+fs.mkdirSync(DIR2, { recursive: true });
+fs.writeFileSync(path.join(DIR2, 'index.html'), fs.readFileSync(path.join(DIR, 'index.html'), 'utf8').replaceAll(ID, ID2).replace(/<aside data-notes>[^<]*<\/aside>/, ''));
+process.on('exit', () => { fs.rmSync(DIR, { recursive: true, force: true }); fs.rmSync(DIR2, { recursive: true, force: true }); });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fail = 0;
 let __last = Date.now(); // TIMING=1이면 직전 검사 이후 1.5초 넘게 걸린 구간을 보여 준다(느린 단계 찾기)
@@ -111,11 +115,29 @@ const MOCKS = {
     check('보기를 꺼도 방향키 이동이 유지된다', await until(async () => (await counter()) === `13 / ${TOTAL}`), await counter());
     check('보기를 꺼도 발표 창과 동기화된다', await until(async () => new URL(pop.url()).hash === '#13'), pop.url());
     await page.keyboard.down('ArrowRight'); await page.keyboard.down('ArrowRight'); await page.keyboard.down('ArrowRight'); await page.keyboard.up('ArrowRight');
-    await sleep(600);
+    await until(async () => (await counter()) !== `13 / ${TOTAL}`);
+    await sleep(300); // 반복 입력이 더 넘기지 않는지 보려고 짧게 둔다(일어나지 않음 확인)
     check('방향키 반복 입력은 한 장만 넘긴다', (await counter()) === `14 / ${TOTAL}`, await counter());
     await page.keyboard.down('t'); await page.keyboard.down('t'); await page.keyboard.up('t');
     await sleep(1600);
     check('T 반복 입력은 한 번만 토글한다', (await page.locator('[role=timer]').first().innerText()) !== '00:00:00');
+    await ctx.close();
+  }
+  // 발표 전 점검: 노트가 없으면 한 번 묻고(Cancel로 돌아가거나 Present anyway로 시작), 노트가 있으면 묻지 않는다
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/present/${ID2}`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Present', exact: true }).click();
+    const dlg = page.getByRole('dialog', { name: 'Before you present' });
+    check('노트가 없으면 발표 전 점검이 묻는다', await until(async () => (await dlg.count()) === 1 && /No slide has speaker notes/.test(await dlg.innerText())));
+    await dlg.getByRole('button', { name: 'Cancel' }).click();
+    check('Cancel은 발표를 시작하지 않는다', await until(async () => (await dlg.count()) === 0) && ctx.pages().length === 1);
+    const popP = ctx.waitForEvent('page', { timeout: 8000 });
+    await page.getByRole('button', { name: 'Present', exact: true }).click();
+    await page.getByRole('button', { name: 'Present anyway' }).click();
+    check('Present anyway는 발표 창을 연다', !!(await popP.catch(() => null)));
     await ctx.close();
   }
   // ?from=N: 그 장에서 시작, 범위 밖은 가장 가까운 장. 발표 시작은 현재 장부터.
@@ -171,6 +193,10 @@ const MOCKS = {
     check('요약 다이얼로그', await until(async () => (await sd.getByText('Rehearsal summary').count()) === 1));
     check('총 시간과 목표 대비', (await sd.innerText()).includes('00:01:10') && /00:10 over|01:10/.test(await sd.innerText()), await sd.innerText());
     check('가장 길었던 슬라이드', /1\.\s*cover[\s\S]*01:10/i.test(await sd.innerText()), await sd.innerText());
+    check('첫 리허설에는 비교가 없다', !(await sd.innerText()).includes('Last run'));
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Summary' }).click(); // 두 번째 요약은 직전 기록과 비교한다
+    check('다음 리허설 요약에 직전 기록과 비교', await until(async () => /Last run\s*00:01:10/.test(await page.getByRole('dialog').innerText())), await page.getByRole('dialog').innerText());
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Auto-scroll notes' }).click();
     check('자동 스크롤 토글', (await page.getByRole('button', { name: 'Auto-scroll notes' }).getAttribute('aria-pressed')) === 'true');
@@ -204,7 +230,7 @@ const MOCKS = {
     await page.getByRole('button', { name: 'Present', exact: true }).click();
     check('권한을 묻기 전에 한 줄 안내가 보인다', await until(async () => (await page.evaluate(() => window.__notes)).some((t) => /browser will ask to manage windows/.test(t))), await page.evaluate(() => window.__notes));
     check('첫 외장 화면(Projector)에 연다', await until(async () => (await page.evaluate(() => window.__opens)).some((f) => /left=1280,top=0,width=1920,height=1080/.test(f))), await page.evaluate(() => window.__opens));
-    check('Presenting on Projector 표시', await until(async () => (await page.evaluate(() => window.__notes)).includes('Presenting on Projector.')), await page.evaluate(() => window.__notes)); // 이어서 전체화면 안내가 덮어쓸 수 있어 기록으로 본다
+    check('Presenting on Projector 표시', await until(async () => (await page.evaluate(() => window.__notes)).some((t) => t.includes('Presenting on Projector.'))), await page.evaluate(() => window.__notes)); // 이어서 전체화면 안내가 덮어쓸 수 있어 기록으로 본다
     check('화면이 둘 이상이면 선택기가 나온다', await until(async () => (await page.getByRole('combobox', { name: 'Presentation display' }).count()) === 1));
     await page.getByRole('combobox', { name: 'Presentation display' }).click();
     await page.getByRole('option', { name: 'TV' }).click();

@@ -12,6 +12,7 @@ import { chooseScreen, chosenScreen, listScreens, presentationOpen, startPresent
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { toast } from "./Toaster";
 import { markdown } from "@/lib/markdown";
+import { saveRun, type Run } from "@/lib/rehearsals";
 import { cn } from "@/lib/utils";
 import { Field } from "@/components/ui/field";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -60,9 +61,11 @@ export function Presenter({ id }: { id: string }) {
   const [screens, setScreens] = useState<string[] | null>(listScreens);
   const [screen, setScreen] = useState<string | null>(chosenScreen);
   const [summary, setSummary] = useState(false);
+  const [prevRun, setPrevRun] = useState<Run | undefined>();
   const [auto, setAuto] = useState(() => localStorage.getItem(AUTO_KEY) === "1");
   const [full, setFull] = useState(() => !!document.fullscreenElement);
   const [win, setWin] = useState<boolean | null>(presentationOpen);
+  const [check, setCheck] = useState<string[] | null>(null);
   const [notesSize, setNotesSize] = useState(() => Math.min(NOTES_MAX, Math.max(NOTES_MIN, Number(localStorage.getItem(NOTES_KEY)) || 20)));
   const notesRef = useRef<HTMLDivElement>(null);
 
@@ -234,10 +237,23 @@ export function Presenter({ id }: { id: string }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const present = async () => {
+  const start = async () => {
+    setCheck(null);
     setErr(null);
-    if (deck) setErr(await startPresentation(deck.folder, pos.slide, setErr));
+    // 성공 안내는 잠깐 토스트로만 보이고, 막힌 경우만 툴바에 남는다.
+    const note = (m: string) => toast(m, { ms: 4000 });
+    const r = deck ? await startPresentation(deck.folder, pos.slide, note) : null;
+    if (r === "Popup blocked") setErr("Popup blocked. Allow popups for this site, then press Present."); else if (r) note(r);
     setScreens(listScreens());
+  };
+  // 발표 전 점검: 문제가 보일 때만(노트가 하나도 없음, 글꼴이 아직 로드 중) 한 번 묻는다. 문제가 없으면 바로 시작한다.
+  const present = () => {
+    const issues: string[] = [];
+    if (!win && info) {
+      if (!info.slides.some((x) => x.notes)) issues.push("No slide has speaker notes.");
+      try { if (curRef.current?.contentDocument?.fonts?.status === "loading") issues.push("Fonts are still loading."); } catch {}
+    }
+    if (issues.length) setCheck(issues); else void start();
   };
   // 발표 전 가벼운 점검: 슬라이드 수, 노트, 글꼴, 표시할 화면. 발표 버튼의 툴팁으로만 보인다.
   const withNotes = info?.slides.filter((x) => x.notes).length ?? 0;
@@ -363,9 +379,14 @@ export function Presenter({ id }: { id: string }) {
                   {target > 0 && <span className={cn("text-caption", remain < 0 ? "text-destructive" : "text-muted-foreground")}>{remain < 0 ? `+${mmss(-remain)} over` : `${mmss(remain)} left`}</span>}
                   <Tooltip content="Start or pause (T)" side="top"><Button variant="ghost" size="icon-compact" aria-label="Start or pause timer" onClick={() => setRunning((r) => !r)}>{running ? <Pause /> : <Play />}</Button></Tooltip>
                   <Tooltip content="Reset (R)" side="top"><Button variant="ghost" size="icon-compact" aria-label="Reset timer" onClick={() => { setRunning(false); setElapsed(0); accMs.current = 0; dwell.current = {}; }}><RotateCcw /></Button></Tooltip>
-                  {elapsed > 0 && <Button variant="ghost" size="compact" onClick={() => { setRunning(false); setSummary(true); }}>Summary</Button>}
-                  <Tooltip content="Target time in minutes" side="top">
-                    <Field aria-label="Target minutes" inputMode="numeric" placeholder="Goal" className="w-14 px-1.5 text-right" value={target ? String(target) : ""}
+                  {elapsed > 0 && <Button variant="ghost" size="compact" onClick={() => {
+                    setRunning(false);
+                    // 직전 리허설과 비교하려고 열 때 이번 기록을 저장하고 직전 것을 꺼낸다.
+                    if (deck) setPrevRun(saveRun(deck.folder, { t: Date.now(), total: elapsed, dwell: Object.fromEntries(Object.entries(dwell.current).map(([n, ms]) => [n, Math.round(ms / 1000)])) }));
+                    setSummary(true);
+                  }}>Summary</Button>}
+                  <Tooltip content="Target (min)" side="top">
+                    <Field aria-label="Target minutes" inputMode="numeric" placeholder="Min" className="w-14 px-1.5 text-right" value={target ? String(target) : ""}
                       onChange={(e) => setTarget(Math.min(999, Math.floor(Number(e.target.value.replace(/\D/g, "")) || 0)))} />
                   </Tooltip>
                 </span>
@@ -401,6 +422,17 @@ export function Presenter({ id }: { id: string }) {
           </div>
         )}
       </div>
+      <Dialog open={!!check} onOpenChange={(o) => { if (!o) setCheck(null); }}>
+        <DialogContent size="sm">
+          <DialogTitle>Before you present</DialogTitle>
+          <DialogDescription>You can still present now.</DialogDescription>
+          <ul className="list-disc pl-5 text-body">{check?.map((c) => <li key={c}>{c}</li>)}</ul>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" size="compact" onClick={() => setCheck(null)}>Cancel</Button>
+            <Button variant="primary" size="compact" autoFocus onClick={() => void start()}>Present anyway</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={summary} onOpenChange={setSummary}>
         <DialogContent size="sm">
           <DialogTitle>Rehearsal summary</DialogTitle>
@@ -409,11 +441,12 @@ export function Presenter({ id }: { id: string }) {
             <dt className="text-muted-foreground">Total</dt><dd>{hms(elapsed)}</dd>
             {target > 0 && (<><dt className="text-muted-foreground">Target</dt><dd>{mmss(target * 60)}, {elapsed > target * 60 ? `${mmss(elapsed - target * 60)} over` : `${mmss(target * 60 - elapsed)} under`}</dd></>)}
             <dt className="text-muted-foreground">Slides</dt><dd>{Object.keys(dwell.current).length} of {total} visited</dd>
+            {prevRun && (<><dt className="text-muted-foreground">Last run</dt><dd>{hms(prevRun.total)}, {elapsed >= prevRun.total ? `${mmss(elapsed - prevRun.total)} longer now` : `${mmss(prevRun.total - elapsed)} shorter now`}</dd></>)}
           </dl>
           <p className="pt-3 text-caption text-muted-foreground">Longest</p>
           <ol className="flex flex-col gap-1 text-body tabular-nums">
             {Object.entries(dwell.current).map(([n, ms]) => ({ n: Number(n), sec: Math.round(ms / 1000) })).sort((a, b) => b.sec - a.sec).slice(0, 3).map(({ n, sec }) => (
-              <li key={n} className="flex justify-between gap-4"><span className="truncate">{n}. {info?.slides[n - 1]?.title ?? info?.slides[n - 1]?.kind ?? `Slide ${n}`}</span><span>{mmss(sec)}</span></li>
+              <li key={n} className="flex justify-between gap-4"><span className="truncate">{n}. {info?.slides[n - 1]?.title ?? info?.slides[n - 1]?.kind ?? `Slide ${n}`}</span><span>{mmss(sec)}{prevRun?.dwell[n] != null && sec !== prevRun.dwell[n] && <span className="ml-2 text-muted-foreground">{sec > prevRun.dwell[n] ? "+" : "-"}{mmss(Math.abs(sec - prevRun.dwell[n]))}</span>}</span></li>
             ))}
           </ol>
           <div className="flex justify-end gap-2 pt-3">

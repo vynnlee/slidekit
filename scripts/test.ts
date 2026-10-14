@@ -60,6 +60,9 @@ const steps: Step[] = [
   browser("tokens", "app/test/tokens.cjs", "dry", DRY),
   browser("export", "app/test/export.cjs", "dry", DRY),
   // 인터넷과 uv가 필요해 --slow 또는 --only로만 돈다.
+  // 코멘트 화면 스크린샷(눈으로 보는 용도, 통과 기준 없음). --only ux-shots로 돌리면 /tmp/slidekit-ux-shots/<폭>/에 저장된다.
+  { ...browser("ux-shots-1440", "scripts/ux-shots-comments2.cjs", "app", APP, { VIEWPORT: "1440x900", OUT: "/tmp/slidekit-ux-shots/1440" }), slow: true },
+  { ...browser("ux-shots-390", "scripts/ux-shots-comments2.cjs", "app", APP, { VIEWPORT: "390x844", OUT: "/tmp/slidekit-ux-shots/390" }), slow: true },
   { ...browser("bundler-fonts-e2e", "bundler/test/fonts.cjs", "static", STATIC), server: undefined, slow: true },
 ];
 

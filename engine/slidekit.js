@@ -238,6 +238,9 @@
         var m = e.data;
         if (!m || m.v !== 1 || m.from === me) return;
         if (m.type === 'state') show((Number(m.slide) || 1) - 1, 'jump', Number(m.step) || 1, true);
+        else if (m.type === 'setblank' && m.role === 'presenter') { /* remote control: only the presenter screen may blank this window */
+          if (m.mode === 'black' || m.mode === 'white') setBlank(m.mode); else if (m.mode === 'off') setBlank(null);
+        }
         else if (m.type === 'hello') {
           bc.postMessage({ v: 1, type: 'state', from: me, slide: cur + 1, step: step });
           if (blankMode) bc.postMessage({ v: 1, type: 'blank', from: me, mode: blankMode });

@@ -342,6 +342,21 @@ const settled = async (...ps) => { await Promise.all(ps.map(settledOne)); if (ps
     check('contextmenu: kept in embed mode (editor and presenter previews)', (await e.evaluate(() => { const ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true }); document.body.dispatchEvent(ev); return ev.defaultPrevented; })) === false); await e.close();
     const o = await ctx.newPage(); await o.goto(BASE + '/__t/dup#1'); await o.waitForSelector('#sk-stage'); await o.keyboard.press('o'); await settled(o);
     check('overview thumbnails use the pointer cursor', (await o.evaluate(() => getComputedStyle(document.querySelector('.sk-thumb')).cursor)) === 'pointer'); await o.close(); }
+  /* remote blank: a presenter-role setblank message sets this window's blank; other roles and values are ignored */
+  { const A = await ctx.newPage(), S = await ctx.newPage();
+    await S.addInitScript(() => { const BC = window.BroadcastChannel; window.BroadcastChannel = function (n) { const c = new BC(n); window.__bc = c; return c; }; });
+    await A.goto(BASE + '/__t/dstep?sync=1#1'); await S.goto(BASE + '/__t/dstep?sync=1#1'); await A.waitForSelector('#sk-stage'); await S.waitForSelector('#sk-stage');
+    const send = (m) => S.evaluate((m) => window.__bc.postMessage(Object.assign({ v: 1, from: 'remote' }, m)), m);
+    const mode = () => A.evaluate(() => document.getElementById('sk-blank').getAttribute('data-blank'));
+    await send({ type: 'setblank', role: 'presenter', mode: 'black' }); await settled(A, S);
+    check('setblank: presenter role blanks the window (black)', (await mode()) === 'black', await mode());
+    await send({ type: 'setblank', role: 'presenter', mode: 'white' }); await settled(A, S);
+    check('setblank: presenter role switches to white', (await mode()) === 'white', await mode());
+    await send({ type: 'setblank', role: 'other', mode: 'off' }); await send({ type: 'setblank', mode: 'off' }); await send({ type: 'setblank', role: 'presenter', mode: 'red' }); await sleep(150); /* kept: ignored messages change nothing */
+    check('setblank: other roles and unknown modes are ignored', (await mode()) === 'white', await mode());
+    await send({ type: 'setblank', role: 'presenter', mode: 'off' }); await settled(A, S);
+    check('setblank: off clears the blank', (await mode()) === null, await mode());
+    await A.close(); await S.close(); }
   /* layout presets (data-layout, spec 2.1): the CSS gives each preset its shape; broken markup falls back to a stacked slide */
   page('lay', [
     '<section data-slide="content" data-layout="two-column"><h2 id="t2">T</h2><div data-col id="c1"><h3>a</h3><p>a</p></div><div data-col id="c2"><h3>b</h3><p>b</p></div></section>',

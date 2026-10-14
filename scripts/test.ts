@@ -2,7 +2,7 @@
 // 전체 검증. 실행: bun run test [--only <이름 일부>...] [--list] [--bail] [--slow]
 // 무거운 작업이라 /tmp/slidekit-heavy.lock을 한 번 잡고 모든 단계를 순서대로 돈다.
 // 실제 덱은 읽기 전용이다. 덱을 고치는 테스트는 scripts/lib/test-deck.cjs의 사본(decks/_e2e-*/)만 쓴다.
-// 단계 전후로 실제 덱(decks/_* 제외)의 내용 해시를 비교해 달라졌으면 WARN으로 보고만 한다(복원하지 않고 실패로도 치지 않는다). 지문은 경로, 크기, 수정 시각이다..
+// 단계 전후로 실제 덱(decks/_* 제외)의 내용 해시를 비교해 달라졌으면 WARN으로 보고만 한다(복원하지 않고 실패로도 치지 않는다). 지문은 경로와 크기다..
 import { createWriteStream, globSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -146,7 +146,7 @@ function fingerprint() {
       if (e.name.includes(".tmp-")) continue;
       const p = join(dir, e.name);
       if (e.isDirectory()) { h.update(`d:${p}\n`); walk(p, false); }
-      else { try { const st = statSync(p); h.update(`f:${p}:${st.size}:${st.mtimeMs}\n`); } catch {} } // 내용 대신 크기와 수정 시각(단계마다 전체를 읽지 않는다)
+      else { try { const st = statSync(p); h.update(`f:${p}:${st.size}\n`); } catch {} } // 내용 대신 크기(단계마다 전체를 읽지 않는다). 수정 시각은 channel 테스트가 utimes로 건드려 뺐다
     }
   };
   walk(decksDir, true);

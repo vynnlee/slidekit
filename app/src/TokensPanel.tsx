@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { readTokens, setToken } from "@/lib/deck-tokens";
 import { deckFonts, familyNames } from "@/lib/deck-fonts";
+import { THEMES, currentTheme } from "@/lib/themes";
 
 // SPEC 4절의 기본값. 덱이 선언하지 않은 토큰은 이 값을 보여 준다(흐리게).
 const DEFAULTS: Record<string, string> = {
@@ -116,6 +117,17 @@ export function TokensPanel({ prefix, onPrefixChange, canvas }: TokensPanelProps
     if (now) flush(); else timer.current = setTimeout(flush, 400);
   };
 
+  // 테마: 색 일곱 개와 글꼴 쌍을 한 번에 바꾼다(prefix 한 번 = 실행 취소 한 건). 값이 모두 같은 테마가 있으면 그것을, 아니면 Custom을 보인다.
+  const theme = currentTheme(val);
+  const applyTheme = (id: string) => {
+    const th = THEMES.find((x) => x.id === id);
+    if (!th) return;
+    let next = latest.current;
+    try { for (const [k, v] of Object.entries(th.tokens)) next = setToken(next, k, v); } catch { return; }
+    latest.current = next; pending.current = true;
+    for (const [k, v] of Object.entries(th.tokens)) canvas?.documentElement.style.setProperty(k, v);
+    flush();
+  };
   const custom = Object.keys(declared).filter((n) => !(n in DEFAULTS));
   // 글꼴은 Select 하나로 고른다(덱이 선언한 글꼴이 위, 그다음 프리셋). CSS 문자열은 접힌 고급 입력에서 고친다.
   const declaredFonts = useMemo(() => deckFonts(prefix), [prefix]);
@@ -149,6 +161,16 @@ export function TokensPanel({ prefix, onPrefixChange, canvas }: TokensPanelProps
       <div className="mt-2 flex flex-col border-t border-border/60 px-4 pt-4">
         <span className="text-caption font-semibold">Deck styles</span>
         <span className="text-micro text-muted-foreground">Applies to every slide</span>
+      </div>
+      <div className="flex flex-col gap-1 px-4 pb-3">
+        <span className="text-micro text-muted-foreground">Theme</span>
+        <Select value={theme?.id ?? "custom"} onValueChange={(v) => { if (v !== "custom") applyTheme(v); }} size="compact">
+          <SelectTrigger aria-label="Theme" />
+          <SelectContent>
+            {THEMES.map((th, i) => <SelectItem key={th.id} index={i} value={th.id}>{th.label}</SelectItem>)}
+            {!theme && <SelectItem index={THEMES.length} value="custom" disabled>Custom</SelectItem>}
+          </SelectContent>
+        </Select>
       </div>
       <InspectorSection id="tokens-colors" title="Colors">
         <div className="flex flex-col gap-1">

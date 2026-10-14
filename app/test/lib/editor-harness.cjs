@@ -23,6 +23,8 @@ async function startEditor({ name, slides: nSlides = 8 } = {}) {
   await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
   await ctx.addInitScript(() => { try { localStorage.setItem('slidekit.tip.editor', '1'); } catch {} }); // 첫 열기 안내 카드는 상단 가운데를 가려 클릭을 가로채므로 닫힌 상태로 시작한다(카드 검사는 별도)
   const page = await ctx.newPage();
+  // 부하 재현: CPU_SLOW=4처럼 주면 이 페이지의 CPU를 그 배수로 늦춘다(조건 대기가 느린 환경에서도 버티는지 보는 용도)
+  if (process.env.CPU_SLOW) { const cdp = await ctx.newCDPSession(page); await cdp.send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.CPU_SLOW) }); }
   // 렌더와 오버레이 갱신(60ms 주기)이 끝나기를 기다린다: 프레임 두 번 + 한 주기. 고정 시간 sleep 대신 쓴다.
   const settleOf = (pg) => pg.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 70)))));
   const settle = () => settleOf(page);

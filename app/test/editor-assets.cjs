@@ -31,13 +31,13 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   check('Cmd+F가 찾기 줄을 열고 포커스', await findIn.evaluate((e) => document.activeElement === e));
   const fieldMetrics = await page.evaluate(() => ['Find', 'Replace with'].map((l) => { const e = document.querySelector('[aria-label="' + l + '"]'); return [Math.round(e.getBoundingClientRect().height), getComputedStyle(e).fontSize]; }));
   check('Find와 Replace 입력의 높이와 글자 크기가 같음', JSON.stringify(fieldMetrics[0]) === JSON.stringify(fieldMetrics[1]), fieldMetrics);
-  await findIn.fill('바이브'); await settle();
+  await findIn.fill('바이브'); await cond(() => /\d+ of \d+ in/.test(document.querySelector('[data-testid=find-count]')?.textContent || ''), null, 6000);
   const total1 = (await page.getByTestId('find-count').textContent()) || '';
   check('찾으면 일치 수와 슬라이드 수를 보임', /\d+ of \d+ in \d+ slide/.test(total1), total1);
   const nMatches = Number((total1.match(/of (\d+)/) || [])[1] || 0);
-  check('필름스트립 타일에 슬라이드별 일치 수', (await page.getByLabel(/^\d+ matches$/).count()) >= 1);
+  check('필름스트립 타일에 슬라이드별 일치 수', (await page.getByTestId('tile-found').count()) >= 1 && (await page.getByRole('option', { name: /^Slide \d+, \d+ match/ }).count()) >= 1);
   const idx0 = await page.getByText(/^Slide \d+ \/ \d+$/).first().textContent().catch(() => '');
-  await page.getByRole('button', { name: 'Next match' }).click(); await settle();
+  await page.getByRole('button', { name: 'Next match' }).click(); await cond(() => /^2 of /.test(document.querySelector('[data-testid=find-count]')?.textContent || '') || /^1 of 1 /.test(document.querySelector('[data-testid=find-count]')?.textContent || ''), null, 4000);
   check('다음 단추가 현재 위치를 옮김', /^2 of /.test((await page.getByTestId('find-count').textContent()) || '') || nMatches === 1);
   await page.getByLabel('Replace with', { exact: true }).fill('Vibe');
   await page.getByRole('button', { name: 'Replace all' }).click(); await settle();
@@ -47,13 +47,14 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   const undone = await page.evaluate(() => [...document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll('#sk-stage > [data-slide]')].map((s) => s.textContent).join('|'));
   check('모두 바꾸기는 실행 취소 한 번에 되돌아감', undone.includes('바이브'));
   void idx0;
-  await page.getByLabel('Find', { exact: true }).fill('zzzz-없는-글'); await settle();
+  await page.getByLabel('Find', { exact: true }).fill('zzzz-없는-글'); await cond(() => (document.querySelector('[data-testid=find-count]')?.textContent || '').includes('No results'), null, 4000);
   check('없는 글은 No results', ((await page.getByTestId('find-count').textContent()) || '').includes('No results'));
   await page.getByLabel('Find', { exact: true }).press('Escape'); await settle();
   check('Esc가 찾기 줄을 닫음', (await page.getByTestId('find-bar').count()) === 0);
 
   // 덱 설정: 헤더 버튼으로 열고 Author를 바꾸면 deck-meta에 저장되고 실행 취소 한 번에 되돌아간다
   await page.getByRole('button', { name: 'Deck settings' }).click();
+  await cond(() => { const a = document.activeElement; return !!a && !!a.closest('[role=dialog]') && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName); }, null, 4000); // 열림 애니메이션 뒤 첫 입력에 포커스가 가기를 기다린다
   const focusedInDialog = await page.evaluate(() => { const a = document.activeElement; return !!a && !!a.closest('[role=dialog]') && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName); });
   check('설정 대화상자가 열리면 첫 입력에 포커스', focusedInDialog);
   const authorIn = page.getByLabel('Author', { exact: true });
@@ -61,6 +62,7 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   await authorIn.fill('테스트 저자'); await page.keyboard.press('Tab');
   await sleep(600); // 폼의 글자 입력 디바운스(400ms)가 지나야 반영된다
   await page.keyboard.press('Escape'); await settle();
+  await cond(() => document.activeElement && document.activeElement.getAttribute('aria-label') === 'Deck settings', null, 4000); // 닫힘 애니메이션 뒤 포커스가 돌아오기를 기다린다
   check('설정 대화상자를 닫으면 포커스가 톱니 단추로 돌아옴', await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label') === 'Deck settings'));
   await page.locator('body').click({ position: { x: 5, y: 5 } }); await page.keyboard.press('Meta+s'); await saveDone();
   check('덱 설정 Author가 deck-meta에 저장됨', /"author"\s*:\s*"테스트 저자"/.test(fs.readFileSync(FILE, 'utf8')));

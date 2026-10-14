@@ -146,8 +146,9 @@ export function Filmstrip(p: Props) {
       </div>
       {!p.collapsed && (
         <ScrollArea orientation="horizontal" className="[mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)]">
+          <div className="flex items-center gap-2 p-2" /* 링(ring-2)이 스크롤 영역 안쪽에서 잘리지 않게 여유를 둔다 */>
           <div
-            role="listbox" aria-label="Slides" aria-orientation="horizontal" className="flex items-center gap-2 p-2" /* 링(ring-2)이 스크롤 영역 안쪽에서 잘리지 않게 여유를 둔다 */
+            role="listbox" aria-label="Slides" aria-orientation="horizontal" className="flex items-center gap-2"
             onDragEnd={end}
             onKeyDown={(e) => {
               if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); e.stopPropagation(); const r = (e.target as HTMLElement).getBoundingClientRect(); p.onMenu(p.index, { x: r.left, y: r.bottom }); return; }
@@ -161,7 +162,7 @@ export function Filmstrip(p: Props) {
               <div
                 key={u.key}
                 ref={(el) => { items.current[i] = el; }}
-                role="option" aria-selected={i === p.index} aria-label={`Slide ${i + 1}`}
+                role="option" aria-selected={i === p.index} aria-label={`Slide ${i + 1}${p.found?.get(i) ? `, ${p.found.get(i)} match${p.found.get(i) === 1 ? "" : "es"}` : ""}${p.updated?.has(i) ? ", updated" : ""}`}
                 tabIndex={i === p.index ? 0 : -1}
                 draggable
                 onDragStart={(e) => { setDrag(i); e.dataTransfer.effectAllowed = "move"; }}
@@ -178,15 +179,17 @@ export function Filmstrip(p: Props) {
               >
                 {drop === i && drag !== null && <div className="absolute -left-1.5 inset-y-0 w-0.5 rounded bg-focus-ring" />}
                 {drop === i + 1 && i === p.units.length - 1 && drag !== null && <div className="absolute -right-1.5 inset-y-0 w-0.5 rounded bg-focus-ring" />}
-                {p.found?.get(i) ? <span aria-label={`${p.found.get(i)} matches`} className="pointer-events-none absolute left-6 top-1 z-10 rounded bg-focus-ring px-1 py-0.5 text-micro leading-none tabular-nums text-white">{p.found.get(i)}</span> : null}
+                {p.found?.get(i) ? <span aria-hidden="true" data-testid="tile-found" data-count={p.found.get(i)} className="pointer-events-none absolute left-6 top-1 z-10 rounded bg-foreground px-1 py-0.5 text-micro leading-none tabular-nums text-background before:content-[attr(data-count)]" /* 숫자는 글자가 아니라 CSS로 그려 접근 가능한 이름(타일 aria-label)과 어긋나지 않게 한다 */ /> : null}
                 {p.warn?.has(i) && <span role="img" aria-label="Content overflows" title="Content overflows the slide" className="pointer-events-none absolute bottom-1 right-1 z-10 rounded bg-destructive px-0.5 py-0.5 text-white"><TriangleAlert className="size-3" /></span>}
-                {p.updated?.has(i) && <span aria-label="Updated" className="pointer-events-none absolute bottom-1 left-1 z-10 rounded bg-focus-ring px-1 py-0.5 text-micro leading-none text-white">Updated</span>}
+                {p.updated?.has(i) && <span aria-hidden="true" data-testid="tile-updated" className="pointer-events-none absolute bottom-1 left-1 z-10 rounded bg-foreground px-1 py-0.5 text-micro leading-none text-background before:content-['Updated']" />}
                 <Thumb shell={p.shell} unit={u} folder={p.folder} eager={i < 6} keep={i === p.index} />
-                <span aria-hidden="true" className={`pointer-events-none absolute left-1 top-1 rounded px-1 py-0.5 text-micro leading-none tabular-nums text-white ${i === p.index ? "bg-focus-ring" : "bg-black/75"}`}>{i + 1}</span>
+                <span aria-hidden="true" className={`pointer-events-none absolute left-1 top-1 rounded px-1 py-0.5 text-micro leading-none tabular-nums ${i === p.index ? "bg-foreground text-background" : "bg-black/75 text-white"}`}>{i + 1}</span>
                 {p.marked.has(p.origin.get(u.key) ?? -1) && <span aria-hidden="true" className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-focus-ring ring-2 ring-black" />}
               </div>
             ))}
-            <AddSlideMenu height={H} onAdd={(id) => p.onAdd(p.units.length - 1, id)} />
+          </div>
+          {/* listbox는 option만 자식으로 둘 수 있어(aria-required-children) 추가 단추는 형제로 둔다 */}
+          <AddSlideMenu height={H} onAdd={(id) => p.onAdd(p.units.length - 1, id)} />
           </div>
         </ScrollArea>
       )}

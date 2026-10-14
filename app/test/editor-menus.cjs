@@ -23,6 +23,7 @@ const { startEditor } = require('./lib/editor-harness.cjs');
 
   // 발견 가능성: 최근 기능이 단축키 안내와 Cmd+K 팔레트에 모두 있다
   await page.keyboard.press('Meta+/'); await settle();
+  await page.getByRole('dialog').getByText('Shortcuts', { exact: true }).waitFor({ timeout: 5000 }).catch(() => {});
   const helpTxt = (await page.getByRole('dialog').innerText()).replace(/\s+/g, ' ');
   const inHelp = ['Group', 'Ungroup', 'Find and replace', 'Copy style', 'Paste style', 'Paste an image from the clipboard', 'Drop an image', 'Pick a layout', 'Context menu', 'Add to selection'];
   check('단축키 안내에 최근 기능이 모두 있음', inHelp.every((t) => helpTxt.includes(t)), inHelp.filter((t) => !helpTxt.includes(t)));
@@ -35,7 +36,7 @@ const { startEditor } = require('./lib/editor-harness.cjs');
     await palIn.fill(q);
     await cond(() => true, null, 50); // 목록 갱신 한 프레임
     await page.waitForFunction(() => document.querySelectorAll('[role=option]').length >= 0);
-    if ((await page.getByRole('option').count()) < 1) { await settle(); if ((await page.getByRole('option').count()) < 1) missingP.push(q); }
+    if (!(await page.getByRole('option').first().waitFor({ timeout: 3000 }).then(() => true).catch(() => false))) missingP.push(q); // 목록이 갱신되어 항목이 나타나기를 기다린다
   }
   await page.keyboard.press('Escape'); await settle();
   check('Cmd+K 팔레트에 최근 기능이 모두 있음', missingP.length === 0, missingP);
@@ -99,7 +100,7 @@ const { startEditor } = require('./lib/editor-harness.cjs');
 
   // 컨텍스트 메뉴: 우클릭은 먼저 선택하고, 맥락에 맞는 항목을 보인다
   await layers.nth(1).click(); await settle(); await focusBody(); await page.keyboard.press('Escape');
-  const menuLabels = () => page.getByRole('menuitem').allTextContents();
+  const menuLabels = async () => { await page.getByRole('menuitem').first().waitFor({ timeout: 5000 }).catch(() => {}); return page.getByRole('menuitem').allTextContents(); }; // 메뉴가 그려지기를 기다린 뒤 읽는다
   const h2b = await fr().locator('[data-active] h2').first().boundingBox();
   await page.mouse.click(h2b.x + 20, h2b.y + h2b.height / 2, { button: 'right' }); await settle();
   check('요소 우클릭이 먼저 선택함', (await page.getByRole('button', { name: 'Show in layers' }).count()) === 1);

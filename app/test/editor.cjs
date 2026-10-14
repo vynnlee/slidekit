@@ -103,7 +103,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   await page.keyboard.press('Escape'); await settle();
   check('Tab 전에는 선택 없음', !(await selVisible()));
   await focusBody(); await page.keyboard.press('Tab'); await settle();
-  check('Tab으로 요소 선택', await selVisible());
+  check('Tab으로 요소 선택', await page.locator('.border-2.border-focus-ring').first().waitFor({ state: 'visible', timeout: 4000 }).then(() => true).catch(() => false));
   await page.keyboard.press('Escape');
   const before = fs.readFileSync(FILE, 'utf8');
   check('원본 슬라이드 수 ' + N0, slides(before) === N0, slides(before));
@@ -129,6 +129,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   await page.keyboard.press('Meta+a'); await page.keyboard.type('편집 테스트 제목');
   await page.keyboard.press('Enter'); await settle();
   check('Enter로 편집 종료', !(await h.evaluate((e) => e.isContentEditable)));
+  await unsaved();
   check('저장 전 상태 표시', (await page.getByText('Unsaved').count()) > 0);
   // 인라인 스타일: 선택된 요소의 속성 패널을 거치지 않고 키로 저장
   await page.keyboard.press('Meta+s'); await saveDone();
@@ -256,6 +257,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   { const nOpt = await layers.count(), nTxt = await page.getByText(`Slide 1 / ${total}`).count(); check('접으면 썸네일 목록이 사라지고 위치 표시만 남음', nOpt === 0 && nTxt === 1, [nOpt, nTxt, total, await page.locator('[data-testid=filmstrip]').innerText()]); }
   await page.getByRole('button', { name: 'Show filmstrip' }).click(); await settle();
   await page.getByRole('button', { name: 'Add slide' }).click();
+  await page.getByRole('menuitem').first().waitFor({ timeout: 5000 }).catch(() => {});
   const layoutItems = (await page.getByRole('menuitem').allTextContents()).join('|');
   check('+ 타일 메뉴에 레이아웃 5종', ['Title and body', 'Two columns', 'Big number', 'Quote', 'Full image'].every((l) => layoutItems.includes(l)), layoutItems);
   await page.getByRole('menuitem', { name: /^Quote/ }).click(); await settle();
@@ -308,6 +310,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   // 자동 저장: Cmd+S 없이 1.5초 뒤 저장된다
   await page.keyboard.press('Escape'); await focusBody(); await page.keyboard.press('Tab'); await settle();
   const op2 = page.getByLabel('Opacity', { exact: true }); await op2.fill('37'); await op2.press('Enter'); await settle();
+  await unsaved();
   check('편집 직후는 Unsaved', (await page.getByText('Unsaved', { exact: true }).count()) > 0);
   await saveDone(); // 자동 저장(입력 1.5초 뒤)이 끝나기를 조건으로 기다린다
   check('자동 저장 뒤 Saved', (await page.getByText('Saved', { exact: true }).count()) > 0);

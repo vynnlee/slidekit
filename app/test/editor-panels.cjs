@@ -72,7 +72,7 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   const names = await page.locator('[role=tree] [role=treeitem] > div > span.truncate').allTextContents();
   check('레이어 이름에 날것의 div가 없음', !names.includes('div') && names.some((x) => /^(Frame|Auto layout|Image|Vector|List)$/.test(x) || x.length > 0), names.slice(0, 6));
   check('슬라이드 루트 행', names.some((x) => /^Slide \d+$/.test(x)) || names.length > 0);
-  await rows.nth(1).click(); await settle();
+  await rows.nth(1).click(); await page.locator('.border-2.border-focus-ring').first().waitFor({ state: 'visible', timeout: 4000 }).catch(() => {});
   check('행 클릭이 캔버스 선택', await page.locator('.border-2.border-focus-ring').first().isVisible());
   check('선택된 행 표시', (await page.locator('[role=treeitem][aria-selected=true]').count()) >= 1);
   await rows.nth(1).dblclick(); await page.getByLabel('Layer name').fill('Hero'); await page.getByLabel('Layer name').press('Enter'); await settle();
@@ -138,6 +138,7 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   check('Layers 단계 배지', (await page.getByTitle('Appears at step 3').count()) >= 1);
   // 효과 목록(engine/steps.ts)과 미리보기 재생
   await page.getByLabel('Step effect', { exact: true }).click();
+  await page.getByRole('option').first().waitFor({ timeout: 5000 }).catch(() => {});
   const effOpts = await page.getByRole('option').allTextContents();
   check('효과 목록이 6종(Rise, Fade, Slide, Scale, Blur, None)', ['Rise', 'Fade', 'Slide', 'Scale', 'Blur', 'None'].every((l) => effOpts.some((o) => o.includes(l))), effOpts);
   await page.getByRole('option', { name: 'Slide' }).click(); await settle();

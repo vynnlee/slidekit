@@ -168,18 +168,6 @@ export function createHub(now: () => number = Date.now) {
       if (!tk || !s || tk.id !== id || tk.session !== s || tk.exp <= now()) return null;
       return tk.role === "host" ? openHost(s, id, sink) : openViewer(s, sink);
     },
-    /** 발표자 화면이 명령을 받는 연결. 열고 닫을 때 휴대폰에 접속 상태를 알린다. */
-    subscribeHost(id: string, hostKey: string, sink: Sink): (() => void) | null {
-      const s = get(id);
-      if (!s || !same(s.host, sha(hostKey))) return null;
-      return openHost(s, id, sink);
-    },
-    /** 휴대폰이 상태를 받는 연결. 붙자마자 마지막 상태와 발표자 접속 여부를 다시 보낸다(재연결 대비). */
-    subscribeViewer(id: string, tk: string, sink: Sink): (() => void) | null {
-      const s = get(id);
-      if (!s || !s.viewers.has(sha(tk).toString("hex"))) return null;
-      return openViewer(s, sink);
-    },
     sweep() { for (const id of [...sessions.keys()]) get(id); },
     size: () => sessions.size,
   };

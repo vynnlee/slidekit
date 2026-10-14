@@ -173,9 +173,32 @@ test("unpublish: dry-run은 기록을 그대로 두고, 토큰 없음과 이미 
     expect(e1.error).toMatch(/Cloudflare token/);
     expect(e1.details).toContain("키체인"); // 한국어 출력은 details에만
     expect(readPublish(pubDir).current).not.toBeNull();
-    const gone = makeRoutes(async () => ({ code: 1, lines: ["게시된 덱: (없음)"] }));
+    const gone = makeRoutes(async () => ({ code: 3, lines: ["게시된 덱: (없음)"] }));
     const e2 = (await lines(await gone["/api/decks/:id/unpublish"].POST(req(PUB_DECK, { confirm: true })))).at(-1);
     expect(e2.error).toMatch(/Nothing is published/);
     expect(readPublish(pubDir).current).toBeNull(); // 낡은 기록은 정리한다
+  });
+});
+
+test("unpublish: 기록의 name이 폴더와 다르면 confirmName이 같아야 CLI를 부른다", async () => {
+  await withPubDeck(async () => {
+    const calls: string[] = [];
+    const r = makeRoutes(async (_s, id) => { calls.push(id); return { code: 0, lines: [`Unpublished https://static.vynnlee.com/${id}`] }; });
+    recordPublish(pubDir, { ...entry(), name: "my-talk", url: "https://static.vynnlee.com/my-talk" });
+    expect((await r["/api/decks/:id/unpublish"].POST(req(PUB_DECK, { confirm: true }))).status).toBe(400);
+    expect((await r["/api/decks/:id/unpublish"].POST(req(PUB_DECK, { confirm: true, confirmName: "other" }))).status).toBe(400);
+    expect(calls.length).toBe(0);
+    await lines(await r["/api/decks/:id/unpublish"].POST(req(PUB_DECK, { confirm: true, confirmName: "my-talk" })));
+    expect(calls).toEqual(["my-talk"]);
+  });
+});
+
+test("unpublish: 로그에 '게시된 덱' 문구가 있어도 종료 코드 1이면 기록을 지우지 않는다", async () => {
+  await withPubDeck(async () => {
+    recordPublish(pubDir, entry());
+    const r = makeRoutes(async () => ({ code: 1, lines: ["wrangler 삭제 실패", "게시된 덱: x"] }));
+    const e = (await lines(await r["/api/decks/:id/unpublish"].POST(req(PUB_DECK, { confirm: true })))).at(-1);
+    expect(e.error).toMatch(/Could not unpublish/);
+    expect(readPublish(pubDir).current).not.toBeNull();
   });
 });

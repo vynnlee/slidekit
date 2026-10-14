@@ -23,6 +23,7 @@ const WORDS: Record<string, string> = {
   canceled: "Canceled.",
   "not-published": "This deck has no publish record, so there is nothing to unpublish.",
   "read-only": "This deck is read-only here.",
+  "confirm-name": "The published name differs from this deck folder. Type the published name to confirm.",
 };
 const bad = (code: string, status = 400, details?: string) => Response.json({ error: WORDS[code] ?? code, code, ...(details ? { details } : {}) }, { status });
 
@@ -155,12 +156,14 @@ export function makeRoutes(run: Run = spawnRun) {
       POST: async (req: Req) => {
         const id = deckId(req);
         if (!id) return bad("deck", 404);
-        const b = (await req.json().catch(() => null)) as { confirm?: unknown } | null;
+        const b = (await req.json().catch(() => null)) as { confirm?: unknown; confirmName?: unknown } | null;
         if (!b || b.confirm !== true) return bad("confirm");
         if ((process.env.SLIDEKIT_READONLY_DECKS ?? "").split(",").some((f) => f.trim() === id)) return bad("read-only", 403);
         const dir = join(root, "decks", id);
         const cur = readPublish(dir).current;
         if (!cur) return bad("not-published", 409);
+        // 기록의 name이 폴더와 다르면(이름 바꾸기 뒤이거나, 공유받은 덱의 위조 기록) 사용자가 그 이름을 직접 입력해야 지운다.
+        if (cur.name !== id && b.confirmName !== cur.name) return bad("confirm-name", 400);
         if (busy) return bad("busy", 409);
         busy = true; canceled = false;
         const enc = new TextEncoder();
@@ -176,7 +179,7 @@ export function makeRoutes(run: Run = spawnRun) {
               if (canceled) send({ error: WORDS.canceled, code: "canceled" });
               else if (r.code === 0 && /^Dry run:/m.test(text)) send({ done: true, dryRun: true }); // 아무것도 지우지 않았으니 기록도 그대로 둔다
               else if (r.code === 0 && /^Unpublished /m.test(text)) { try { recordUnpublish(dir); } catch { /* 기록 실패는 취소 결과에 영향 없음 */ } send({ done: true, dryRun: false }); }
-              else if (/게시된 덱|게시되지/.test(text)) { try { recordUnpublish(dir); } catch { /* */ } send({ error: "Nothing is published under that name anymore. The record was out of date and is cleared.", details: r.lines.slice(-3).join("\n") }); }
+              else if (r.code === 3) { try { recordUnpublish(dir); } catch { /* */ } send({ error: "Nothing is published under that name anymore. The record was out of date and is cleared.", details: r.lines.slice(-3).join("\n") }); }
               else send({ error: `Could not unpublish. ${why(r.lines) || "See Details."}`, details: r.lines.slice(-3).join("\n") });
             } catch (e) { send({ error: String(e) }); }
             finally { busy = false; c.close(); }

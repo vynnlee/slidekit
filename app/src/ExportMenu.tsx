@@ -80,7 +80,7 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
   const [pdfDialog, setPdfDialog] = useState(false);
   const [pub, setPub] = useState<Published | null>(null);
   const [pubOpen, setPubOpen] = useState(false), [unpubOpen, setUnpubOpen] = useState(false);
-  const [unpubBusy, setUnpubBusy] = useState(false), [unpubErr, setUnpubErr] = useState(""), [unpubDetails, setUnpubDetails] = useState("");
+  const [unpubBusy, setUnpubBusy] = useState(false), [typedName, setTypedName] = useState(""), [unpubErr, setUnpubErr] = useState(""), [unpubDetails, setUnpubDetails] = useState("");
   const loadPub = () => fetch(`/api/decks/${folder}/published`).then((r) => (r.ok ? r.json() : Promise.reject())).then((j: Published) => setPub(j), () => setPub(null));
   useEffect(() => { void loadPub(); }, [folder]); // eslint-disable-line react-hooks/exhaustive-deps
   const [pdfMode, setPdfMode] = useState<PdfMode>("notes");
@@ -166,7 +166,7 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
   const unpublish = async () => {
     setUnpubBusy(true); setUnpubErr(""); setUnpubDetails("");
     try {
-      const res = await post(`/api/decks/${folder}/unpublish`, { confirm: true });
+      const res = await post(`/api/decks/${folder}/unpublish`, { confirm: true, confirmName: typedName });
       if (!res.ok || !res.body) { const e = await readErr(res); setUnpubErr(e.msg); setUnpubDetails(e.details); return; }
       let buf = "", done: { dryRun?: boolean } | null = null, failed = false;
       for await (const chunk of res.body.pipeThrough(new TextDecoderStream())) {
@@ -390,7 +390,7 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
                 </section>
               )}
               <div className="flex items-center justify-between gap-2">
-                <Button size="compact" variant="ghost" className="text-destructive [&_svg]:text-destructive" leadingIcon={Trash2} onClick={() => { setUnpubErr(""); setUnpubDetails(""); setUnpubOpen(true); }}>Unpublish...</Button>
+                <Button size="compact" variant="ghost" className="text-destructive [&_svg]:text-destructive" leadingIcon={Trash2} onClick={() => { setUnpubErr(""); setUnpubDetails(""); setTypedName(""); setUnpubOpen(true); }}>Unpublish...</Button>
                 <Button size="compact" variant="ghost" onClick={() => setPubOpen(false)}>Close</Button>
               </div>
             </div>
@@ -403,13 +403,19 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
             <div className="flex flex-col gap-3" data-testid="unpublish-dialog">
               <DialogTitle>Unpublish this deck?</DialogTitle>
               <p className="text-body">This removes <span className="break-all">{pub.url}</span> for everyone. People with the link will see a not found page. The deck in this app is not deleted.</p>
+              {pub.name !== folder && (
+                <label className="flex flex-col gap-1 text-caption">
+                  <span>This address was published as <strong className="text-body">{pub.name}</strong>, not as this deck folder. Type that name to confirm.</span>
+                  <input value={typedName} onChange={(e) => setTypedName(e.target.value)} aria-label="Published name" autoComplete="off" spellCheck={false} className="h-7 rounded-md bg-hover px-2 text-body" />
+                </label>
+              )}
               {pub.visibility === "password" && <p className="text-caption text-muted-foreground">The password-protected copy is removed too.</p>}
               {unpubBusy && <p className="flex items-center gap-2 text-caption text-muted-foreground" aria-live="polite"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />Removing from Cloudflare...</p>}
               {unpubErr && <p role="alert" className="text-body">{unpubErr}</p>}
               {unpubErr && unpubDetails && <details className="rounded-md bg-hover"><summary className="cursor-default select-none px-2 py-1 text-caption text-muted-foreground">Details</summary><pre className="max-h-32 overflow-auto whitespace-pre-wrap px-2 pb-2 font-mono text-caption text-muted-foreground">{unpubDetails}</pre></details>}
               <div className="flex justify-end gap-2">
                 <Button size="compact" variant="ghost" disabled={unpubBusy} onClick={() => setUnpubOpen(false)}>Cancel</Button>
-                <Button size="compact" variant="secondary" className="text-destructive [&_svg]:text-destructive" disabled={unpubBusy} onClick={unpublish} leadingIcon={unpubErr ? RotateCcw : Trash2}>{unpubErr ? "Try again" : "Unpublish"}</Button>
+                <Button size="compact" variant="secondary" className="text-destructive [&_svg]:text-destructive" disabled={unpubBusy || (pub.name !== folder && typedName !== pub.name)} onClick={unpublish} leadingIcon={unpubErr ? RotateCcw : Trash2}>{unpubErr ? "Try again" : "Unpublish"}</Button>
               </div>
             </div>
           </DialogContent>

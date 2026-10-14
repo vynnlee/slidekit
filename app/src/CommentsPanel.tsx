@@ -182,12 +182,11 @@ export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, o
                     type="button"
                     data-comment-main
                     aria-keyshortcuts="J K E"
-                    onClick={() => onJump(c)}
-                    aria-label={`Comment ${nums.get(c.id)}, ${STATE_LABEL[st]}: ${c.text.slice(0, 60)}`}
+                    onClick={() => onJump(c)} // 이름은 보이는 글자(번호, 상태, 시각, 요소, 본문)에서 온다. aria-label을 따로 두면 보이는 글자가 이름에 빠진다(WCAG 2.5.3)
                     className="flex cursor-default flex-col gap-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
                   >
                     <span className="flex items-center gap-2">
-                      <span aria-hidden="true" className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-black/40 px-1 text-micro tabular-nums">{nums.get(c.id)}</span>
+                      <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-black/40 px-1 text-micro tabular-nums">{nums.get(c.id)}</span>
                       <StateBadge state={st} />
                       <span className="ml-auto text-micro text-muted-foreground">{ago(c.createdAt)}</span>
                     </span>

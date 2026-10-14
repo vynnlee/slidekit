@@ -26,7 +26,17 @@ export function CommentComposer({ onSend, onCancel, target, channel, className }
   const [err, setErr] = useState("");
   const [hold, setHold] = useState(holdPref); // 켜 두면 Send all to Claude를 누를 때까지 보내지 않는다(브라우저에 기억)
   const ref = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { ref.current?.focus(); }, []);
+  // 열기 직전에 포커스가 있던 곳(캔버스 등)을 기억했다가 닫을 때 돌려준다. 작성창이 사라지면 포커스가 body로 떨어져 키보드 흐름이 끊긴다.
+  const opener = useRef<Element | null>(typeof document === "undefined" ? null : document.activeElement);
+  useEffect(() => {
+    ref.current?.focus();
+    return () => {
+      const back = opener.current as HTMLElement | null;
+      const a = document.activeElement;
+      // 포커스가 작성창 안이거나 이미 body로 떨어졌을 때만 돌려준다(사용자가 다른 곳으로 옮겼다면 건드리지 않는다).
+      if (back?.isConnected && back !== document.body && (!a || a === document.body || ref.current?.closest("[role=group]")?.contains(a) || a === ref.current)) back.focus({ preventScroll: true });
+    };
+  }, []);
 
   const send = async () => {
     const t = text.trim();

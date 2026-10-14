@@ -323,6 +323,8 @@ const settled = async (...ps) => { await Promise.all(ps.map(settledOne)); if (ps
     await f.keyboard.press('ArrowRight'); await settled(f);
     const sh = await f.evaluate(() => [...document.querySelectorAll('#sk-stage [data-step]')].map((e) => { const c = getComputedStyle(e); return c.opacity + c.visibility + c.transform + c.filter; }));
     check('data-step effects: every effect ends fully shown', sh.every((v) => v === '1visiblenonenone'), sh);
+    const say = await f.evaluate(() => document.querySelector('.sk-live, #sk-live, [role=status]').textContent);
+    check('a11y: stepping forward announces the text that appeared', /단계 2 \/ 2: rise\. fade\. left\. scale\. blur\. none\. bogus$/.test(say) || /step 2 \/ 2: rise\./.test(say), say);
     await f.emulateMedia({ media: 'print' }); await f.keyboard.press('ArrowLeft'); await settled(f);
     const pr = await f.evaluate(() => [...document.querySelectorAll('#sk-stage [data-step]')].map((e) => { const c = getComputedStyle(e); return c.opacity + c.visibility + c.transform + c.filter; }));
     check('data-step effects: print shows all with no blur or transform', pr.every((v) => v === '1visiblenonenone'), pr);

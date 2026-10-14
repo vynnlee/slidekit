@@ -171,7 +171,12 @@
       if (!embed) { try { history.replaceState(null, '', '#' + s.n); } catch (err) { /* ignore */ } }
       if (live && (s.n !== lastSlide || step !== lastStep)) {
         var nm = nameOf(s);
-        say((en ? 'Slide ' : '슬라이드 ') + s.n + ' / ' + slides.length + (nm ? ', ' + nm : '') + (s.steps > 1 ? (en ? ', step ' : ', 단계 ') + step + ' / ' + s.steps : ''));
+        /* stepping forward inside a slide also reads what just appeared (data-step elements of this step) */
+        var shown = '';
+        if (s.n === lastSlide && step > lastStep) {
+          shown = [].map.call(s.el.querySelectorAll('[data-step="' + step + '"]'), function (x) { return x.textContent.replace(/\s+/g, ' ').trim(); }).filter(Boolean).join('. ').slice(0, 160);
+        }
+        say((en ? 'Slide ' : '슬라이드 ') + s.n + ' / ' + slides.length + (nm ? ', ' + nm : '') + (s.steps > 1 ? (en ? ', step ' : ', 단계 ') + step + ' / ' + s.steps : '') + (shown ? ': ' + shown : ''));
         lastSlide = s.n; lastStep = step;
       }
       if (!quiet && bc) bc.postMessage({ v: 1, type: 'state', from: me, slide: s.n, step: step });

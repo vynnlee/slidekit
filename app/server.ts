@@ -13,12 +13,13 @@ import { routes as searchRoutes } from "./search-api";
 
 // 하위 명령: slidekit new|lint|pdf|doctor|bundle|deploy <덱>. 해당 스크립트는 argv[2]를 덱 이름으로 읽는다.
 const sub = process.argv[2];
-const SUBS: Record<string, string> = { new: "../engine/new.ts", lint: "../engine/lint-cli.ts", layouts: "../engine/layouts-cli.ts", pdf: "../engine/pdf.ts", doctor: "../engine/doctor.ts", bundle: "../bundler/bundle.ts", deploy: "../deploy/deploy.ts" };
+const SUBS: Record<string, string> = { new: "../engine/new.ts", lint: "../engine/lint-cli.ts", layouts: "../engine/layouts-cli.ts", templates: "../engine/templates-cli.ts", pdf: "../engine/pdf.ts", doctor: "../engine/doctor.ts", bundle: "../bundler/bundle.ts", deploy: "../deploy/deploy.ts" };
 const USAGE = `사용법: slidekit [명령]
   (명령 없음)      앱을 연다(덱 목록, 편집기, 발표자 화면)
   new <이름>       새 덱을 만든다
   lint <덱>        규격 위반을 점검한다
   layouts          슬라이드 레이아웃 프리셋 목록(--json)
+  templates        새 덱 템플릿 목록(--json). new <이름> --template <id>로 고른다
   bundle <덱>      단독 HTML 한 파일로 묶는다
   pdf <덱>         슬라이드당 한 페이지의 PDF로 내보낸다
   deploy <덱>      static.vynnlee.com에 올린다

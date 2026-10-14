@@ -129,7 +129,7 @@ export function lint(html: string): Issue[] {
   if (/['"](?:Space|PageDown|PageUp)['"]|key\s*===?\s*['"] ['"]/.test(js)) add("error", "nav", "스페이스와 PageUp, PageDown 이동은 쓰지 않는다. 방향키만 쓴다");
   for (const m of rest.matchAll(/\b(?:src|href)=["'](https?:\/\/[^"']+)/g)) if (!/fonts\.(?:googleapis|gstatic)\.com|font|pretendard|woff/i.test(m[1])) add("warn", "external", `외부 리소스: ${m[1].slice(0, 60)}. 파일을 덱 폴더에 내려받아 상대 경로로 쓴다(글꼴 CSS는 번들 때 인라인된다)`);
   for (const m of css.matchAll(/url\(\s*["']?(https?:\/\/[^)"']+)/g)) if (!/fonts\.(?:googleapis|gstatic)\.com/.test(m[1])) add("warn", "external", `외부 리소스: ${m[1].slice(0, 60)}. 파일을 덱 폴더에 내려받아 상대 경로로 쓴다`);
-  // 템플릿의 예제 문구가 남은 채 배포되는 것을 막는다(engine/template/index.html의 문구와 편집기의 새 슬라이드 기본값).
+  // 템플릿의 예제 문구가 남은 채 배포되는 것을 막는다(engine/templates.ts의 문구와 편집기의 새 슬라이드 기본값).
   const PLACEHOLDER = /여기에 적는다|핵심 문장 하나|뒷받침하는 설명을 짧게 쓴다|작은 글자는 보조 정보에만 쓴다|두 번째 본문/;
   const phText = rest.replace(/<[^>]+>/g, " ") + " " + (metaS?.body ?? "");
   const phAll = [...phText.matchAll(new RegExp(`.{0,16}(?:${PLACEHOLDER.source})`, "g"))].map((m) => m[0].replace(/\s+/g, " ").trim());

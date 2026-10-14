@@ -10,7 +10,7 @@ description: slidekit 덱(HTML 슬라이드)을 새로 만들거나 고칠 때 �
 ## 1. 새 덱 시작
 
 1. 이름을 정한다. 영문 소문자, 숫자, `-`만 쓴다(예: `design-review`).
-2. 저장소 루트에서 `bun app/server.ts new <이름>`을 실행한다. `engine/template/index.html`을 복사해 `decks/<이름>/index.html`을 만든다. 제목, 날짜, id가 채워지고 `author`는 `git config user.name`이 있으면 그 이름, 없으면 빈 문자열이다.
+2. 저장소 루트에서 `bun app/server.ts new <이름> [--template <id>]`를 실행한다. 템플릿은 `talk`(기본, 발표), `blank`(표지와 본문 한 장), `workshop`(단계 공개, 큰 숫자, 전후 비교, 노트 예시)이고 목록은 `bun app/server.ts templates`로 본다. 공통 head와 템플릿의 슬라이드를 합쳐 `decks/<이름>/index.html`을 만든다. 제목, 날짜, id가 채워지고 `author`는 `git config user.name`이 있으면 그 이름, 없으면 빈 문자열이다.
 3. 만들어진 `decks/<이름>/index.html`을 고친다. 템플릿의 예시 슬라이드는 지우거나 바꾼다.
 4. `#deck-meta`의 `title`을 실제 제목으로, `author`(비어 있으면)를 채우고 `<title>`도 같은 제목으로 맞춘다.
 

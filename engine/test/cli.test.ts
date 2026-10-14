@@ -66,3 +66,35 @@ test("layouts: 프리셋 목록을 사람 글과 JSON으로 낸다", () => {
   expect(j.map((l: { id: string }) => l.id)).toEqual(["title-body", "two-column", "big-number", "quote", "image-full"]);
   expect(j.every((l: { html: string }) => l.html.startsWith("<section data-slide=\"content\""))).toBe(true);
 });
+
+test("new --template: 템플릿마다 lint 종료 코드 0과 placeholder 경고, 첫 슬라이드는 표지, 알 수 없는 id는 목록을 보여 준다", async () => {
+  const { readFileSync, rmSync } = await import("node:fs");
+  const { TEMPLATE_IDS } = await import("../templates");
+  expect(TEMPLATE_IDS).toEqual(["talk", "blank", "workshop"]);
+  for (const id of TEMPLATE_IDS) {
+    const name = `qa-cli-tpl-${id}`, dir = join(import.meta.dir, "..", "..", "decks", name);
+    try {
+      expect(run("new", name, "--template", id).code, id).toBe(0);
+      const html = readFileSync(join(dir, "index.html"), "utf8");
+      expect(html.match(/<section data-slide="(\w+)"/)![1], id).toBe("cover");
+      expect(html.match(/<h1>([^<]*)<\/h1>/)![1], id).toBe("제목을 여기에 적는다"); // 앱의 제목 설정이 첫 h1을 바꾼다
+      expect(html).not.toContain("__SLIDES__");
+      const l = run("lint", name);
+      expect(l.code, id).toBe(0);
+      expect(l.out, id).toContain("warn placeholder");
+      expect(l.out.split("\n").filter((x) => x.startsWith("warn") || x.startsWith("error")).every((x) => x.startsWith("warn placeholder")), l.out).toBe(true);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  }
+  const bad = run("new", "qa-cli-tpl-bad", "--template", "nope");
+  expect(bad.code).toBe(1);
+  expect(bad.err).toContain("talk, blank, workshop");
+  const noval = run("new", "qa-cli-tpl-bad", "--template");
+  expect(noval.code).toBe(1);
+});
+test("templates: 목록을 사람 글과 JSON으로 낸다", () => {
+  const t = run("templates");
+  expect(t.code).toBe(0);
+  for (const id of ["talk", "blank", "workshop"]) expect(t.out).toContain(id);
+  const j = JSON.parse(run("templates", "--json").out);
+  expect(j.map((x: { id: string; default: boolean }) => [x.id, x.default])).toEqual([["talk", true], ["blank", false], ["workshop", false]]);
+});

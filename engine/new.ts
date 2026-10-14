@@ -1,10 +1,16 @@
-/* slidekit new <이름>: engine/template/index.html로 decks/<이름>/index.html을 만든다 */
+/* slidekit new <이름> [--template <id>]: engine/templates.ts의 템플릿으로 decks/<이름>/index.html을 만든다 */
+import { DEFAULT_TEMPLATE, TEMPLATE_IDS, buildDeck } from "./templates";
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 
 const root = join(import.meta.dir, "..");
-const name = process.argv[2];
-if (!name) { console.error("사용법: slidekit new <이름>  (예: slidekit new my-talk)"); process.exit(1); }
+const args = process.argv.slice(2);
+const ti = args.indexOf("--template");
+const template = ti >= 0 ? args[ti + 1] : DEFAULT_TEMPLATE;
+if (ti >= 0) args.splice(ti, 2);
+const name = args[0];
+if (!name) { console.error("사용법: slidekit new <이름> [--template <id>]  (예: slidekit new my-talk). 템플릿 목록은 slidekit templates"); process.exit(1); }
+if (!template || !TEMPLATE_IDS.includes(template)) { console.error(`알 수 없는 템플릿 "${template ?? ""}". 쓸 수 있는 것: ${TEMPLATE_IDS.join(", ")} (기본 ${DEFAULT_TEMPLATE}). 자세한 목록은 slidekit templates`); process.exit(1); }
 if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name)) {
   console.error(`이름 "${name}"은 쓸 수 없다. 영문 소문자, 숫자, -만 쓴다(예: my-talk). 화면에 보이는 제목은 만든 뒤 덱 안에서 바꾼다.`);
   process.exit(1);
@@ -17,11 +23,10 @@ const date = new Date().toLocaleDateString("sv"); // YYYY-MM-DD
 // git 사용자 이름이 있으면 author로 채운다. 없으면 빈 문자열(목록과 lint는 빈 author를 정상으로 본다). JSON 문자열 안에 들어가므로 이스케이프한다.
 const gitName = Bun.spawnSync(["git", "config", "user.name"]).stdout.toString().trim();
 const author = JSON.stringify(gitName).slice(1, -1).replaceAll("<", "\\u003c");
-const html = (await Bun.file(join(root, "engine", "template", "index.html")).text())
-  .replaceAll("__TITLE__", "제목을 여기에 적는다").replaceAll("__DATE__", date).replaceAll("__AUTHOR__", author).replaceAll("__ID__", name);
+const html = buildDeck(template, { title: "제목을 여기에 적는다", date, author, id: name });
 await mkdir(dir, { recursive: true });
 await Bun.write(file, html);
-console.log(`만들었다: decks/${name}/index.html
+console.log(`만들었다: decks/${name}/index.html (템플릿 ${template})
 다음:
   1. bun run slidekit 으로 앱을 열고 "${name}"을 선택해 제목과 문구를 고친다(파일을 직접 고쳐도 된다).
   2. bun run slidekit lint ${name} 으로 규격을 점검한다.

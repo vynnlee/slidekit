@@ -17,14 +17,14 @@ import { ChannelBadge } from "./CommentsPanel";
 import { ReplyToasts } from "./ReplyToasts";
 import { useCommentsLive } from "@/lib/use-comments-live";
 import { numbering } from "@/lib/comment-state";
-import { firstChild, isLeaf, parentOf, siblings } from "@/lib/selection";
+import { firstChild, isLeaf, isLockedDeep, parentOf, siblings } from "@/lib/selection";
 import { startPresentation } from "@/lib/present";
 import type { Comment, DeckEntry } from "@/lib/deck";
 
 const KEY_GROUPS: [string, [string, string][]][] = [
-  ["Edit", [["Cmd+S", "Save"], ["Cmd+Z", "Undo"], ["Shift+Cmd+Z", "Redo"], ["Cmd+D", "Duplicate"], ["Cmd+C", "Copy"], ["Cmd+V", "Paste"], ["Delete", "Delete selection"], ["Cmd+B", "Bold"], ["Cmd+I", "Italic"]]],
+  ["Edit", [["Cmd+S", "Save"], ["Cmd+Z", "Undo"], ["Shift+Cmd+Z", "Redo"], ["Cmd+D", "Duplicate"], ["Cmd+[", "Send backward"], ["Cmd+]", "Bring forward"], ["F2", "Rename layer"], ["Cmd+C", "Copy"], ["Cmd+V", "Paste"], ["Delete", "Delete selection"], ["Cmd+B", "Bold"], ["Cmd+I", "Italic"]]],
   ["Select", [["Click", "Select a top-level element"], ["Double-click", "Go one level in, or edit text"], ["Cmd+Click", "Select the innermost element"], ["Enter", "First child, or edit text"], ["Shift+Enter", "Select the parent"], ["Tab", "Next sibling"], ["Esc", "Finish editing, or deselect"]]],
-  ["View", [["Up, Down", "Go to slide"], ["Cmd+Scroll", "Zoom"], ["Shift+1", "Zoom to fit"], ["Cmd+0", "Zoom to fit"], ["Cmd+\\", "Toggle panels"], ["Shift+Cmd+\\", "Toggle filmstrip"]]],
+  ["View", [["Up, Down", "Go to slide (no selection)"], ["Arrows", "Nudge 1px (Shift: 10px)"], ["Drag", "Move (Shift: lock axis)"], ["Cmd+Scroll", "Zoom"], ["Shift+1", "Zoom to fit"], ["Cmd+0", "Zoom to fit"], ["Cmd+\\", "Toggle panels"], ["Shift+Cmd+\\", "Toggle filmstrip"]]],
   ["General", [["Cmd+K", "Command palette"], ["Cmd+Enter", "Present from this slide"], ["Shift+Cmd+Enter", "Present from the start"], ["Cmd+/", "Shortcuts"]]],
 ];
 const GLYPH: Record<string, string> = { Cmd: "⌘", Shift: "⇧", Enter: "↵", Delete: "⌫", Esc: "⎋", Up: "↑", Down: "↓" };
@@ -121,7 +121,8 @@ export function Editor({ id }: { id: string }) {
       const d = l.find((x) => x.id === id) ?? null;
       setDeck(d);
       if (d) {
-        load(d.folder).catch((e) => setErr(String(e)));
+        const q = parseInt(new URLSearchParams(location.search).get("slide") ?? "", 10); // /edit/<id>?slide=N(1부터). 범위 밖이면 가까운 슬라이드
+        load(d.folder, Number.isFinite(q) ? Math.max(0, q - 1) : 0).catch((e) => setErr(String(e)));
       }
     }).catch((e) => setErr(String(e.message ?? e)));
   }, [id, load]);
@@ -238,6 +239,7 @@ export function Editor({ id }: { id: string }) {
   };
   const delSelected = () => {
     if (!sel) return delSlide(indexRef.current);
+    if (isLockedDeep(sel)) return; // 잠긴 요소는 잠금을 풀기 전에 지우지 않는다
     sel.remove(); pickSel(null); commit();
   };
   const [filmCollapsed, setFilmCollapsed] = useState(() => localStorage.getItem("slidekit.filmstrip.collapsed") === "1");
@@ -262,6 +264,17 @@ export function Editor({ id }: { id: string }) {
     pickSel(n); commit();
   };
   const toggleHidden = (el: HTMLElement) => { if (el.style.display === "none") el.style.removeProperty("display"); else el.style.setProperty("display", "none"); pickSel(sel); commit(); };
+  const toggleLock = (el: Element) => { if (el.hasAttribute("data-locked")) el.removeAttribute("data-locked"); else el.setAttribute("data-locked", ""); pickSel(sel); commit(); };
+  const [renameTick, setRenameTick] = useState(0);
+  // Cmd+[ 와 Cmd+]: 같은 부모 안에서 한 칸 뒤로, 앞으로(문서 순서)
+  const reorder = (dir: -1 | 1) => {
+    if (!sel || isLockedDeep(sel)) return;
+    let n = dir < 0 ? sel.previousElementSibling : sel.nextElementSibling;
+    while (n && /^(SCRIPT|STYLE|TEMPLATE)$/.test(n.tagName)) n = dir < 0 ? n.previousElementSibling : n.nextElementSibling;
+    if (!n || n.matches("aside[data-notes]")) return;
+    if (dir < 0) n.before(sel); else n.after(sel);
+    pickSel(sel); commit();
+  };
   const renameEl = (el: Element, name: string) => { if (name) el.setAttribute("data-name", name); else el.removeAttribute("data-name"); pickSel(sel); commit(); };
   const moveEl = (el: Element, target: Element, after: boolean) => {
     if (el.contains(target) || !target.parentElement) return;
@@ -275,6 +288,7 @@ export function Editor({ id }: { id: string }) {
   };
   const dupSelected = () => {
     if (!sel) return dupSlide(indexRef.current);
+    if (isLockedDeep(sel)) return;
     const c = sel.cloneNode(true) as Element;
     c.removeAttribute("id");
     sel.after(c); pickSel(c); commit();
@@ -400,11 +414,14 @@ export function Editor({ id }: { id: string }) {
     else if (mod && k === "-") { e.preventDefault(); canvas.current?.zoom(-1); }
     else if (!mod && e.key === "Tab") { if (e.view === window && t !== document.body) return; e.preventDefault(); cycle(e.shiftKey ? -1 : 1); } // 패널 안에서는 브라우저의 Tab 이동을 지킨다
     else if (!mod && !e.shiftKey && k === "c" && sel && (t === document.body || e.view !== window)) { e.preventDefault(); canvas.current?.compose(); }
+    else if (e.key === "F2" && sel) { e.preventDefault(); setRenameTick((n) => n + 1); }
+    else if (mod && (k === "[" || k === "]") && sel) { e.preventDefault(); reorder(k === "[" ? -1 : 1); }
     else if (mod && k === "z") { e.preventDefault(); e.shiftKey ? restore(future.current, past.current) : restore(past.current, future.current); }
     else if (mod && k === "d") { e.preventDefault(); dupSelected(); }
     else if (!mod && (e.key === "Delete" || e.key === "Backspace")) { if (!sel) return; e.preventDefault(); delSelected(); }
     else if (!mod && e.key === "Escape") pickSel(null);
     else if (!mod && e.key === "Enter" && (t === document.body || e.view !== window)) { e.preventDefault(); if (e.shiftKey) upSel(); else enterSel(); }
+    else if (!mod && sel && !isLockedDeep(sel) && (t === document.body || e.view !== window) && e.key.startsWith("Arrow")) { e.preventDefault(); const n = e.shiftKey ? 10 : 1; canvas.current?.nudge(e.key === "ArrowLeft" ? -n : e.key === "ArrowRight" ? n : 0, e.key === "ArrowUp" ? -n : e.key === "ArrowDown" ? n : 0); }
     else if (!mod && (e.key === "ArrowDown" || e.key === "ArrowRight")) { e.preventDefault(); setIndex(indexRef.current + 1); }
     else if (!mod && (e.key === "ArrowUp" || e.key === "ArrowLeft")) { e.preventDefault(); setIndex(indexRef.current - 1); }
   };
@@ -470,7 +487,7 @@ export function Editor({ id }: { id: string }) {
             <div className="shrink-0 px-3 pt-2 text-caption font-semibold">Layers</div>
             <div className="min-h-0 flex-1 overflow-auto">
               <LayerTree slide={canvas.current?.slide(index) ?? null} sel={sel} rev={units} slideName={canvas.current?.slide(index)?.getAttribute("data-title") || `Slide ${index + 1}`} onSelectSlide={() => pickSel(null)} onSelect={pickSel} onHover={(el) => canvas.current?.hover(el)}
-                onToggleHidden={toggleHidden} onRename={renameEl} onMove={moveEl} />
+                onToggleHidden={toggleHidden} onToggleLock={toggleLock} renameSignal={renameTick} onRename={renameEl} onMove={moveEl} />
             </div>
           </div>
         }

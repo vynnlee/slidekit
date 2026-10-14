@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Eye, EyeOff, Frame, Image as ImageIcon, Shapes, Square, Type } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, EyeOff, Lock, LockOpen, Frame, Image as ImageIcon, Shapes, Square, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { textual } from "./Canvas";
@@ -14,6 +14,8 @@ type Props = {
   onSelect(el: Element): void;
   onHover(el: Element | null): void;
   onToggleHidden(el: HTMLElement): void;
+  onToggleLock(el: Element): void;
+  renameSignal: number; // 바뀌면 선택한 요소의 이름 변경을 시작한다(F2)
   onRename(el: Element, name: string): void;
   onMove(el: Element, target: Element, after: boolean): void;
 };
@@ -50,6 +52,12 @@ export function LayerTree(p: Props) {
   const [drag, setDrag] = useState<Element | null>(null);
   const [drop, setDrop] = useState<{ el: Element; after: boolean } | null>(null);
   const selRow = useRef<HTMLDivElement>(null);
+  const firstSignal = useRef(p.renameSignal);
+  useEffect(() => {
+    if (p.renameSignal === firstSignal.current) return;
+    firstSignal.current = p.renameSignal;
+    if (p.sel) setRename(p.sel);
+  }, [p.renameSignal]); // eslint-disable-line
   const [slideOpen, setSlideOpen] = useState(true);
 
   // 선택한 요소의 조상은 펼친다
@@ -69,6 +77,7 @@ export function LayerTree(p: Props) {
   const row = (el: Element, depth: number): React.ReactNode => {
     const ch = kids(el), isOpen = open.has(el), I = iconOf(el);
     const hidden = (el as HTMLElement).style?.display === "none";
+    const locked = el.hasAttribute("data-locked");
     const on = el === p.sel;
     return (
       <div key={[...(el.parentElement?.children ?? [])].indexOf(el)} role="treeitem" aria-selected={on} aria-expanded={ch.length ? isOpen : undefined}>
@@ -112,6 +121,13 @@ export function LayerTree(p: Props) {
             />
           ) : <span className="min-w-0 flex-1 truncate">{nameOf(el)}</span>}
           {el.hasAttribute("data-step") && <span title={`Appears at step ${el.getAttribute("data-step")}`} className="shrink-0 rounded bg-surface-2 px-1 text-micro tabular-nums text-muted-foreground">{el.getAttribute("data-step")}</span>}
+          <Tooltip content={locked ? "Unlock (can be selected on the canvas again)" : "Lock (cannot be selected on the canvas)"} side="left">
+            <Button aria-label={locked ? "Unlock layer" : "Lock layer"} aria-pressed={locked} variant="ghost" size="icon-compact"
+              className={locked ? "" : "opacity-0 focus-visible:opacity-100 group-hover:opacity-100"}
+              onClick={(e) => { e.stopPropagation(); p.onToggleLock(el); }}>
+              {locked ? <Lock /> : <LockOpen />}
+            </Button>
+          </Tooltip>
           <Tooltip content={hidden ? "Show (removes display: none)" : "Hide (sets display: none, saved with the deck)"} side="left">
             <Button aria-label={hidden ? "Show layer" : "Hide layer"} aria-pressed={hidden} variant="ghost" size="icon-compact"
               className={hidden ? "" : "opacity-0 focus-visible:opacity-100 group-hover:opacity-100"}

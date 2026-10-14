@@ -57,6 +57,15 @@ test("노트와 슬라이드 루트는 선택되지 않는다", () => {
   expect(pick(root, root, null)).toBeNull();
 });
 
+test("잠긴 요소와 그 안쪽은 캔버스에서 선택되지 않는다", () => {
+  const lockedP = el("p", { text: "잠금", attrs: { "data-locked": "" } });
+  const wrap = el("div", { attrs: { "data-locked": "" } }, [el("p", { text: "안쪽" })]);
+  const r = el("section", {}, [lockedP, wrap, el("p", { text: "보통" })]);
+  expect(pick(r, lockedP, null)).toBeNull();
+  expect(pick(r, wrap.children[0], null)).toBeNull();
+  expect(pick(r, r.children[2], null)).toBe(r.children[2]);
+});
+
 test("부모, 첫 자식, 형제", () => {
   expect(parentOf(root, title)).toBe(card);
   expect(parentOf(root, cards)).toBeNull();

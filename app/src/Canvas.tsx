@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { TextArea } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
 import { byPath, previewHtml, serializeSlide, type Unit } from "@/lib/deck-source";
-import { childToward, isLeaf, pick as pickEl } from "@/lib/selection";
+import { childToward, isLeaf, isLockedDeep, pick as pickEl, siblings } from "@/lib/selection";
+import { canMove, localScale, moveBy, readTranslate, writeTranslate } from "@/lib/move";
+import { lockAxis, snapMove, toSlide, type Gap, type Guide, type Rect } from "@/lib/guides";
 import { CommentPin } from "./CommentPin";
 import { CommentComposer } from "./CommentComposer";
 import { nameOf } from "./LayerTree";
@@ -19,6 +21,7 @@ export type CanvasApi = {
   select(el: Element | null): void;
   zoom(dir: 1 | -1 | 0): void; // 0은 맞춤
   compose(): void; // 선택한 요소에 코멘트 작성창을 연다
+  nudge(dx: number, dy: number): void; // 선택한 요소를 슬라이드 px만큼 옮긴다(방향키)
   reload(): void; // 덱 head(prefix)가 바뀐 뒤 현재 모델로 캔버스를 다시 만든다
   document(): Document | null;
   hover(el: Element | null): void; // 레이어 목록에서 가리킨 요소를 캔버스에 외곽선으로 보인다
@@ -57,7 +60,22 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [zoom, setZoom] = useState(1);
-  const zoomBy = useCallback((dir: 1 | -1 | 0, f = 1.15) => setZoom((z) => (dir === 0 ? 1 : Math.max(0.25, Math.min(4, z * (dir > 0 ? f : 1 / f))))), []);
+  // 확대와 축소. at(스크롤 영역 안의 좌표)을 주면 그 지점이 제자리에 있도록 스크롤을 보정한다.
+  const anchor = useRef<{ x: number; y: number; ratio: number; sl: number; st: number } | null>(null);
+  const zoomBy = useCallback((dir: 1 | -1 | 0, f = 1.15, at?: { x: number; y: number }) => setZoom((z) => {
+    const nz = dir === 0 ? 1 : Math.max(0.25, Math.min(4, z * (dir > 0 ? f : 1 / f)));
+    if (at && box.current && nz !== z) anchor.current = { ...at, ratio: nz / z, sl: box.current.scrollLeft, st: box.current.scrollTop };
+    return nz;
+  }), []);
+  useLayoutEffect(() => {
+    const a = anchor.current, b = box.current;
+    if (!a || !b) return;
+    anchor.current = null;
+    b.scrollLeft = (a.sl + a.x) * a.ratio - a.x;
+    b.scrollTop = (a.st + a.y) * a.ratio - a.y;
+  }, [zoom]);
+  // Space를 누르고 있는 동안은 캔버스 위에 덮개를 씌워 끌어서 이동(팬)한다.
+  const [panning, setPanning] = useState(false);
   const [url, setUrl] = useState("");
   const urlRef = useRef("");
   const [composing, setComposing] = useState(false);
@@ -65,6 +83,10 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   const editing = useRef<HTMLElement | null>(null);
   const hover = useRef<Element | null>(null);
   const sizeTag = useRef<HTMLDivElement>(null);
+  const guideSvg = useRef<SVGSVGElement>(null);
+  // 끌어서 이동: 시작 상태. moved는 3px 넘게 움직인 뒤에만 참이다.
+  const drag = useRef<{ el: HTMLElement; x0: number; y0: number; t0: [number, number]; ks: number; moved: boolean; start: Rect; cands: Rect[]; orig: string } | null>(null);
+  const swallowClick = useRef(false);
   const hoverBox = useRef<HTMLDivElement>(null), selBox = useRef<HTMLDivElement>(null), bar = useRef<HTMLDivElement>(null), pop = useRef<HTMLDivElement>(null);
   const markers = useRef<HTMLDivElement>(null);
   const P = useRef(p);
@@ -111,6 +133,12 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     select: (el) => P.current.onSel(el),
     zoom: (d) => zoomBy(d),
     compose: () => setComposing(true),
+    nudge(dx, dy) {
+      const el = P.current.sel as HTMLElement | null;
+      if (!el || isLockedDeep(el) || !canMove(el)) return;
+      moveBy(el, dx, dy);
+      P.current.onCommit("nudge");
+    },
     reload: () => build(P.current.units),
     document: () => doc(),
     hover: (el) => { hover.current = el; },
@@ -153,13 +181,24 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   const onWheel = useCallback((e: WheelEvent) => {
     if (!(e.metaKey || e.ctrlKey)) return;
     e.preventDefault();
-    zoomBy(e.deltaY < 0 ? 1 : -1, 1 + Math.min(Math.abs(e.deltaY), 40) / 200);
+    const br = box.current!.getBoundingClientRect();
+    const fr = e.view !== window ? frame.current?.getBoundingClientRect() : null; // iframe 안의 좌표는 바깥 화면 기준으로 바꾼다
+    zoomBy(e.deltaY < 0 ? 1 : -1, 1 + Math.min(Math.abs(e.deltaY), 40) / 200, { x: e.clientX + (fr?.left ?? 0) - br.left, y: e.clientY + (fr?.top ?? 0) - br.top });
   }, [zoomBy]);
   useEffect(() => {
     const el = box.current!;
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, [onWheel]);
+
+  useEffect(() => {
+    const typing = (t: EventTarget | null) => { const e = t as HTMLElement | null; return !!e && (e.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.tagName)); };
+    const down = (e: KeyboardEvent) => { if (e.code === "Space" && !typing(e.target) && !editing.current) { e.preventDefault(); setPanning(true); } };
+    const up = (e: KeyboardEvent) => { if (e.code === "Space") setPanning(false); };
+    const off = () => setPanning(false);
+    window.addEventListener("keydown", down); window.addEventListener("keyup", up); window.addEventListener("blur", off);
+    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); window.removeEventListener("blur", off); };
+  }, []);
 
   const goto = useCallback(() => {
     frame.current?.contentWindow?.postMessage({ source: "slidekit", v: 1, type: "goto", slide: P.current.index + 1 }, location.origin);
@@ -172,7 +211,13 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   useEffect(() => { selRef.current = p.sel; }, [p.sel]);
   const pick = (e: Event): Element | null => {
     const s = cur();
-    return s ? pickEl<Element>(s, e.target as Element, selRef.current, !!(e as MouseEvent).metaKey || !!(e as MouseEvent).ctrlKey) : null;
+    let t = e.target as Element | null;
+    // 잠긴 요소 위를 눌러도 그 아래 잠기지 않은 요소를 고른다(잠긴 덮개 아래 요소)
+    if (s && t && isLockedDeep(t)) {
+      const m = e as MouseEvent;
+      t = (doc()?.elementsFromPoint(m.clientX, m.clientY) ?? []).find((n) => s.contains(n) && n !== s && !isLockedDeep(n)) ?? null;
+    }
+    return s ? pickEl<Element>(s, t, selRef.current, !!(e as MouseEvent).metaKey || !!(e as MouseEvent).ctrlKey) : null;
   };
 
   function endEdit() {
@@ -198,12 +243,72 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     const st = d.createElement("style");
     st.textContent = EDIT_CSS;
     d.head.appendChild(st);
+    const clearGuides = () => { if (guideSvg.current) guideSvg.current.replaceChildren(); };
+    const draw = (sr: DOMRect, ks: number, guides: Guide[], gaps: Gap[]) => {
+      const svg = guideSvg.current;
+      if (!svg) return;
+      const X = (v: number) => sr.left + v * ks, Y = (v: number) => sr.top + v * ks;
+      let h = "";
+      for (const g of guides) h += g.axis === "x"
+        ? `<line data-testid="guide-line" x1="${X(g.pos)}" x2="${X(g.pos)}" y1="${Y(g.from)}" y2="${Y(g.to)}" stroke="#ff3ea5" stroke-width="1"/>`
+        : `<line data-testid="guide-line" y1="${Y(g.pos)}" y2="${Y(g.pos)}" x1="${X(g.from)}" x2="${X(g.to)}" stroke="#ff3ea5" stroke-width="1"/>`;
+      for (const g of gaps) {
+        const a = g.axis === "x" ? [X(g.from), Y(g.at), X(g.to), Y(g.at)] : [X(g.at), Y(g.from), X(g.at), Y(g.to)];
+        const mx = (a[0] + a[2]) / 2, my = (a[1] + a[3]) / 2, t = String(Math.round(g.value));
+        h += `<line x1="${a[0]}" y1="${a[1]}" x2="${a[2]}" y2="${a[3]}" stroke="#f24822" stroke-width="1"/><rect data-testid="gap-label" x="${mx - 12}" y="${my - 8}" width="24" height="16" rx="4" fill="#f24822"/><text x="${mx}" y="${my + 4}" font-size="11" fill="#fff" text-anchor="middle" font-family="system-ui">${t}</text>`;
+      }
+      svg.innerHTML = h;
+    };
+    d.addEventListener("pointerdown", (e) => {
+      const sl = cur();
+      if (e.button !== 0 || editing.current || !sl) return;
+      const el = pick(e) as HTMLElement | null;
+      if (!el || isLockedDeep(el) || !canMove(el)) return;
+      const sr = sl.getBoundingClientRect(), ks = sr.width / 1920 || 1;
+      const cands = siblings<Element>(sl, el).filter((n) => n !== el && n.getBoundingClientRect().width > 0 && getComputedStyle(n).display !== "none").map((n) => toSlide(n.getBoundingClientRect(), sr, ks));
+      drag.current = { el, x0: e.clientX, y0: e.clientY, t0: readTranslate(el), ks, moved: false, start: toSlide(el.getBoundingClientRect(), sr, ks), cands, orig: el.style.translate };
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+    }, true);
+    d.addEventListener("pointermove", (e) => {
+      const g = drag.current;
+      if (!g) return;
+      let dx = e.clientX - g.x0, dy = e.clientY - g.y0;
+      if (!g.moved) {
+        if (Math.hypot(dx, dy) < 3) return;
+        g.moved = true;
+        if (selRef.current !== g.el) { selRef.current = g.el; P.current.onSel(g.el); }
+        hover.current = null;
+      }
+      const lock = e.shiftKey ? lockAxis(dx, dy) : null;
+      if (lock) { dx = lock.dx; dy = lock.dy; }
+      const sl = cur()!, sr = sl.getBoundingClientRect();
+      const mv: Rect = { ...g.start, x: g.start.x + dx / g.ks, y: g.start.y + dy / g.ks };
+      const snap = snapMove(mv, g.cands, 6 / g.ks, { lock: lock?.axis, frame: { x: 0, y: 0, w: 1920, h: 1080 } });
+      const ls = localScale(g.el) / g.ks || 1; // 화면 배율과 로컬 배율의 비(보통 1)
+      writeTranslate(g.el, g.t0[0] + (dx / g.ks + snap.dx) / ls, g.t0[1] + (dy / g.ks + snap.dy) / ls);
+      draw(sr, g.ks, snap.guides, snap.gaps);
+      e.preventDefault();
+    }, true);
+    const endDrag = (cancel: boolean) => {
+      const g = drag.current;
+      drag.current = null;
+      clearGuides();
+      if (!g || !g.moved) return;
+      swallowClick.current = true; // 끌고 난 뒤의 click이 선택을 바꾸지 않게 한다
+      setTimeout(() => { swallowClick.current = false; }, 0);
+      if (cancel) { if (g.orig) g.el.style.translate = g.orig; else g.el.style.removeProperty("translate"); return; }
+      P.current.onCommit(); // 한 번 끌기 = 실행 취소 한 건
+    };
+    d.addEventListener("pointerup", () => endDrag(false), true);
+    d.addEventListener("pointercancel", () => endDrag(true), true);
+    d.addEventListener("keydown", (e) => { if (e.key === "Escape" && drag.current?.moved) { e.preventDefault(); e.stopPropagation(); endDrag(true); } }, true);
     const inEdit = (e: Event) => !!editing.current && editing.current.contains(e.target as Node);
     d.addEventListener("mouseover", (e) => { if (!editing.current) hover.current = pick(e); }, true);
     d.addEventListener("mouseleave", () => { hover.current = null; });
     d.addEventListener("click", (e) => {
       if (inEdit(e)) return;
       e.preventDefault(); e.stopPropagation();
+      if (swallowClick.current) { swallowClick.current = false; return; }
       const t = pick(e);
       selRef.current = t;
       P.current.onSel(t);
@@ -212,7 +317,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     d.addEventListener("dblclick", (e) => {
       // 선택된 요소를 더블클릭: 글자 블록이면 편집, 컨테이너이면 한 단계 안쪽 요소를 선택한다.
       const sl = cur(), c = selRef.current;
-      if (editing.current || !sl || !c || !c.contains(e.target as Node)) return;
+      if (editing.current || !sl || !c || isLockedDeep(c) || !c.contains(e.target as Node)) return;
       if (isLeaf(c)) { if (textual(c)) startEdit(c as HTMLElement); return; }
       const child = childToward<Element>(sl, c, e.target as Element);
       if (child) { selRef.current = child; P.current.onSel(child); }
@@ -223,6 +328,8 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       P.current.onKey(e);
     }, true);
     d.addEventListener("wheel", onWheel, { passive: false });
+    d.addEventListener("keydown", (e) => { if (e.code === "Space" && !editing.current) { e.preventDefault(); e.stopPropagation(); setPanning(true); } }, true);
+    d.addEventListener("keyup", (e) => { if (e.code === "Space") setPanning(false); }, true);
     goto();
     P.current.onReady();
   };
@@ -281,6 +388,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div ref={hoverBox} className="absolute left-0 top-0 hidden border border-focus-ring/60" />
           <div ref={selBox} className="absolute left-0 top-0 hidden border-2 border-focus-ring" />
+          <svg ref={guideSvg} aria-hidden="true" className="absolute inset-0 size-full overflow-visible" />
           <div ref={sizeTag} aria-hidden="true" className="absolute left-0 top-0 hidden whitespace-nowrap rounded bg-focus-ring px-1.5 py-0.5 text-micro tabular-nums text-white" />
           <div ref={markers}>
             {here.map((c, ci) => (
@@ -306,6 +414,18 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
         </div>
       </div>
     </div>
+    {panning && (
+      <div
+        data-testid="pan-overlay" className="absolute inset-0 z-20 cursor-grab active:cursor-grabbing"
+        onPointerDown={(e) => {
+          const b = box.current!, x0 = e.clientX, y0 = e.clientY, sl = b.scrollLeft, st = b.scrollTop;
+          e.currentTarget.setPointerCapture(e.pointerId);
+          const move = (m: PointerEvent) => { b.scrollLeft = sl - (m.clientX - x0); b.scrollTop = st - (m.clientY - y0); };
+          const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+          window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+        }}
+      />
+    )}
     <div role="group" aria-label="Zoom" className="absolute bottom-3 right-3 flex items-center gap-0.5 rounded-lg bg-surface-3 p-0.5 shadow-surface-3">
       <Tooltip content="Zoom out (Cmd+-)" side="top"><Button aria-label="Zoom out" variant="ghost" size="icon-compact" onClick={() => zoomBy(-1)}><Minus /></Button></Tooltip>
       <Tooltip content="Zoom to fit (Cmd+0, Shift+1)" side="top"><Button aria-label="Zoom to fit" variant="ghost" size="compact" className="min-w-12 tabular-nums" onClick={() => zoomBy(0)}>{pct}%</Button></Tooltip>

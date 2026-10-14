@@ -374,6 +374,66 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('Esc로 작성창 닫힘', (await page.getByRole('group', { name: 'New comment' }).count()) === 0);
   await focusBody(); await page.keyboard.press('Escape');
 
+  // Space 드래그 팬과 커서 기준 줌
+  await page.getByRole('button', { name: 'Zoom in' }).click(); await page.getByRole('button', { name: 'Zoom in' }).click(); await page.getByRole('button', { name: 'Zoom in' }).click(); await sleep(400);
+  const scroller = () => page.evaluate(() => { const b = document.querySelector('iframe[title="Canvas"]').closest('div.overflow-auto'); return [b.scrollLeft, b.scrollTop, b.scrollWidth > b.clientWidth]; });
+  const s0 = await scroller();
+  const fbx = await page.locator('iframe[title="Canvas"]').boundingBox();
+  await focusBody(); await page.keyboard.down('Space'); await sleep(200);
+  check('Space를 누르면 팬 덮개가 나타남', (await page.getByTestId('pan-overlay').count()) === 1);
+  await page.mouse.move(fbx.x + 300, fbx.y + 200); await page.mouse.down(); await page.mouse.move(fbx.x + 150, fbx.y + 120, { steps: 6 }); await page.mouse.up(); await page.keyboard.up('Space'); await sleep(300);
+  const s1 = await scroller();
+  check('Space+드래그로 스크롤이 이동', s1[2] && (s1[0] > s0[0] || s1[1] > s0[1]), [s0, s1]);
+  check('Space를 떼면 덮개가 사라짐', (await page.getByTestId('pan-overlay').count()) === 0);
+  await page.getByRole('button', { name: 'Zoom to fit' }).click(); await sleep(300);
+  // 끌어서 이동(translate), 스마트 가이드, 방향키 넛지, 실행 취소 1건
+  await layers.nth(1).click(); await sleep(600); await focusBody(); await page.keyboard.press('Escape');
+  const hb2 = await fr().locator('[data-active] h2').first().boundingBox();
+  const cx = hb2.x + hb2.width / 2, cy = hb2.y + hb2.height / 2;
+  const tr = () => inDoc((s) => s.querySelector('h2').style.translate || '');
+  await page.mouse.move(cx, cy); await page.mouse.down(); await page.mouse.move(cx, cy + 40, { steps: 8 }); await sleep(250);
+  check('끄는 동안 가이드선이 보임(왼쪽 가장자리 정렬 유지)', (await page.getByTestId('guide-line').count()) >= 1);
+  await page.mouse.up(); await sleep(400);
+  const t1 = await tr();
+  check('끌면 인라인 translate가 생김', /px\s+-?\d/.test(t1), t1);
+  check('끌고 난 뒤 가이드선이 사라짐', (await page.getByTestId('guide-line').count()) === 0);
+  await focusBody(); await page.keyboard.press('Meta+z'); await sleep(400);
+  check('끌기는 실행 취소 한 번에 되돌아감', (await tr()) === '', await tr());
+  await fr().locator('[data-active] h2').first().click({ modifiers: ['Meta'] }); await sleep(300);
+  await focusBody(); await page.keyboard.press('ArrowRight'); await page.keyboard.press('Shift+ArrowDown'); await sleep(400);
+  const t2 = await tr();
+  check('방향키 1px와 Shift+방향키 10px 넛지', /^1px 10px$/.test(t2), t2);
+  await focusBody(); await page.keyboard.press('Meta+z'); await sleep(300); await page.keyboard.press('Escape');
+
+  // 레이어: 잠금은 캔버스 선택에서 제외, Cmd+[ ]로 순서 이동, F2 이름 변경
+  await layers.nth(1).click(); await sleep(600);
+  const rowsL = page.getByTestId('layer-row');
+  await rowsL.nth(1).click(); await sleep(300);
+  await rowsL.nth(1).getByRole('button', { name: 'Lock layer' }).click({ force: true }); await sleep(300);
+  check('잠금이 data-locked로 저장됨', await inDoc((s) => !!s.querySelector('[data-locked]')));
+  await focusBody(); await page.keyboard.press('Escape');
+  const lockedBox = await fr().locator('[data-active] [data-locked]').first().boundingBox();
+  await page.mouse.click(lockedBox.x + lockedBox.width / 2, lockedBox.y + lockedBox.height / 2); await sleep(300);
+  check('잠긴 요소는 캔버스 클릭으로 선택되지 않음', (await page.getByRole('button', { name: 'Show in layers' }).count()) === 0);
+  // 잠긴 요소를 Layers에서 고른 뒤 Delete를 눌러도 지워지지 않는다
+  const nLocked = await inDoc((s) => s.children.length);
+  await rowsL.nth(1).click(); await focusBody(); await page.keyboard.press('Delete'); await sleep(300);
+  check('잠긴 요소는 Delete로 지워지지 않음', (await inDoc((s) => s.children.length)) === nLocked);
+  await page.getByRole('button', { name: 'Unlock layer' }).first().click({ force: true }); await sleep(300);
+  check('잠금 해제', !(await inDoc((s) => !!s.querySelector('[data-locked]'))));
+  await rowsL.nth(1).click(); await sleep(300);
+  const orderOf = () => inDoc((s) => [...s.children].map((e) => e.tagName + ((e.textContent || '').trim().slice(0, 4))).join('|'));
+  const o0 = await orderOf();
+  await focusBody(); await page.keyboard.press('Meta+['); await sleep(400);
+  const o1 = await orderOf();
+  check('Cmd+[로 한 칸 앞으로(문서 순서)', o1 !== o0, [o0, o1]);
+  await page.keyboard.press('Meta+]'); await sleep(400);
+  check('Cmd+]로 되돌림', (await orderOf()) === o0);
+  await focusBody(); await page.keyboard.press('F2'); await sleep(300);
+  check('F2로 레이어 이름 입력창', (await page.getByLabel('Layer name').count()) === 1);
+  await page.getByLabel('Layer name').press('Escape'); await sleep(200);
+  await focusBody(); await page.keyboard.press('Escape');
+
   // 노트 pane은 접지 않는다
   check('노트 pane에 접기 버튼이 없고 입력창이 항상 보임', (await page.getByRole('button', { name: /notes/i }).count()) === 0 && (await page.getByPlaceholder('Speaker notes (Markdown)').isVisible()));
   // 자동 저장: Cmd+S 없이 1.5초 뒤 저장된다

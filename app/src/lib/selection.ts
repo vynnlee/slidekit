@@ -13,6 +13,10 @@ const ATOMIC = /^(IMG|SVG|VIDEO|CANVAS|INPUT|SELECT|TEXTAREA|IFRAME|OBJECT|PICTU
 const SKIP = /^(SCRIPT|STYLE|TEMPLATE)$/;
 const tag = (e: N) => e.tagName.toUpperCase();
 
+/** 잠금(data-locked): Layers에서만 고를 수 있다 */
+export const isLocked = (e: N) => (e.getAttribute?.("data-locked") ?? null) !== null;
+/** 자기나 조상이 잠겼는지 */
+export const isLockedDeep = (e: N) => { for (let n: N | null = e; n; n = n.parentElement) if (isLocked(n)) return true; return false; };
 const isNotes = (e: N) => tag(e) === "ASIDE" && (e.getAttribute?.("data-notes") ?? null) !== null;
 /** 편집 대상이 아닌 요소(노트, 스크립트, 스타일) */
 export const selectable = (e: N) => !SKIP.test(tag(e)) && !isNotes(e);
@@ -30,7 +34,7 @@ export function leafOf<T extends N>(root: T, target: T | null): T | null {
   if (!target || target === root || !contains(root, target)) return null;
   let r = target;
   for (let a: T | null = target; a && a !== root; a = a.parentElement as T | null) {
-    if (isNotes(a)) return null;
+    if (isNotes(a) || isLocked(a)) return null; // 잠긴 요소와 그 안쪽은 캔버스에서 고르지 않는다
     if (tag(a) === "SVG" || isTextBlock(a)) r = a;
   }
   return r;

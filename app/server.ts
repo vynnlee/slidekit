@@ -15,7 +15,7 @@ import { routes as searchRoutes } from "./search-api";
 
 // 하위 명령: slidekit new|lint|pdf|doctor|bundle|deploy <덱>. 해당 스크립트는 argv[2]를 덱 이름으로 읽는다.
 const sub = process.argv[2];
-const SUBS: Record<string, string> = { new: "../engine/new.ts", lint: "../engine/lint-cli.ts", layouts: "../engine/layouts-cli.ts", templates: "../engine/templates-cli.ts", unpublish: "../deploy/unpublish.ts", image: "../engine/image-cli.ts", pdf: "../engine/pdf.ts", doctor: "../engine/doctor.ts", bundle: "../bundler/bundle.ts", deploy: "../deploy/deploy.ts" };
+const SUBS: Record<string, string> = { new: "../engine/new.ts", lint: "../engine/lint-cli.ts", layouts: "../engine/layouts-cli.ts", templates: "../engine/templates-cli.ts", unpublish: "../deploy/unpublish.ts", outline: "../engine/outline-cli.ts", image: "../engine/image-cli.ts", pdf: "../engine/pdf.ts", doctor: "../engine/doctor.ts", bundle: "../bundler/bundle.ts", deploy: "../deploy/deploy.ts" };
 const USAGE = `사용법: slidekit [명령]
   (명령 없음)      앱을 연다(덱 목록, 편집기, 발표자 화면)
   new <이름>       새 덱을 만든다
@@ -23,6 +23,7 @@ const USAGE = `사용법: slidekit [명령]
   layouts          슬라이드 레이아웃 프리셋 목록(--json)
   templates        새 덱 템플릿 목록(--json). new <이름> --template <id>로 고른다
   image <덱> <파일> 이미지를 덱의 assets/에 안전하게 저장한다(--max 2400)
+  outline <덱>     덱을 Markdown 개요로 출력한다(--notes로 발표자 노트 포함)
   unpublish <덱>   배포한 덱을 지운다(--yes가 있어야 지움, 없으면 목록만 보임)
   bundle <덱>      단독 HTML 한 파일로 묶는다
   pdf <덱>         슬라이드당 한 페이지의 PDF로 내보낸다

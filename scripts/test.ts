@@ -106,6 +106,7 @@ const MAP: [RegExp, string[]][] = [
   [/^app\/(remote-api\.ts|src\/(Remote|lib\/remote-host))|^app\/test\/remote/, ["remote", "unit-other"]],
   [/^app\/src\//, BROWSER_APP],
   [/^scripts\/(test\.ts|scan-secrets)/, ["scan-secrets"]],
+  [/^engine\/outline/, ["unit-other"]],
   [/\.test\.ts$/, ["unit-other", "unit-isolated"]],
 ];
 function changedSteps(): { names: string[]; files: string[]; unknown: string[] } {

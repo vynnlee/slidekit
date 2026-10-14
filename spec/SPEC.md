@@ -437,3 +437,15 @@ Figma식 계층 선택이다. 구현은 `app/src/lib/selection.ts`(DOM 없이 �
   - ContextMenu 키와 Shift+F10으로도 열고, 화살표, Enter, Esc, 첫 글자 이동을 지원한다. 항목 실행, Esc, 바깥 클릭, 스크롤, 줌, 창 크기 변경, 포커스 이동에서 닫히고 드래그 중에는 열리지 않는다.
 - 맥락별 메뉴: 캔버스 요소(글자 편집, 코멘트, 선택 이동, 순서, 이름 변경, 잠금과 숨김, 변경 되돌리기, 복제, 삭제), 캔버스 빈 곳(코멘트, 맞춤과 100% 확대, 슬라이드 추가, 복제, 삭제), Layers 행(요소 메뉴와 같고 `Slide N` 행은 슬라이드 메뉴), 필름스트립 타일(여기서 발표, 코멘트, 앞뒤 추가, 처음과 끝으로 이동, 복제, 삭제), 코멘트(패널에서 열기, 해결, 신뢰, 복사, 삭제), 덱 카드와 행(열기, 발표, 이름 변경, 복제, 게시 링크 복사, 휴지통으로, 카드의 `...` 버튼과 같은 목록). 잠긴 요소는 Unlock, Select Parent, Add comment만 보인다. 메뉴를 두지 않는 곳은 Inspector 입력, 노트 영역, 발표자 화면, 청중 화면, 줌 컨트롤, 헤더 버튼이다.
 - 커서: 앱 UI는 화살표(`default`)가 기본이고 손가락(`pointer`)은 덱 카드와 링크에만 쓴다. 캔버스에서는 선택된 요소 위가 `move`, 글자 편집 중이 `text`, 리사이즈 핸들이 방향별 `ns-resize`, `ew-resize`, `nwse-resize`, `nesw-resize`이고 끌기가 끝날 때까지 유지한다. Space는 `grab`, Space 팬 중은 `grabbing`, 잠긴 요소는 `default`다. 숫자 칸의 라벨은 `ew-resize`, 색 칸의 스포이트는 `crosshair`, 놓을 수 없는 자리는 끌기 중에만 `not-allowed`다. 캔버스는 iframe 안이라 끌기 시작 때 전체 화면 투명 방패로 커서를 고정한다. 커서 값은 `lib/cursors.ts` 한 곳의 표에서만 정한다. 청중 화면은 포인터를 2초 뒤 숨기고 전체 보기 썸네일은 `pointer`다.
+
+## 10. 텍스트 내보내기 (Markdown 개요)
+
+덱 내용을 Claude나 다른 도구에 붙여 넣거나 문서로 쓰려고 Markdown으로 바꾼다. 본체는 `engine/outline.ts`의 순수 함수 `outline(html, { notes })`이고 CLI는 `slidekit outline <덱> [--notes]`, 앱은 Export 메뉴의 Copy as Markdown과 Download .md다(앱은 노트를 넣는다).
+
+- 머리말: `# 제목`, 이어서 `- Author:`와 `- Date:`(`#deck-meta` 값, 없으면 생략). 공개 범위, 비밀번호, 코멘트, 게시 기록은 HTML 밖의 정보이거나 내보낼 내용이 아니라서 넣지 않는다.
+- 슬라이드마다 `## N. 제목`. 제목은 `data-title`, 없으면 슬라이드의 첫 제목, 없으면 `Slide N`이다. 제목과 같은 첫 제목은 본문에서 다시 쓰지 않는다. 본문 제목은 `###`부터이고 h1과 h2는 `###`, h3은 `####`이다.
+- 본문은 읽기 순서(DOM 순서)로 평탄화한다. 문단은 빈 줄로 나누고 `div`와 `span` 카드, 두 열, 단계(`data-step`)도 그 순서 그대로다. 붙어 있는 `span` 둘은 한 칸 띄운다.
+- 목록은 `-`(번호 목록은 `1.`)이고 중첩은 들여쓴다. 링크는 `[글](url)`, 이미지는 `![alt](assets/...)`, `data:` 이미지는 `![alt](inline-image)`다. `pre`는 코드 블록(`language-x` 클래스가 있으면 언어 표시), 표는 Markdown 표, 인용은 `>`다. 굵게와 기울임은 `**`와 `*`, 인라인 코드는 백틱이다. 줄 맨 앞의 Markdown 기호는 `\`로 글자로 둔다.
+- 빠지는 것: `script`, `style`, `svg`, `canvas`, `video`, `footer`, `hidden`과 `aria-hidden="true"`와 `display:none` 요소.
+- 발표자 노트(`aside[data-notes]`)는 옵션일 때만 슬라이드 끝에 `> Notes:` 인용으로 넣는다(여러 줄이면 줄마다 `> `).
+- 파서는 관대하다. 닫히지 않은 `li`와 `p`, 알 수 없는 태그에도 던지지 않는다.

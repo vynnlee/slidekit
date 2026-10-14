@@ -143,3 +143,13 @@ test("doctor <덱>: 덱 점검 요약과 종료 코드, 없는 덱은 목록과 
   expect(no.code).toBe(1);
   expect(no.err).toContain("있는 덱");
 });
+
+test("outline: 덱을 Markdown으로 출력하고 노트는 --notes일 때만, 없는 덱과 인자 없음은 안내", () => {
+  const plain = run("outline", "slidekit-guide");
+  expect(plain.code).toBe(0);
+  expect(plain.out.startsWith("# ")).toBe(true);
+  expect(plain.out).not.toContain("Notes:");
+  expect(run("outline", "slidekit-guide", "--notes").out).toContain("> Notes:");
+  expect(run("outline", "no-such-deck-xyz").err).toContain("없는 덱: decks/no-such-deck-xyz");
+  expect(run("outline").err).toContain("사용법: slidekit outline");
+});

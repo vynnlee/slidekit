@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { ArrowDownUp, Copy, LayoutGrid, List, MonitorPlay, MoreHorizontal, Pencil, Pin, PinOff, Plus, Presentation, Search, TextCursorInput, Trash2 } from "lucide-react";
+import { ArrowDownUp, Copy, LayoutGrid, List, MonitorPlay, MoreHorizontal, Pencil, Pin, PinOff, Plus, Settings2, Presentation, Search, TextCursorInput, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardGroup, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -11,6 +11,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { CommandMenu, CommandMenuDialog, CommandMenuItem, useIsMac, CommandMenuEmpty, CommandMenuFooter, CommandMenuInput, CommandMenuList, type CommandMenuItemData } from "@/components/ui/command-menu";
 import { Shell } from "./Shell";
 import { TrashList } from "./TrashList";
+import { DeckSettingsDialog } from "./DeckSettings";
 import { StatusPage } from "./StatusPage";
 import { toast } from "./Toaster";
 import { readRecent } from "@/lib/recent";
@@ -189,6 +190,7 @@ export function DeckList() {
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [name, setName] = useState("");
+  const [settingsFor, setSettingsFor] = useState<DeckEntry | null>(null);
   const [template, setTemplate] = useState("talk");
   const [templates, setTemplates] = useState([{ id: "talk", label: "Talk" }]);
   const [nameTouched, setNameTouched] = useState(false); // 폴더를 직접 고치면 제목에서 자동 제안을 멈춘다
@@ -264,7 +266,8 @@ export function DeckList() {
     const j = await run(() => api(`/api/decks/${encodeURIComponent(d.folder)}/duplicate`, "POST"));
     if (j) toast(`Duplicated ${d.title}`);
   };
-  const startRename = (d: DeckEntry) => { setRenameTitle(d.title); setRenameFolder(d.folder); setFolderOpen(false); setRenameErr(""); setRenaming(d); };
+  const [published, setPublished] = useState<string | null>(null); // 이름을 바꿀 덱이 게시되어 있으면 그 주소
+  const startRename = (d: DeckEntry) => { setPublished(null); fetch(`/api/decks/${encodeURIComponent(d.folder)}/published`).then((r) => r.json()).then((j) => j?.published && typeof j.url === "string" && setPublished(j.url)).catch(() => {}); setRenameTitle(d.title); setRenameFolder(d.folder); setFolderOpen(false); setRenameErr(""); setRenaming(d); };
   const renameFolderErr = renaming ? folderError(renameFolder, renaming.folder) : "";
   const doRename = async () => {
     if (!renaming || busy || renameFolderErr || !renameTitle.trim()) return;
@@ -284,8 +287,8 @@ export function DeckList() {
   };
   // 카드와 행의 메뉴 항목은 한 곳(menu-model)에서 만들고, ... 버튼과 우클릭과 ContextMenu 키가 같은 목록을 쓴다.
   const menuFor = (d: DeckEntry) => deckMenu(
-    { open: () => open(d), present: () => present(d), rename: () => startRename(d), duplicate: () => { duplicate(d); }, trash: () => { trash(d); }, togglePin: () => togglePin(d), pinned: isPinned(d) },
-    { open: Pencil, present: MonitorPlay, rename: TextCursorInput, duplicate: Copy, trash: Trash2, pin: Pin, unpin: PinOff },
+    { open: () => open(d), present: () => present(d), rename: () => startRename(d), duplicate: () => { duplicate(d); }, trash: () => { trash(d); }, togglePin: () => togglePin(d), pinned: isPinned(d), settings: () => setSettingsFor(d) },
+    { open: Pencil, present: MonitorPlay, rename: TextCursorInput, duplicate: Copy, trash: Trash2, pin: Pin, unpin: PinOff, settings: Settings2 },
   );
   const menu = (d: DeckEntry, cls = "absolute right-2 top-2 z-30") => (
     <div className={cn(cls, "flex items-center gap-0.5")}>
@@ -427,6 +430,7 @@ export function DeckList() {
       </Shell>
 
       <ContextMenu menu={cm} />
+      <DeckSettingsDialog folder={settingsFor?.folder ?? null} title={settingsFor?.title} onClose={() => setSettingsFor(null)} onSaved={load} />
 
       <CommandMenuDialog open={palette} onOpenChange={setPalette} title="Search" description="Open a deck or run an action">
         <CommandMenu items={items} query={q} onQueryChange={setQ}>
@@ -457,6 +461,7 @@ export function DeckList() {
             ) : (
               <Button type="button" variant="ghost" size="compact" className="self-start text-muted-foreground" onClick={() => setFolderOpen(true)}>Edit folder name</Button>
             )}
+            {published && <p className="text-caption text-muted-foreground">This deck is published at {published}. Renaming does not change that address. To take the old link down, unpublish it first from Export &gt; Published.</p>}
             <p role="alert" className="min-h-4 text-caption text-destructive">{renameErr || renameFolderErr}</p>
             <Button type="submit" variant="primary" size="compact" disabled={!renameTitle.trim() || !!renameFolderErr || busy} className="self-end">Rename</Button>
           </form>

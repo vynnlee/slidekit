@@ -13,7 +13,7 @@ const setup = async () => {
   process.env.SLIDEKIT_DECKS = dir;
   const api = await import(`../decks-api.ts?x=${Date.now()}${Math.random()}`);
   const up = (folder: string, body: Uint8Array, q = "?name=photo.png", headers: Record<string, string> = {}) =>
-    api.uploadAsset(Object.assign(new Request(`http://127.0.0.1/api/decks/${folder}/assets${q}`, { method: "POST", headers: { "Content-Type": "image/png", "Content-Length": String(body.length), ...headers }, body }), { params: { folder } }));
+    api.uploadAsset(Object.assign(new Request(`http://127.0.0.1/api/decks/${folder}/assets${q}`, { method: "POST", headers: { "Content-Type": "image/png", "Content-Length": String(body.length), ...headers }, body: body as unknown as BodyInit }), { params: { folder } }));
   return { dir, up };
 };
 

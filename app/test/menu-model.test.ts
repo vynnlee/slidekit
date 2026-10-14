@@ -63,6 +63,11 @@ test("코멘트 메뉴: 핀은 Open in panel이 맨 위, 해결됨이면 Reopen,
   expect(commentMenu({ ...cacts, openInPanel: noop, unverified: true, trust: noop }).filter((x) => x.type !== "separator").length).toBeLessThanOrEqual(12);
 });
 
+test("덱 메뉴: settings를 주면 Duplicate 뒤에 Settings 항목이 생긴다", () => {
+  const l = labels(deckMenu({ ...acts, settings: noop }));
+  expect(l.indexOf("Settings")).toBe(l.indexOf("Duplicate") + 1);
+});
+
 test("덱 메뉴: togglePin을 주면 Pin to top 또는 Unpin from top 항목이 Rename 위에 생긴다", () => {
   expect(labels(deckMenu({ ...acts, togglePin: noop, pinned: false }))).toContain("Pin to top");
   const l = labels(deckMenu({ ...acts, togglePin: noop, pinned: true }));

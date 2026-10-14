@@ -72,8 +72,11 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   check('복제는 history 제외', !fs.existsSync(path.join(DECKS, 'zz-e2e-a-copy', 'history')));
   await page.reload();
   await actions('zz-e2e-a').first().click({ force: true });
+  await page.route('**/api/decks/zz-e2e-a/published', (r) => r.fulfill({ json: { published: true, url: 'https://example.pages.dev/zz-e2e-a', name: 'zz-e2e-a' } }));
   await item('Rename').click();
   const rd = page.getByRole('dialog');
+  check('게시된 덱은 이름 바꾸기에 주소 안내가 뜬다', await until(async () => (await rd.getByText(/published at https:\/\/example\.pages\.dev\/zz-e2e-a\. Renaming does not change that address/).count()) === 1));
+  await page.unroute('**/api/decks/zz-e2e-a/published');
   check('Rename은 제목 필드가 먼저', (await rd.getByLabel('Title').inputValue()) === 'zz-e2e-a');
   await rd.getByRole('button', { name: 'Edit folder name' }).click();
   await rd.getByLabel('Folder').fill('zz-e2e-a-copy');
@@ -209,7 +212,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.getByRole('menu').waitFor();
   const mb = await menuBox();
   check('메뉴가 포인터 오른쪽 아래에서 시작한다', mb && mb.x >= px - 1 && mb.x <= px + 12 && mb.y >= py - 1 && mb.y <= py + 12, [mb, px, py]);
-  check('항목 순서', JSON.stringify(await page.getByRole('menuitem').allInnerTexts().then((a) => a.map((t) => t.split('\n')[0].trim()))) === JSON.stringify(['Open', 'Present', 'Pin to top', 'Rename', 'Duplicate', 'Move to trash']), await page.getByRole('menuitem').allInnerTexts());
+  check('항목 순서', JSON.stringify(await page.getByRole('menuitem').allInnerTexts().then((a) => a.map((t) => t.split('\n')[0].trim()))) === JSON.stringify(['Open', 'Present', 'Pin to top', 'Rename', 'Duplicate', 'Settings', 'Move to trash']), await page.getByRole('menuitem').allInnerTexts());
   check('단축키 키캡(Open과 Present)', (await page.getByRole('menuitem', { name: 'Open' }).getAttribute('data-shortcut')) === '↵' && /↵$/.test((await page.getByRole('menuitem', { name: 'Present' }).getAttribute('data-shortcut')) || ''));
   const col = await page.getByRole('menuitem', { name: 'Move to trash' }).evaluate((e) => [...e.querySelectorAll('span')].map((x) => getComputedStyle(x).color));
   check('파괴적 항목은 빨강(--destructive)', col.length > 0 && col.every((c) => c === 'rgb(248, 113, 113)'), col);
@@ -233,6 +236,40 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await cardBtn('zz-e2e-k2').click({ button: 'right', position: { x: 40, y: 40 } });
   await page.getByRole('menuitem', { name: 'Unpin from top' }).click();
   check('Unpin으로 해제된다', await until(async () => (await page.getByRole('img', { name: 'Pinned' }).count()) === 0));
+  // 덱 설정: 메뉴의 Settings에서 바꾸는 즉시 파일의 deck-meta에 저장된다(비밀번호는 저장하지 않는다)
+  const metaOf = () => { const h = fs.readFileSync(path.join(DECKS, 'zz-e2e-k1', 'index.html'), 'utf8'); return JSON.parse(h.match(/<script[^>]*id="deck-meta"[^>]*>([\s\S]*?)<\/script>/)[1]); };
+  await cardBtn('zz-e2e-k1').click({ button: 'right', position: { x: 40, y: 40 } });
+  await page.getByRole('menuitem', { name: 'Settings' }).click();
+  const sd = page.getByRole('dialog', { name: 'Deck settings' });
+  await sd.getByLabel('Author').waitFor();
+  await sd.getByLabel('Author').fill('Settings E2E');
+  check('Author가 파일에 저장된다', await until(async () => metaOf().author === 'Settings E2E'), metaOf());
+  await sd.getByLabel('Date').fill('2026-10-14');
+  check('Date가 저장된다', await until(async () => metaOf().date === '2026-10-14'), metaOf());
+  await sd.getByLabel('Title (browser tab and deck list)').fill('Settings Title');
+  check('Title은 meta와 <title>에 저장되고 표지 h1은 그대로', await until(async () => { const h = fs.readFileSync(path.join(DECKS, 'zz-e2e-k1', 'index.html'), 'utf8'); return metaOf().title === 'Settings Title' && h.includes('<title>Settings Title</title>') && !h.includes('<h1>Settings Title</h1>'); }));
+  await sd.getByRole('switch', { name: 'Page numbers' }).click();
+  check('Page numbers가 저장된다', await until(async () => metaOf().pageNumber === true), metaOf());
+  await sd.getByRole('combobox', { name: 'Visibility' }).click();
+  await page.getByRole('option', { name: 'Password' }).click();
+  check('Visibility를 Password로 바꾸면 저장되고 안내가 보인다', await until(async () => metaOf().visibility === 'password' && (await sd.getByText(/never saved in the deck/).count()) === 1), metaOf());
+  check('비밀번호 키는 파일에 없다', !Object.keys(metaOf()).some((k) => /pass|secret|token/i.test(k)) || Object.keys(metaOf()).every((k) => !/pass|secret|token/i.test(k)));
+  // 달력에 없는 날짜는 네이티브 날짜 입력이 받지 않으므로 검증은 단위 테스트(deck-meta.test.ts)가 맡는다
+  await sd.getByLabel('Date').fill('2026-10-15');
+  check('고친 날짜는 저장된다', await until(async () => metaOf().date === '2026-10-15'));
+  const stale = await page.evaluate(() => fetch('/api/decks/zz-e2e-k1/meta', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ patch: { author: 'x' }, base: 1 }) }).then((r) => r.status));
+  check('오래된 base의 PATCH는 409', stale === 409, stale);
+  await sd.getByLabel('Title (browser tab and deck list)').fill('zz-e2e-k1'); // 뒤 검사가 이 이름으로 카드를 찾는다
+  await page.keyboard.press('Escape'); // 마지막 입력이 디바운스 중이어도 닫을 때 보낸다
+  check('닫을 때 보류 입력도 저장되고 목록이 따라온다', await until(async () => metaOf().title === 'zz-e2e-k1' && (await cardBtn('zz-e2e-k1').count()) === 1));
+  // 이미지 업로드 API: 바이너리 본문이 guard를 지나 assets/에 저장되고 정적으로 서빙된다
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  const upR = await ctx.request.post(BASE + '/api/decks/zz-e2e-k1/assets', { data: png, headers: { 'Content-Type': 'image/png', 'x-filename': 'e2e.png' } });
+  const upJ = await upR.json().catch(() => ({}));
+  check('이미지 업로드는 201과 assets 경로', upR.status() === 201 && /^assets\/e2e/.test(upJ.path || ''), [upR.status(), upJ]);
+  const got = upJ.path ? await ctx.request.get(BASE + '/decks/zz-e2e-k1/' + upJ.path) : null;
+  check('올린 이미지는 정적으로 열린다', !!got && got.status() === 200 && (got.headers()['content-type'] || '').startsWith('image/'), got && got.status());
+  check('JSON이 아닌 다른 변경 경로는 여전히 거절', (await ctx.request.post(BASE + '/api/decks/zz-e2e-k1/rename', { data: png, headers: { 'Content-Type': 'image/png' } })).status() === 415);
   // 닫는 조건: 휠(줌 포함), 줌 키. 드래그 중(왼쪽 버튼을 누른 채)에는 열리지 않는다
   await cardBtn('zz-e2e-k1').click({ button: 'right', position: { x: 40, y: 40 } });
   await page.getByRole('menu').waitFor();

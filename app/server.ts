@@ -8,6 +8,7 @@ import { routes as exportRoutes } from "./export-api";
 import { guardHost, guardRoutes } from "./guard";
 import { alreadyUp, openApp } from "./launch";
 import { createDeck, routes as deckRoutes } from "./decks-api";
+import { routes as searchRoutes } from "./search-api";
 
 // 하위 명령: slidekit new|lint|pdf|doctor|bundle|deploy <덱>. 해당 스크립트는 argv[2]를 덱 이름으로 읽는다.
 const sub = process.argv[2];
@@ -82,6 +83,7 @@ Bun.serve({
     "/dev/controls": index,
     "/api/decks": { GET: async () => Response.json(await listDecks()), POST: createDeck },
     ...deckRoutes,
+    ...searchRoutes,
     ...commentRoutes,
     ...editorRoutes,
     ...exportRoutes,

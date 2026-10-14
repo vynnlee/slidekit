@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
-import { ArrowDownUp, Copy, LayoutGrid, List, MonitorPlay, MoreHorizontal, Pencil, Plus, Search, TextCursorInput, Trash2 } from "lucide-react";
+import { ArrowDownUp, Copy, LayoutGrid, List, MonitorPlay, MoreHorizontal, Pencil, Plus, Presentation, Search, TextCursorInput, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardGroup, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -105,6 +105,14 @@ function DeckMenu({ deck, open, onOpenChange, onRename, onTrash, onDuplicate, on
   );
 }
 
+type SearchEntry = { folder: string; id: string; title: string; slides: { n: number; title: string; text: string; notes: string }[] };
+// 일치한 곳 앞뒤 글자를 잘라 보여 준다.
+const snippet = (text: string, words: string[]) => {
+  const low = text.toLowerCase();
+  const at = words.map((w) => low.indexOf(w)).filter((i) => i >= 0).sort((a, b) => a - b)[0];
+  if (at === undefined) return "";
+  return `${at > 24 ? "..." : ""}${text.slice(Math.max(0, at - 24), at + 56).trim()}${text.length > at + 56 ? "..." : ""}`;
+};
 const pref = <T extends string>(k: string, ok: readonly T[], d: T) => { const v = localStorage.getItem(k) as T; return ok.includes(v) ? v : d; };
 
 export function DeckList() {
@@ -112,6 +120,13 @@ export function DeckList() {
   const [view, setView] = useState(() => pref("slidekit:list-view", ["grid", "list"], "grid"));
   const [sort, setSort] = useState<Sort>(() => pref("slidekit:list-sort", ["date", "title"], "date"));
   const [palette, setPalette] = useState(false);
+  // 전체 검색: 팔레트를 열 때 슬라이드 제목, 본문, 노트 색인을 받아 둔다(서버는 파일이 안 바뀌면 캐시를 쓴다).
+  const [q, setQ] = useState("");
+  const [index, setIndex] = useState<SearchEntry[] | null>(null);
+  useEffect(() => {
+    if (!palette) { setQ(""); return; }
+    fetch("/api/search-index").then((r) => (r.ok ? r.json() : null)).then(setIndex).catch(() => {});
+  }, [palette]);
   const [trashView, setTrashView] = useState(false);
   // 카드 열 수는 폭에서 정한다(카드 최소 폭 220px).
   const body = useRef<HTMLDivElement>(null);
@@ -231,6 +246,28 @@ export function DeckList() {
   const mac = useIsMac();
   const startCreate = () => { setPalette(false); setErr(""); setNewTitle(""); setName(""); setNameTouched(false); setCreating(true); };
 
+  // 두 글자 이상 입력하면 모든 덱의 슬라이드 제목, 본문, 노트에서 찾는다(최대 30건). 결과를 고르면 그 슬라이드의 편집기로 간다.
+  const slideHits = useMemo((): CommandMenuItemData[] => {
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    if (q.trim().length < 2 || !index) return [];
+    const out: CommandMenuItemData[] = [];
+    for (const d of index) {
+      for (const sl of d.slides) {
+        const hay = `${sl.title} ${sl.text} ${sl.notes}`.toLowerCase();
+        if (!words.every((w) => hay.includes(w))) continue;
+        const inNotes = snippet(sl.notes, words);
+        const hit = snippet(sl.text, words) || (inNotes ? `Notes: ${inNotes}` : "");
+        out.push({
+          value: `slide:${d.folder}:${sl.n}`, label: sl.title || `Slide ${sl.n}`, icon: Presentation, group: "Slides",
+          description: `${d.title}, slide ${sl.n}${hit ? `: ${hit}` : ""}`, keywords: [sl.text, sl.notes],
+          onSelect: () => go(`/edit/${encodeURIComponent(d.id)}?slide=${sl.n}`),
+        });
+        if (out.length >= 30) return out;
+      }
+    }
+    return out;
+  }, [q, index]);
+
   const items: CommandMenuItemData[] = useMemo(() => [
     { value: "new", label: "New deck", icon: Plus, group: "Actions", onSelect: startCreate },
     { value: "view", label: view === "grid" ? "View as list" : "View as grid", icon: view === "grid" ? List : LayoutGrid, group: "Actions", onSelect: () => setView(view === "grid" ? "list" : "grid") },
@@ -239,7 +276,8 @@ export function DeckList() {
       { value: `edit:${d.id}`, label: d.title, description: "Edit", icon: Pencil, group: "Decks", keywords: [d.folder, d.author ?? ""], onSelect: () => open(d) },
       { value: `present:${d.id}`, label: d.title, description: "Presenter view", icon: MonitorPlay, group: "Decks", keywords: [d.folder, "present"], onSelect: () => go(`/present/${encodeURIComponent(d.id)}`) },
     ]),
-  ], [sorted, view, sort]);
+    ...slideHits,
+  ], [sorted, view, sort, slideHits]);
 
   return (
     <>
@@ -310,8 +348,8 @@ export function DeckList() {
       </Shell>
 
       <CommandMenuDialog open={palette} onOpenChange={setPalette} title="Search" description="Open a deck or run an action">
-        <CommandMenu items={items}>
-          <CommandMenuInput placeholder="Deck name or action" />
+        <CommandMenu items={items} query={q} onQueryChange={setQ}>
+          <CommandMenuInput placeholder="Decks, slides, or actions" />
           <CommandMenuList />
           <CommandMenuEmpty>No results</CommandMenuEmpty>
           <CommandMenuFooter />

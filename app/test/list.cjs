@@ -139,6 +139,17 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.getByRole('dialog').getByRole('button', { name: 'Create' }).click();
   check('만든 뒤 바로 편집기로', await until(async () => new URL(page.url()).pathname === '/edit/zz-e2e-t'), page.url());
   check('제목이 덱에 들어간다', fs.readFileSync(path.join(DECKS, 'zz-e2e-t', 'index.html'), 'utf8').includes('<title>zz e2e T</title>') && fs.readFileSync(path.join(DECKS, 'zz-e2e-t', 'index.html'), 'utf8').includes('"title":"zz e2e T"'));
+  // 전체 검색: 슬라이드 본문에서 찾아 그 슬라이드의 편집기로 간다
+  check('색인 API', Array.isArray(await (await ctx.request.get(BASE + '/api/search-index')).json()));
+  await post('/api/decks', { name: 'zz-e2e-s', title: 'Zebra Quartz' });
+  await page.goto(BASE + '/');
+  await page.getByRole('button', { name: /^Search/ }).click();
+  await page.getByRole('dialog').getByRole('combobox').fill('zebra quartz');
+  check('슬라이드 그룹이 나온다', await until(async () => (await page.getByRole('dialog').getByText('Slides', { exact: true }).count()) >= 1));
+  const hit = page.getByRole('dialog').getByRole('option').filter({ hasText: 'slide 1' }).first();
+  check('결과에 덱 제목과 슬라이드 번호', (await hit.count()) === 1 && (await hit.innerText()).includes('Zebra Quartz'));
+  await hit.click();
+  check('결과를 고르면 그 슬라이드로', await until(async () => { const u = new URL(page.url()); return u.pathname === '/edit/zz-e2e-s' && u.search === '?slide=1'; }), page.url());
   // 키보드 이동, 빠른 발표 버튼, 메타 위계, Public 칩 숨김, 없는 덱 화면
   await post('/api/decks', { name: 'zz-e2e-k1', title: 'zz-e2e-k1' });
   await post('/api/decks', { name: 'zz-e2e-k2', title: 'zz-e2e-k2' });

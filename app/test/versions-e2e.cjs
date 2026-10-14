@@ -45,9 +45,10 @@ const J = { 'Content-Type': 'application/json' };
     const title = (original.match(/<h[12][^>]*>([^<]+)</) ?? [])[1];
 
     // 1) 대화상자가 열리고 처음 상태(사본 만들 때의 스냅샷이 있을 수 있다)를 보여 준다
-    const baseline = (await versions()).length;
     await openHistory();
-    check('Version history가 열리고 목록 또는 없음 안내를 보인다', await page.getByTestId(baseline ? 'version-list' : 'no-versions').isVisible());
+    // 목록은 대화상자가 열린 뒤 서버에서 받아 그려지니 즉시 isVisible()로 보면 경쟁이 된다. 둘 중 하나가 보일 때까지 조건으로 기다린다.
+    const shown = page.locator('[data-testid=version-list], [data-testid=no-versions]').first();
+    check('Version history가 열리고 목록 또는 없음 안내를 보인다', await shown.waitFor({ state: 'visible', timeout: 8000 }).then(() => true, () => false));
     await page.keyboard.press('Escape');
 
     // 2) Claude가 파일을 고치면 직전 내용이 external 버전으로 남는다
@@ -90,7 +91,7 @@ const J = { 'Content-Type': 'application/json' };
     await page.getByText(/changed after Claude's edit/).first().waitFor({ timeout: 5000 }).then(() => check('덱이 더 바뀌었으면 거절 안내', true), () => check('덱이 더 바뀌었으면 거절 안내', false));
     check('거절하면 파일을 건드리지 않는다', fs.readFileSync(t.file, 'utf8').includes('Claude 수정 2 그리고 사용자 수정'));
     await page.getByRole('button', { name: 'Version history' }).last().click();
-    check('안내의 Version history 버튼이 대화상자를 연다', await page.getByRole('dialog').getByText('Version history').first().isVisible());
+    check('안내의 Version history 버튼이 대화상자를 연다', await page.getByRole('dialog').getByText('Version history').first().waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false));
     check('페이지 오류 없음', errors.length === 0, errors);
   } catch (e) {
     fail++; console.log('FAIL 예외 ' + e);

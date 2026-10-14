@@ -8,7 +8,9 @@ import { SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuItem, SidebarM
 import { Shell } from "./Shell";
 import { go } from "./App";
 import { deckUrl, type DeckEntry, type Info, type Pos } from "@/lib/deck";
-import { presentationOpen, startPresentation, warmScreens } from "@/lib/present";
+import { chooseScreen, chosenScreen, listScreens, presentationOpen, startPresentation, warmScreens } from "@/lib/present";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import { toast } from "./Toaster";
 import { markdown } from "@/lib/markdown";
 import { cn } from "@/lib/utils";
 import { Field } from "@/components/ui/field";
@@ -47,7 +49,11 @@ export function Presenter({ id }: { id: string }) {
   const [target, setTarget] = useState(() => { const n = Number(localStorage.getItem(TARGET_KEY)); return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0; });
   const [stalled, setStalled] = useState(false);
   // 리허설: 타이머가 도는 동안 슬라이드별 체류 시간을 메모리에만 센다(새로고침하면 사라진다).
+  // 시간은 밀리초로 쌓고 틱마다 Date.now() 차이를 더한다(백그라운드 탭에서 틱이 늦어도 정확하다).
   const dwell = useRef<Record<number, number>>({});
+  const accMs = useRef(0), lastTick = useRef(Date.now()), resetArmed = useRef(0);
+  const [screens, setScreens] = useState<string[] | null>(listScreens);
+  const [screen, setScreen] = useState<string | null>(chosenScreen);
   const [summary, setSummary] = useState(false);
   const [auto, setAuto] = useState(() => localStorage.getItem(AUTO_KEY) === "1");
   const [full, setFull] = useState(() => !!document.fullscreenElement);
@@ -73,7 +79,7 @@ export function Presenter({ id }: { id: string }) {
       .then((l: DeckEntry[]) => { const d = l.find((x) => x.id === id) ?? null; setDeck(d); setLoad(d ? "loading" : "missing"); })
       .catch(() => setLoad("error"));
   }, [id]);
-  useEffect(() => { warmScreens(); }, []);
+  useEffect(() => { warmScreens().then(() => setScreens(listScreens())); }, []);
   useEffect(() => { localStorage.setItem(VIEW_KEY, JSON.stringify(view)); }, [view]);
   useEffect(() => { localStorage.setItem(NOTES_KEY, String(notesSize)); }, [notesSize]);
   useEffect(() => { localStorage.setItem(TARGET_KEY, String(target)); }, [target]);
@@ -97,8 +103,22 @@ export function Presenter({ id }: { id: string }) {
   }, []);
   useEffect(() => { notesRef.current?.scrollTo({ top: 0 }); }, [pos.slide]);
   useEffect(() => {
-    const t = setInterval(() => { setNow(new Date()); setWin(presentationOpen()); if (running) { setElapsed((e) => e + 1); const n = posRef.current.slide; dwell.current[n] = (dwell.current[n] ?? 0) + 1; } }, 1000);
-    return () => clearInterval(t);
+    lastTick.current = Date.now();
+    const tick = () => {
+      const t = Date.now(), dt = t - lastTick.current;
+      lastTick.current = t;
+      setNow(new Date(t)); setWin(presentationOpen());
+      if (running) {
+        accMs.current += dt;
+        setElapsed(Math.floor(accMs.current / 1000));
+        const n = posRef.current.slide;
+        dwell.current[n] = (dwell.current[n] ?? 0) + dt;
+      }
+    };
+    const id = setInterval(tick, 1000);
+    const vis = () => { if (document.visibilityState === "visible") tick(); };
+    document.addEventListener("visibilitychange", vis);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", vis); };
   }, [running]);
 
   const post = (f: HTMLIFrameElement | null, msg: object) =>
@@ -180,7 +200,11 @@ export function Presenter({ id }: { id: string }) {
       else if (e.key === "+" || e.key === "=") setNotesSize((n) => Math.min(NOTES_MAX, n + 2));
       else if (e.key === "-" || e.key === "_") setNotesSize((n) => Math.max(NOTES_MIN, n - 2));
       else if (e.key === "t" || e.key === "T") setRunning((r) => !r);
-      else if (e.key === "r" || e.key === "R") { setRunning(false); setElapsed(0); dwell.current = {}; }
+      else if (e.key === "r" || e.key === "R") {
+        // 실수로 눌러 기록이 날아가지 않게, 시간이 쌓여 있으면 2.5초 안에 한 번 더 눌러야 리셋한다.
+        if (accMs.current > 0 && Date.now() > resetArmed.current) { resetArmed.current = Date.now() + 2500; toast("Press R again to reset the timer", { ms: 2500 }); }
+        else { resetArmed.current = 0; setRunning(false); setElapsed(0); accMs.current = 0; dwell.current = {}; }
+      }
       else if (e.key === "PageDown" || e.key === "PageUp") {
         e.preventDefault();
         const el = notesRef.current;
@@ -191,7 +215,16 @@ export function Presenter({ id }: { id: string }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const present = async () => { setErr(null); if (deck) setErr(await startPresentation(deck.folder, pos.slide, setErr)); };
+  const present = async () => {
+    setErr(null);
+    if (deck) setErr(await startPresentation(deck.folder, pos.slide, setErr));
+    setScreens(listScreens());
+  };
+  // 발표 전 가벼운 점검: 슬라이드 수, 노트, 글꼴, 표시할 화면. 발표 버튼의 툴팁으로만 보인다.
+  const withNotes = info?.slides.filter((x) => x.notes).length ?? 0;
+  let fonts = "";
+  try { fonts = curRef.current?.contentDocument?.fonts?.status === "loaded" ? "fonts loaded" : "fonts loading"; } catch {}
+  const readyNote = `${total} slides, ${withNotes} with notes${fonts ? `, ${fonts}` : ""}. ${screens === null ? "Display access is requested when you present." : screens.length ? `Opens on ${screens.includes(screen ?? "") ? screen : screens[0]}.` : "No other display found."}`;
 
   if (!deck) {
     if (load === "loading") return null;
@@ -226,7 +259,15 @@ export function Presenter({ id }: { id: string }) {
           <span className="mr-auto truncate text-subtitle font-medium">{deck.title}</span>
           {err && <span role="status" className="truncate text-caption text-muted-foreground">{err}</span>}
           {win !== null && <span className="flex items-center gap-1.5 text-caption text-muted-foreground"><span className={`size-1.5 rounded-full ${win ? "bg-green-500" : "bg-red-500"}`} />{win ? "Presentation window open" : "Presentation window closed"}</span>}
-          <Button variant={win ? "secondary" : "primary"} size="compact" leadingIcon={MonitorPlay} onClick={present}>{win ? "Focus presentation" : "Present"}</Button>
+          {screens && screens.length >= 2 && (
+            <Select value={screens.includes(screen ?? "") ? screen! : screens[0]} onValueChange={(v) => { chooseScreen(v); setScreen(v); }} size="compact">
+              <SelectTrigger aria-label="Presentation display" className="w-36 min-w-0" />
+              <SelectContent>{screens.map((l, i) => <SelectItem key={l} index={i} value={l}>{l}</SelectItem>)}</SelectContent>
+            </Select>
+          )}
+          <Tooltip content={readyNote} side="bottom">
+            <Button variant={win ? "secondary" : "primary"} size="compact" leadingIcon={MonitorPlay} onClick={present}>{win ? "Focus presentation" : "Present"}</Button>
+          </Tooltip>
         </>
       }
       left={
@@ -301,7 +342,7 @@ export function Presenter({ id }: { id: string }) {
                   <span role="timer" aria-label="Elapsed time" className="text-title font-medium">{hms(elapsed)}</span>
                   {target > 0 && <span className={cn("text-caption", remain < 0 ? "text-destructive" : "text-muted-foreground")}>{remain < 0 ? `+${mmss(-remain)} over` : `${mmss(remain)} left`}</span>}
                   <Tooltip content="Start or pause (T)" side="top"><Button variant="ghost" size="icon-compact" aria-label="Start or pause timer" onClick={() => setRunning((r) => !r)}>{running ? <Pause /> : <Play />}</Button></Tooltip>
-                  <Tooltip content="Reset (R)" side="top"><Button variant="ghost" size="icon-compact" aria-label="Reset timer" onClick={() => { setRunning(false); setElapsed(0); dwell.current = {}; }}><RotateCcw /></Button></Tooltip>
+                  <Tooltip content="Reset (R)" side="top"><Button variant="ghost" size="icon-compact" aria-label="Reset timer" onClick={() => { setRunning(false); setElapsed(0); accMs.current = 0; dwell.current = {}; }}><RotateCcw /></Button></Tooltip>
                   {elapsed > 0 && <Button variant="ghost" size="compact" onClick={() => { setRunning(false); setSummary(true); }}>Summary</Button>}
                   <Tooltip content="Target time in minutes" side="top">
                     <Field aria-label="Target minutes" inputMode="numeric" placeholder="Goal" className="w-14 px-1.5 text-right" value={target ? String(target) : ""}
@@ -351,12 +392,12 @@ export function Presenter({ id }: { id: string }) {
           </dl>
           <p className="pt-3 text-caption text-muted-foreground">Longest</p>
           <ol className="flex flex-col gap-1 text-body tabular-nums">
-            {Object.entries(dwell.current).map(([n, sec]) => ({ n: Number(n), sec })).sort((a, b) => b.sec - a.sec).slice(0, 3).map(({ n, sec }) => (
+            {Object.entries(dwell.current).map(([n, ms]) => ({ n: Number(n), sec: Math.round(ms / 1000) })).sort((a, b) => b.sec - a.sec).slice(0, 3).map(({ n, sec }) => (
               <li key={n} className="flex justify-between gap-4"><span className="truncate">{n}. {info?.slides[n - 1]?.title ?? info?.slides[n - 1]?.kind ?? `Slide ${n}`}</span><span>{mmss(sec)}</span></li>
             ))}
           </ol>
           <div className="flex justify-end gap-2 pt-3">
-            <Button variant="ghost" size="compact" onClick={() => { dwell.current = {}; setElapsed(0); setSummary(false); }}>Clear</Button>
+            <Button variant="ghost" size="compact" onClick={() => { dwell.current = {}; accMs.current = 0; setElapsed(0); setSummary(false); }}>Clear</Button>
             <Button variant="primary" size="compact" onClick={() => setSummary(false)}>Close</Button>
           </div>
         </DialogContent>

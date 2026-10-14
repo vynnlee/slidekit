@@ -53,7 +53,9 @@ const MOCKS = {
       await sleep(1500);
       check('정지하면 시간이 멈춘다', (await timer()) === t1);
       await page.keyboard.press('r');
-      check('R로 리셋', (await timer()) === '00:00:00', await timer());
+      check('R 한 번은 리셋하지 않고 안내한다', (await timer()) === t1 && (await page.getByText('Press R again to reset the timer').count()) === 1, await timer());
+      await page.keyboard.press('r');
+      check('R 두 번째로 리셋', (await timer()) === '00:00:00', await timer());
       await page.keyboard.press('+');
       const size = () => page.locator('[aria-label="Speaker notes"]').evaluate((e) => parseFloat(getComputedStyle(e).fontSize));
       const s1 = await size(); await page.keyboard.press('-'); await page.keyboard.press('-');
@@ -174,6 +176,51 @@ const MOCKS = {
     check('노트 A+ 버튼', (await page.locator('[aria-label="Speaker notes"]').evaluate((e) => parseFloat(getComputedStyle(e).fontSize))) === size0 + 2);
     for (let i = 0; i < TOTAL - 1; i++) await page.keyboard.press('ArrowRight');
     check('마지막 장에서 End of deck 표시', await until(async () => (await page.getByText('End of deck').count()) === 1));
+    await ctx.close();
+  }
+  // 외장 화면(API 모킹): 권한 안내, 선택한 화면에 열기, 선택 기억, 타이머 시간 보정
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+    await ctx.addInitScript(`
+      window.__opens = [];
+      const open = window.open.bind(window);
+      window.open = (u, n, f) => { window.__opens.push(f); return open(u, n, 'popup,width=640,height=400'); };
+      const cur = { label: 'Laptop', availLeft: 0, availTop: 0, availWidth: 1280, availHeight: 800 };
+      const a = { label: 'Projector', availLeft: 1280, availTop: 0, availWidth: 1920, availHeight: 1080 };
+      const b = { label: 'TV', availLeft: 3200, availTop: 0, availWidth: 3840, availHeight: 2160 };
+      navigator.permissions.query = async () => ({ state: 'prompt' });
+      window.getScreenDetails = async () => { await new Promise((r) => setTimeout(r, 400)); return { screens: [cur, a, b], currentScreen: cur }; }; // 권한 창이 떠 있는 시간을 흉내 낸다
+    `);
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/present/${ID}`);
+    await until(async () => (await page.getByRole('button', { name: 'Present', exact: true }).count()) === 1);
+    check('권한 전에는 표시할 화면을 아직 모른다고 안내', (await page.getByRole('button', { name: 'Present', exact: true }).count()) === 1 && (await page.getByRole('combobox', { name: 'Presentation display' }).count()) === 0);
+    await page.evaluate(() => { window.__notes = []; setInterval(() => { for (const e of document.querySelectorAll('[role=status]')) if (e.textContent && !window.__notes.includes(e.textContent)) window.__notes.push(e.textContent); }, 30); });
+    await page.getByRole('button', { name: 'Present', exact: true }).click();
+    check('권한을 묻기 전에 한 줄 안내가 보인다', await until(async () => (await page.evaluate(() => window.__notes)).some((t) => /browser will ask to manage windows/.test(t))), await page.evaluate(() => window.__notes));
+    check('첫 외장 화면(Projector)에 연다', await until(async () => (await page.evaluate(() => window.__opens)).some((f) => /left=1280,top=0,width=1920,height=1080/.test(f))), await page.evaluate(() => window.__opens));
+    check('Presenting on Projector 표시', await until(async () => (await page.evaluate(() => window.__notes)).includes('Presenting on Projector.')), await page.evaluate(() => window.__notes)); // 이어서 전체화면 안내가 덮어쓸 수 있어 기록으로 본다
+    check('화면이 둘 이상이면 선택기가 나온다', await until(async () => (await page.getByRole('combobox', { name: 'Presentation display' }).count()) === 1));
+    await page.getByRole('combobox', { name: 'Presentation display' }).click();
+    await page.getByRole('option', { name: 'TV' }).click();
+    check('선택한 화면을 기억한다', (await page.evaluate(() => localStorage.getItem('slidekit:screen'))) === 'TV');
+    await page.getByRole('button', { name: /Focus presentation|Present$/ }).click();
+    check('다음 발표는 기억한 화면(TV)에 연다', await until(async () => (await page.evaluate(() => window.__opens)).some((f) => /left=3200,top=0,width=3840,height=2160/.test(f))), await page.evaluate(() => window.__opens));
+    await ctx.close();
+  }
+  // 타이머는 틱이 늦어도 시계 차이로 센다(백그라운드 탭 보정)
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+    const page = await ctx.newPage();
+    await page.clock.install();
+    await page.goto(`${BASE}/present/${ID}`);
+    await until(async () => (await page.getByText(/^\d+ \/ \d+$/).count()) >= 1);
+    await page.mouse.click(640, 780);
+    await page.keyboard.press('t');
+    await page.clock.fastForward(65000); // 한 번의 틱으로 65초가 지난 상황
+    check('늦은 틱에도 경과 시간이 정확하다', await until(async () => /^00:01:0\d$/.test(await page.locator('[role=timer]').first().innerText())), await page.locator('[role=timer]').first().innerText());
     await ctx.close();
   }
   // 깨진 localStorage

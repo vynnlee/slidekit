@@ -1,9 +1,25 @@
 import { deckUrl } from "./deck";
 
-type Screen = { availLeft: number; availTop: number; availWidth: number; availHeight: number; isInternal?: boolean };
+type Screen = { label?: string; availLeft: number; availTop: number; availWidth: number; availHeight: number; isInternal?: boolean };
 type Details = { screens: Screen[]; currentScreen: Screen };
 
 let cached: Details | null = null;
+
+// 외장 화면 선택 기억: 화면 라벨(없으면 순번)을 localStorage에 둔다.
+const SCREEN_KEY = "slidekit:screen";
+const externals = () => (cached ? cached.screens.filter((s) => s !== cached!.currentScreen) : []);
+const labelOf = (s: Screen, i: number) => s.label || `Display ${i + 1}`;
+/** 발표자 화면이 있는 곳 말고 쓸 수 있는 화면들. 권한 전이면 null. */
+export const listScreens = (): string[] | null => (cached ? externals().map(labelOf) : null);
+export const chosenScreen = () => localStorage.getItem(SCREEN_KEY);
+export const chooseScreen = (label: string) => { try { localStorage.setItem(SCREEN_KEY, label); } catch {} };
+const pickExternal = (): { screen: Screen; label: string } | null => {
+  const ex = externals();
+  if (!ex.length) return null;
+  const saved = chosenScreen();
+  const i = Math.max(0, ex.findIndex((s, k) => labelOf(s, k) === saved));
+  return { screen: ex[i], label: labelOf(ex[i], i) };
+};
 let win: Window | null = null;
 
 // 이 페이지 세션에서 연 발표 창이 아직 열려 있는지. 연 적이 없으면 null.
@@ -26,16 +42,26 @@ export async function startPresentation(folder: string, fromSlide?: number, onNo
   const url = new URL(deckUrl(folder, "?sync=1") + hash, location.href).href;
   let unavailable = false;
   if (!cached) {
-    try { cached = await (window as any).getScreenDetails(); } catch { unavailable = true; }
+    if (typeof (window as any).getScreenDetails !== "function") unavailable = true;
+    else {
+      // 권한 창이 뜨기 전에 한 줄로 이유를 알린다. 이미 거부했으면 묻지 않고 창으로 연다.
+      const state = await navigator.permissions.query({ name: "window-management" as PermissionName }).then((p) => p.state, () => "prompt");
+      if (state === "denied") unavailable = true;
+      else {
+        if (state === "prompt") onNote("Your browser will ask to manage windows. Allow it to open slides on another display.");
+        try { cached = await (window as any).getScreenDetails(); } catch { unavailable = true; }
+      }
+    }
   }
-  const ext = cached?.screens.find((s) => s !== cached!.currentScreen);
+  const pick = pickExternal();
+  const ext = pick?.screen;
   const features = ext
     ? `left=${ext.availLeft},top=${ext.availTop},width=${ext.availWidth},height=${ext.availHeight}`
     : "popup,width=1280,height=720";
   const w = window.open(url, "slidekit-present", features);
   if (!w) return "Popup blocked";
   win = w;
-  const note = ext ? null : unavailable ? "Display access unavailable. Opened in a window." : "No external display found. Opened in a window.";
+  const note = pick ? `Presenting on ${pick.label}.` : unavailable ? "Display access unavailable. Opened in a window. Press F there for full screen." : "No external display found. Opened in a window. Press F there for full screen.";
   if (ext) {
     // 전체화면은 사용자 입력이 필요해 실패할 수 있다. 실패하면 발표 창에서 F를 누른다.
     const t = setInterval(async () => {

@@ -359,6 +359,20 @@ const settled = async (...ps) => { await Promise.all(ps.map(settledOne)); if (ps
     await send({ type: 'setblank', role: 'presenter', mode: 'black' }); await send({ type: 'setblank', role: 'presenter', mode: null }); await settled(A, S);
     check('setblank: null clears the blank too', (await mode()) === null, await mode());
     await A.close(); await S.close(); }
+  /* ?debug=1 diagnostic overlay: off by default, never in embed or print, follows slide and step */
+  { const q = await ctx.newPage(); await q.goto(BASE + '/__t/dup?debug=1#1'); await q.waitForSelector('#sk-stage'); await settled(q);
+    const txt = () => q.evaluate(() => { const e = document.getElementById('sk-debug'); return e ? e.textContent : null; });
+    check('debug: overlay shows slide, step, fps and node count', /^slide 1\/3  step 1\/1  \d+ fps  \d+ nodes$/.test(await txt()), await txt());
+    await q.keyboard.press('ArrowRight'); await settled(q);
+    check('debug: overlay follows the slide', /^slide 2\/3 /.test(await txt()), await txt());
+    check('debug: overlay is not exposed to assistive tech and ignores the pointer', await q.evaluate(() => { const e = document.getElementById('sk-debug'); return e.getAttribute('aria-hidden') === 'true' && getComputedStyle(e).pointerEvents === 'none'; }));
+    await q.emulateMedia({ media: 'print' });
+    check('debug: hidden in print', await q.evaluate(() => getComputedStyle(document.getElementById('sk-debug')).display === 'none'));
+    await q.close();
+    const n = await ctx.newPage(); await n.goto(BASE + '/__t/dup#1'); await n.waitForSelector('#sk-stage'); await settled(n);
+    check('debug: absent without the query', (await n.evaluate(() => !document.getElementById('sk-debug'))));
+    const e = await ctx.newPage(); await e.goto(BASE + '/__t/dup?embed=1&debug=1#1'); await e.waitForSelector('#sk-stage'); await settled(e);
+    check('debug: absent in embed mode', (await e.evaluate(() => !document.getElementById('sk-debug')))); await n.close(); await e.close(); }
   /* layout presets (data-layout, spec 2.1): the CSS gives each preset its shape; broken markup falls back to a stacked slide */
   page('lay', [
     '<section data-slide="content" data-layout="two-column"><h2 id="t2">T</h2><div data-col id="c1"><h3>a</h3><p>a</p></div><div data-col id="c2"><h3>b</h3><p>b</p></div></section>',

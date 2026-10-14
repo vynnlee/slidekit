@@ -176,6 +176,25 @@
       }
       if (!quiet && bc) bc.postMessage({ v: 1, type: 'state', from: me, slide: s.n, step: step });
       if (embed && started) toParent('state', { slide: s.n, step: step });
+      if (dbgEl) paintDebug();
+    }
+
+    /* diagnostic overlay for rehearsals: ?debug=1 (off by default, never in embed or print). Shows slide, step, fps and DOM node count. */
+    var dbgEl = null, dbgFps = 0;
+    function paintDebug() {
+      var s = slides[cur];
+      dbgEl.textContent = 'slide ' + s.n + '/' + slides.length + '  step ' + step + '/' + s.steps + '  ' + dbgFps + ' fps  ' + document.getElementsByTagName('*').length + ' nodes' + (sync ? '  sync' : '');
+    }
+    if (!embed && qs.get('debug') === '1') {
+      dbgEl = make('div', 'sk-debug');
+      dbgEl.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(dbgEl);
+      var dbgFrames = 0, dbgT0 = performance.now();
+      (function dbgTick(now) {
+        dbgFrames++;
+        if (now - dbgT0 >= 500) { dbgFps = Math.round(dbgFrames * 1000 / (now - dbgT0)); dbgFrames = 0; dbgT0 = now; if (cur >= 0) paintDebug(); }
+        requestAnimationFrame(dbgTick);
+      })(dbgT0);
     }
 
     /* scale */

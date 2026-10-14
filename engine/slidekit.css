@@ -80,6 +80,7 @@ html[data-sk-show-steps] [data-step] { visibility: visible !important; opacity: 
 #sk-live { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 
 /* page number, progress, number entry: quiet, aligned to the slide grid */
+#sk-debug { position: fixed; left: 8px; top: 8px; z-index: 200; padding: 4px 8px; font: 12px/1.4 var(--sk-font-mono); color: #7CFC9A; background: rgb(0 0 0 / .78); border: 1px solid rgb(124 252 154 / .35); pointer-events: none; white-space: nowrap; }
 #sk-page, #sk-num { position: absolute; z-index: 3; font-variant-numeric: tabular-nums; }
 #sk-page { right: var(--sk-pad-x); bottom: 56px; font-size: 24px; color: var(--sk-faint); }
 #sk-num { left: 50%; bottom: 64px; transform: translateX(-50%); padding: 10px 32px; border-radius: 999px; font-size: 40px; color: var(--sk-fg); background: rgba(255, 255, 255, .14); white-space: pre; }
@@ -124,6 +125,6 @@ html[data-idle], html[data-idle] body, html[data-idle] [data-slide] { cursor: no
   #sk-stage { position: static; width: 1920px; height: auto; transform: none !important; overflow: visible; }
   [data-slide] { position: relative; inset: auto; width: 1920px; height: 1080px; visibility: visible; animation: none; break-after: page; break-inside: avoid; }
   section[data-slide]:last-of-type { break-after: auto; }
-  #sk-overview, #sk-num, #sk-page, #sk-progress, #sk-blank { display: none !important; }
+  #sk-overview, #sk-num, #sk-page, #sk-progress, #sk-blank, #sk-debug { display: none !important; }
   [data-step] { visibility: visible !important; opacity: 1 !important; transform: none !important; transition: none !important; }
 }

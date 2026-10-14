@@ -29,6 +29,8 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   const findIn = page.getByLabel('Find', { exact: true });
   await findIn.waitFor({ timeout: 5000 }).catch(() => {});
   check('Cmd+F가 찾기 줄을 열고 포커스', await findIn.evaluate((e) => document.activeElement === e));
+  const fieldMetrics = await page.evaluate(() => ['Find', 'Replace with'].map((l) => { const e = document.querySelector('[aria-label="' + l + '"]'); return [Math.round(e.getBoundingClientRect().height), getComputedStyle(e).fontSize]; }));
+  check('Find와 Replace 입력의 높이와 글자 크기가 같음', JSON.stringify(fieldMetrics[0]) === JSON.stringify(fieldMetrics[1]), fieldMetrics);
   await findIn.fill('바이브'); await settle();
   const total1 = (await page.getByTestId('find-count').textContent()) || '';
   check('찾으면 일치 수와 슬라이드 수를 보임', /\d+ of \d+ in \d+ slide/.test(total1), total1);
@@ -52,11 +54,14 @@ const { startEditor } = require('./lib/editor-harness.cjs');
 
   // 덱 설정: 헤더 버튼으로 열고 Author를 바꾸면 deck-meta에 저장되고 실행 취소 한 번에 되돌아간다
   await page.getByRole('button', { name: 'Deck settings' }).click();
+  const focusedInDialog = await page.evaluate(() => { const a = document.activeElement; return !!a && !!a.closest('[role=dialog]') && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName); });
+  check('설정 대화상자가 열리면 첫 입력에 포커스', focusedInDialog);
   const authorIn = page.getByLabel('Author', { exact: true });
   await authorIn.waitFor({ timeout: 8000 }).catch(() => {});
   await authorIn.fill('테스트 저자'); await page.keyboard.press('Tab');
   await sleep(600); // 폼의 글자 입력 디바운스(400ms)가 지나야 반영된다
   await page.keyboard.press('Escape'); await settle();
+  check('설정 대화상자를 닫으면 포커스가 톱니 단추로 돌아옴', await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label') === 'Deck settings'));
   await page.locator('body').click({ position: { x: 5, y: 5 } }); await page.keyboard.press('Meta+s'); await saveDone();
   check('덱 설정 Author가 deck-meta에 저장됨', /"author"\s*:\s*"테스트 저자"/.test(fs.readFileSync(FILE, 'utf8')));
   await focusBody(); await page.keyboard.press('Meta+z'); await settle(); await saveDone();

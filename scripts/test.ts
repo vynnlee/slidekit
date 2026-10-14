@@ -101,7 +101,10 @@ const MAP: [RegExp, string[]][] = [
   [/^app\/(versions\.ts|src\/(VersionHistory|ExportMenu)|test\/versions)/, ["versions", "versions-e2e"]],
   [/^app\/(export-api\.ts|src\/ExportMenu)/, ["export-api", "export"]],
   [/^app\/(editor-api\.ts|src\/lib\/(deck-source|move|selection|guides))/, ["roundtrip", "deck-source.fuzz", "editor-readonly", "editor", "inspector"]],
-  [/^app\/src\/(Editor|Canvas|LayerTree|Filmstrip|Notes)/, [...EDITOR_ALL, "inspector"]],
+  [/^app\/src\/(Editor|Canvas|Filmstrip|Notes)/, [...EDITOR_ALL, "inspector"]],
+  // import 그래프와 검사가 쓰는 화면으로 좁힌 규칙: LayerTree는 Layers 행을 보는 파일만(panels는 행을 길 찾기로만 쓴다), menu-model은 메뉴를 쓰는 화면(편집기 타일 메뉴, 덱 목록, 코멘트 메뉴)만
+  [/^app\/src\/LayerTree/, ["editor", "editor-assets", "editor-multi", "editor-menus", "inspector"]],
+  [/^app\/src\/lib\/menu-model\.ts|^app\/test\/(editor-menus\.test|menu-model\.test)/, ["editor", "editor-menus", "comments-e2e"]],
   [/^app\/src\/(FindBar|DeckSettings|EditorTip|lib\/(find|overflow|deck-meta))/, ["editor-assets"]],
   [/^app\/test\/editor-assets\.cjs/, ["editor-assets"]],
   [/^app\/test\/(editor\.cjs|lib\/editor-harness\.cjs)/, EDITOR_ALL],

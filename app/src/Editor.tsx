@@ -112,6 +112,7 @@ export function Editor({ id }: { id: string }) {
     else setSafeArea((v) => { localStorage.setItem("slidekit.safearea", v ? "0" : "1"); return !v; });
   };
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const gearBtn = useRef<HTMLButtonElement>(null); // 설정 대화상자를 닫으면 포커스를 이 단추로 돌린다
   const [metaError, setMetaError] = useState("");
   const [updated, setUpdated] = useState<Set<number>>(new Set()); // 밖에서 바뀐 슬라이드(필름스트립에 4초 표시)
   const updatedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -256,6 +257,7 @@ export function Editor({ id }: { id: string }) {
   const restore = (from: Unit[][], to: Unit[][]) => {
     const prev = from.pop();
     if (!prev) return;
+    const before = unitsRef.current;
     to.push(unitsRef.current);
     if (shellRef.current) prefixOf.current.set(unitsRef.current, shellRef.current.prefix);
     last.current = null;
@@ -266,7 +268,9 @@ export function Editor({ id }: { id: string }) {
     const cs = canvas.current?.slide(indexRef.current);
     const keeps = cs && sel ? [sel, ...more].map((n) => pathOf(cs, n)) : [];
     const keep = keeps[0] ?? null;
-    indexRef.current = Math.min(indexRef.current, prev.length - 1); setIndexState(indexRef.current);
+    indexRef.current = Math.min(indexRef.current, prev.length - 1);
+    if (prev.length > before.length) { const k = prev.findIndex((u) => !before.some((b) => b.key === u.key)); if (k >= 0) indexRef.current = k; } // 지운 슬라이드를 되살리면 그 슬라이드로 간다
+    setIndexState(indexRef.current);
     const s = canvas.current?.slide(indexRef.current);
     pickGroup(s ? keeps.map((k) => (k ? byPath(s, k) : null)).filter((n): n is Element => !!n) : []); // 되돌린 뒤에도 같은 요소를 선택해 둔다
   };
@@ -773,7 +777,7 @@ export function Editor({ id }: { id: string }) {
               </Tooltip>
             </div>
             {dirty && !changed && <Button variant="ghost" size="compact" onClick={() => save()}>Save</Button>}
-            <Tooltip content="Deck settings" side="bottom"><Button aria-label="Deck settings" variant="ghost" size="icon-compact" className="max-sm:hidden" onClick={() => setSettingsOpen(true)}><Settings2 /></Button></Tooltip>
+            <Tooltip content="Deck settings" side="bottom"><Button ref={gearBtn} aria-label="Deck settings" variant="ghost" size="icon-compact" className="max-sm:hidden" onClick={() => setSettingsOpen(true)}><Settings2 /></Button></Tooltip>
             <ExportMenu folder={deck.folder} dirty={dirty} onSave={() => save()} />
             <Button variant="primary" size="compact" leadingIcon={MonitorPlay} onClick={() => present()}>Present</Button>
           </>
@@ -846,7 +850,7 @@ export function Editor({ id }: { id: string }) {
       </CommandMenuDialog>
 
       <Dialog open={settingsOpen} onOpenChange={(o) => { setSettingsOpen(o); if (!o) setMetaError(""); }}>
-        <DialogContent size="sm">
+        <DialogContent size="sm" onCloseAutoFocus={(e) => { e.preventDefault(); (gearBtn.current ?? document.body).focus(); }}>
           <DialogTitle>Deck settings</DialogTitle>
           <DeckSettingsForm meta={readMeta(shell.prefix) ?? {}} onChange={onMetaChange} error={metaError} />
         </DialogContent>

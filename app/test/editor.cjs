@@ -280,6 +280,29 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('Esc로 작성창 닫힘', (await page.getByRole('group', { name: 'New comment' }).count()) === 0);
   await focusBody(); await page.keyboard.press('Escape');
 
+  // 키보드만으로 슬라이드 하나 만들기: 추가(Cmd+K) -> 글자 편집(Tab, Enter) -> 이동(방향키) -> 삭제(Cmd+K) -> 되돌리기(Cmd+Z). 마우스는 쓰지 않는다.
+  {
+    await focusBody(); await page.keyboard.press('Escape');
+    const n0 = await layers.count();
+    await page.keyboard.press('Meta+k'); await settle();
+    await page.keyboard.type('Add slide: Title and body'); await settle();
+    await page.keyboard.press('Enter'); await settle();
+    check('키보드: 팔레트로 슬라이드 추가', (await layers.count()) === n0 + 1, [n0, await layers.count()]);
+    await page.keyboard.press('Escape'); await page.keyboard.press('Tab'); await settle(); // 첫 요소(제목)를 고른다
+    await page.keyboard.press('Enter'); await settle(); // 글자 요소라 편집 시작
+    await page.keyboard.press('Meta+a'); await page.keyboard.type('Keyboard slide'); await page.keyboard.press('Escape'); await settle();
+    check('키보드: 제목 글자를 입력', await inDoc((s) => (s.querySelector('h2') || {}).textContent === 'Keyboard slide'), await inDoc((s) => (s.querySelector('h2') || {}).textContent));
+    await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight'); await settle();
+    check('키보드: 방향키로 이동(translate 2px)', /^2px( 0px)?$/.test(await inDoc((s) => s.querySelector('h2').style.translate || '')), await inDoc((s) => s.querySelector('h2').style.translate || ''));
+    await page.keyboard.press('Escape'); await settle();
+    await page.keyboard.press('Meta+k'); await settle(); await page.keyboard.type('Delete slide'); await settle(); await page.keyboard.press('Enter'); await settle(); // 선택이 없을 때 슬라이드 삭제는 팔레트로(Delete 키는 선택한 요소만 지운다)
+    check('키보드: 팔레트로 슬라이드 삭제', (await layers.count()) === n0, [n0, await layers.count()]);
+    await page.keyboard.press('Meta+z'); await settle();
+    check('키보드: Cmd+Z로 삭제를 되돌림(글자가 남아 있음)', (await layers.count()) === n0 + 1 && (await inDoc((s) => (s.querySelector('h2') || {}).textContent)) === 'Keyboard slide');
+    for (let i = 0; i < 6 && (await layers.count()) !== n0; i++) { await page.keyboard.press('Meta+z'); await settle(); } // 뒤 시험을 위해 추가까지 모두 되돌린다
+    check('키보드: 되돌리기를 거듭하면 처음 장수로', (await layers.count()) === n0, [n0, await layers.count()]);
+  }
+
   // 노트 pane은 접지 않는다
   check('노트 pane에 접기 버튼이 없고 입력창이 항상 보임', (await page.getByRole('button', { name: /notes/i }).count()) === 0 && (await page.getByPlaceholder('Speaker notes (Markdown)').isVisible()));
   // 자동 저장: Cmd+S 없이 1.5초 뒤 저장된다

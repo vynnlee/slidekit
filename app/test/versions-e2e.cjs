@@ -66,7 +66,7 @@ const J = { 'Content-Type': 'application/json' };
     await page.getByText(/Restored the version from/).first().waitFor({ timeout: 5000 });
     check('Restore가 파일을 옛 내용으로 되돌린다', fs.readFileSync(t.file, 'utf8') === original);
     check('복원 직전 내용이 restore 버전으로 남는다', (await versions()).some((v) => v.kind === 'restore'));
-    await page.getByRole('button', { name: 'Undo' }).last().click();
+    await page.getByRole('button', { name: 'Undo', exact: true }).last().click();
     check('Undo 토스트가 복원을 취소한다', await (async () => { for (let i = 0; i < 50; i++) { if (fs.readFileSync(t.file, 'utf8').includes('Claude 수정 1')) return true; await sleep(100); } return false; })());
 
     // 4) 코멘트의 Revert Claude's edit

@@ -139,7 +139,7 @@ const json = { 'Content-Type': 'application/json' };
     await page.keyboard.press('Delete');
     check('Delete로 코멘트가 지워진다', await page.waitForFunction(() => document.querySelectorAll('[data-testid=comments-panel] li[data-comment-id]').length === 1, null, { timeout: 5000 }).then(() => true, () => false));
     check('지운 뒤 포커스가 남은 코멘트로 간다', await focused(0));
-    await page.getByRole('button', { name: 'Undo' }).click();
+    await page.getByRole('button', { name: 'Undo', exact: true }).last().click();
     check('Undo로 되살아난다', await page.waitForFunction(() => document.querySelectorAll('[data-testid=comments-panel] li[data-comment-id]').length === 2, null, { timeout: 5000 }).then(() => true, () => false));
 
     // 우클릭 메뉴(패널 항목과 핀): INTERACTION 2.5
@@ -161,7 +161,7 @@ const json = { 'Content-Type': 'application/json' };
     await items.first().click({ button: 'right' });
     await menu.getByRole('menuitem', { name: /^Delete/ }).click();
     check('패널 메뉴의 Delete가 지우고 Undo로 되살아난다', await page.waitForFunction(() => document.querySelectorAll('[data-testid=comments-panel] li[data-comment-id]').length === 1, null, { timeout: 5000 }).then(() => true, () => false));
-    await page.getByRole('button', { name: 'Undo' }).last().click();
+    await page.getByRole('button', { name: 'Undo', exact: true }).last().click();
     check('Undo 뒤 코멘트가 둘이다', await page.waitForFunction(() => document.querySelectorAll('[data-testid=comments-panel] li[data-comment-id]').length === 2, null, { timeout: 5000 }).then(() => true, () => false));
 
     // 파일 변경 -> 캔버스 새로고침

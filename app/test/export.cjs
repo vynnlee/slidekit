@@ -27,6 +27,17 @@ const PW = 'S3cret-pass-ZZ';
   [dl] = await Promise.all([p.waitForEvent('download'), menu('Download PDF')]);
   f = await saveDl(dl); const pdf = fs.readFileSync(f);
   check('Download PDF: 실제 PDF, 5쪽', dl.suggestedFilename() === 'qa-exp-pub.pdf' && pdf.slice(0, 5).toString() === '%PDF-' && (pdf.toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length === 5, pdf.length);
+  // PDF 옵션: 노트 PDF와 유인물 PDF(파일 이름과 PDF 헤더)
+  await p.getByRole('button', { name: 'Export' }).click(); await p.getByRole('menuitem', { name: 'PDF options...' }).click();
+  await p.getByRole('radio', { name: /With notes/ }).check();
+  [dl] = await Promise.all([p.waitForEvent('download'), p.getByRole('button', { name: 'Download PDF' }).click()]);
+  f = await saveDl(dl);
+  check('PDF options: With notes는 .notes.pdf로 내려받는다', dl.suggestedFilename() === 'qa-exp-pub.notes.pdf' && fs.readFileSync(f).slice(0, 5).toString() === '%PDF-', dl.suggestedFilename());
+  await p.getByRole('button', { name: 'Export' }).click(); await p.getByRole('menuitem', { name: 'PDF options...' }).click();
+  await p.getByRole('radio', { name: /Handout/ }).check(); await p.getByLabel('Slides per page').selectOption('4');
+  [dl] = await Promise.all([p.waitForEvent('download'), p.getByRole('button', { name: 'Download PDF' }).click()]);
+  f = await saveDl(dl);
+  check('PDF options: Handout 4장은 .handout.pdf로 내려받는다', dl.suggestedFilename() === 'qa-exp-pub.handout.pdf' && fs.readFileSync(f).slice(0, 5).toString() === '%PDF-', dl.suggestedFilename());
   // API 검증
   check('confirm 없이 deploy는 400', (await api('POST', '/api/decks/qa-exp-pub/deploy', {})).s === 400);
   check('나쁜 id는 404', (await api('POST', '/api/decks/..%2Fx/bundle', {})).s === 404);

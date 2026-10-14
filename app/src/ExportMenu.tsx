@@ -45,6 +45,10 @@ const readErr = async (res: Response) => {
   return { msg: j.error || `Request failed (${res.status})`, details: j.details ?? "" };
 };
 const MIN_PW = 8;
+// PDF 종류: 슬라이드(기본), 쪽마다 슬라이드 한 장과 노트, 한 쪽에 여러 장(유인물). 파일 이름과 다운로드 kind는 서버 규칙(export-api)을 따른다.
+type PdfMode = "slides" | "notes" | "handout";
+const PDF_FILE: Record<PdfMode, string> = { slides: "pdf", notes: "notes.pdf", handout: "handout.pdf" };
+const PDF_KIND: Record<PdfMode, string> = { slides: "pdf", notes: "notes-pdf", handout: "handout-pdf" };
 
 function CheckRow({ ok, warn, children }: { ok: boolean; warn?: boolean; children: React.ReactNode }) {
   // 색만으로 구분하지 않도록 아이콘 모양을 다르게 한다(통과 체크, 주의 느낌표).
@@ -70,6 +74,11 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
   const token = useRef(0); // 대화상자를 닫으면 올려서, 닫은 뒤 늦게 오는 결과를 무시한다
   const [check, setCheck] = useState<Check | null | "error">(null);
   const [versions, setVersions] = useState(false);
+  const [pdfDialog, setPdfDialog] = useState(false);
+  const [pdfMode, setPdfMode] = useState<PdfMode>("notes");
+  const [per, setPer] = useState(3);
+  const [fileLabel, setFileLabel] = useState("");
+  const lastPdf = useRef<{ mode: PdfMode; per: number } | undefined>(undefined); // 다시 시도할 때 같은 옵션을 쓴다
   // 코멘트의 되돌리기가 거절되었을 때 토스트의 "Version history" 버튼이 이 대화상자를 연다.
   useEffect(() => { const on = () => setVersions(true); window.addEventListener("slidekit:open-versions", on); return () => window.removeEventListener("slidekit:open-versions", on); }, []);
   const [last, setLast] = useState(() => readPublished(folder));
@@ -85,18 +94,20 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
   const say = (t: string) => toast(t, { ms: 2500 });
   const fail = async (res: Response) => { const e = await readErr(res); setErr(e.msg); setDetails(e.details); };
 
-  const download = async (kind: "html" | "pdf") => {
-    setMode(kind); setErr(""); setDetails(""); setBusy(true);
+  const download = async (kind: "html" | "pdf", pdf?: { mode: PdfMode; per: number }) => {
+    const pm = pdf?.mode ?? "slides";
+    lastPdf.current = pdf;
+    setMode(kind); setErr(""); setDetails(""); setBusy(true); setFileLabel(`${folder}.${kind === "html" ? "html" : PDF_FILE[pm]}`);
     const my = ++token.current;
     try {
       if (!(await saved())) return setErr("Save the deck first");
-      const res = await post(`/api/decks/${folder}/${kind === "html" ? "bundle" : "pdf"}`);
+      const res = await post(`/api/decks/${folder}/${kind === "html" ? "bundle" : "pdf"}`, pdf ? { mode: pdf.mode, per: pdf.per } : undefined);
       if (my !== token.current) return; // 닫혔다
       if (!res.ok) return fail(res);
       const info = (await res.json().catch(() => ({}))) as { bytes?: number; pages?: number };
-      if (info.bytes) say(`${folder}.${kind} ready: ${fmt(info.bytes)}${info.pages ? `, ${info.pages} pages` : ""}`);
+      if (info.bytes) say(`${folder}.${kind === "html" ? "html" : PDF_FILE[pm]} ready: ${fmt(info.bytes)}${info.pages ? `, ${info.pages} pages` : ""}`);
       const a = document.createElement("a");
-      a.href = `/api/decks/${folder}/download?kind=${kind}`; a.download = `${folder}.${kind}`;
+      a.href = `/api/decks/${folder}/download?kind=${kind === "html" ? "html" : PDF_KIND[pm]}`; a.download = `${folder}.${kind === "html" ? "html" : PDF_FILE[pm]}`;
       document.body.appendChild(a); a.click(); a.remove();
       setMode("idle");
     } catch { if (my === token.current) setErr("Could not reach the server. Check that slidekit is still running."); } finally { if (my === token.current) setBusy(false); }
@@ -153,9 +164,10 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
         <DropdownContent align="end" side="bottom">
           <MenuItem index={0} icon={FileText} label="Download HTML" onSelect={() => download("html")} />
           <MenuItem index={1} icon={FileText} label="Download PDF" onSelect={() => download("pdf")} />
-          <MenuItem index={2} icon={Globe} label="Publish to static.vynnlee.com..." onSelect={openPublish} />
-          {last && <MenuItem index={3} icon={Link2} label="Copy published link" onSelect={copyLast} />}
-          <MenuItem index={last ? 4 : 3} icon={History} label="Version history..." onSelect={() => setVersions(true)} />
+          <MenuItem index={2} icon={FileText} label="PDF options..." onSelect={() => setPdfDialog(true)} />
+          <MenuItem index={3} icon={Globe} label="Publish to static.vynnlee.com..." onSelect={openPublish} />
+          {last && <MenuItem index={4} icon={Link2} label="Copy published link" onSelect={copyLast} />}
+          <MenuItem index={last ? 5 : 4} icon={History} label="Version history..." onSelect={() => setVersions(true)} />
         </DropdownContent>
       </DropdownMenu>
       <Dialog open={mode !== "idle"} onOpenChange={(o) => !o && close()}>
@@ -267,7 +279,7 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
             <div className="flex flex-col gap-3">
               <DialogTitle>{mode === "pdf" ? "Download PDF" : "Download HTML"}</DialogTitle>
               {err ? <p role="alert" className="text-body">{err}</p> : (
-                <p className="flex items-center gap-2 text-body text-muted-foreground" aria-live="polite"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />Preparing {folder}.{mode === "pdf" ? "pdf" : "html"}...</p>
+                <p className="flex items-center gap-2 text-body text-muted-foreground" aria-live="polite"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />Preparing {fileLabel}...</p>
               )}
               {!err && <p className="text-caption text-muted-foreground">{mode === "pdf" ? "A PDF can take a minute." : "This usually takes a few seconds."} Cancel stops it.</p>}
               {err && details && (
@@ -277,11 +289,38 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
               {err && (
                 <div className="flex justify-end gap-2">
                   <Button size="compact" variant="ghost" onClick={close}>Close</Button>
-                  <Button size="compact" variant="primary" leadingIcon={RotateCcw} onClick={() => download(mode === "pdf" ? "pdf" : "html")}>Retry</Button>
+                  <Button size="compact" variant="primary" leadingIcon={RotateCcw} onClick={() => download(mode === "pdf" ? "pdf" : "html", lastPdf.current)}>Retry</Button>
                 </div>
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={pdfDialog} onOpenChange={setPdfDialog}>
+        <DialogContent size="sm">
+          <div className="flex flex-col gap-3">
+            <DialogTitle>PDF options</DialogTitle>
+            <fieldset className="flex flex-col gap-2 text-body">
+              <legend className="sr-only">PDF type</legend>
+              {([["slides", "Slides", "One slide per page, 16:9"], ["notes", "With notes", "A4 pages with one slide and its speaker notes"], ["handout", "Handout", "Several slides per A4 page"]] as const).map(([v, label, hint]) => (
+                <label key={v} className="flex cursor-default items-start gap-2">
+                  <input type="radio" name="pdf-mode" value={v} checked={pdfMode === v} onChange={() => setPdfMode(v)} className="mt-1" />
+                  <span className="flex flex-col"><span>{label}</span><span className="text-caption text-muted-foreground">{hint}</span></span>
+                </label>
+              ))}
+            </fieldset>
+            {pdfMode === "handout" && (
+              <label className="flex items-center gap-2 text-body">Slides per page
+                <select aria-label="Slides per page" value={per} onChange={(e) => setPer(+e.target.value)} className="rounded-md bg-hover px-2 py-1">
+                  {[2, 3, 4, 6].map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button size="compact" variant="ghost" onClick={() => setPdfDialog(false)}>Cancel</Button>
+              <Button size="compact" variant="primary" leadingIcon={Download} onClick={() => { setPdfDialog(false); void download("pdf", { mode: pdfMode, per }); }}>Download PDF</Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
       <VersionHistory folder={folder} open={versions} onOpenChange={setVersions} ensureSaved={saved} />

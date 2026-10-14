@@ -61,5 +61,18 @@ export function useCommentsLive(folder: string | null) {
     toast("Comment deleted", { action: { label: "Undo", onClick: () => { post("restore").catch(() => setError("Could not restore the comment")); } } });
   }, [folder]);
 
-  return { comments, setComments, channel, error, upsert, resolve, trust, remove };
+  /** Claude의 수정을 되돌리고(undo=true면 취소) 토스트로 알린다. 덱이 그 뒤로 바뀌었으면 서버가 409(changed)로 거절한다. */
+  const revert = useCallback(async (c: Comment, undo = false) => {
+    try {
+      const r = await fetch(`/api/comments/${c.id}/revert`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deck: folder, undo }) });
+      if (r.status === 409 && !undo && ((await r.json().catch(() => ({}))) as { error?: string }).error === "changed") {
+        toast("The deck changed after Claude's edit, so it was not reverted.", { ms: 9000, action: { label: "Version history", onClick: () => window.dispatchEvent(new Event("slidekit:open-versions")) } });
+        return;
+      }
+      if (!r.ok) throw new Error(String(r.status));
+    } catch { setError("Could not revert the edit"); return; }
+    toast(undo ? "Revert undone" : "Reverted Claude's edit", undo ? { ms: 3000 } : { action: { label: "Undo", onClick: () => { void revert(c, true); } } });
+  }, [folder]);
+
+  return { comments, setComments, channel, error, upsert, resolve, trust, remove, revert };
 }

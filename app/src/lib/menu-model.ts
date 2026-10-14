@@ -74,15 +74,18 @@ export type CommentMenuActions = {
   unverified: boolean;
   /** 핀에서만 준다. 없으면 항목이 빠진다. */
   openInPanel?(): void;
+  /** Claude가 이 코멘트에 답하며 고친 덱을 되돌릴 수 있을 때만 준다. */
+  revert?(): void;
   resolve(): void;
   trust?(): void;
   copyText(): void;
   remove(): void;
 };
-export function commentMenu(a: CommentMenuActions, icons: { open?: IconComponent; resolve?: IconComponent; reopen?: IconComponent; trust?: IconComponent; copy?: IconComponent; trash?: IconComponent } = {}): MenuItem[] {
+export function commentMenu(a: CommentMenuActions, icons: { open?: IconComponent; resolve?: IconComponent; reopen?: IconComponent; trust?: IconComponent; copy?: IconComponent; trash?: IconComponent; revert?: IconComponent } = {}): MenuItem[] {
   return tidy([
     a.openInPanel && item("open", "Open in panel", a.openInPanel, { icon: icons.open }),
     a.resolved ? item("reopen", "Reopen", a.resolve, { shortcut: "e", icon: icons.reopen }) : item("resolve", "Resolve", a.resolve, { shortcut: "e", icon: icons.resolve }),
+    a.revert && item("revert", "Revert Claude's edit", a.revert, { icon: icons.revert }),
     a.unverified && a.trust && item("trust", "Trust", a.trust, { icon: icons.trust }),
     item("copy", "Copy text", a.copyText, { icon: icons.copy }),
     separator,

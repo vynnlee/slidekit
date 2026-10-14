@@ -15,4 +15,5 @@ export type Comment = {
   status: "open" | "done"; reply?: string; createdAt: string; repliedAt?: string;
   slideDeleted?: boolean;
   deliveredAt?: string; ackAt?: string; resolved?: boolean; resolvedAt?: string; trusted?: boolean;
+  editBase?: string; editHash?: string; revertedAt?: string; revertUndo?: string; // Claude의 수정 되돌리기(서버가 답이 달릴 때 연결)
 };

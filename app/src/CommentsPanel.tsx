@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Check, CheckCheck, Clock, Copy, Loader2, MessageSquare, RotateCcw, Send, ShieldAlert } from "lucide-react";
+import { Check, CheckCheck, Clock, Copy, Loader2, MessageSquare, RotateCcw, Send, ShieldAlert, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ContextMenu, useContextMenu } from "@/components/ui/context-menu";
 import { commentMenu } from "@/lib/comment-actions";
@@ -77,18 +77,20 @@ interface CommentsPanelProps {
   onTrust?(c: Comment): void;
   /** 삭제(Delete 키). 되돌리기 토스트는 부른 쪽(useCommentsLive.remove)이 띄운다. */
   onRemove?(c: Comment): void;
+  /** Claude의 수정 되돌리기와(undo=true) 그 취소. 없으면 되돌리기 버튼을 보이지 않는다. */
+  onRevert?(c: Comment, undo?: boolean): void;
   /** 캔버스 핀과 목록이 서로를 강조하도록 마우스나 포커스가 올라간 코멘트 id를 맞춘다. */
   hoverId?: string | null;
   onHover?(id: string | null): void;
 }
 
-export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, onRemove, hoverId, onHover }: CommentsPanelProps) {
+export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, onRemove, onRevert, hoverId, onHover }: CommentsPanelProps) {
   const [filter, setFilter] = useState<Filter>("all");
   const [open, setOpen] = useState<Set<string>>(new Set()); // 길어서 펼친 코멘트
   const root = useRef<HTMLDivElement>(null);
   const cm = useContextMenu();
   // 우클릭 메뉴(INTERACTION 2.5): 삭제 연결이 있을 때만 연다. 핀 전용 항목(Open in panel)은 없다.
-  const actions = onRemove ? { resolve: onResolve, trust: onTrust, remove: onRemove } : null;
+  const actions = onRemove ? { resolve: onResolve, trust: onTrust, remove: onRemove, revert: onRevert } : null;
   const nums = useMemo(() => numbering(comments), [comments]);
   const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, comments.filter((c) => f.match(stateOf(c))).length])) as Record<Filter, number>, [comments]);
   const shown = comments.filter((c) => FILTERS.find((f) => f.id === filter)!.match(stateOf(c)));
@@ -182,6 +184,13 @@ export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, o
                     <div className="flex flex-col gap-0.5 border-l-2 border-border pl-2" data-testid="comment-reply">
                       <span className="text-micro text-muted-foreground">Claude{c.repliedAt ? `, ${ago(c.repliedAt)}` : ""}</span>
                       <span className="whitespace-pre-wrap break-words text-body text-muted-foreground">{c.reply}</span>
+                    </div>
+                  )}
+                  {c.reply && c.editBase && onRevert && (
+                    <div className="flex items-center gap-1" data-testid="revert-row">
+                      {c.revertedAt
+                        ? <><span className="text-micro text-muted-foreground">Claude&apos;s edit was reverted.</span><Button size="compact" variant="ghost" onClick={() => onRevert(c, true)} aria-label={`Undo revert of comment ${nums.get(c.id)}`} leadingIcon={RotateCcw}>Undo revert</Button></>
+                        : <Button size="compact" variant="ghost" onClick={() => onRevert(c)} aria-label={`Revert Claude's edit for comment ${nums.get(c.id)}`} leadingIcon={Undo2}>Revert Claude&apos;s edit</Button>}
                     </div>
                   )}
                   {st === "unverified" && (

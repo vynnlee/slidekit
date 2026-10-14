@@ -4,7 +4,7 @@
 // 무거운 작업이라 /tmp/slidekit-heavy.lock을 한 번 잡고 모든 단계를 순서대로 돈다.
 // 실제 덱은 읽기 전용이다. 덱을 고치는 테스트는 scripts/lib/test-deck.cjs의 사본(decks/_e2e-*/)만 쓴다.
 // 단계 전후로 실제 덱(decks/_* 제외)의 내용 해시를 비교해 달라졌으면 WARN으로 보고만 한다(복원하지 않고 실패로도 치지 않는다). 지문은 경로와 크기다..
-import { createWriteStream, globSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync, statSync, writeFileSync } from "node:fs";
+import { createWriteStream, existsSync, globSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, statSync, writeFileSync } from "node:fs";
 import { ALIASES, selectSteps } from "./lib/select-steps";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -20,11 +20,19 @@ const last = (pattern: string) => globSync(pattern).sort().at(-1);
 const PW = last(join(homedir(), ".bun/install/cache/playwright-core@*")) ?? last(join(homedir(), ".npm/_npx/*/node_modules/playwright-core"));
 const CHROME = last(join(homedir(), "Library/Caches/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-mac-*/chrome-headless-shell"));
 
+// axe-core(접근성 검사 엔진): AXE=<axe.min.js>가 있으면 그것, 없으면 자주 있는 자리(개발 폴더의 node_modules, bun 캐시, 작업 폴더)를 찾는다.
+// 없으면 axe가 필요한 단계는 조용히 통과하지 않고 "건너뜀"으로 크게 알린다. 근본 해결은 axe-core를 devDependency로 받는 것이다(새 의존성이라 승인 필요).
+const AXE = (() => {
+  if (process.env.AXE && existsSync(process.env.AXE)) return process.env.AXE;
+  const cands = [...globSync(join(homedir(), "Developer/*/node_modules/axe-core/axe.min.js")), ...globSync(join(homedir(), ".bun/install/cache/axe-core@*/axe.min.js")), ...globSync("/tmp/claude-501/*/*/scratchpad/*/node_modules/axe-core/axe.min.js")];
+  return cands.sort().at(-1) ?? "";
+})();
+
 // 테스트 서버는 이 덱들에 PUT하지 못한다(실제 덱 보호). 고치는 테스트는 makeTestDeck 사본을 쓴다.
 const READONLY = "vibe-coding-workshop,slidekit-guide";
 // 포트: 3240 정적(엔진), 3242 채널, 3245 앱(배포 dry-run, 모든 앱 단계가 공유)
 const DRY = "http://127.0.0.1:3245", APP = DRY, STATIC = "http://127.0.0.1:3240";
-type Step = { name: string; cmd: string[]; env?: Record<string, string>; server?: "app" | "dry" | "static"; slow?: boolean };
+type Step = { name: string; cmd: string[]; env?: Record<string, string>; server?: "app" | "dry" | "static"; slow?: boolean; needs?: "axe" };
 const browser = (name: string, file: string, server: "app" | "dry" | "static", base: string, extra: Record<string, string> = {}): Step =>
   ({ name, cmd: ["node", file], server, env: { PW: PW ?? "", CHROME: CHROME ?? "", BASE: base, ...extra } });
 const bun = (name: string, ...cmd: string[]): Step => ({ name, cmd: ["bun", ...cmd] });
@@ -55,7 +63,7 @@ const steps: Step[] = [
   browser("responsive", "app/test/responsive.cjs", "app", APP),
   browser("controls", "app/test/controls.cjs", "app", APP),
   browser("inspector", "app/test/inspector.cjs", "app", APP),
-  browser("inspector-a11y", "app/test/inspector-a11y.cjs", "app", APP),
+  browser("inspector-a11y", "app/test/inspector-a11y.cjs", "app", APP, { AXE }),
   browser("editor", "app/test/editor.cjs", "app", APP),
   browser("editor-assets", "app/test/editor-assets.cjs", "app", APP),
   browser("comments-e2e", "app/test/comments-e2e.cjs", "app", APP),
@@ -71,6 +79,8 @@ const steps: Step[] = [
   { ...browser("ux-shots-390", "scripts/ux-shots-comments2.cjs", "app", APP, { VIEWPORT: "390x844", OUT: "/tmp/slidekit-ux-shots/390" }), slow: true },
   // 덱 30개 목록의 부하 한도 검사(동시에 올라 있는 썸네일 수와 브라우저 메모리). 측정이 길어 --slow 또는 --only로만 돈다.
   { ...browser("list-load", "app/test/list-load.cjs", "app", APP, { CHECK: "1" }), slow: true },
+  // 덱 목록과 발표자 화면의 axe 접근성 검사(serious와 critical 위반). axe-core가 없으면 건너뜀으로 크게 알린다.
+  { ...browser("a11y-app", "app/test/a11y-app.cjs", "app", APP, { AXE }), slow: true, needs: "axe" },
   { ...browser("bundler-fonts-e2e", "bundler/test/fonts.cjs", "static", STATIC), server: undefined, slow: true },
 ];
 
@@ -299,11 +309,13 @@ const warned: string[] = [];
 const flaky: string[] = []; // 첫 실행은 실패했고 재실행은 통과한 단계
 const results: [string, boolean, number][] = [];
 try {
+const skipped: string[] = []; // 필요한 도구가 없어 건너뛴 단계
   for (const s of picked) {
     current = s.name;
     console.log(`\n== ${s.name}`);
     const t0 = Date.now();
     let before = fingerprint();
+    if (s.needs === "axe" && !AXE) { console.log(`\n== ${s.name}\n!! 건너뜀: ${s.name}(axe-core를 찾지 못함). AXE=<axe.min.js>를 주거나 axe-core를 설치해 주세요. 이 단계는 검사하지 않았습니다`); skipped.push(s.name); continue; }
     let ok = false;
     try {
       if (s.server) await ensure(s.server);
@@ -337,6 +349,7 @@ if (warned.length) console.log(`\nWARN: 실제 덱이 바뀐 단계 ${warned.joi
 if (flaky.length) console.log(`\nWARN: 불안정(첫 실행 실패, 재실행 통과): ${flaky.join(", ")}. 로그 ${logDir}/<단계>.log는 재실행 기준이다`);
 if (failed.length) {
   console.log(`\nFAIL: ${failed.join(", ")}`);
+if (skipped.length) console.log(`\n!! 건너뜀(도구 없음): ${skipped.join(", ")}. 통과가 아니라 검사하지 않은 것이다`);
   for (const n of failed) {
     const tr = globSync(join(logDir, `${n}-trace-*.zip`)).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs).slice(0, 2);
     for (const f of tr) console.log(`  트레이스: node ${PW}/cli.js show-trace ${f}`);

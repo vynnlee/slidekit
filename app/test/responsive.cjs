@@ -107,7 +107,37 @@ const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.
     const sw = await page.evaluate(() => [document.documentElement.scrollWidth, document.body.scrollWidth, window.innerWidth]);
     check(`[편집기 ${w}px] 문서가 가로로 넘치지 않음`, sw[0] <= sw[2] && sw[1] <= sw[2], sw);
     for (const name of ['Present', 'Export']) check(`[편집기 ${w}px] 헤더 ${name} 버튼이 화면 안`, inside(await page.getByRole('button', { name }).first().boundingBox(), w, h));
+    if (w === 390) { // 좁은 폭의 찾기 줄: Find와 Replace 입력의 높이와 글자 크기가 같고 줄이 화면 밖으로 넘치지 않는다
+      await page.keyboard.press('Meta+f');
+      await page.getByLabel('Find', { exact: true }).waitFor({ timeout: 5000 }).catch(() => {});
+      const fm = await page.evaluate(() => ['Find', 'Replace with'].map((l) => { const e = document.querySelector('[aria-label="' + l + '"]'); if (!e) return null; const r = e.getBoundingClientRect(); return [Math.round(r.height), getComputedStyle(e).fontSize, Math.round(r.right)]; }));
+      check(`[편집기 ${w}px] 찾기 줄의 Find와 Replace 입력 높이와 글자 크기가 같음`, !!fm[0] && !!fm[1] && fm[0][0] === fm[1][0] && fm[0][1] === fm[1][1], fm);
+      check(`[편집기 ${w}px] 찾기 줄이 가로로 넘치지 않음`, !!fm[0] && !!fm[1] && fm[0][2] <= w && fm[1][2] <= w && (await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)), fm);
+    }
     await ctx.close();
+  }
+  // 터치 기기(pointer: coarse): 눌리는 영역만 44px로 넓히고 레이아웃은 그대로, 마우스 기기에는 영향 0(index.css 한 곳의 규칙).
+  {
+    const rects = async (page) => page.evaluate(() => [...document.querySelectorAll('button')].filter((b) => !String(b.className).includes('pointer-coarse:')).map((b) => { const r = b.getBoundingClientRect(); return [b.getAttribute('aria-label') || b.textContent.trim(), Math.round(r.x * 2) / 2, Math.round(r.y * 2) / 2, Math.round(r.width * 2) / 2, Math.round(r.height * 2) / 2]; }));
+    const open = async (touch) => {
+      const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: touch });
+      await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+      const page = await ctx.newPage();
+      await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+      await page.getByRole('button', { name: 'Toggle view' }).waitFor();
+      await sleep(1200);
+      return { ctx, page };
+    };
+    const hit = (page, dy, dx = 0) => page.evaluate(([dy, dx]) => { const b = document.querySelector('button[aria-label="Toggle view"]'); const r = b.getBoundingClientRect(); const e = document.elementFromPoint(r.x + r.width / 2 + dx, r.y + r.height / 2 + dy); return !!e && !!e.closest('button[aria-label="Toggle view"]'); }, [dy, dx]);
+    const mouse = await open(false), touch = await open(true);
+    const noSlop = await mouse.page.evaluate(() => [...document.querySelectorAll('button')].every((b) => { const c = getComputedStyle(b, '::after').content; return c === 'none' || c === 'normal'; }));
+    check('[터치] 마우스 기기에서는 버튼에 확장 영역(::after)이 없다', noSlop && !(await hit(mouse.page, 20)));
+    const a1 = await rects(mouse.page), a2 = await rects(touch.page);
+    const diff = a1.length !== a2.length ? 'count ' + a1.length + ' vs ' + a2.length : a1.filter((r, i) => r.join() !== a2[i].join()).slice(0, 3);
+    check('[터치] 터치 기기에서도 버튼 위치와 크기가 마우스 기기와 같다(레이아웃 불변)', Array.isArray(diff) ? diff.length === 0 : false, diff);
+    const btnH = await touch.page.evaluate(() => Math.round(document.querySelector('button[aria-label="Toggle view"]').getBoundingClientRect().height));
+    check('[터치] 보이는 크기는 그대로(28px)인데 위아래 20px, 옆 17px 떨어진 곳도 그 버튼이 눌린다', btnH <= 30 && (await hit(touch.page, 20)) && (await hit(touch.page, -20)) && (await hit(touch.page, 0, 17)) && !(await hit(touch.page, 30)), btnH);
+    await mouse.ctx.close(); await touch.ctx.close();
   }
   // 큰 화면 스모크: 1440x900과 같은 넓은 레이아웃이라 전체 검사는 생략하고 첫 로드에서 핵심 세 가지만 본다.
   {

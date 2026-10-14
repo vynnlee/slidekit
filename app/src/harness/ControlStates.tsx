@@ -1,3 +1,4 @@
+// 테스트 하네스(제품 화면이 아니다): controls.cjs 검사가 부품을 단독으로 띄우려고 쓴다. /dev/* 경로는 개발 서버에서만 열리고 production 번들과 서버 라우트에서 빠진다.
 // /dev/controls: 입력 컨트롤의 상태표. 행은 컨트롤, 열은 상태(기본, 호버, 포커스, 설정됨, Mixed, 비활성, 오류).
 // 호버와 포커스는 실제 의사 상태를 못 만드니 같은 토큰의 클래스를 강제로 붙여 눈으로 비교한다. 맨 위 행은 기준인 Fluid Select.
 import { useState, type ReactNode } from "react";

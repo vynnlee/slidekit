@@ -104,10 +104,8 @@ Bun.serve({
     "/present/:id": index,
     "/edit/:id": index,
     "/remote/:id": index,
-    "/dev/inspector": index,
-    "/dev/tokens": index,
-    "/dev/export": index,
-    "/dev/controls": index,
+    // 테스트 하네스 화면(src/harness): production에서는 열지 않는다.
+    ...Object.fromEntries((process.env.NODE_ENV === "production" ? [] : ["inspector", "tokens", "export", "controls"]).map((n) => [`/dev/${n}`, index])),
     "/api/decks": { GET: async () => Response.json(await listDecks()), POST: createDeck },
     ...deckRoutes,
     ...searchRoutes,

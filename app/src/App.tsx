@@ -9,10 +9,10 @@ const Remote = lazy(() => import("./Remote").then((m) => ({ default: m.Remote })
 // 개발용 데모 라우트는 production 번들에서 빠진다(NODE_ENV 분기는 번들 때 접혀 import가 사라진다).
 const dev: Record<string, ComponentType> = {};
 if (process.env.NODE_ENV !== "production") {
-  dev["/dev/inspector"] = lazy(() => import("./InspectorDemo").then((m) => ({ default: m.InspectorDemo })));
-  dev["/dev/tokens"] = lazy(() => import("./TokensDemo").then((m) => ({ default: m.TokensDemo })));
-  dev["/dev/controls"] = lazy(() => import("./ControlStates").then((m) => ({ default: m.ControlStates })));
-  dev["/dev/export"] = lazy(() => import("./ExportDemo").then((m) => ({ default: m.ExportDemo })));
+  dev["/dev/inspector"] = lazy(() => import("./harness/InspectorDemo").then((m) => ({ default: m.InspectorDemo })));
+  dev["/dev/tokens"] = lazy(() => import("./harness/TokensDemo").then((m) => ({ default: m.TokensDemo })));
+  dev["/dev/controls"] = lazy(() => import("./harness/ControlStates").then((m) => ({ default: m.ControlStates })));
+  dev["/dev/export"] = lazy(() => import("./harness/ExportDemo").then((m) => ({ default: m.ExportDemo })));
 }
 
 import { recordRecent } from "@/lib/recent";

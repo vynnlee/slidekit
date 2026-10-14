@@ -52,6 +52,7 @@ const steps: Step[] = [
   browser("present", "app/test/present.cjs", "app", APP),
   browser("remote", "app/test/remote.cjs", "app", APP),
   browser("responsive", "app/test/responsive.cjs", "app", APP),
+  browser("controls", "app/test/controls.cjs", "app", APP),
   browser("inspector", "app/test/inspector.cjs", "app", APP),
   browser("inspector-a11y", "app/test/inspector-a11y.cjs", "app", APP),
   browser("editor", "app/test/editor.cjs", "app", APP),
@@ -67,6 +68,8 @@ const steps: Step[] = [
   // 코멘트 화면 스크린샷(눈으로 보는 용도, 통과 기준 없음). --only ux-shots로 돌리면 /tmp/slidekit-ux-shots/<폭>/에 저장된다.
   { ...browser("ux-shots-1440", "scripts/ux-shots-comments2.cjs", "app", APP, { VIEWPORT: "1440x900", OUT: "/tmp/slidekit-ux-shots/1440" }), slow: true },
   { ...browser("ux-shots-390", "scripts/ux-shots-comments2.cjs", "app", APP, { VIEWPORT: "390x844", OUT: "/tmp/slidekit-ux-shots/390" }), slow: true },
+  // 덱 30개 목록의 부하 한도 검사(동시에 올라 있는 썸네일 수와 브라우저 메모리). 측정이 길어 --slow 또는 --only로만 돈다.
+  { ...browser("list-load", "app/test/list-load.cjs", "app", APP, { CHECK: "1" }), slow: true },
   { ...browser("bundler-fonts-e2e", "bundler/test/fonts.cjs", "static", STATIC), server: undefined, slow: true },
 ];
 
@@ -104,6 +107,7 @@ const MAP: [RegExp, string[]][] = [
   [/^app\/src\/(Inspector|components\/inspector)/, ["inspector", "inspector-a11y", "editor"]],
   [/^app\/src\/(TokensPanel|harness\/TokensDemo|lib\/deck-(tokens|fonts))|^app\/test\/deck-(tokens|fonts)/, ["deck-tokens", "deck-fonts", "tokens"]],
   [/^app\/src\/harness\/InspectorDemo/, ["inspector", "inspector-a11y"]],
+  [/^app\/src\/(components\/ui\/|lib\/control-surface|index\.css|harness\/ControlStates)|^app\/test\/controls/, ["controls"]],
   [/^app\/src\/harness\/ExportDemo/, ["export"]],
   [/^app\/src\/(Presenter|lib\/present)/, ["present"]],
   [/^app\/src\/(DeckList|TrashList|lib\/menu-model|components\/ui\/context-menu)/, ["list"]],

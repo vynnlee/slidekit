@@ -103,6 +103,15 @@ test("API: 목록, 원문, 복원(읽기 전용 덱은 403), 잘못된 덱과 id
   expect((await r["/api/decks/:folder/versions/:vid/restore"].POST(creq("/", {}, { folder: deck, vid: l[0].id }) as any)).status).toBe(200);
 });
 
+test("미리보기: base href가 들어가고 sandbox로 나가며, 잘못된 id는 404", async () => {
+  const id = V.list(deck)[0].id;
+  const res = await V.routes["/api/decks/:folder/versions/:vid/preview"].GET(creq("/", undefined, { folder: deck, vid: id }) as any);
+  expect(res.status).toBe(200);
+  expect(res.headers.get("content-security-policy")).toContain("sandbox");
+  expect(await res.text()).toContain(`<base href="/decks/${deck}/">`);
+  expect((await V.routes["/api/decks/:folder/versions/:vid/preview"].GET(creq("/", undefined, { folder: deck, vid: "../x" }) as any)).status).toBe(404);
+});
+
 test("코멘트: 답이 달리면 그 사이 외부 수정이 연결되고 Revert가 되돌리며, 이후 덱이 바뀌면 409", async () => {
   writeFileSync(file, html("base"));
   V.afterSave(deck, html("zero"), html("base"));

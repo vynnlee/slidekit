@@ -147,6 +147,18 @@ export const routes = {
       return source === null || !v ? bad("no such version", 404) : Response.json({ ...v, source });
     },
   },
+  // 미리보기: 옛 원문에 <base href="/decks/<덱>/">를 넣어 상대 경로(../../engine/ 이미지)가 풀리게 한다. 앱 출처와 분리하려고 sandbox로 연다.
+  "/api/decks/:folder/versions/:vid/preview": {
+    GET: (req: Req) => {
+      const deck = deckOf(req);
+      if (!deck) return bad("deck", 404);
+      const src = read(deck, req.params.vid!);
+      if (src === null) return bad("no such version", 404);
+      const base = `<base href="/decks/${deck}/">`;
+      const html = /<head[^>]*>/i.test(src) ? src.replace(/<head[^>]*>/i, (m) => m + base) : base + src;
+      return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": "sandbox allow-scripts allow-popups", "Cache-Control": "no-store" } });
+    },
+  },
   "/api/decks/:folder/versions/:vid/restore": {
     POST: (req: Req) => {
       const deck = deckOf(req);

@@ -568,6 +568,18 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   check('서식 변경 실행 취소', (await inDoc((s) => s.querySelector('h2').getAttribute('style') || '')) === styleBefore, [styleBefore, await inDoc((s) => s.querySelector('h2').getAttribute('style') || '')]);
   await page.keyboard.press('Escape');
 
+  // 덱 설정: 헤더 버튼으로 열고 Author를 바꾸면 deck-meta에 저장되고 실행 취소 한 번에 되돌아간다
+  await page.getByRole('button', { name: 'Deck settings' }).click();
+  const authorIn = page.getByLabel('Author', { exact: true });
+  await authorIn.waitFor({ timeout: 8000 }).catch(() => {});
+  await authorIn.fill('테스트 저자'); await page.keyboard.press('Tab');
+  await sleep(600); // 폼의 글자 입력 디바운스(400ms)가 지나야 반영된다
+  await page.keyboard.press('Escape'); await settle();
+  await page.locator('body').click({ position: { x: 5, y: 5 } }); await page.keyboard.press('Meta+s'); await saveDone();
+  check('덱 설정 Author가 deck-meta에 저장됨', /"author"\s*:\s*"테스트 저자"/.test(fs.readFileSync(FILE, 'utf8')));
+  await focusBody(); await page.keyboard.press('Meta+z'); await settle(); await saveDone();
+  check('덱 설정 변경 실행 취소', !/"author"\s*:\s*"테스트 저자"/.test(fs.readFileSync(FILE, 'utf8')));
+
   // 헤더 Undo와 Redo 버튼: 편집 뒤 켜지고 누르면 되돌린다
   await fr().locator('[data-active] h2').first().click(); await settle();
   await focusBody(); await page.keyboard.press('ArrowRight'); await settle();

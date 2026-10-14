@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, MonitorPlay, Redo2, Undo2 } from "lucide-react";
+import { ArrowLeft, MonitorPlay, Redo2, Settings2, Undo2 } from "lucide-react";
 import { TextArea } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -22,6 +22,8 @@ import type { CommentActions } from "@/lib/comment-actions";
 import { numbering } from "@/lib/comment-state";
 import { firstChild, isLeaf, isLockedDeep, parentOf, siblings } from "@/lib/selection";
 import { EditorTip } from "./EditorTip";
+import { DeckSettingsForm } from "./DeckSettings";
+import { readMeta, setMeta } from "@/lib/deck-meta";
 import { ContextMenu, useContextMenu } from "@/components/ui/context-menu";
 import { elementMenu, groupMenu, slideMenu, tileMenu, type MenuItem, type SlideMenuActions } from "@/lib/menu-model";
 import { diffDecks, slidesLabel } from "@/lib/deck-diff";
@@ -97,6 +99,8 @@ export function Editor({ id }: { id: string }) {
   const live = useCommentsLive(folder || null);
   const cm = useContextMenu();
   const [notFound, setNotFound] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [metaError, setMetaError] = useState("");
   const [updated, setUpdated] = useState<Set<number>>(new Set()); // 밖에서 바뀐 슬라이드(필름스트립에 4초 표시)
   const updatedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const comments = live.comments;
@@ -390,6 +394,16 @@ export function Editor({ id }: { id: string }) {
     window.addEventListener("paste", on);
     return () => window.removeEventListener("paste", on);
   }, []);
+  // 덱 설정(deck-meta는 head에 있다): 검증을 통과한 값만 prefix에 반영하고, 한 번 = 실행 취소 한 건(changePrefix).
+  const onMetaChange = (patch: Record<string, unknown>) => {
+    const sh = shellRef.current;
+    if (!sh) return;
+    const r = setMeta(sh.prefix, patch);
+    if (!r.ok) { setMetaError(r.issues[0]?.msg ?? "Invalid value"); return; }
+    setMetaError("");
+    changePrefix(r.html);
+    if (typeof patch.title === "string" && patch.title) setDeck((d) => (d ? { ...d, title: patch.title as string } : d));
+  };
   const alignGroup = (axis: "h" | "v", where: "start" | "center" | "end") => {
     const s = canvas.current?.slide(indexRef.current);
     const els = ([sel, ...more].filter(Boolean) as HTMLElement[]).filter((e) => !isLockedDeep(e) && canMove(e));
@@ -612,6 +626,7 @@ export function Editor({ id }: { id: string }) {
     { value: "act-dup", label: "Duplicate slide", group: "Actions", onSelect: () => dupSlide(indexRef.current) },
     { value: "act-del", label: "Delete slide", group: "Actions", disabled: units.length < 2, onSelect: () => delSlide(indexRef.current) },
     { value: "act-save", label: "Save", group: "Actions", shortcut: "mod+s", onSelect: () => { save(true); } },
+    { value: "act-settings", label: "Deck settings", group: "Actions", onSelect: () => setSettingsOpen(true) },
     { value: "act-undo", label: "Undo", group: "Actions", shortcut: "mod+z", disabled: !past.current.length, onSelect: () => restore(past.current, future.current) },
     { value: "act-redo", label: "Redo", group: "Actions", shortcut: "mod+shift+z", disabled: !future.current.length, onSelect: () => restore(future.current, past.current) },
     { value: "act-comment", label: "Add comment", group: "Actions", shortcut: "c", onSelect: () => canvas.current?.compose() },
@@ -659,6 +674,7 @@ export function Editor({ id }: { id: string }) {
               </Tooltip>
             </div>
             {dirty && !changed && <Button variant="ghost" size="compact" onClick={() => save()}>Save</Button>}
+            <Tooltip content="Deck settings" side="bottom"><Button aria-label="Deck settings" variant="ghost" size="icon-compact" onClick={() => setSettingsOpen(true)}><Settings2 /></Button></Tooltip>
             <ExportMenu folder={deck.folder} dirty={dirty} onSave={() => save()} />
             <Button variant="primary" size="compact" leadingIcon={MonitorPlay} onClick={() => present()}>Present</Button>
           </>
@@ -723,6 +739,12 @@ export function Editor({ id }: { id: string }) {
         </CommandMenu>
       </CommandMenuDialog>
 
+      <Dialog open={settingsOpen} onOpenChange={(o) => { setSettingsOpen(o); if (!o) setMetaError(""); }}>
+        <DialogContent size="sm">
+          <DialogTitle>Deck settings</DialogTitle>
+          <DeckSettingsForm meta={readMeta(shell.prefix) ?? {}} onChange={onMetaChange} error={metaError} />
+        </DialogContent>
+      </Dialog>
       <ContextMenu menu={cm} />
       <EditorTip sample={/<h2>제목<\/h2>\s*<p>내용<\/p>/.test(text)} />
       <Dialog open={help} onOpenChange={setHelp}>

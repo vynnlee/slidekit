@@ -13,6 +13,7 @@ import { Shell } from "./Shell";
 import { TrashList } from "./TrashList";
 import { DeckSettingsDialog } from "./DeckSettings";
 import { ShortcutHelp, type KeyGroup } from "./ShortcutHelp";
+import { DeckPalette } from "./DeckPalette";
 import { StatusPage } from "./StatusPage";
 import { TOAST, toast } from "./Toaster";
 import { readRecent } from "@/lib/recent";
@@ -140,20 +141,6 @@ function DeckMenu({ deck, items }: { deck: DeckEntry; items: MenuItem[] }) {
   );
 }
 
-type SearchEntry = { folder: string; id: string; title: string; slides: { n: number; title: string; text: string; notes: string }[] };
-// 일치한 곳 앞뒤 글자를 잘라 보여 준다.
-const snippet = (text: string, words: string[]) => {
-  const low = text.toLowerCase();
-  const at = words.map((w) => low.indexOf(w)).filter((i) => i >= 0).sort((a, b) => a - b)[0];
-  if (at === undefined) return "";
-  return `${at > 24 ? "..." : ""}${text.slice(Math.max(0, at - 24), at + 56).trim()}${text.length > at + 56 ? "..." : ""}`;
-};
-// 검색어와 일치한 부분을 굵게 보인다(Fluid 행의 기본 레이아웃을 같은 모양으로 직접 그린다).
-const Hl = ({ text, q }: { text: string; q: string }) => {
-  const words = q.split(/\s+/).filter(Boolean).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  if (!words.length) return <>{text}</>;
-  return <>{text.split(new RegExp(`(${words.join("|")})`, "gi")).map((part, i) => (i % 2 ? <mark key={i} className="bg-transparent font-semibold text-foreground">{part}</mark> : part))}</>;
-};
 // 로드가 끝난 썸네일 문서의 rAF 루프, 타이머, 웹 애니메이션, 미디어를 멈춘다(이후 장면은 그대로 보인다).
 function freezeFrame(f: HTMLIFrameElement) {
   try {
@@ -175,14 +162,6 @@ export function DeckList() {
   const [sort, setSort] = useState<Sort>(() => pref("slidekit:list-sort", ORDER, "date"));
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
-  // 전체 검색: 팔레트를 열 때 슬라이드 제목, 본문, 노트 색인을 받아 둔다(서버는 파일이 안 바뀌면 캐시를 쓴다).
-  const [q, setQ] = useState("");
-  const [index, setIndex] = useState<SearchEntry[] | null>(null);
-  useEffect(() => { pauseThumbs(palette); return () => pauseThumbs(false); }, [palette]);
-  useEffect(() => {
-    if (!palette) { setQ(""); return; }
-    fetch("/api/search-index").then((r) => (r.ok ? r.json() : null)).then(setIndex).catch(() => {});
-  }, [palette]);
   const [trashView, setTrashView] = useState(false);
   // 카드 열 수는 폭에서 정한다(카드 최소 폭 220px).
   const body = useRef<HTMLDivElement>(null);
@@ -338,40 +317,7 @@ export function DeckList() {
   keyActions.current = { search: () => setPalette(true), create: startCreate };
 
   // 두 글자 이상 입력하면 모든 덱의 슬라이드 제목, 본문, 노트에서 찾는다(최대 30건). 결과를 고르면 그 슬라이드의 편집기로 간다.
-  const slideHits = useMemo((): CommandMenuItemData[] => {
-    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-    if (q.trim().length < 2 || !index) return [];
-    const out: CommandMenuItemData[] = [];
-    for (const d of index) {
-      for (const sl of d.slides) {
-        const hay = `${sl.title} ${sl.text} ${sl.notes}`.toLowerCase();
-        if (!words.every((w) => hay.includes(w))) continue;
-        const inNotes = snippet(sl.notes, words);
-        // 제목에서 이미 일치했으면 라벨이 보여 주니 본문 조각은 붙이지 않는다.
-        const inTitle = words.every((w) => sl.title.toLowerCase().includes(w));
-        const hit = inTitle ? "" : snippet(sl.text, words) || (inNotes ? `Notes: ${inNotes}` : "");
-        out.push({
-          value: `slide:${d.folder}:${sl.n}`, label: sl.title || `Slide ${sl.n}`, icon: Presentation, group: "Slides",
-          description: `${d.title}, slide ${sl.n}${hit ? `: ${hit}` : ""}`, keywords: [sl.text, sl.notes],
-          onSelect: () => go(`/edit/${encodeURIComponent(d.id)}?slide=${sl.n}`),
-        });
-        if (out.length >= 30) return out;
-      }
-    }
-    return out;
-  }, [q, index]);
 
-  const items: CommandMenuItemData[] = useMemo(() => [
-    { value: "new", label: "New deck", icon: Plus, group: "Actions", shortcut: "n", onSelect: startCreate },
-    { value: "view", label: view === "grid" ? "View as list" : "View as grid", icon: view === "grid" ? List : LayoutGrid, group: "Actions", onSelect: () => setView(view === "grid" ? "list" : "grid") },
-    { value: "keys", label: "Keyboard shortcuts", icon: Keyboard, group: "Actions", keywords: ["help", "keys"], onSelect: () => setHelp(true) },
-    { value: "sort", label: `Sort by ${SORTS[ORDER[(ORDER.indexOf(sort) + 1) % ORDER.length]]}`, icon: ArrowDownUp, group: "Actions", onSelect: cycleSort },
-    ...sorted.flatMap((d): CommandMenuItemData[] => [
-      { value: `edit:${d.id}`, label: d.title, description: "Edit", icon: Pencil, group: "Decks", keywords: [d.folder, d.author ?? ""], onSelect: () => open(d) },
-      { value: `present:${d.id}`, label: d.title, description: "Presenter view", icon: MonitorPlay, group: "Decks", keywords: [d.folder, "present"], onSelect: () => go(`/present/${encodeURIComponent(d.id)}`) },
-    ]),
-    ...slideHits,
-  ], [sorted, view, sort, slideHits]);
 
   return (
     <>
@@ -456,21 +402,8 @@ export function DeckList() {
       <ShortcutHelp open={help} onOpenChange={setHelp} groups={KEY_GROUPS} description="Keyboard shortcuts for the deck list" />
       <DeckSettingsDialog folder={settingsFor?.folder ?? null} title={settingsFor?.title} onClose={() => setSettingsFor(null)} onSaved={load} />
 
-      <CommandMenuDialog open={palette} onOpenChange={setPalette} title="Search" description="Open a deck or run an action">
-        <CommandMenu items={items} query={q} onQueryChange={setQ}>
-          <CommandMenuInput placeholder="Decks, slides, or actions" />
-          <CommandMenuList renderItem={(item) => (
-            <CommandMenuItem value={item.value}>
-              <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                <span className="truncate [text-box:trim-both_cap_alphabetic] py-1 -my-1"><Hl text={item.label} q={q} /></span>
-                {item.description && <span className="min-w-0 truncate [text-box:trim-both_cap_alphabetic] py-1 -my-1 text-foreground/75"><Hl text={item.description} q={q} /></span>}
-              </span>
-            </CommandMenuItem>
-          )} />
-          <CommandMenuEmpty>No results</CommandMenuEmpty>
-          <CommandMenuFooter className="[&_kbd_*]:text-foreground/80" />
-        </CommandMenu>
-      </CommandMenuDialog>
+      <DeckPalette open={palette} onOpenChange={setPalette} sorted={sorted} view={view} sortLabel={`Sort by ${SORTS[ORDER[(ORDER.indexOf(sort) + 1) % ORDER.length]]}`}
+        onNew={startCreate} onToggleView={() => setView(view === "grid" ? "list" : "grid")} onCycleSort={cycleSort} onHelp={() => setHelp(true)} onOpen={open} />
 
       <Dialog open={!!renaming} onOpenChange={(o) => !o && setRenaming(null)}>
         <DialogContent size="sm">

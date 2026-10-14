@@ -18,6 +18,7 @@ export type Comment = {
   reply?: string;
   createdAt: string;
   repliedAt?: string;
+  recheck?: boolean; // 버전 복원 뒤 그 슬라이드에서 발췌문을 찾지 못한 코멘트. 위치 확인이 필요하다고 표시만 한다
   slideDeleted?: boolean; // 저장 때 슬라이드가 지워진 코멘트. 지우지 않고 표시만 한다
   deliveredAt?: string; // 채널이 Claude 세션에 전달한 시각
   ackAt?: string; // Claude가 작업을 시작했다고 알린 시각
@@ -92,6 +93,7 @@ export function sanitize(list: unknown[]): Comment[] {
     for (const k of ["repliedAt", "deliveredAt", "resolvedAt", "ackAt", "revertedAt"] as const) { const v = str(c[k], 40); if (v && !Number.isNaN(Date.parse(v))) s[k] = v; }
     if (c.resolved === true) s.resolved = true;
     if (c.slideDeleted === true) s.slideDeleted = true;
+    if (c.recheck === true) s.recheck = true;
     out.push(s);
   }
   return out;
@@ -348,6 +350,22 @@ export function remap(deck: string, map: Record<string, number>) {
     // 없는 번호나 정수가 아닌 값(슬라이드 번호로 들어오면 안 된다)은 삭제된 슬라이드로 본다.
     if (to === undefined || !Number.isInteger(to) || to < 1) { c.slideDeleted = true; changed = true; }
     else if (to !== c.slide) { c.slide = to; changed = true; }
+  }
+  if (!changed) return;
+  save(deck, list);
+  emit("comments", { deck, comments: list });
+}
+
+/** 버전 복원 뒤에 부른다. 열린 코멘트의 발췌문이 복원된 덱의 그 번호 슬라이드에 없으면 recheck로 표시한다(코멘트는 지우지 않는다). */
+export function flagAfterRestore(deck: string, html: string) {
+  if (!validDeck(deck)) return;
+  const slides = [...html.matchAll(/<section\b[^>]*\bdata-slide\b[^>]*>[\s\S]*?<\/section>/gi)].map((m) => m[0].replace(/<[^>]+>/g, " ").replace(/\s+/g, " "));
+  const list = load(deck);
+  let changed = false;
+  for (const c of list) {
+    if (c.status !== "open" || c.slideDeleted) continue;
+    const lost = c.excerpt.trim() !== "" && !(slides[c.slide - 1] ?? "").includes(c.excerpt.trim().replace(/\s+/g, " "));
+    if (lost !== !!c.recheck) { if (lost) c.recheck = true; else delete c.recheck; changed = true; }
   }
   if (!changed) return;
   save(deck, list);

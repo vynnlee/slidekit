@@ -165,6 +165,7 @@ export const routes = {
       if (!deck) return bad("deck", 404);
       if (readonly(deck)) return bad("read-only deck", 403);
       const r = restore(deck, req.params.vid!);
+      if (r.ok) void import("./comments").then((m) => m.flagAfterRestore(deck, readFileSync(fileOf(deck), "utf8"))).catch(() => {}); // 순환 import를 피해 늦게 불러온다
       return r.ok ? Response.json({ ok: true, undo: r.undo }) : bad(r.error, r.status);
     },
   },

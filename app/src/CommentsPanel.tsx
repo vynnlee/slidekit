@@ -175,6 +175,7 @@ export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, o
                       <span className="ml-auto text-micro text-muted-foreground">{ago(c.createdAt)}</span>
                     </span>
                     {c.excerpt && <span className="truncate text-micro text-muted-foreground">on &ldquo;{c.excerpt}&rdquo;</span>}
+                    {c.recheck && <span className="text-micro text-muted-foreground">Position needs a check. The text was not found on this slide after a restore.</span>}
                     <span className={cn("whitespace-pre-wrap break-words text-body", c.text.length > 220 && !open.has(c.id) && "line-clamp-5")}>{c.text}</span>
                   </button>
                   {c.text.length > 220 && (

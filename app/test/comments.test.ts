@@ -8,7 +8,7 @@ const dir = mkdtempSync(join(tmpdir(), "sk-comments-"));
 mkdirSync(join(dir, "d"));
 process.env.SLIDEKIT_DECKS = dir;
 process.env.SLIDEKIT_KEY_FILE = join(dir, "test.key"); // 실제 ~/.config 키를 건드리지 않는다
-const { load, save, remap, sanitize, sign, verify } = await import("../comments");
+const { load, save, remap, sanitize, sign, verify, flagAfterRestore } = await import("../comments");
 const file = join(dir, "d", "comments.json");
 
 test("파일이 없으면 빈 목록, 저장 후 다시 읽힘", () => {
@@ -72,4 +72,14 @@ test("서명: 만든 코멘트는 검증되고, 본문이나 덱이 바뀌거나
   expect(readFileSync(file, "utf8")).not.toContain('"trusted"'); // 저장하지 않는다
   const { statSync } = require("node:fs");
   expect(statSync(join(dir, "test.key")).mode & 0o777).toBe(0o600); // 키 파일 권한
+});
+
+test("버전 복원 뒤: 발췌문이 그 번호 슬라이드에 없으면 recheck, 있으면 해제", () => {
+  const c = { id: "r1", slide: 1, path: "", excerpt: "Alpha", text: "t", status: "open" as const, createdAt: "2026-10-14T00:00:00Z" };
+  save("d", [c, { ...c, id: "r2", slide: 2, excerpt: "" }]);
+  const html = (a: string, b: string) => `<section data-slide="content"><h1>${a}</h1></section><section data-slide="content"><h1>${b}</h1></section>`;
+  flagAfterRestore("d", html("Beta", "Alpha"));
+  expect(load("d").map((x) => !!x.recheck)).toEqual([true, false]); // 발췌문이 없는 코멘트는 판단하지 않는다
+  flagAfterRestore("d", html("Alpha", "Beta"));
+  expect(load("d").map((x) => !!x.recheck)).toEqual([false, false]);
 });

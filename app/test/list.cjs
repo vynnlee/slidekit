@@ -305,6 +305,9 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await cardBtn('zz-e2e-k1').waitFor(); await sleep(600);
   // 다른 곳을 우클릭하면 교체, 창 크기가 바뀌면 닫힘
+  // 느린 기계(게이트처럼 다른 단계가 같이 도는 상황)를 흉내 낸다: CPU를 6배 늦춘 채 교체한다. 늦은 프레임에 옛 메뉴의 포커스 복귀가 새 메뉴를 닫던 문제를 잡는다.
+  const cdp = await ctx.newCDPSession(page).catch(() => null);
+  if (cdp) await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 }).catch(() => {});
   await cardBtn('zz-e2e-k1').click({ button: 'right', position: { x: 30, y: 30 } });
   await page.getByRole('menu').waitFor();
   await cardBtn('zz-e2e-k2').scrollIntoViewIfNeeded(); // 스크롤이 새 메뉴를 닫지 않게 먼저 화면에 맞춘다
@@ -312,6 +315,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await sleep(400);
   const k2 = await cardBtn('zz-e2e-k2').boundingBox();
   const swapped = await menuBox();
+  if (cdp) await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 }).catch(() => {});
   check('다른 카드를 우클릭하면 메뉴가 하나로 교체된다', (await page.getByRole('menu').count()) === 1 && swapped.y >= k2.y + 29 && swapped.y <= k2.y + 45, [swapped, k2]); // 오른쪽 가장자리라 가로는 뒤집힐 수 있어 세로 위치로 본다
   await page.setViewportSize({ width: 1200, height: 800 });
   check('창 크기가 바뀌면 닫힌다', await until(async () => (await page.getByRole('menu').count()) === 0));
@@ -376,6 +380,19 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   const p4 = await ctx4.newPage();
   await p4.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   check('렌더 오류는 Reload 화면', await until(async () => (await p4.getByText('Something went wrong.').count()) === 1 && (await p4.getByRole('button', { name: 'Reload' }).count()) === 1));
+  // 편집기 첫 열기 안내 카드: 보이고, 아래 요소(필름스트립)의 클릭을 막지 않으며, 첫 상호작용에 사라지고, 다시 안 뜬다
+  const ctx5 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await ctx5.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+  const p5 = await ctx5.newPage();
+  await p5.goto(BASE + '/edit/slidekit-guide', { waitUntil: 'domcontentloaded' });
+  const tip = p5.getByRole('region', { name: 'Editor tips' });
+  check('편집기 첫 열기에는 안내 카드가 보인다', await until(async () => (await tip.count()) === 1));
+  await p5.locator('section[data-testid="filmstrip"] [role=option]').nth(2).click({ timeout: 10000 });
+  check('카드가 필름스트립 클릭을 막지 않고, 그 클릭에 카드가 사라진다', await until(async () => (await tip.count()) === 0) && (await p5.getByRole('option', { name: 'Slide 3', exact: true }).getAttribute('aria-selected')) === 'true');
+  await p5.reload({ waitUntil: 'domcontentloaded' });
+  await sleep(2500);
+  check('닫은 뒤에는 다시 뜨지 않는다', (await tip.count()) === 0);
+  await ctx5.close();
   check('페이지 오류 없음', errors.length === 0, errors);
   await browser.close();
   console.log(fail ? `${fail} FAILED` : 'ALL PASS');

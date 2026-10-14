@@ -165,13 +165,16 @@ export function ContextMenu({ menu }: { menu: ContextMenuController }) {
   }, [state?.id]);
 
   // 닫힌 뒤에는 메뉴를 연 요소로 포커스를 돌려준다(Radix는 보이지 않는 앵커로 돌려놓는다).
+  const live = useRef(state);
+  live.current = state;
   const wasOpen = useRef(false);
   useEffect(() => {
     if (state) { wasOpen.current = true; return; }
     if (!wasOpen.current) return;
     wasOpen.current = false;
     const el = returnTo.current;
-    requestAnimationFrame(() => { if (el?.isConnected) el.focus({ preventScroll: true }); });
+    // 부하로 프레임이 늦어져 그 사이 다른 메뉴가 열렸다면(우클릭 교체) 포커스를 되돌리지 않는다: 새 메뉴에서 포커스를 빼앗아 바깥 포커스로 닫히게 만든다.
+    requestAnimationFrame(() => { if (!live.current && el?.isConnected) el.focus({ preventScroll: true }); });
   }, [state]);
 
   if (!state) return null;

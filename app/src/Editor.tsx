@@ -768,7 +768,7 @@ export function Editor({ id }: { id: string }) {
             <Tooltip content="Decks" side="bottom"><Button aria-label="Decks" variant="ghost" size="icon-compact" onClick={back}><ArrowLeft /></Button></Tooltip>
             <span className="min-w-0 truncate text-subtitle font-medium">{deck.title}</span>
             {status === "error"
-              ? <Button variant="ghost" size="compact" onClick={() => save()}>Save failed. Retry</Button>
+              ? <Button aria-label="Save failed. Retry" variant="ghost" size="compact" onClick={() => save()}><span className="max-sm:hidden">Save failed. </span>Retry</Button> /* 좁은 화면에서는 Retry만 보여 헤더가 넘치지 않게 한다(이름은 그대로) */
               : <span data-testid="status" className="max-sm:sr-only text-caption text-muted-foreground">{label}</span>}
             <ChannelBadge connected={live.channel} className="max-md:hidden" />
             {changed && (

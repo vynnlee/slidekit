@@ -14,7 +14,7 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   check('선택 요소 크기 칩(W × H)', (await page.getByText(/^\d+ × \d+$/).count()) === 1);
   await focusBody(); await page.keyboard.press('Escape');
   await page.keyboard.press('Meta+k'); await settle();
-  await page.getByPlaceholder('Slide number, title or action').fill('Slide 3'); await settle();
+  await page.getByPlaceholder('Slides or actions').fill('Slide 3'); await settle();
   await page.keyboard.press('Enter'); await settle();
   check('Cmd+K 팔레트로 슬라이드 이동', (await layers.nth(2).getAttribute('aria-selected')) === 'true');
   await page.keyboard.press('Meta+/'); await settle();
@@ -30,7 +30,7 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   const inPalette = ['Group selection', 'Ungroup', 'Find and replace', 'Copy style', 'Paste style', 'Deck settings', 'Insert image', 'Add slide: Quote', 'Theme: Paper', 'Text style: Caption', 'Zoom to 100%', 'Show safe area', 'overflow outlines', 'Undo'];
   const missingP = [];
   await page.keyboard.press('Meta+k'); await settle(); // 팔레트를 한 번 열어 두고 검색어만 바꿔 가며 본다
-  const palIn = page.getByPlaceholder('Slide number, title or action');
+  const palIn = page.getByPlaceholder('Slides or actions');
   for (const q of inPalette) {
     await palIn.fill(q);
     await cond(() => true, null, 50); // 목록 갱신 한 프레임

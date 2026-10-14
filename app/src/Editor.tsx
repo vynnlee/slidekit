@@ -22,6 +22,7 @@ import type { CommentActions } from "@/lib/comment-actions";
 import { holdPref, numbering } from "@/lib/comment-state";
 import { firstChild, isLeaf, isLockedDeep, parentOf, siblings } from "@/lib/selection";
 import { EditorTip } from "./EditorTip";
+import { ShortcutHelp, type KeyGroup } from "./ShortcutHelp";
 import { LAYOUTS } from "../../engine/layouts";
 import { THEMES } from "@/lib/themes";
 import { TEXT_STYLES } from "@/lib/text-styles";
@@ -40,24 +41,13 @@ import { DeckColorsContext } from "@/lib/deck-colors-context";
 import { startPresentation } from "@/lib/present";
 import type { Comment, DeckEntry } from "@/lib/deck";
 
-const KEY_GROUPS: [string, [string, string][]][] = [
+const KEY_GROUPS: KeyGroup[] = [
   ["Edit", [["Cmd+S", "Save"], ["Cmd+Z", "Undo"], ["Shift+Cmd+Z", "Redo"], ["Cmd+D", "Duplicate"], ["Cmd+G", "Group"], ["Shift+Cmd+G", "Ungroup"], ["Cmd+[", "Send backward"], ["Cmd+]", "Bring forward"], ["F2", "Rename layer"], ["Cmd+C", "Copy"], ["Cmd+Opt+C", "Copy style"], ["Cmd+Opt+V", "Paste style"], ["Cmd+V", "Paste (an image too)"], ["Delete", "Delete selection"], ["Cmd+B", "Bold"], ["Cmd+I", "Italic"]]],
   ["Select", [["Click", "Select a top-level element"], ["Double-click", "Go one level in, or edit text"], ["Cmd+Click", "Select the innermost element"], ["Enter", "First child, or edit text"], ["Shift+Enter", "Select the parent"], ["Shift+Click", "Add to selection"], ["Tab", "Next sibling"], ["Esc", "Finish editing, or deselect"]]],
   ["View", [["Up, Down", "Go to slide (no selection)"], ["Arrows", "Nudge 1px (Shift: 10px)"], ["Drag", "Move (Shift: lock axis)"], ["Cmd+Scroll", "Zoom"], ["Shift+1", "Zoom to fit"], ["Shift+0", "Zoom to 100%"], ["Cmd+0", "Zoom to fit"], ["Cmd+\\", "Toggle panels"], ["Shift+Cmd+\\", "Toggle filmstrip"]]],
   ["Insert", [["Cmd+V", "Paste an image from the clipboard"], ["Drop", "Drop an image on the canvas, or on an image to replace it"], ["1, 2, 3, 4, 5", "Pick a layout in the Add slide menu"]]],
   ["General", [["Cmd+K", "Command palette"], ["Cmd+F", "Find and replace"], ["Cmd+Enter", "Present from this slide"], ["Shift+Cmd+Enter", "Present from the start"], ["Opt+Enter", "Present from this slide"], ["Shift+F10", "Context menu"], ["Cmd+/", "Shortcuts"]]],
 ];
-const GLYPH: Record<string, string> = { Cmd: "⌘", Shift: "⇧", Enter: "↵", Delete: "⌫", Esc: "⎋", Up: "↑", Down: "↓" };
-// "Shift+Cmd+Z" -> 키캡 칩 여러 개. "Up, Down"은 쉼표로 나눈 두 키.
-const Keys = ({ combo }: { combo: string }) => (
-  <span className="flex items-center gap-1">
-    {combo.split(", ").map((c, ci) => (
-      <span key={ci} className="flex items-center gap-0.5">
-        {c.split("+").map((k) => <kbd key={k} className="min-w-5 rounded bg-surface-3 px-1 py-0.5 text-center font-sans text-micro tabular-nums text-foreground">{GLYPH[k] ?? k}</kbd>)}
-      </span>
-    ))}
-  </span>
-);
 // 팔레트에 보일 슬라이드 제목: data-title, 없으면 첫 제목 태그, 없으면 첫 글자.
 const slideTitle = (html: string) => {
   const t = document.createElement("template");
@@ -717,7 +707,7 @@ export function Editor({ id }: { id: string }) {
 
   // 명령 팔레트(Cmd+K): 슬라이드로 이동하고 자주 쓰는 동작을 실행한다. 열 때만 만든다.
   const paletteItems: CommandMenuItemData[] = palette ? [
-    ...units.map((u, i) => ({ value: `slide-${i}`, label: `Slide ${i + 1}`, description: slideTitle(u.html), group: "Slides", keywords: [String(i + 1)], onSelect: () => setIndex(i) })),
+    ...units.map((u, i) => ({ value: `slide-${i}`, label: `${i + 1}. ${slideTitle(u.html)}`, group: "Slides", keywords: [String(i + 1), `slide ${i + 1}`], onSelect: () => setIndex(i) })),
     { value: "act-present", label: "Present from this slide", group: "Actions", shortcut: "mod+enter", onSelect: () => present() },
     { value: "act-present-start", label: "Present from the start", group: "Actions", shortcut: "mod+shift+enter", onSelect: () => present(true) },
     { value: "act-add", label: "Add slide after this one", group: "Actions", onSelect: () => addSlide(indexRef.current) },
@@ -846,9 +836,9 @@ export function Editor({ id }: { id: string }) {
         </div>
       </Shell>
       <ReplyToasts comments={comments} onView={jump} />
-      <CommandMenuDialog open={palette} onOpenChange={setPalette} title="Command palette" description="Go to a slide or run an action">
+      <CommandMenuDialog open={palette} onOpenChange={setPalette} title="Search" description="Go to a slide or run an action">
         <CommandMenu items={paletteItems}>
-          <CommandMenuInput placeholder="Slide number, title or action" />
+          <CommandMenuInput placeholder="Slides or actions" />
           <CommandMenuList />
           <CommandMenuEmpty>No results</CommandMenuEmpty>
           <CommandMenuFooter />
@@ -864,21 +854,7 @@ export function Editor({ id }: { id: string }) {
       <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp" aria-label="Choose image file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void addImage(f, null); }} />
       <ContextMenu menu={cm} />
       <EditorTip sample={/<h2>제목<\/h2>\s*<p>내용<\/p>/.test(text)} />
-      <Dialog open={help} onOpenChange={setHelp}>
-        <DialogContent size="lg">
-          <DialogTitle>Shortcuts</DialogTitle>
-          <div className="grid grid-cols-2 gap-x-8 gap-y-4 pt-3">
-            {KEY_GROUPS.map(([g, list]) => (
-              <div key={g} className="flex flex-col gap-1.5">
-                <span className="text-caption font-semibold">{g}</span>
-                {list.map(([k, v]) => (
-                  <div key={k} className="flex items-center justify-between gap-3 text-body"><span className="text-muted-foreground">{v}</span><Keys combo={k} /></div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ShortcutHelp open={help} onOpenChange={setHelp} groups={KEY_GROUPS} description="Keyboard shortcuts for the editor" />
     </DeckColorsContext.Provider>
   );
 }

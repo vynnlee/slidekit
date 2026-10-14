@@ -55,8 +55,8 @@ const JSON_H = { 'Content-Type': 'application/json' };
     if (await head.count()) {
       await head.click({ modifiers: ['Meta'] });
       await sleep(300);
-      await page.getByRole('button', { name: 'Comment' }).first().click();
-      const box = page.getByPlaceholder('Comment');
+      await page.getByRole('button', { name: 'Comment', exact: true }).first().click();
+      const box = page.getByRole('textbox', { name: 'Comment' });
       await box.fill('이 제목을 두 줄로 줄이면 어떨까요? 발표 때 읽기 어렵습니다.');
       await shot('composer', box.locator('xpath=ancestor::div[1]'));
       await page.keyboard.press('Escape');
@@ -101,13 +101,17 @@ const JSON_H = { 'Content-Type': 'application/json' };
 
       // (4) 열린 코멘트가 있는 슬라이드(paths[1].slide)에서 핀, (5) 핀 호버
       await gotoSlide(paths[1].slide - 1);
-      const pin = page.locator('div[data-path] > button[aria-label="Comment"]').first();
+      const pin = page.locator('[data-comment-pin]').first();
       if (await pin.isVisible().catch(() => false)) {
         await shot('pin');
         await pin.hover();
         await shot('pin-hover');
       } else warn('pin, pin-hover', '코멘트 핀이 보이지 않음');
     }
+
+    // Export는 `_` 폴더(테스트 사본)를 내보낼 수 없어서(덱 id 규칙) 실제 덱을 읽기만 하는 dev 화면에서 찍는다. dry-run 서버라 업로드는 없다.
+    await page.goto(`${BASE}/dev/export?deck=vibe-coding-workshop`);
+    await page.getByRole('button', { name: 'Export' }).waitFor({ timeout: 15000 });
 
     // (6) Export 메뉴
     await page.mouse.move(0, 0);
@@ -127,14 +131,14 @@ const JSON_H = { 'Content-Type': 'application/json' };
       const prog = dialog.locator('[aria-label="Progress"]');
       if (await prog.waitFor({ timeout: 8000 }).then(() => true, () => false)) await shot('publish-running', dialog);
       else warn('publish-running', '진행 로그가 8초 안에 안 보임');
-      if (await dialog.getByRole('button', { name: /Copy/ }).waitFor({ timeout: 60000 }).then(() => true, () => false)) await shot('publish-done', dialog);
+      if (await dialog.getByRole('button', { name: 'Copy link' }).waitFor({ timeout: 60000 }).then(() => true, () => false)) await shot('publish-done', dialog);
       else warn('publish-done', 'Copy 버튼이 60초 안에 안 나옴');
       await dialog.getByRole('button', { name: /^(Close|Cancel)$/ }).click().catch(() => {});
     } else warn('publish-dialog, publish-running, publish-done', 'Publish 메뉴 항목이 없음');
 
     // (10) 서버 연결 끊김 안내(ping은 5초마다, 최대 20초 대기)
     await page.route('**/api/ping', (r) => r.abort());
-    if (await page.getByRole('status').filter({ hasText: 'Disconnected' }).waitFor({ timeout: 20000 }).then(() => true, () => false)) await shot('disconnected');
+    if (await page.getByRole('status').filter({ hasText: /unreachable|Disconnected/i }).waitFor({ timeout: 20000 }).then(() => true, () => false)) await shot('disconnected');
     else warn('disconnected', '끊김 안내가 20초 안에 안 보임');
   } finally {
     if (browser) await browser.close();

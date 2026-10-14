@@ -5,6 +5,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { deckFingerprint, readPublish, recordUnpublish } from "../engine/publish-record";
 import { deckCheck } from "../engine/deck-check";
+import { readOnlyDeck } from "./deck-lock";
 
 const root = join(import.meta.dir, "..");
 const ID = /^[a-z0-9][a-z0-9-]*$/;
@@ -158,7 +159,7 @@ export function makeRoutes(run: Run = spawnRun) {
         if (!id) return bad("deck", 404);
         const b = (await req.json().catch(() => null)) as { confirm?: unknown; confirmName?: unknown } | null;
         if (!b || b.confirm !== true) return bad("confirm");
-        if ((process.env.SLIDEKIT_READONLY_DECKS ?? "").split(",").some((f) => f.trim() === id)) return bad("read-only", 403);
+        if (readOnlyDeck(id)) return bad("read-only", 403);
         const dir = join(root, "decks", id);
         const cur = readPublish(dir).current;
         if (!cur) return bad("not-published", 409);

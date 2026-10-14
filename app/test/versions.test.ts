@@ -140,3 +140,33 @@ test("코멘트: 답이 달리면 그 사이 외부 수정이 연결되고 Rever
   expect(((await r2.json()) as any).error).toBe("changed");
   expect(readFileSync(file, "utf8")).toBe(html("fixed-and-more")); // 건드리지 않았다
 });
+
+test("restore 스냅샷은 10개까지만 남아 다른 기록을 밀어내지 않는다", () => {
+  const d2 = "d2";
+  mkdirSync(join(dir, d2));
+  writeFileSync(join(dir, d2, "index.html"), html("base"));
+  for (let i = 0; i < 5; i++) V.snapshot(d2, html("keep" + i), "external", at(i * 100));
+  for (let i = 0; i < 40; i++) V.snapshot(d2, html("r" + i), "restore", at(1000 + i));
+  const l = V.list(d2);
+  expect(l.filter((v) => v.kind === "restore").length).toBe(10);
+  expect(l.filter((v) => v.kind === "external").length).toBe(5);
+});
+
+test("같은 초에 만든 스냅샷은 슬라이드 수 자릿수와 상관없이 만든 순서로 정렬된다", () => {
+  const d3 = "d3";
+  mkdirSync(join(dir, d3));
+  V.snapshot(d3, html("a", 9), "external", at(0));
+  V.snapshot(d3, html("b", 10), "external", at(0));
+  expect(V.list(d3).map((v) => v.slides)).toEqual([10, 9]);
+});
+
+test("미리보기: <header>와 주석의 <head>에 걸리지 않고, 헤더에 connect-src와 nosniff가 있다", async () => {
+  const src = `<!doctype html><html><!-- <headx> --><body><header>h</header></body></html>`;
+  const v = V.snapshot(deck, src, "external", at(5000))!;
+  const res = await V.routes["/api/decks/:folder/versions/:vid/preview"].GET(creq("/", undefined, { folder: deck, vid: v.id }) as any);
+  const t = await res.text();
+  expect(t.indexOf("<base")).toBeLessThan(t.indexOf("<!--")); // <html> 바로 뒤
+  expect(t).not.toContain("<header><base");
+  expect(res.headers.get("content-security-policy")).toContain("connect-src 'none'");
+  expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+});

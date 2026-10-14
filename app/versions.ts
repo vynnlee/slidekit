@@ -6,11 +6,13 @@ import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { deckFolder, decksDir } from "./folder";
+import { readOnlyDeck, withDeckLock } from "./deck-lock";
 
 export type Kind = "save" | "external" | "restore";
 export type Version = { id: string; at: string; kind: Kind; slides: number; bytes: number };
 
 const KEEP = 50; // 덱마다 최근 50개
+const KEEP_RESTORE = 10; // restore 종류는 따로 10개까지: 같은 두 버전을 번갈아 복원해 다른 기록을 밀어내지 못하게
 const MAX_BYTES = 30 * 1024 * 1024; // 덱마다 30MB
 const BURST_MS = 60_000; // 이 안의 연속 저장은 하나로
 const ID = /^\d{8}T\d{6}Z-(save|external|restore)-\d{1,5}-[0-9a-f]{4}$/;
@@ -19,7 +21,6 @@ const bad = (error: string, status = 400) => Response.json({ error }, { status }
 export const hash = (s: string) => createHash("sha1").update(s).digest("hex");
 const slidesOf = (html: string) => (html.match(/<section\b[^>]*\bdata-slide\b/g) ?? []).length;
 const vdir = (deck: string) => join(decksDir, deck, ".versions");
-const readonly = (deck: string) => (process.env.SLIDEKIT_READONLY_DECKS ?? "").split(",").some((f) => f.trim() === deck);
 
 function parse(file: string, bytes: number): Version | null {
   const id = file.replace(/\.html$/, "");
@@ -33,13 +34,15 @@ function parse(file: string, bytes: number): Version | null {
 export function list(deck: string): Version[] {
   const dir = vdir(deck);
   if (!existsSync(dir)) return [];
-  const out: Version[] = [];
+  const out: { v: Version; m: number }[] = [];
   for (const f of readdirSync(dir)) {
     if (!f.endsWith(".html")) continue;
-    const v = parse(f, statSync(join(dir, f)).size);
-    if (v) out.push(v);
+    const st = statSync(join(dir, f));
+    const v = parse(f, st.size);
+    if (v) out.push({ v, m: st.mtimeMs });
   }
-  return out.sort((a, b) => b.id.localeCompare(a.id));
+  // 같은 초 안에서는 만든 순서(mtime)로, 그래도 같으면 id로 정한다. id만 문자열로 비교하면 슬라이드 수 -10-이 -9-보다 앞서 prune이 최신을 지울 수 있다.
+  return out.sort((a, b) => b.v.at.localeCompare(a.v.at) || b.m - a.m || b.v.id.localeCompare(a.v.id)).map((x) => x.v);
 }
 
 const stamp = (d = new Date()) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
@@ -61,11 +64,19 @@ export function snapshot(deck: string, source: string, kind: Kind, now = new Dat
 
 function prune(deck: string) {
   const dir = vdir(deck);
+  // 끊긴 쓰기가 남긴 임시 파일(1분 넘은 것)은 용량과 개수에 안 잡히므로 여기서 지운다.
+  for (const f of readdirSync(dir)) if (f.startsWith(".tmp-")) { try { if (Date.now() - statSync(join(dir, f)).mtimeMs > 60_000) rmSync(join(dir, f), { force: true }); } catch { /* 이미 없다 */ } }
   let all = list(deck);
-  for (const v of all.slice(KEEP)) rmSync(join(dir, v.id + ".html"), { force: true });
-  all = all.slice(0, KEEP);
+  let restores = 0;
+  const kept: Version[] = [];
+  for (const v of all) {
+    if (v.kind === "restore" && ++restores > KEEP_RESTORE) { rmSync(join(dir, v.id + ".html"), { force: true }); continue; }
+    kept.push(v);
+  }
+  for (const v of kept.slice(KEEP)) rmSync(join(dir, v.id + ".html"), { force: true });
+  all = kept.slice(0, KEEP);
   let total = all.reduce((n, v) => n + v.bytes, 0);
-  for (let i = all.length - 1; i > 0 && total > MAX_BYTES; i--) { rmSync(join(dir, all[i].id + ".html"), { force: true }); total -= all[i].bytes; } // 가장 오래된 것부터, 최신 하나는 남긴다
+  for (let i = all.length - 1; i > 2 && total > MAX_BYTES; i--) { rmSync(join(dir, all[i].id + ".html"), { force: true }); total -= all[i].bytes; } // 가장 오래된 것부터, 최신 셋은 남긴다
 }
 
 export const read = (deck: string, id: string): string | null => {
@@ -155,16 +166,17 @@ export const routes = {
       const src = read(deck, req.params.vid!);
       if (src === null) return bad("no such version", 404);
       const base = `<base href="/decks/${deck}/">`;
-      const html = /<head[^>]*>/i.test(src) ? src.replace(/<head[^>]*>/i, (m) => m + base) : base + src;
-      return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": "sandbox allow-scripts allow-popups", "Cache-Control": "no-store" } });
+      // <header> 같은 이름에 걸리지 않게 head 태그만 찾고, 없으면 <html> 뒤, 그것도 없으면 맨 앞에 넣는다.
+      const html = /<head(\s[^>]*)?>/i.test(src) ? src.replace(/<head(\s[^>]*)?>/i, (m) => m + base) : /<html(\s[^>]*)?>/i.test(src) ? src.replace(/<html(\s[^>]*)?>/i, (m) => m + base) : base + src;
+      return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": "sandbox allow-scripts allow-popups; connect-src 'none'; form-action 'none'", "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store" } });
     },
   },
   "/api/decks/:folder/versions/:vid/restore": {
-    POST: (req: Req) => {
+    POST: async (req: Req) => {
       const deck = deckOf(req);
       if (!deck) return bad("deck", 404);
-      if (readonly(deck)) return bad("read-only deck", 403);
-      const r = restore(deck, req.params.vid!);
+      if (readOnlyDeck(deck)) return bad("read-only deck", 403);
+      const r = await withDeckLock(deck, async () => restore(deck, req.params.vid!)); // 편집기 저장(PUT)과 같은 잠금
       if (r.ok) void import("./comments").then((m) => m.flagAfterRestore(deck, readFileSync(fileOf(deck), "utf8"))).catch(() => {}); // 순환 import를 피해 늦게 불러온다
       return r.ok ? Response.json({ ok: true, undo: r.undo }) : bad(r.error, r.status);
     },

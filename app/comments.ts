@@ -5,6 +5,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
 import { editsBetween, hash, noteFileChanged, restore } from "./versions";
+import { readOnlyDeck, withDeckLock } from "./deck-lock";
 
 const decksDir = process.env.SLIDEKIT_DECKS ?? join(import.meta.dir, "..", "decks");
 
@@ -207,27 +208,31 @@ export const routes = {
     POST: async (req: Request & { params: { id: string } }) => {
       const b = await body(req);
       if (!b || !validDeck(b.deck)) return bad("deck");
-      if ((process.env.SLIDEKIT_READONLY_DECKS ?? "").split(",").some((f) => f.trim() === b.deck)) return bad("read-only deck", 403);
-      const list = load(b.deck);
+      if (readOnlyDeck(b.deck)) return bad("read-only deck", 403);
+      const deck = b.deck;
+      const undo = b.undo === true;
+      return withDeckLock(deck, async () => { // 편집기 저장(PUT)과 같은 잠금: 해시 확인부터 복원까지 한 번에
+      const list = load(deck);
       const comment = list.find((c) => c.id === req.params.id);
       if (!comment) return bad("not found", 404);
-      const file = join(decksDir, b.deck, "index.html");
-      if (b.undo === true) {
+      const file = join(decksDir, deck, "index.html");
+      if (undo) {
         if (!comment.revertedAt || !comment.revertUndo) return bad("nothing to undo", 409);
-        const r = restore(b.deck, comment.revertUndo);
+        const r = restore(deck, comment.revertUndo);
         if (!r.ok) return bad(r.error, r.status);
         delete comment.revertedAt; delete comment.revertUndo;
       } else {
         if (!comment.editBase || comment.revertedAt) return bad("nothing to revert", 409);
         if (hash(readFileSync(file, "utf8")) !== comment.editHash) return Response.json({ error: "changed" }, { status: 409 });
-        const r = restore(b.deck, comment.editBase);
+        const r = restore(deck, comment.editBase);
         if (!r.ok) return bad(r.error, r.status);
         comment.revertedAt = new Date().toISOString();
         if (r.undo) comment.revertUndo = r.undo;
       }
-      save(b.deck, list);
-      emit("reply", { deck: b.deck, comment });
+      save(deck, list);
+      emit("reply", { deck: deck, comment });
       return Response.json({ ok: true });
+      });
     },
   },
   "/api/comments/:id/ack": {

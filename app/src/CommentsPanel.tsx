@@ -27,7 +27,8 @@ const TONE: Record<CommentState, string> = {
 export function StateBadge({ state, className }: { state: CommentState; className?: string }) {
   const Icon = ICON[state];
   return (
-    <span className={cn("inline-flex items-center gap-1 text-micro", TONE[state], className)}>
+    // cn은 text-micro(글자 크기)를 글자색으로 보고 지우므로 일반 문자열로 잇는다.
+    <span className={`inline-flex items-center gap-1 text-micro ${TONE[state]} ${className ?? ""}`}>
       <Icon className="h-3 w-3" aria-hidden="true" />{STATE_LABEL[state]}
     </span>
   );
@@ -37,23 +38,28 @@ export function StateBadge({ state, className }: { state: CommentState; classNam
 export function ChannelBadge({ connected, className }: { connected: boolean | null; className?: string }) {
   if (connected === null) return null;
   return (
-    <span role="status" className={cn("inline-flex items-center gap-1.5 text-micro text-muted-foreground", className)}>
+    <span role="status" className={`inline-flex items-center gap-1.5 whitespace-nowrap text-micro text-muted-foreground ${className ?? ""}`}>
       <span aria-hidden="true" className={cn("h-1.5 w-1.5 rounded-full", connected ? "bg-emerald-400" : "bg-muted-foreground/60")} />
       {connected ? "Claude connected" : "Claude not connected"}
     </span>
   );
 }
 
-function NotConnected() {
+function NotConnected({ open }: { open: boolean }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => { try { await navigator.clipboard.writeText(CMD); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* 클립보드 거부: 명령을 직접 복사한다 */ } };
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-hover p-3" data-testid="channel-help">
-      <ChannelBadge connected={false} />
-      <p className="text-caption text-muted-foreground">Comments are saved and sent to Claude as soon as a session connects. To start one, run this in the slidekit folder:</p>
-      <code className="block break-all rounded-md bg-black/30 px-2 py-1.5 text-micro text-foreground">{CMD}</code>
-      <Button size="compact" variant="secondary" className="self-start" onClick={copy} aria-label="Copy command">{copied ? <Check /> : <Copy />}{copied ? "Copied" : "Copy command"}</Button>
-    </div>
+    <details open={open} className="rounded-lg bg-hover" data-testid="channel-help">
+      <summary className="flex cursor-pointer select-none items-center gap-2 rounded-lg px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-focus-ring">
+        <ChannelBadge connected={false} />
+        <span className="ml-auto whitespace-nowrap text-micro text-muted-foreground">How to connect</span>
+      </summary>
+      <div className="flex flex-col gap-2 px-3 pb-3">
+        <p className="text-caption text-muted-foreground">Comments are saved and sent to Claude as soon as a session connects. To start one, run this in the slidekit folder:</p>
+        <code className="block break-all rounded-md bg-black/30 px-2 py-1.5 text-micro text-foreground">{CMD}</code>
+        <Button size="compact" variant="secondary" className="self-start" onClick={copy} aria-label="Copy command" leadingIcon={copied ? Check : Copy}>{copied ? "Copied" : "Copy command"}</Button>
+      </div>
+    </details>
   );
 }
 
@@ -82,10 +88,10 @@ export function CommentsPanel({ comments, channel, onJump, onResolve, hoverId, o
 
   return (
     <div className="flex flex-col gap-3 pt-3" data-testid="comments-panel">
-      {channel === false ? <NotConnected /> : <ChannelBadge connected={channel} />}
+      {channel === false ? <NotConnected open={comments.length === 0} /> : <ChannelBadge connected={channel} />}
       {comments.length > 0 && (
         <div role="group" aria-label="Filter comments" className="flex flex-wrap gap-1">
-          {FILTERS.map((f) => (
+          {FILTERS.filter((f) => f.id === "all" || f.id === "open" || f.id === filter || counts[f.id] > 0).map((f) => ( // Replied와 Resolved는 0건이면 숨겨 한 줄에 맞춘다
             <Button key={f.id} size="compact" variant={filter === f.id ? "secondary" : "ghost"} aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
               {f.label} <span className="tabular-nums text-muted-foreground">{counts[f.id]}</span>
             </Button>
@@ -138,8 +144,8 @@ export function CommentsPanel({ comments, channel, onJump, onResolve, hoverId, o
                   )}
                   <div className="flex justify-end">
                     {st === "resolved"
-                      ? <Button size="compact" variant="ghost" onClick={() => onResolve(c, false)} aria-label={`Reopen comment ${nums.get(c.id)}`}><RotateCcw />Reopen</Button>
-                      : <Button size="compact" variant="ghost" onClick={() => onResolve(c, true)} aria-label={`Resolve comment ${nums.get(c.id)}`}><Check />Resolve</Button>}
+                      ? <Button size="compact" variant="ghost" onClick={() => onResolve(c, false)} aria-label={`Reopen comment ${nums.get(c.id)}`} leadingIcon={RotateCcw}>Reopen</Button>
+                      : <Button size="compact" variant="ghost" onClick={() => onResolve(c, true)} aria-label={`Resolve comment ${nums.get(c.id)}`} leadingIcon={Check}>Resolve</Button>}
                   </div>
                 </li>
               );

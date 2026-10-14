@@ -52,7 +52,7 @@ export function CommentComposer({ onSend, onCancel, target, channel, className }
       {channel === false && <p className="px-1 text-micro text-muted-foreground">Claude is not connected. The comment is saved and sent when a session connects.</p>}
       {err && <p role="alert" className="px-1 text-micro">{err}</p>}
       <div className="flex items-center gap-2">
-        <span className={cn("px-1 text-micro tabular-nums", over ? "text-foreground" : "text-muted-foreground")} aria-live="polite">
+        <span className={`px-1 text-micro tabular-nums ${over ? "text-foreground" : "text-muted-foreground"}`} aria-live="polite">
           {text.length > MAX - 200 ? `${text.length}/${MAX}` : "Cmd+Enter to send"}
         </span>
         <Button size="compact" variant="ghost" className="ml-auto" onClick={onCancel}>Cancel</Button>

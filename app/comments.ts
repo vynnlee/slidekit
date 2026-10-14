@@ -34,6 +34,32 @@ function emit(event: string, data: unknown) {
 const validDeck = (d: unknown): d is string =>
   typeof d === "string" && /^[\w.-]+$/.test(d) && d !== "." && d !== ".." && existsSync(join(decksDir, d));
 const file = (deck: string) => join(decksDir, deck, "comments.json");
+// 파일을 믿지 않는다(남에게 받은 덱의 comments.json은 사용자가 쓴 것이 아니다). 형식이 틀린 항목은 버리고 길이를 자른다.
+const ID = /^[\w][\w.-]{0,63}$/;
+const str = (v: unknown, n: number) => (typeof v === "string" ? v.slice(0, n) : undefined);
+export function sanitize(list: unknown[]): Comment[] {
+  const out: Comment[] = [];
+  for (const x of list) {
+    const c = x as Record<string, unknown> | null;
+    if (!c || typeof c !== "object") continue;
+    if (typeof c.id !== "string" || !ID.test(c.id)) continue;
+    if (!Number.isInteger(c.slide) || (c.slide as number) < 1) continue;
+    if (typeof c.text !== "string" || !c.text.trim()) continue;
+    if (c.status !== "open" && c.status !== "done") continue;
+    if (typeof c.createdAt !== "string" || Number.isNaN(Date.parse(c.createdAt))) continue;
+    const s: Comment = {
+      id: c.id, slide: c.slide as number, path: clip(c.path, 200), excerpt: clip(c.excerpt, 200),
+      text: c.text.slice(0, 2000), status: c.status, createdAt: c.createdAt,
+    };
+    const reply = str(c.reply, 2000); if (reply !== undefined) s.reply = reply;
+    for (const k of ["repliedAt", "deliveredAt", "resolvedAt"] as const) { const v = str(c[k], 40); if (v && !Number.isNaN(Date.parse(v))) s[k] = v; }
+    if (c.resolved === true) s.resolved = true;
+    if (c.slideDeleted === true) s.slideDeleted = true;
+    out.push(s);
+  }
+  return out;
+}
+
 // 파일이 없으면 빈 목록이다. 깨진 파일은 복사해 보존하고 오류로 올린다(빈 목록으로 다음 저장이 덮어쓰면 코멘트가 사라진다).
 export const load = (deck: string): Comment[] => {
   let text: string;
@@ -44,7 +70,7 @@ export const load = (deck: string): Comment[] => {
   try {
     const list = JSON.parse(text);
     if (!Array.isArray(list)) throw new Error("not an array");
-    return list;
+    return sanitize(list);
   } catch {
     const keep = join(decksDir, deck, `.comments.json.corrupt-${Math.floor(statSync(file(deck)).mtimeMs)}`);
     copyFileSync(file(deck), keep);
@@ -109,6 +135,7 @@ export const routes = {
       const list = load(b.deck);
       const comment = list.find((c) => c.id === req.params.id);
       if (!comment) return bad("not found", 404);
+      if (comment.status !== "open") return bad("already replied", 409); // 이미 답한 코멘트를 덮어쓰지 못하게 한다
       Object.assign(comment, { status: "done", reply: b.reply, repliedAt: new Date().toISOString() });
       save(b.deck, list);
       emit("reply", { deck: b.deck, comment });
@@ -151,6 +178,8 @@ export const routes = {
   "/api/events": (req: Request, server: { timeout(r: Request, s: number): void }) => {
     server.timeout(req, 0); // SSE 연결이 유휴로 끊기지 않게 한다
     const isChannel = new URL(req.url).searchParams.get("client") === "channel";
+    // 구독자 수 상한. 채널 연결 표시를 흉내 내는 연결도 몇 개로 제한한다.
+    if (clients.size >= 20 || (isChannel && channelClients.size >= 3)) return new Response("too many connections", { status: 503 });
     let ctrl!: ReadableStreamDefaultController<string>;
     let ping: Timer;
     const stream = new ReadableStream<string>({
@@ -183,7 +212,8 @@ export function remap(deck: string, map: Record<string, number>) {
   for (const c of list) {
     if (c.slideDeleted) continue;
     const to = map[c.slide];
-    if (to === undefined) { c.slideDeleted = true; changed = true; }
+    // 없는 번호나 정수가 아닌 값(슬라이드 번호로 들어오면 안 된다)은 삭제된 슬라이드로 본다.
+    if (to === undefined || !Number.isInteger(to) || to < 1) { c.slideDeleted = true; changed = true; }
     else if (to !== c.slide) { c.slide = to; changed = true; }
   }
   if (!changed) return;

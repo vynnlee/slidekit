@@ -1,14 +1,19 @@
 import { Check } from "lucide-react";
-import { cn } from "@/lib/utils";
 import type { Comment } from "@/lib/deck";
 import { STATE_LABEL, stateOf, type CommentState } from "@/lib/comment-state";
 
 // 캔버스 위 코멘트 핀. 번호는 목록과 같고(lib/comment-state numbering), 상태는 색과 모양으로 함께 구분한다.
-const RING: Record<CommentState, string> = {
-  waiting: "bg-black text-foreground ring-muted-foreground/70",
-  sent: "bg-focus-ring text-white ring-black",
-  replied: "bg-emerald-500 text-black ring-black",
-  resolved: "bg-black/70 text-muted-foreground ring-muted-foreground/40",
+const FILL: Record<CommentState, string> = {
+  waiting: "bg-black text-foreground",
+  sent: "bg-focus-ring text-white",
+  replied: "bg-emerald-500 text-black",
+  resolved: "bg-black/70 text-muted-foreground",
+};
+const OUTLINE: Record<CommentState, string> = {
+  waiting: "ring-muted-foreground/70",
+  sent: "ring-black",
+  replied: "ring-black",
+  resolved: "ring-muted-foreground/40",
 };
 
 interface CommentPinProps {
@@ -33,11 +38,8 @@ export function CommentPin({ comment, number, highlighted, onClick, onHover }: C
       onMouseLeave={() => onHover?.(false)}
       onFocus={() => onHover?.(true)}
       onBlur={() => onHover?.(false)}
-      className={cn(
-        "flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-micro tabular-nums ring-2 outline-none transition-transform focus-visible:ring-focus-ring",
-        RING[st],
-        highlighted && "scale-125 ring-focus-ring",
-      )}
+      // cn은 text-micro를 글자색으로 보고 지우므로 클래스를 일반 문자열로 잇고, 링 색은 한 곳에서만 정한다.
+      className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-micro tabular-nums ring-2 outline-none transition-transform focus-visible:ring-focus-ring ${FILL[st]} ${highlighted ? "scale-125 ring-focus-ring" : OUTLINE[st]}`}
     >
       {st === "resolved" ? <Check className="h-3 w-3" aria-hidden="true" /> : number}
     </button>

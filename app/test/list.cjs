@@ -300,6 +300,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   // 다른 곳을 우클릭하면 교체, 창 크기가 바뀌면 닫힘
   await cardBtn('zz-e2e-k1').click({ button: 'right', position: { x: 30, y: 30 } });
   await page.getByRole('menu').waitFor();
+  await cardBtn('zz-e2e-k2').scrollIntoViewIfNeeded(); // 스크롤이 새 메뉴를 닫지 않게 먼저 화면에 맞춘다
   await cardBtn('zz-e2e-k2').click({ button: 'right', position: { x: 30, y: 30 }, force: true });
   await sleep(400);
   const k2 = await cardBtn('zz-e2e-k2').boundingBox();

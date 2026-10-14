@@ -127,17 +127,17 @@ export function ContextMenu({ menu }: { menu: ContextMenuController }) {
   // 스크롤, 휠, 창 크기, 창 포커스, 포커스 이동, 줌 키에서 닫는다(메뉴 안의 입력은 제외).
   useEffect(() => {
     if (!state) return;
-    const onScroll = (e: Event) => { if (!(e.target instanceof HTMLElement && e.target.closest("[role=menu]"))) close(); };
+    const onScroll = (e: Event) => { if (Date.now() - openedAt > 400 && !(e.target instanceof HTMLElement && e.target.closest("[role=menu]"))) close(); }; // 열린 직후의 스크롤(우클릭한 카드를 화면에 맞추는 이동 등)은 무시
+    const openedAt = Date.now();
     const closeAll = () => close();
     const inMenu = (t: EventTarget | null) => t instanceof HTMLElement && !!t.closest("[role=menu]");
     // 휠(Cmd+휠 줌 포함)과 메뉴 밖으로 가는 포커스 이동, 줌 키(Cmd 또는 Ctrl과 + - 0)에서도 닫는다.
     const onWheel = (e: WheelEvent) => { if (!inMenu(e.target)) close(); };
     // 교체로 열린 직후에는 옛 메뉴의 포커스 복귀가 늦게 도착할 수 있어(부하) 잠깐 무시한다.
-    const openedAt = Date.now();
     // 우클릭을 뗄 때(mouseup)는 포인터 아래에 막 열린 메뉴 항목이 있을 수 있다(화면 가장자리에서 메뉴가 밀려 올라올 때).
-    // 열린 직후 250ms 안에 메뉴 안으로 오는 포인터 해제와 클릭은 항목에 닿지 않게 막는다.
+    // 열린 직후 250ms 안에 메뉴 안으로 오는 포인터 해제(pointerup, mouseup)는 항목에 닿지 않게 막는다. 키보드는 영향 없다.
     const swallow = (e: Event) => { if (Date.now() - openedAt < 250 && inMenu(e.target)) { e.stopPropagation(); e.preventDefault(); } };
-    for (const t of ["pointerup", "mouseup", "click"]) window.addEventListener(t, swallow, true);
+    for (const t of ["pointerup", "mouseup"]) window.addEventListener(t, swallow, true); // click은 제외한다: 키보드 Enter의 click까지 막으면 안 된다
     const onFocusIn = (e: FocusEvent) => { if (!inMenu(e.target) && Date.now() - openedAt > 400) close(); };
     const onKey = (e: globalThis.KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && /^[=+\-_0]$/.test(e.key)) close(); };
     window.addEventListener("scroll", onScroll, true);
@@ -147,7 +147,7 @@ export function ContextMenu({ menu }: { menu: ContextMenuController }) {
     window.addEventListener("resize", closeAll);
     window.addEventListener("blur", closeAll);
     return () => {
-      for (const t of ["pointerup", "mouseup", "click"]) window.removeEventListener(t, swallow, true);
+      for (const t of ["pointerup", "mouseup"]) window.removeEventListener(t, swallow, true);
       window.removeEventListener("scroll", onScroll, true); window.removeEventListener("wheel", onWheel, true); document.removeEventListener("focusin", onFocusIn, true);
       window.removeEventListener("keydown", onKey, true); window.removeEventListener("resize", closeAll); window.removeEventListener("blur", closeAll);
     };

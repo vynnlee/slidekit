@@ -237,7 +237,10 @@
         var m = e.data;
         if (!m || m.v !== 1 || m.from === me) return;
         if (m.type === 'state') show((Number(m.slide) || 1) - 1, 'jump', Number(m.step) || 1, true);
-        else if (m.type === 'hello') bc.postMessage({ v: 1, type: 'state', from: me, slide: cur + 1, step: step });
+        else if (m.type === 'hello') {
+          bc.postMessage({ v: 1, type: 'state', from: me, slide: cur + 1, step: step });
+          if (blankMode) bc.postMessage({ v: 1, type: 'blank', from: me, mode: blankMode });
+        }
       };
       bc.postMessage({ v: 1, type: 'hello', from: me });
     }
@@ -316,11 +319,14 @@
       } catch (err) { /* ignore */ }
     }
 
-    /* blank screen: B black, W white. Local to this window; position, steps and sync are untouched. */
+    /* blank screen: B black, W white. Local to this window; position and steps are untouched. In sync mode the state is only reported (6.5 blank) so the presenter can show it. */
     var blank = make('div', 'sk-blank');
     blank.setAttribute('aria-hidden', 'true');
     document.body.appendChild(blank);
+    var blankMode = null;
     function setBlank(m) {
+      blankMode = m || null;
+      if (bc) bc.postMessage({ v: 1, type: 'blank', from: me, mode: blankMode }); /* only reported; the blank itself stays local to this window */
       if (m) { blank.setAttribute('data-blank', m); stage.setAttribute('aria-hidden', 'true'); }
       else { blank.removeAttribute('data-blank'); stage.removeAttribute('aria-hidden'); }
     }

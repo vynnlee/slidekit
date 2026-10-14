@@ -300,6 +300,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await A.keyboard.press('ArrowRight'); await A.keyboard.press('ArrowRight'); await sleep(500);
     check('data-step: sync carries the step', (await vis(B, 'b')) === 'visible' && (await vis(B, 'a')) === 'visible' && (await hash(B)) === '#2');
     await A.close(); await B.close(); }
+  /* blank is reported over the channel (6.5) but never blanks other windows */
+  { const L = await ctx.newPage(), A = await ctx.newPage();
+    await L.addInitScript(() => { window.__bm = []; const BC = window.BroadcastChannel; window.BroadcastChannel = function (n) { const c = new BC(n); c.addEventListener('message', (e) => { if (e.data && e.data.type === 'blank') window.__bm.push(e.data.mode); }); return c; }; });
+    await L.goto(BASE + '/__t/dstep?sync=1#1'); await A.goto(BASE + '/__t/dstep?sync=1#1'); await L.waitForSelector('#sk-stage'); await A.waitForSelector('#sk-stage'); await sleep(300);
+    await A.keyboard.press('b'); await sleep(300);
+    check('blank: B reports black over the channel', JSON.stringify(await L.evaluate(() => window.__bm)) === '["black"]', await L.evaluate(() => window.__bm));
+    check('blank: other windows are not blanked', !(await L.evaluate(() => document.getElementById('sk-blank').hasAttribute('data-blank'))));
+    await A.keyboard.press('w'); await sleep(200); await A.keyboard.press('w'); await sleep(300);
+    check('blank: switching and clearing are reported (white, null)', JSON.stringify(await L.evaluate(() => window.__bm)) === '["black","white",null]', await L.evaluate(() => window.__bm));
+    await A.keyboard.press('b'); await sleep(200);
+    await L.evaluate(() => { window.__bm.length = 0; });
+    const N = await ctx.newPage(); await N.addInitScript(() => { window.__bm = []; const BC = window.BroadcastChannel; window.BroadcastChannel = function (n) { const c = new BC(n); c.addEventListener('message', (e) => { if (e.data && e.data.type === 'blank') window.__bm.push(e.data.mode); }); return c; }; });
+    await N.goto(BASE + '/__t/dstep?sync=1#1'); await N.waitForSelector('#sk-stage'); await sleep(500);
+    check('blank: hello restores the state for a reconnecting window', JSON.stringify(await N.evaluate(() => window.__bm)) === '["black"]', await N.evaluate(() => window.__bm));
+    await L.close(); await A.close(); await N.close(); }
   { const m = await ctx.newPage(); await m.goto(BASE + '/__t/dstep-more#1'); await m.waitForSelector('#sk-stage');
     let n = 0; while ((await hash(m)) === '#1' && n < 10) { await m.keyboard.press('ArrowRight'); await sleep(60); n++; }
     check('data-step: data-steps larger than the max N wins (4 steps)', n === 4, n); await m.close(); }

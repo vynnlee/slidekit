@@ -13,6 +13,7 @@ import { TrashList } from "./TrashList";
 import { StatusPage } from "./StatusPage";
 import { toast } from "./Toaster";
 import { readRecent } from "@/lib/recent";
+import { acquireThumb, pauseThumbs } from "@/lib/thumb-queue";
 import { FOLDER_RE, slugify } from "@/lib/slug";
 import { UNREACHABLE, isDown, onReconnect } from "@/lib/connection";
 import { go } from "./App";
@@ -33,23 +34,47 @@ function Thumb({ deck, width: fixed }: { deck: DeckEntry; width?: number }) {
     return () => ro.disconnect();
   }, []);
   const width = w;
+  // iframe은 화면 가까이(120px)에 들어오면 대기열을 거쳐 동시에 3개까지만 로드하고, 화면에서 220px 넘게 멀어지면 해제한다.
   const [seen, setSeen] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const releaseRef = useRef<(() => void) | null>(null);
   useEffect(() => {
-    let t: ReturnType<typeof setTimeout> | undefined;
-    const io = new IntersectionObserver(([e]) => {
-      clearTimeout(t);
-      if (e.isIntersecting) t = setTimeout(() => { setSeen(true); io.disconnect(); }, 60);
-    }, { rootMargin: "120px" });
-    io.observe(ref.current!);
-    return () => { clearTimeout(t); io.disconnect(); };
+    let want = false, cancel: (() => void) | null = null, t: ReturnType<typeof setTimeout> | undefined, guard: ReturnType<typeof setTimeout> | undefined;
+    const start = () => {
+      if (want) return;
+      want = true;
+      cancel = acquireThumb((release) => {
+        releaseRef.current = release;
+        setSeen(true);
+        guard = setTimeout(release, 10000); // 로드가 끝나지 않아도 슬롯은 돌려준다
+      });
+    };
+    const stop = () => {
+      clearTimeout(t); clearTimeout(guard);
+      if (!want) return;
+      want = false; cancel?.(); cancel = null; releaseRef.current = null;
+      setSeen(false); setLoaded(false);
+    };
+    const near = new IntersectionObserver(([e]) => { clearTimeout(t); if (e.isIntersecting) t = setTimeout(start, 100); }, { rootMargin: "120px" });
+    const far = new IntersectionObserver(([e]) => { if (!e.isIntersecting) stop(); }, { rootMargin: "220px" });
+    near.observe(ref.current!); far.observe(ref.current!);
+    return () => { near.disconnect(); far.disconnect(); stop(); };
   }, []);
   return (
     <div ref={ref} className={cn("relative shrink-0 overflow-hidden rounded-md bg-hover", !loaded && "motion-safe:animate-pulse")} style={{ width: fixed ?? "100%", aspectRatio: "16 / 9" }}>
       {seen && (
         <iframe
           src={deckUrl(deck.folder, "?embed=1")} title={deck.title} aria-hidden="true" tabIndex={-1} loading="lazy"
-          onLoad={() => setLoaded(true)}
+          onLoad={(e) => {
+            // 썸네일은 정지 화면이면 충분하다. 같은 출처 iframe은 부모와 메인 스레드를 나눠 쓰니, 로드가 끝나면 덱의 애니메이션과 타이머를 멈춘다.
+            const f = e.currentTarget;
+            try {
+              const d = f.contentDocument!;
+              const st = d.createElement("style"); st.textContent = "*,*::before,*::after{animation:none!important;transition:none!important}"; d.head.appendChild(st);
+              setTimeout(() => freezeFrame(f), 400);
+            } catch {}
+            setLoaded(true); releaseRef.current?.();
+          }}
           className={cn("pointer-events-none absolute left-0 top-0 origin-top-left border-0 bg-black transition-opacity duration-300 motion-reduce:transition-none", loaded ? "opacity-100" : "opacity-0")}
           style={{ width: 1920, height: 1080, transform: `scale(${width / 1920})` }}
         />
@@ -124,6 +149,19 @@ const Hl = ({ text, q }: { text: string; q: string }) => {
   if (!words.length) return <>{text}</>;
   return <>{text.split(new RegExp(`(${words.join("|")})`, "gi")).map((part, i) => (i % 2 ? <mark key={i} className="bg-transparent font-semibold text-foreground">{part}</mark> : part))}</>;
 };
+// 로드가 끝난 썸네일 문서의 rAF 루프, 타이머, 웹 애니메이션, 미디어를 멈춘다(이후 장면은 그대로 보인다).
+function freezeFrame(f: HTMLIFrameElement) {
+  try {
+    const w = f.contentWindow as (Window & typeof globalThis) | null;
+    if (!w) return;
+    w.requestAnimationFrame = () => 0;
+    w.setInterval = (() => 0) as unknown as typeof w.setInterval;
+    w.setTimeout = (() => 0) as unknown as typeof w.setTimeout;
+    for (let i = 1; i < 3000; i++) { w.clearInterval(i); w.clearTimeout(i); }
+    w.document.getAnimations().forEach((a) => a.pause());
+    w.document.querySelectorAll("video,audio").forEach((m) => (m as HTMLMediaElement).pause());
+  } catch {}
+}
 const pref = <T extends string>(k: string, ok: readonly T[], d: T) => { const v = localStorage.getItem(k) as T; return ok.includes(v) ? v : d; };
 
 export function DeckList() {
@@ -134,6 +172,7 @@ export function DeckList() {
   // 전체 검색: 팔레트를 열 때 슬라이드 제목, 본문, 노트 색인을 받아 둔다(서버는 파일이 안 바뀌면 캐시를 쓴다).
   const [q, setQ] = useState("");
   const [index, setIndex] = useState<SearchEntry[] | null>(null);
+  useEffect(() => { pauseThumbs(palette); return () => pauseThumbs(false); }, [palette]);
   useEffect(() => {
     if (!palette) { setQ(""); return; }
     fetch("/api/search-index").then((r) => (r.ok ? r.json() : null)).then(setIndex).catch(() => {});

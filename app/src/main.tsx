@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { App } from "./App";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ConnectionStatus } from "./ConnectionStatus";
+import { Toaster } from "./Toaster";
 
 createRoot(document.getElementById("root")!).render(
   <IconProvider>
@@ -12,6 +13,7 @@ createRoot(document.getElementById("root")!).render(
       <TooltipProvider>
         <ErrorBoundary>
           <ConnectionStatus />
+          <Toaster />
           <App />
         </ErrorBoundary>
       </TooltipProvider>

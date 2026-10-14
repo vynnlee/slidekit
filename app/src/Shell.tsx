@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { PanelLeft, PanelRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { spring } from "@/lib/springs";
@@ -105,12 +105,13 @@ export function Shell({ toolbar, left, right, children, bare, heading = "slideki
   }, [open]);
 
   const overlay = narrow && !bare && ((left && leftOpen) || (right && rightOpen));
+  const reduce = useReducedMotion();
   const slide = (side: "left" | "right") => ({
-    initial: { x: side === "left" ? -24 : 24, opacity: 0 }, animate: { x: 0, opacity: 1 },
-    exit: { x: side === "left" ? -24 : 24, opacity: 0, transition: spring.moderate.exit }, transition: spring.moderate,
+    initial: reduce ? { opacity: 0 } : { x: side === "left" ? -24 : 24, opacity: 0 }, animate: { x: 0, opacity: 1 },
+    exit: { ...(reduce ? {} : { x: side === "left" ? -24 : 24 }), opacity: 0, transition: reduce ? { duration: 0 } : spring.moderate.exit }, transition: reduce ? { duration: 0.01 } : spring.moderate,
   });
   const ov = "absolute bottom-0 top-0 z-20 overflow-auto bg-background shadow-surface-3 outline-none";
-  const dlg = { role: "dialog", tabIndex: -1, "data-shell-panel": "" } as const;
+  const dlg = { role: "dialog", "aria-modal": true, tabIndex: -1, "data-shell-panel": "" } as const;
 
   return (
     <div className="flex h-full flex-col">
@@ -126,7 +127,7 @@ export function Shell({ toolbar, left, right, children, bare, heading = "slideki
             <Handle side="left" width={lw} onChange={(w) => setLw(w < 0 ? 240 : w)} />
           </aside>
         )}
-        <main className="min-h-0 min-w-0 flex-1 overflow-auto">
+        <main inert={overlay ? true : undefined} className="min-h-0 min-w-0 flex-1 overflow-auto">
           <h1 className="sr-only">{heading}</h1>
           {children}
         </main>

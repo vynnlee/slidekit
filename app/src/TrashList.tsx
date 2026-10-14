@@ -5,11 +5,14 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Field } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
 import { StatusPage } from "./StatusPage";
+import { toast } from "./Toaster";
+import { UNREACHABLE, isDown, onReconnect } from "@/lib/connection";
 
 type Item = { entry: string; folder: string; title: string; deletedAt: string };
 
 const call = async (path: string, method: string, body: object = {}) => {
-  const r = await fetch(path, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (isDown()) throw new Error(UNREACHABLE);
+  const r = await fetch(path, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => { throw new Error(UNREACHABLE); });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error ?? `Request failed (${r.status})`);
   return j;
@@ -25,7 +28,7 @@ export function TrashList({ onRestored }: { onRestored: () => void }) {
   const [typed, setTyped] = useState("");
 
   const load = () => fetch("/api/trash").then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); }).then(setItems).catch(() => setErr("Could not load trash"));
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); return onReconnect(() => { setErr(""); load(); }); }, []);
 
   const run = async (fn: () => Promise<unknown>) => {
     if (busy) return false;
@@ -34,7 +37,7 @@ export function TrashList({ onRestored }: { onRestored: () => void }) {
     catch (e) { setErr((e as Error).message); return false; }
     finally { setBusy(false); }
   };
-  const restore = (i: Item) => run(async () => { await call(`/api/trash/${encodeURIComponent(i.entry)}/restore`, "POST"); onRestored(); });
+  const restore = (i: Item) => run(async () => { const r = await call(`/api/trash/${encodeURIComponent(i.entry)}/restore`, "POST"); onRestored(); toast(`Restored ${i.title}`); return r; });
   const purge = async () => {
     const i = purging;
     if (i && (await run(() => call(`/api/trash/${encodeURIComponent(i.entry)}/purge`, "POST", { confirm: typed })))) setPurging(null);
@@ -47,7 +50,7 @@ export function TrashList({ onRestored }: { onRestored: () => void }) {
           {err}{items === null && <Button variant="ghost" size="compact" onClick={() => { setErr(""); load(); }}>Retry</Button>}
         </p>
       )}
-      {items?.length === 0 && <StatusPage title="Trash is empty">Decks you move to Trash show up here.</StatusPage>}
+      {items?.length === 0 && <StatusPage as="h2" title="Trash is empty">Decks you move to Trash show up here.</StatusPage>}
       <ul className="flex flex-col gap-0.5">
         {items?.map((i) => (
           <li key={i.entry} className="flex h-9 items-center gap-3 px-2 text-body">

@@ -27,12 +27,15 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
     check(`Esc로 닫힌다 (${combo})`, await until(async () => (await page.getByRole('dialog').count()) === 0));
   }
   await page.getByRole('button', { name: 'New deck' }).click();
-  await page.getByLabel('Deck name').fill('vibe-coding-workshop');
-  await page.getByRole('button', { name: 'Create' }).click();
-  check('중복 이름 오류 표시', await until(async () => (await page.getByText('Name already exists').count()) === 1));
-  await page.getByLabel('Deck name').fill('Bad Name');
-  await page.getByRole('button', { name: 'Create' }).click();
+  const nd = page.getByRole('dialog');
+  await nd.getByLabel('Title').fill('vibe-coding-workshop');
+  check('제목에서 폴더 이름을 제안한다', (await nd.getByLabel('Folder').inputValue()) === 'vibe-coding-workshop');
+  check('중복 폴더 이름은 입력하는 동안 오류', await until(async () => (await page.getByText(/A deck named vibe-coding-workshop already exists/).count()) === 1));
+  check('오류가 있으면 Create 비활성', await nd.getByRole('button', { name: 'Create' }).isDisabled());
+  await nd.getByLabel('Folder').fill('Bad Name');
   check('잘못된 이름 오류 표시', await until(async () => (await page.getByText(/Use lowercase letters/).count()) >= 1));
+  await nd.getByLabel('Title').fill('한글만 제목');
+  check('직접 고친 폴더 이름은 제목을 따라가지 않는다', (await nd.getByLabel('Folder').inputValue()) === 'Bad Name');
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Toggle view' }).click();
   await page.reload();
@@ -52,7 +55,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   // 덱 관리: 복제, 이름 변경, 우클릭 메뉴, 휴지통. 테스트가 만든 덱(zz-e2e*)은 끝에 지운다.
   cleanup();
   const post = (u, data) => ctx.request.post(BASE + u, { data });
-  check('API로 덱 생성', (await post('/api/decks', { name: 'zz-e2e-a' })).status() === 201);
+  check('API로 덱 생성', (await post('/api/decks', { name: 'zz-e2e-a', title: 'zz-e2e-a' })).status() === 201);
   await page.goto(BASE + '/');
   const actions = (title) => page.getByRole('button', { name: `Actions for ${title}`, exact: true });
   const item = (name) => page.getByRole('menuitem', { name });
@@ -68,25 +71,30 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.reload();
   await actions('zz-e2e-a').first().click({ force: true });
   await item('Rename').click();
-  await page.getByLabel('New name').fill('zz-e2e-a-copy');
-  await page.getByRole('button', { name: 'Rename' }).click();
-  check('중복 이름 변경 거부', await until(async () => (await page.getByText('Name already exists').count()) === 1));
-  await page.getByLabel('New name').fill('Bad Name');
-  await page.getByRole('button', { name: 'Rename' }).click();
-  check('잘못된 이름 변경 거부', await until(async () => (await page.getByText(/Use lowercase letters/).count()) >= 1));
-  await page.getByLabel('New name').fill('zz-e2e-b');
-  await page.getByRole('button', { name: 'Rename' }).click();
-  check('이름 변경', await until(async () => { const l = await ids(); return l.includes('zz-e2e-b') && !l.includes('zz-e2e-a'); }), await ids());
+  const rd = page.getByRole('dialog');
+  check('Rename은 제목 필드가 먼저', (await rd.getByLabel('Title').inputValue()) === 'zz-e2e-a');
+  await rd.getByRole('button', { name: 'Edit folder name' }).click();
+  await rd.getByLabel('Folder').fill('zz-e2e-a-copy');
+  check('중복 폴더 이름은 입력 중 오류와 버튼 비활성', await until(async () => (await rd.getByText(/already exists/).count()) >= 1) && (await rd.getByRole('button', { name: 'Rename' }).isDisabled()));
+  await rd.getByLabel('Folder').fill('Bad Name');
+  check('잘못된 폴더 이름 오류', await until(async () => (await rd.getByText(/Use lowercase letters/).count()) >= 1));
+  await rd.getByLabel('Folder').fill('zz-e2e-b');
+  await rd.getByLabel('Title').fill('Renamed Title');
+  await rd.getByRole('button', { name: 'Rename' }).click();
+  check('폴더 이름 변경', await until(async () => { const l = await ids(); return l.includes('zz-e2e-b') && !l.includes('zz-e2e-a'); }), await ids());
+  check('제목 변경이 목록에 보인다', await until(async () => (await page.getByRole('button', { name: 'Renamed Title', exact: true }).count()) === 1));
+  check('제목이 파일의 title과 메타에 들어간다', fs.readFileSync(path.join(DECKS, 'zz-e2e-b', 'index.html'), 'utf8').includes('<title>Renamed Title</title>') && fs.readFileSync(path.join(DECKS, 'zz-e2e-b', 'index.html'), 'utf8').includes('"title":"Renamed Title"'));
   check('이름 변경 시 메타 id 갱신', fs.readFileSync(path.join(DECKS, 'zz-e2e-b', 'index.html'), 'utf8').includes('"id":"zz-e2e-b"'));
-  await page.getByRole('button', { name: 'zz-e2e-a', exact: true }).click({ button: 'right' });
+  await page.getByRole('button', { name: 'Renamed Title', exact: true }).click({ button: 'right' });
   check('우클릭으로 메뉴가 열린다', await until(async () => (await item('Move to trash').count()) === 1));
   await item('Move to trash').click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
-  check('취소하면 덱이 남는다', (await ids()).includes('zz-e2e-b'));
-  await page.getByRole('button', { name: 'zz-e2e-a', exact: true }).click({ button: 'right' });
+  check('확인 없이 바로 휴지통으로 이동', await until(async () => !(await ids()).includes('zz-e2e-b')));
+  check('Undo 토스트가 뜬다', await until(async () => (await page.getByText('Moved Renamed Title to Trash').count()) === 1));
+  await page.getByRole('button', { name: 'Undo' }).click();
+  check('Undo로 되돌린다', await until(async () => (await ids()).includes('zz-e2e-b')), await ids());
+  await page.getByRole('button', { name: 'Renamed Title', exact: true }).click({ button: 'right' });
   await item('Move to trash').click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Move to trash' }).click();
-  check('휴지통으로 이동', await until(async () => !(await ids()).includes('zz-e2e-b')));
+  check('다시 휴지통으로 이동', await until(async () => !(await ids()).includes('zz-e2e-b')));
   check('폴더는 decks/.trash에 보존', fs.readdirSync(path.join(DECKS, '.trash')).some((d) => d.startsWith('zz-e2e-b-')));
   check('.trash는 목록에 없다', !(await ids()).some((i) => String(i).includes('trash')));
   check('.trash 폴더는 정적 서빙 안 함', (await ctx.request.get(BASE + '/decks/.trash/x/index.html')).status() === 404);
@@ -95,10 +103,10 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   // 휴지통 보기: 복구(이름 충돌은 -restored), 영구 삭제는 이름 입력 필요
   await page.goto(BASE + '/');
   await page.getByRole('button', { name: 'Trash', exact: true }).click();
-  await page.getByRole('button', { name: 'Restore zz-e2e-a' }).waitFor();
-  check('휴지통 목록에 삭제한 덱', (await page.getByRole('button', { name: 'Restore zz-e2e-a' }).count()) === 1);
-  await post('/api/decks', { name: 'zz-e2e-b' }); // 원래 이름을 비워 두지 않으면 -restored가 된다
-  await page.getByRole('button', { name: 'Restore zz-e2e-a' }).click();
+  await page.getByRole('button', { name: 'Restore Renamed Title' }).waitFor();
+  check('휴지통 목록에 삭제한 덱', (await page.getByRole('button', { name: 'Restore Renamed Title' }).count()) === 1);
+  await post('/api/decks', { name: 'zz-e2e-b', title: 'zz-e2e-b' }); // 원래 이름을 비워 두지 않으면 -restored가 된다
+  await page.getByRole('button', { name: 'Restore Renamed Title' }).click();
   check('이름 충돌 복구는 -restored', await until(async () => (await ids()).includes('zz-e2e-b-restored')), await ids());
   check('복구본 메타 id 갱신', fs.readFileSync(path.join(DECKS, 'zz-e2e-b-restored', 'index.html'), 'utf8').includes('"id":"zz-e2e-b-restored"'));
   await ctx.request.post(BASE + '/api/decks/zz-e2e-b/trash', { data: {} });
@@ -113,7 +121,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   const trashed = () => fs.existsSync(path.join(DECKS, '.trash')) ? fs.readdirSync(path.join(DECKS, '.trash')).filter((d) => d.startsWith('zz-e2e-b-2')) : [];
   check('영구 삭제', await until(async () => trashed().length === 0), trashed());
   check('휴지통 API 목록', Array.isArray(await (await ctx.request.get(BASE + '/api/trash')).json()));
-  await post('/api/decks', { name: 'zz-e2e-p2' });
+  await post('/api/decks', { name: 'zz-e2e-p2', title: 'zz-e2e-p2' });
   await ctx.request.post(BASE + '/api/decks/zz-e2e-p2/trash', { data: {} });
   const e2 = (await (await ctx.request.get(BASE + '/api/trash')).json()).find((i) => i.folder === 'zz-e2e-p2');
   check('이름 없이 purge 거부', (await post(`/api/trash/${e2.entry}/purge`, {})).status() === 400);
@@ -123,9 +131,17 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   check('이름과 일치하면 purge', (await post(`/api/trash/${e2.entry}/purge`, { confirm: 'zz-e2e-p2' })).status() === 200);
   cleanup();
 
+  // 새 덱: 제목에서 폴더 이름 제안, 만들면 바로 편집기로
+  await page.goto(BASE + '/');
+  await page.getByRole('button', { name: 'New deck' }).click();
+  await page.getByRole('dialog').getByLabel('Title').fill('zz e2e T');
+  check('제목에서 zz-e2e-t 제안', (await page.getByRole('dialog').getByLabel('Folder').inputValue()) === 'zz-e2e-t');
+  await page.getByRole('dialog').getByRole('button', { name: 'Create' }).click();
+  check('만든 뒤 바로 편집기로', await until(async () => new URL(page.url()).pathname === '/edit/zz-e2e-t'), page.url());
+  check('제목이 덱에 들어간다', fs.readFileSync(path.join(DECKS, 'zz-e2e-t', 'index.html'), 'utf8').includes('<title>zz e2e T</title>') && fs.readFileSync(path.join(DECKS, 'zz-e2e-t', 'index.html'), 'utf8').includes('"title":"zz e2e T"'));
   // 키보드 이동, 빠른 발표 버튼, 메타 위계, Public 칩 숨김, 없는 덱 화면
-  await post('/api/decks', { name: 'zz-e2e-k1' });
-  await post('/api/decks', { name: 'zz-e2e-k2' });
+  await post('/api/decks', { name: 'zz-e2e-k1', title: 'zz-e2e-k1' });
+  await post('/api/decks', { name: 'zz-e2e-k2', title: 'zz-e2e-k2' });
   await page.goto(BASE + '/');
   await page.evaluate(() => localStorage.setItem('slidekit:list-view', 'grid')); // 앞 단계가 목록 보기로 남겼을 수 있다
   await page.goto(BASE + '/');
@@ -161,9 +177,10 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   const p3 = await ctx3.newPage();
   await p3.goto(BASE + '/');
   down = true;
-  check('서버가 끊기면 표시', await until(async () => (await p3.getByRole('status').filter({ hasText: 'Disconnected' }).count()) === 1, 12000));
+  check('서버가 끊기면 표시', await until(async () => (await p3.getByRole('status').filter({ hasText: 'Server unreachable' }).count()) === 1, 12000));
   down = false;
-  check('다시 연결되면 사라진다', await until(async () => (await p3.getByRole('status').filter({ hasText: 'Disconnected' }).count()) === 0, 15000));
+  check('다시 연결되면 Reconnected 표시', await until(async () => (await p3.getByText('Reconnected').count()) === 1, 15000));
+  check('다시 연결되면 사라진다', await until(async () => (await p3.getByRole('status').filter({ hasText: 'Server unreachable' }).count()) === 0, 15000));
   const ctx4 = await browser.newContext();
   await ctx4.route('**/api/decks', (r) => r.request().method() === 'GET' ? r.fulfill({ json: {} }) : r.continue());
   const p4 = await ctx4.newPage();

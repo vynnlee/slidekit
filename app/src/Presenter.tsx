@@ -151,7 +151,13 @@ export function Presenter({ id }: { id: string }) {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       // 길게 눌러 반복되는 입력은 이동, 전체화면, 타이머에서 무시한다(노트 크기와 스크롤은 반복 허용).
       const once = e.repeat;
-      if ((e.target as HTMLElement).closest("input,textarea,select,[contenteditable]")) return;
+      const t = e.target as HTMLElement;
+      if (t.closest("input,textarea,select,[contenteditable]")) return;
+      // 화살표는 포커스된 위젯(탭, 스위치, 목록, 메뉴, 대화상자)의 것이고, 노트 영역에서 위아래는 노트 스크롤이다.
+      const arrow = e.key.startsWith("Arrow");
+      if (arrow && (t.closest("[role=tablist],[role=tab],[role=switch],[role=slider],[role=listbox],[role=combobox],[role=menu],[role=menuitem],[role=dialog]") || (t.closest("[data-notes]") && (e.key === "ArrowUp" || e.key === "ArrowDown")))) return;
+      // 한 글자 단축키는 버튼과 링크에 포커스가 있을 때 쓰지 않는다(그 위젯의 입력과 겹치지 않게).
+      if (!arrow && e.key.length === 1 && t.closest("button,a,[role=button],[role=tab],[role=switch],[role=menuitem]")) return;
       if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); if (!once) post(curRef.current, { type: "next" }); }
       else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); if (!once) post(curRef.current, { type: "prev" }); }
       else if (once && /^[ftr]$/i.test(e.key)) return;
@@ -165,7 +171,7 @@ export function Presenter({ id }: { id: string }) {
       else if (e.key === "PageDown" || e.key === "PageUp") {
         e.preventDefault();
         const el = notesRef.current;
-        el?.scrollBy({ top: (e.key === "PageDown" ? 1 : -1) * el.clientHeight * 0.8, behavior: "smooth" });
+        el?.scrollBy({ top: (e.key === "PageDown" ? 1 : -1) * el.clientHeight * 0.8, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
       }
     };
     window.addEventListener("keydown", onKey);
@@ -279,7 +285,7 @@ export function Presenter({ id }: { id: string }) {
               )}
               {view.timer && (
                 <span className="ml-auto flex items-center gap-1">
-                  <span role="timer" className="text-title font-medium">{hms(elapsed)}</span>
+                  <span role="timer" aria-label="Elapsed time" className="text-title font-medium">{hms(elapsed)}</span>
                   {target > 0 && <span className={cn("text-caption", remain < 0 ? "text-destructive" : "text-muted-foreground")}>{remain < 0 ? `+${mmss(-remain)} over` : `${mmss(remain)} left`}</span>}
                   <Tooltip content="Start or pause (T)" side="top"><Button variant="ghost" size="icon-compact" aria-label="Start or pause timer" onClick={() => setRunning((r) => !r)}>{running ? <Pause /> : <Play />}</Button></Tooltip>
                   <Tooltip content="Reset (R)" side="top"><Button variant="ghost" size="icon-compact" aria-label="Reset timer" onClick={() => { setRunning(false); setElapsed(0); }}><RotateCcw /></Button></Tooltip>
@@ -293,8 +299,8 @@ export function Presenter({ id }: { id: string }) {
             </div>
           )}
           {info && total > 1 && (
-            <div role="progressbar" aria-label="Slide progress" aria-valuemin={1} aria-valuemax={total} aria-valuenow={pos.slide} className="col-span-2 h-1 overflow-hidden rounded-full bg-hover">
-              <div className="h-full rounded-full bg-foreground/60 transition-[width] duration-200" style={{ width: `${(pos.slide / total) * 100}%` }} />
+            <div role="progressbar" aria-label="Slide progress" aria-valuemin={1} aria-valuemax={total} aria-valuenow={pos.slide} aria-valuetext={`Slide ${pos.slide} of ${total}`} className="col-span-2 h-1 overflow-hidden rounded-full bg-hover">
+              <div className="h-full rounded-full bg-foreground/60 transition-[width] duration-200 motion-reduce:transition-none" style={{ width: `${(pos.slide / total) * 100}%` }} />
             </div>
           )}
         </div>
@@ -310,6 +316,7 @@ export function Presenter({ id }: { id: string }) {
             <div
               ref={notesRef}
               tabIndex={0}
+              data-notes=""
               aria-label="Speaker notes"
               style={{ fontSize: notesSize, lineHeight: 1.5 }}
               className="min-h-0 flex-1 overflow-auto rounded-lg text-foreground outline-none focus-visible:ring-1 focus-visible:ring-focus-ring [&_code]:rounded [&_code]:bg-hover [&_code]:px-1 [&_h1]:text-[1.4em] [&_h1]:font-semibold [&_h2]:text-[1.2em] [&_h2]:font-semibold [&_h3]:font-semibold [&_a]:underline [&_li]:ml-5 [&_ol]:list-decimal [&_p+*]:mt-2 [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-hover [&_pre]:p-2 [&_ul]:list-disc"

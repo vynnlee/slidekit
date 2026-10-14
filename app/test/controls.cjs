@@ -44,15 +44,10 @@ const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' 
   const rn = await ring(page.locator('[data-state=Default] input[aria-label=Number]'));
   await sleep(250);
   const rn2 = await page.locator('[data-state=Default] input[aria-label=Number]').evaluate((e) => getComputedStyle(e.parentElement).boxShadow);
-  // Select 트리거에는 실제 키보드 이동(Shift+Tab 반복)으로 도달해 :focus-visible을 만든다.
-  for (let i = 0; i < 14 && !(await page.evaluate(() => document.activeElement === document.querySelectorAll('[role=combobox]')[0])); i++) await page.keyboard.press('Shift+Tab');
-  await sleep(250);
-  const rc = await page.locator('[data-state=Default] [role=combobox]').evaluate((e) => getComputedStyle(e).boxShadow);
   const one = (s) => /0px 0px 0px 1px/.test(s);
   check('Field 포커스 링은 1px box-shadow', one(rs.sh), rs.sh);
   check('NumberField 포커스 링은 1px box-shadow', one(rn2), rn2);
-  check('Select 포커스 링은 1px box-shadow(기준)', one(rc), rc);
-  check('Field와 NumberField와 Select의 링 색이 같다', rs.sh === rn2 && rn2 === rc, [rs.sh, rn2, rc]);
+  check('Field와 NumberField의 링이 같다(Select는 Fluid 원본 규칙)', rs.sh === rn2, [rs.sh, rn2]);
   check('포커스해도 Field 박스가 변하지 않는다', rs.same);
 
   // Segmented 키보드

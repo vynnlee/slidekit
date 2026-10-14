@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEve
 import { ArrowDownUp, Copy, LayoutGrid, List, MonitorPlay, MoreHorizontal, Pencil, Plus, Search, TextCursorInput, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardGroup, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownTrigger, DropdownContent } from "@/components/ui/dropdown";
 import { MenuItem } from "@/components/ui/menu-item";
 import { Field } from "@/components/ui/field";
@@ -11,6 +11,9 @@ import { CommandMenu, CommandMenuDialog, useIsMac, CommandMenuEmpty, CommandMenu
 import { Shell } from "./Shell";
 import { TrashList } from "./TrashList";
 import { StatusPage } from "./StatusPage";
+import { toast } from "./Toaster";
+import { FOLDER_RE, slugify } from "@/lib/slug";
+import { UNREACHABLE, isDown, onReconnect } from "@/lib/connection";
 import { go } from "./App";
 import { deckUrl, type DeckEntry } from "@/lib/deck";
 import { cn } from "@/lib/utils";
@@ -42,7 +45,7 @@ function Thumb({ deck, width: fixed }: { deck: DeckEntry; width?: number }) {
     <div ref={ref} className="relative shrink-0 overflow-hidden rounded-md bg-hover" style={{ width: fixed ?? "100%", aspectRatio: "16 / 9" }}>
       {seen && (
         <iframe
-          src={deckUrl(deck.folder, "?embed=1")} title={deck.title} tabIndex={-1} loading="lazy"
+          src={deckUrl(deck.folder, "?embed=1")} title={deck.title} aria-hidden="true" tabIndex={-1} loading="lazy"
           className="pointer-events-none absolute left-0 top-0 origin-top-left border-0 bg-black"
           style={{ width: 1920, height: 1080, transform: `scale(${width / 1920})` }}
         />
@@ -71,7 +74,8 @@ const Meta = ({ d }: { d: DeckEntry }) => (
 );
 
 const api = async (path: string, method: string, body: object = {}) => {
-  const r = await fetch(path, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (isDown()) throw new Error(UNREACHABLE);
+  const r = await fetch(path, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => { throw new Error(UNREACHABLE); });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error ?? `Request failed (${r.status})`);
   return j;
@@ -120,22 +124,25 @@ export function DeckList() {
     return () => ro.disconnect();
   }, []);
   const [creating, setCreating] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
   const [name, setName] = useState("");
+  const [nameTouched, setNameTouched] = useState(false); // 폴더를 직접 고치면 제목에서 자동 제안을 멈춘다
   const [err, setErr] = useState("");
 
   const [loadErr, setLoadErr] = useState(false);
   const [busy, setBusy] = useState(false);
   const [menuId, setMenuId] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<DeckEntry | null>(null);
-  const [renameTo, setRenameTo] = useState("");
+  const [renameTitle, setRenameTitle] = useState("");
+  const [renameFolder, setRenameFolder] = useState("");
+  const [folderOpen, setFolderOpen] = useState(false);
   const [renameErr, setRenameErr] = useState("");
-  const [trashing, setTrashing] = useState<DeckEntry | null>(null);
   const [actionErr, setActionErr] = useState("");
   const load = () => {
     setLoadErr(false);
     return fetch("/api/decks").then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); }).then(setDecks).catch(() => setLoadErr(true));
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); return onReconnect(() => { load(); }); }, []);
   useEffect(() => { localStorage.setItem("slidekit:list-view", view); localStorage.setItem("slidekit:list-sort", sort); }, [view, sort]);
 
   const sorted = useMemo(() => {
@@ -146,36 +153,51 @@ export function DeckList() {
   const open = (d: DeckEntry) => go(`/edit/${encodeURIComponent(d.id)}`);
   const cycleSort = () => setSort((s) => (s === "date" ? "title" : "date"));
 
+  // 새 덱: 폴더 이름은 제목에서 제안하고, 형식과 중복은 입력하는 동안 바로 알린다.
+  const known = useMemo(() => new Set((decks ?? []).map((d) => d.folder)), [decks]);
+  const folderError = (f: string, self?: string) => !f ? "" : !FOLDER_RE.test(f) ? "Use lowercase letters, digits and -" : f !== self && known.has(f) ? `A deck named ${f} already exists` : "";
+  const newErr = err || folderError(name);
+  const onTitle = (v: string) => { setNewTitle(v); setErr(""); if (!nameTouched) setName(v.trim() ? slugify(v) : ""); };
   const create = async () => {
     if (busy) return;
     setBusy(true);
     try {
-      const r = await fetch("/api/decks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: name.trim() }) });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) return setErr(j.error ?? "Could not create deck");
-      setCreating(false); setName(""); setErr("");
+      const j = await api("/api/decks", "POST", { name: name.trim(), title: newTitle.trim() || name.trim() });
+      setCreating(false); setNewTitle(""); setName(""); setNameTouched(false); setErr("");
       go(`/edit/${encodeURIComponent(j.id)}`);
-    } catch { setErr("Could not reach the server"); }
+    } catch (e) { setErr((e as Error).message); }
     finally { setBusy(false); }
   };
-  const run = async (fn: () => Promise<unknown>) => {
+  const run = async <T,>(fn: () => Promise<T>): Promise<T | false> => {
     if (busy) return false;
     setBusy(true); setActionErr("");
-    try { await fn(); await load(); return true; }
+    try { const r = await fn(); await load(); return r; }
     catch (e) { setActionErr((e as Error).message); return false; }
     finally { setBusy(false); }
   };
   const present = (d: DeckEntry) => go(`/present/${encodeURIComponent(d.id)}`);
-  const duplicate = (d: DeckEntry) => run(() => api(`/api/decks/${encodeURIComponent(d.folder)}/duplicate`, "POST"));
-  const startRename = (d: DeckEntry) => { setRenameTo(d.folder); setRenameErr(""); setRenaming(d); };
+  const duplicate = async (d: DeckEntry) => {
+    const j = await run(() => api(`/api/decks/${encodeURIComponent(d.folder)}/duplicate`, "POST"));
+    if (j) toast(`Duplicated ${d.title}`);
+  };
+  const startRename = (d: DeckEntry) => { setRenameTitle(d.title); setRenameFolder(d.folder); setFolderOpen(false); setRenameErr(""); setRenaming(d); };
+  const renameFolderErr = renaming ? folderError(renameFolder, renaming.folder) : "";
   const doRename = async () => {
-    if (!renaming || busy) return;
+    if (!renaming || busy || renameFolderErr || !renameTitle.trim()) return;
     setBusy(true);
-    try { await api(`/api/decks/${encodeURIComponent(renaming.folder)}/rename`, "POST", { name: renameTo.trim() }); setRenaming(null); await load(); }
-    catch (e) { setRenameErr((e as Error).message); }
+    try {
+      let folder = renaming.folder;
+      if (renameTitle.trim() !== renaming.title) await api(`/api/decks/${encodeURIComponent(folder)}/title`, "POST", { title: renameTitle.trim() });
+      if (renameFolder !== folder) { await api(`/api/decks/${encodeURIComponent(folder)}/rename`, "POST", { name: renameFolder }); folder = renameFolder; }
+      setRenaming(null); await load();
+    } catch (e) { setRenameErr((e as Error).message); await load(); }
     finally { setBusy(false); }
   };
-  const doTrash = async () => { const d = trashing; if (d && (await run(() => api(`/api/decks/${encodeURIComponent(d.folder)}/trash`, "POST")))) setTrashing(null); };
+  // 휴지통으로 보내는 것은 확인 없이 바로 하고, 되돌리기는 토스트의 Undo로 한다.
+  const trash = async (d: DeckEntry) => {
+    const j = await run(() => api(`/api/decks/${encodeURIComponent(d.folder)}/trash`, "POST"));
+    if (j) toast(`Moved ${d.title} to Trash`, { action: { label: "Undo", onClick: () => { run(() => api(`/api/trash/${encodeURIComponent((j as { entry: string }).entry)}/restore`, "POST")); } } });
+  };
   const menu = (d: DeckEntry, cls = "absolute right-2 top-2 z-30") => (
     <div className={cn(cls, "flex items-center gap-0.5")}>
       <Tooltip content="Present" side="top">
@@ -183,7 +205,7 @@ export function DeckList() {
       </Tooltip>
       <DeckMenu
         deck={d} open={menuId === d.id} onOpenChange={(o) => setMenuId(o ? d.id : null)}
-        onOpen={() => open(d)} onPresent={() => present(d)} onDuplicate={() => duplicate(d)} onRename={() => startRename(d)} onTrash={() => setTrashing(d)}
+        onOpen={() => open(d)} onPresent={() => present(d)} onDuplicate={() => { duplicate(d); }} onRename={() => startRename(d)} onTrash={() => trash(d)}
       />
     </div>
   );
@@ -207,7 +229,7 @@ export function DeckList() {
   };
 
   const mac = useIsMac();
-  const startCreate = () => { setPalette(false); setErr(""); setCreating(true); };
+  const startCreate = () => { setPalette(false); setErr(""); setNewTitle(""); setName(""); setNameTouched(false); setCreating(true); };
 
   const items: CommandMenuItemData[] = useMemo(() => [
     { value: "new", label: "New deck", icon: Plus, group: "Actions", onSelect: startCreate },
@@ -250,7 +272,7 @@ export function DeckList() {
             </div>
           )}
           {decks?.length === 0 && (
-            <StatusPage title="No decks yet" actions={<Button variant="primary" size="compact" leadingIcon={Plus} onClick={startCreate}>New deck</Button>}>
+            <StatusPage as="h2" title="No decks yet" actions={<Button variant="primary" size="compact" leadingIcon={Plus} onClick={startCreate}>New deck</Button>}>
               Create a deck to start, or run slidekit new in a terminal.
             </StatusPage>
           )}
@@ -300,31 +322,29 @@ export function DeckList() {
         <DialogContent size="sm">
           <DialogTitle>Rename deck</DialogTitle>
           <form className="flex flex-col gap-2 pt-2" onSubmit={(e) => { e.preventDefault(); doRename(); }}>
-            <Field autoFocus aria-label="New name" value={renameTo} onChange={(e) => { setRenameTo(e.target.value); setRenameErr(""); }} />
-            <p className={renameErr ? "text-caption text-destructive" : "text-caption text-muted-foreground"}>{renameErr || "Lowercase letters, digits and - only"}</p>
-            <Button type="submit" variant="primary" size="compact" disabled={!renameTo.trim() || busy} className="self-end">Rename</Button>
+            <Field autoFocus aria-label="Title" value={renameTitle} onChange={(e) => { setRenameTitle(e.target.value); setRenameErr(""); }} />
+            {folderOpen ? (
+              <>
+                <Field aria-label="Folder" aria-invalid={!!renameFolderErr || undefined} value={renameFolder} onChange={(e) => { setRenameFolder(e.target.value); setRenameErr(""); }} />
+                <p className="text-caption text-muted-foreground">Changing the folder changes the deck address.</p>
+              </>
+            ) : (
+              <Button type="button" variant="ghost" size="compact" className="self-start text-muted-foreground" onClick={() => setFolderOpen(true)}>Edit folder name</Button>
+            )}
+            <p role="alert" className="min-h-4 text-caption text-destructive">{renameErr || renameFolderErr}</p>
+            <Button type="submit" variant="primary" size="compact" disabled={!renameTitle.trim() || !!renameFolderErr || busy} className="self-end">Rename</Button>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!trashing} onOpenChange={(o) => !o && setTrashing(null)}>
-        <DialogContent size="sm">
-          <DialogTitle>Move to trash?</DialogTitle>
-          <DialogDescription>{trashing?.title} moves to Trash. You can restore it from the Trash view.</DialogDescription>
-          <div className="flex justify-end gap-2 pt-3">
-            <Button variant="ghost" size="compact" onClick={() => setTrashing(null)}>Cancel</Button>
-            <Button variant="primary" size="compact" disabled={busy} onClick={doTrash}>Move to trash</Button>
-          </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent size="sm">
           <DialogTitle>New deck</DialogTitle>
-          <form className="flex flex-col gap-2 pt-2" onSubmit={(e) => { e.preventDefault(); if (name.trim()) create(); }}>
-            <Field autoFocus aria-label="Deck name" placeholder="deck-name" value={name} onChange={(e) => { setName(e.target.value); setErr(""); }} />
-            <p className={err ? "text-caption text-destructive" : "text-caption text-muted-foreground"}>{err || "Lowercase letters, digits and - only"}</p>
-            <Button type="submit" variant="primary" size="compact" disabled={!name.trim() || busy} className="self-end">Create</Button>
+          <form className="flex flex-col gap-2 pt-2" onSubmit={(e) => { e.preventDefault(); if (name.trim() && !newErr) create(); }}>
+            <Field autoFocus aria-label="Title" placeholder="Title" value={newTitle} onChange={(e) => onTitle(e.target.value)} />
+            <Field aria-label="Folder" placeholder="folder-name" aria-invalid={!!newErr || undefined} value={name} onChange={(e) => { setName(e.target.value); setNameTouched(true); setErr(""); }} />
+            <p role={newErr ? "alert" : undefined} className={newErr ? "text-caption text-destructive" : "text-caption text-muted-foreground"}>{newErr || "Folder: lowercase letters, digits and -"}</p>
+            <Button type="submit" variant="primary" size="compact" disabled={!name.trim() || !!newErr || busy} className="self-end">Create</Button>
           </form>
         </DialogContent>
       </Dialog>

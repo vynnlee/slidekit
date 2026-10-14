@@ -10,11 +10,40 @@ const exists = (p: string) => stat(p).then(() => true, () => false);
 
 // 새 덱: engine/new.ts(slidekit new)를 그대로 실행해 규칙(이름 형식, 중복 거부)을 한 곳에 둔다.
 export async function createDeck(req: Request) {
-  const { name } = (await req.json().catch(() => ({}))) as { name?: unknown };
+  const { name, title } = (await req.json().catch(() => ({}))) as { name?: unknown; title?: unknown };
   if (typeof name !== "string" || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name)) return err("Use lowercase letters, digits and - only", 400);
+  const t = cleanTitle(title);
+  if (title !== undefined && t === null) return err("Title must be 1 to 120 characters on one line", 400);
+  if (await exists(join(decks, name))) return err(`A deck named ${name} already exists`, 409);
   const p = Bun.spawn(["bun", join(root, "engine", "new.ts"), name], { cwd: root, stdout: "pipe", stderr: "pipe" });
-  if ((await p.exited) !== 0) return err("Name already exists", 409);
+  if ((await p.exited) !== 0) return err("Could not create the deck", 500);
+  if (t) await setTitle(name, t);
   return Response.json({ id: name }, { status: 201 });
+}
+
+const cleanTitle = (v: unknown) => (typeof v === "string" && /^[^\r\n]{1,120}$/.test(v.trim()) ? v.trim() : null);
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+// 제목은 deck-meta.title과 <title>, 표지의 첫 <h1>에 들어간다(새 덱 템플릿은 셋 다 같은 값으로 시작한다).
+async function setTitle(folder: string, title: string) {
+  const file = join(decks, folder, "index.html");
+  let html = await Bun.file(file).text();
+  const old = html.match(/<title>([^<]*)<\/title>/)?.[1];
+  html = html.replace(/<title>[^<]*<\/title>/, () => `<title>${esc(title)}</title>`);
+  // 표지 h1이 옛 제목과 같을 때만 바꾼다(손으로 고친 표지는 건드리지 않는다).
+  if (old !== undefined) html = html.replace(new RegExp(`(<h1[^>]*>)${old.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(</h1>)`), (_, a, b) => `${a}${esc(title)}${b}`);
+  await Bun.write(file, html);
+  await patchMeta(folder, (m) => { m.title = title; });
+}
+
+export async function retitleDeck(req: Request & { params: { folder: string } }) {
+  const { folder } = req.params;
+  const { title } = (await req.json().catch(() => ({}))) as { title?: unknown };
+  const t = cleanTitle(title);
+  if (!t) return err("Title must be 1 to 120 characters on one line", 400);
+  if (!(await source(folder))) return err("Deck not found", 404);
+  await setTitle(folder, t);
+  return Response.json({ title: t });
 }
 
 // #deck-meta JSON을 고쳐 다시 쓴다. 메타가 없으면 그대로 둔다(id는 폴더 이름이 된다).
@@ -65,8 +94,9 @@ export async function trashDeck(req: Request & { params: { folder: string } }) {
   if (!from) return err("Deck not found", 404);
   const trash = join(decks, ".trash");
   await mkdir(trash, { recursive: true });
-  await rename(from, join(trash, `${folder}-${new Date().toISOString().replace(/[:.]/g, "-")}`));
-  return Response.json({ ok: true });
+  const entry = `${folder}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+  await rename(from, join(trash, entry));
+  return Response.json({ ok: true, entry });
 }
 
 // ---- 휴지통(decks/.trash/<이름>-<타임스탬프>) ----
@@ -124,6 +154,7 @@ export const routes = {
   "/api/decks/:folder/rename": { POST: renameDeck },
   // "/api/decks/:folder"는 편집기의 저장(PUT)이 쓰므로 휴지통은 별도 경로로 둔다.
   "/api/decks/:folder/trash": { POST: trashDeck },
+  "/api/decks/:folder/title": { POST: retitleDeck },
   "/api/trash": { GET: listTrash },
   "/api/trash/:entry/restore": { POST: restoreDeck },
   "/api/trash/:entry/purge": { POST: purgeDeck },

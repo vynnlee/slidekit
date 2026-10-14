@@ -72,7 +72,7 @@ const MOCKS = {
     check(`[${name}] 발표 창은 ?sync=1 덱 페이지`, pop.url().includes(`/decks/${DECK}/`) && pop.url().includes('sync=1'), pop.url());
     await pop.waitForLoadState('load');
     const note = { unsupported: 'Display access unavailable', denied: 'Display access unavailable', 'single screen': 'No external display found' }[name];
-    check(`[${name}] 폴백 사유 표시`, await until(async () => ((await page.getByRole('status').innerText()) || '').includes(note)), await page.getByRole('status').innerText().catch(() => null));
+    check(`[${name}] 폴백 사유 표시`, await until(async () => ((await page.getByRole('status').filter({ hasText: note }).innerText()) || '').includes(note)), await page.getByRole('status').filter({ hasText: note }).innerText().catch(() => null));
     check(`[${name}] 발표 창 열림 표시`, await until(async () => (await page.getByText('Presentation window open').count()) === 1));
     // 발표 창이 시작할 때 hello로 위치를 받는다
     const hash = () => new URL(pop.url()).hash;
@@ -100,6 +100,7 @@ const MOCKS = {
     check('열려 있는 발표 창 위치(12)로 시작', await until(async () => (await counter()) === `12 / ${TOTAL}`), await counter().catch(() => null));
     await page.getByRole('switch', { name: 'Current slide' }).click();
     await page.getByRole('switch', { name: 'Next slide' }).click();
+    await page.mouse.click(640, 780); // 스위치 포커스를 벗어난다(위젯에 포커스가 있으면 화살표와 단축키는 그 위젯의 것이다)
     await page.keyboard.press('ArrowRight');
     check('보기를 꺼도 방향키 이동이 유지된다', await until(async () => (await counter()) === `13 / ${TOTAL}`), await counter());
     check('보기를 꺼도 발표 창과 동기화된다', await until(async () => new URL(pop.url()).hash === '#13'), pop.url());
@@ -140,6 +141,14 @@ const MOCKS = {
     await page.goto(`${BASE}/present/${ID}`);
     const counter = () => page.getByText(/^\d+ \/ \d+$/).first().innerText();
     await until(async () => (await counter()) === `1 / ${TOTAL}`);
+    // 포커스된 위젯의 입력은 슬라이드 이동과 한 글자 단축키로 새지 않는다
+    await page.getByRole('tab', { name: 'Slides' }).focus();
+    await page.keyboard.press('ArrowRight'); await sleep(250);
+    check('탭에서 화살표는 슬라이드를 넘기지 않는다', (await counter()) === `1 / ${TOTAL}`, await counter());
+    await page.getByRole('button', { name: 'Reset timer' }).focus();
+    await page.keyboard.press('t'); await page.clock.runFor(3000);
+    check('버튼에 포커스가 있으면 T는 타이머를 켜지 않는다', (await page.locator('[role=timer]').first().innerText()) === '00:00:00');
+    await page.locator('body').focus();
     check('Current와 Next 라벨', (await page.getByText('Current', { exact: true }).count()) === 1 && (await page.getByText(/^Next/).count()) >= 1);
     check('슬라이드 진행 바', (await page.getByRole('progressbar', { name: 'Slide progress' }).getAttribute('aria-valuenow')) === '1');
     await page.getByLabel('Target minutes').fill('1');

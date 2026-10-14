@@ -35,7 +35,8 @@ export type MetaIssue = { field: string; code: string; msg: string };
 /** 이 키들은 덱 파일에 절대 넣지 않는다(비밀번호는 게시할 때만 받고 해시로 올린다). */
 const SECRET_KEY = /pass|secret|token/i;
 
-const oneLine = (s: string) => !/[\r\n]/.test(s);
+// 한 줄: 줄바꿈과 제어 문자, 유니코드 줄 구분자, 양방향 제어 문자(글자 순서를 속이는 U+202A-202E, U+2066-2069)가 없어야 한다
+const oneLine = (s: string) => !/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/.test(s);
 const realDate = (s: string) => { const d = new Date(`${s}T00:00:00Z`); return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s; };
 
 function check(f: FieldSpec, v: unknown): MetaIssue | null {
@@ -43,7 +44,7 @@ function check(f: FieldSpec, v: unknown): MetaIssue | null {
   if (f.kind === "boolean") return typeof v === "boolean" ? null : err("boolean", `${f.label} must be on or off.`);
   if (typeof v !== "string") return err(({ title: "title-missing", date: "date-format", visibility: "visibility", id: "id-format", lang: "lang-format" } as Record<string, string>)[f.key] ?? `${f.key}-type`, `${f.label} must be text.`);
   if (f.key === "title" && !v.trim()) return err("title-missing", "Title is required.");
-  if (f.max !== undefined && (v.length > f.max || !oneLine(v))) return err(`${f.key}-format`, `${f.label} must be ${f.required ? "1" : "up to"}${f.required ? " to" : ""} ${f.max} characters on one line.`);
+  if (f.max !== undefined && (v.trim().length > f.max || !oneLine(v))) return err(`${f.key}-format`, `${f.label} must be ${f.required ? "1" : "up to"}${f.required ? " to" : ""} ${f.max} characters on one line.`);
   if (f.enum && !f.enum.includes(v)) return err("visibility", `${f.label} must be ${f.enum.join(" or ")}.`);
   if (f.pattern && !f.pattern.test(v)) {
     if (f.key === "date") return err("date-format", "Date must be a real date like 2026-10-14.");
@@ -78,7 +79,7 @@ export function validatePatch(patch: unknown): MetaIssue[] {
     const f = META_FIELDS.find((x) => x.key === k);
     if (!f) { out.push({ field: k, code: "unknown", msg: `Unknown setting "${k}".` }); continue; }
     if (f.readonly) { out.push({ field: k, code: "readonly", msg: `${f.label} cannot be changed here.` }); continue; }
-    if (v === null || v === "") { // 지우기: title만 못 지운다
+    if (v === null || v === "" || (typeof v === "string" && v.trim() === "")) { // 지우기(공백만 있어도): title만 못 지운다
       if (f.required) out.push({ field: k, code: "title-missing", msg: "Title is required." });
       continue;
     }
@@ -92,7 +93,7 @@ export function validatePatch(patch: unknown): MetaIssue[] {
 export function applyPatch(meta: Record<string, unknown>, patch: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = { ...meta };
   for (const [k, v] of Object.entries(patch)) {
-    if (v === null || v === "") delete out[k];
+    if (v === null || v === "" || (typeof v === "string" && v.trim() === "")) delete out[k];
     else out[k] = typeof v === "string" ? v.trim() : v;
   }
   return out;

@@ -10,7 +10,7 @@ const deck = args.find((a) => !a.startsWith("--"));
 const yes = args.includes("--yes");
 const dry = args.includes("--dry-run") || !!process.env.SLIDEKIT_DEPLOY_DRY_RUN;
 if (!deck) { console.error("사용: slidekit unpublish <덱> [--yes]  (예: slidekit unpublish my-talk). --yes가 없으면 지울 목록만 보인다"); process.exit(1); }
-if (!/^[\w-]+$/.test(deck)) { console.error(`덱 이름이 올바르지 않습니다: ${deck}`); process.exit(1); }
+if (!/^[A-Za-z0-9_][\w-]*$/.test(deck)) { console.error(`덱 이름이 올바르지 않습니다: ${deck}`); process.exit(1); }
 
 if (dry) process.exit(runUnpublish(deck, { yes, dry: true }, null));
 

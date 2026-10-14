@@ -1,7 +1,7 @@
 /* 덱 이미지 자산(node 전용). 편집기의 붙여넣기와 끌어다 놓기, 업로드 API, CLI(slidekit image)가 saveAsset 하나로 덱 폴더의 assets/에 저장한다.
    - 파일명은 소문자, 숫자, 하이픈만 쓰고 충돌하면 -2, -3을 붙인다. 확장자는 png, jpg, webp, gif, svg(heic는 sips가 있으면 jpg로 바꿔 저장).
    - 내용 앞부분(매직 바이트)이 확장자와 맞아야 하고, svg는 스크립트가 될 수 있는 것을 거부한다.
-   - jpg의 GPS 위치정보와 XMP, png의 텍스트 메타데이터는 항상 지운다(순수 코드). 방향 정보 등 나머지 EXIF는 둔다.
+   - jpg의 GPS 위치정보와 XMP, png의 텍스트 메타데이터, webp의 EXIF와 XMP, gif의 주석은 항상 지운다(순수 코드). 방향 정보 등 나머지 EXIF는 둔다.
    - macOS sips가 있으면 긴 변이 max를 넘는 png, jpg를 줄인다. 없으면 원본을 저장하고 경고만 한다(오류가 아니다).
    덱 이름 검증은 호출하는 쪽(app/folder.ts의 deckFolder, CLI)이 하고 여기서는 이미 검증된 덱 폴더 경로를 받는다. */
 import { closeSync, constants, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -9,6 +9,8 @@ import { tmpdir } from "node:os";
 import { basename, extname, join, sep } from "node:path";
 
 export const MAX_BYTES = 20 * 1024 * 1024;
+export const MAX_PIXELS = 100_000_000; // 압축 폭탄 방지: 가로 x 세로가 1억 픽셀을 넘으면 거부(헤더 값 기준)
+const SIPS_TIMEOUT = 30_000; // ms. 서버를 오래 붙들지 않는다
 export const DEFAULT_MAX = 2400;
 export const LARGE_BYTES = 400 * 1024; // 번들러의 큰 이미지 경고와 같은 기준
 export type SavedAsset = { path: string; bytes: number; width?: number; height?: number; resized: boolean; warnings: string[] };
@@ -40,14 +42,43 @@ export function sniff(b: Uint8Array): "png" | "jpg" | "gif" | "webp" | "heic" | 
   return null;
 }
 
-/** svg에서 스크립트가 될 수 있는 것을 찾는다. 있으면 이유를 돌려준다. */
+const NAMED_ENTITY: Record<string, string> = { lt: "<", gt: ">", amp: "&", quot: '"', apos: "'", colon: ":", tab: "\t", newline: "\n", lpar: "(", rpar: ")", sol: "/" };
+/** 숫자와 이름 엔티티를 풀어 준다(XML 파서가 속성값에서 푸는 것과 같다). 검사는 풀기 전과 푼 뒤 둘 다 한다. */
+export function decodeEntities(s: string): string {
+  const code = (n: number) => (n >= 0 && n <= 0x10ffff ? String.fromCodePoint(n) : "");
+  return s.replace(/&(?:#(\d+)|#[xX]([0-9a-fA-F]+)|([a-zA-Z]+));/g, (m, d, h, n) => (d ? code(+d) : h ? code(parseInt(h, 16)) : NAMED_ENTITY[String(n).toLowerCase()] ?? m));
+}
+/** 주소 비교용: 공백, 제어 문자, 보이지 않는 문자를 지우고 소문자로 */
+const normUrl = (v: string) => decodeEntities(v).replace(/[\u0000-\u0020\u007f-\u009f\u00ad\u200b-\u200f\u2028\u2029\ufeff]/g, "").toLowerCase();
+const SAFE_URL = /^(?:#|data:image\/(?:png|jpe?g|gif|webp)[;,])/;
+
+/** svg에서 스크립트나 외부 참조가 될 수 있는 것을 찾는다. 있으면 이유를 돌려준다.
+    정규식 금지 목록이라 완전하지 않으므로 정적 서빙이 assets/ 응답에 sandbox CSP를 붙이는 것(app/server.ts)과 함께 쓴다. */
 export function svgProblem(text: string): string | null {
-  if (/<script\b/i.test(text)) return "<script>가 들어 있다";
-  if (/\son[a-z]+\s*=/i.test(text)) return "on* 이벤트 속성이 들어 있다";
-  if (/javascript\s*:/i.test(text)) return "javascript: 주소가 들어 있다";
-  if (/data\s*:\s*text\/html/i.test(text)) return "data:text/html 주소가 들어 있다";
-  if (/<(foreignObject|iframe|embed|object)\b/i.test(text)) return "foreignObject, iframe, embed, object 요소가 들어 있다";
-  if (/<!ENTITY/i.test(text)) return "외부 엔티티 선언이 들어 있다";
+  const dec = decodeEntities(text);
+  for (const t of [text, dec]) {
+    if (/<(?:[\w.-]+:)?script\b/i.test(t)) return "<script>가 들어 있다(접두사가 붙은 것 포함)";
+    if (/[\s"'\/]on[a-z]+\s*=/i.test(t)) return "on* 이벤트 속성이 들어 있다";
+    if (/<(?:[\w.-]+:)?(foreignObject|iframe|embed|object|handler|listener)\b/i.test(t)) return "foreignObject, iframe, embed, object, handler 요소가 들어 있다";
+    if (/<!ENTITY/i.test(t)) return "외부 엔티티 선언이 들어 있다";
+    if (/@import|expression\s*\(|behavior\s*:|-moz-binding/i.test(t)) return "CSS @import나 expression이 들어 있다";
+    if (/<(?:[\w.-]+:)?(set|animate)\b[^>]*attributeName\s*=\s*["']?(?:xlink:)?href/i.test(t)) return "href를 바꾸는 애니메이션이 들어 있다";
+  }
+  // 속성 주소: href와 xlink:href는 #참조나 래스터 data 주소만 된다(http(s)는 <a>에서만)
+  for (const tag of dec.matchAll(/<((?:[\w.-]+:)?[\w-]+)\b([^>]*)>/g)) {
+    for (const a of tag[2].matchAll(/\b(?:[\w.-]+:)?href\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)) {
+      const v = normUrl(a[1] ?? a[2] ?? "");
+      if (v === "" || SAFE_URL.test(v)) continue;
+      if (/^https?:\/\//.test(v) && /^(?:[\w.-]+:)?a$/i.test(tag[1])) continue;
+      return `허용하지 않는 주소 참조가 있다(${v.slice(0, 30)})`;
+    }
+  }
+  // CSS url(): #참조나 래스터 data 주소만
+  for (const m of dec.matchAll(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*))\s*\)/gi)) {
+    const v = normUrl(m[1] ?? m[2] ?? m[3] ?? "");
+    if (v !== "" && !SAFE_URL.test(v)) return `CSS url()에 허용하지 않는 주소가 있다(${v.slice(0, 30)})`;
+  }
+  if (/data\s*:\s*text\/html|vbscript\s*:|javascript\s*:/i.test(dec)) return "스크립트가 될 수 있는 주소가 들어 있다";
   return null;
 }
 
@@ -109,7 +140,9 @@ function zeroGps(seg: Uint8Array) {
     for (let k = 0; k < n; k++) {
       const e = ifd0 + 2 + k * 12;
       if (u16(e) !== 0x8825) continue;
-      const gps = tiff + u32(e + 8), gn = u16(gps), SZ = [0, 1, 1, 2, 4, 8, 1, 1, 2, 4, 8, 4, 8];
+      const gps = tiff + u32(e + 8);
+      if (gps === ifd0 || gps < tiff + 8) continue; // 가리키는 곳이 IFD0 자신이거나 TIFF 머리 안이면 건드리지 않는다
+      const gn = u16(gps), SZ = [0, 1, 1, 2, 4, 8, 1, 1, 2, 4, 8, 4, 8];
       for (let g = 0; g < gn; g++) {
         const ge = gps + 2 + g * 12, size = (SZ[u16(ge + 2)] ?? 1) * u32(ge + 4);
         if (size > 4) { const at = tiff + u32(ge + 8); if (at + size <= seg.length) seg.fill(0, at, at + size); }
@@ -135,6 +168,56 @@ export function stripPng(b: Uint8Array): Uint8Array {
   return res;
 }
 
+/** webp에서 EXIF와 XMP 청크를 빼고 RIFF 크기와 VP8X 표시를 맞춘다. 읽지 못하면 원본을 돌려준다. */
+export function stripWebp(b: Uint8Array): Uint8Array {
+  if (b.length < 20 || ascii(b, 0, 4) !== "RIFF" || ascii(b, 8, 4) !== "WEBP") return b;
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength), parts: Uint8Array[] = [b.slice(0, 12)];
+  let i = 12;
+  while (i + 8 <= b.length) {
+    const type = ascii(b, i, 4), len = dv.getUint32(i + 4, true), end = i + 8 + len + (len & 1);
+    if (end > b.length + 1) return b;
+    const chunk = b.slice(i, Math.min(end, b.length));
+    if (type === "EXIF" || type === "XMP ") { i = end; continue; }
+    if (type === "VP8X" && chunk.length >= 9) chunk[8] &= ~0x0c; // EXIF(0x08)와 XMP(0x04) 표시를 끈다
+    parts.push(chunk);
+    i = end;
+  }
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let o = 0;
+  for (const p of parts) { out.set(p, o); o += p.length; }
+  new DataView(out.buffer).setUint32(4, out.length - 8, true);
+  return out;
+}
+
+/** gif에서 주석(0xFE)과 XMP 응용 확장, 글자 확장(0x01)을 뺀다. 읽지 못하면 원본을 돌려준다. */
+export function stripGif(b: Uint8Array): Uint8Array {
+  if (b.length < 13 || ascii(b, 0, 3) !== "GIF") return b;
+  const parts: Uint8Array[] = [];
+  let i = 13 + (b[10] & 0x80 ? 3 * (1 << ((b[10] & 7) + 1)) : 0);
+  parts.push(b.slice(0, i));
+  const skipSub = (at: number) => { while (at < b.length && b[at] !== 0) at += b[at] + 1; return at + 1; }; // 하위 블록 끝(0)까지
+  while (i < b.length) {
+    const t = b[i];
+    if (t === 0x3b) { parts.push(b.slice(i, i + 1)); i++; break; }
+    if (t === 0x21) {
+      const label = b[i + 1], end = label === 0xff ? skipSub(i + 2 + b[i + 2] + 1) : label === 0xf9 ? i + 2 + b[i + 2] + 2 : skipSub(i + 2);
+      const app = label === 0xff ? ascii(b, i + 3, 11) : "";
+      if (end > b.length) return b;
+      if (!(label === 0xfe || label === 0x01 || app === "XMP DataXMP")) parts.push(b.slice(i, end));
+      i = end;
+    } else if (t === 0x2c) {
+      const flags = b[i + 9], lct = flags & 0x80 ? 3 * (1 << ((flags & 7) + 1)) : 0, end = skipSub(i + 10 + lct + 1);
+      if (end > b.length) return b;
+      parts.push(b.slice(i, end));
+      i = end;
+    } else return b;
+  }
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let o = 0;
+  for (const p of parts) { out.set(p, o); o += p.length; }
+  return out;
+}
+
 const hasSips = () => process.platform === "darwin" && !process.env.SLIDEKIT_NO_SIPS && !!Bun.which("sips"); // SLIDEKIT_NO_SIPS=1은 sips가 없는 환경을 시험하는 용도
 /** sips로 변환하고 줄인다(heic를 jpg로, 긴 변이 max보다 크면 축소). 실패하면 null */
 function sips(bytes: Uint8Array, kind: "png" | "jpg" | "heic", max: number): Uint8Array | null {
@@ -145,11 +228,12 @@ function sips(bytes: Uint8Array, kind: "png" | "jpg" | "heic", max: number): Uin
     // -Z는 작은 이미지도 키우므로, 이미 max 이하이면 크기 옵션을 주지 않는다(heic 변환만 한다).
     let zoom = kind !== "heic";
     if (kind === "heic") {
-      const g = Bun.spawnSync(["sips", "-g", "pixelWidth", "-g", "pixelHeight", src], { stdout: "pipe", stderr: "pipe" }).stdout.toString();
+      const g = Bun.spawnSync(["sips", "-g", "pixelWidth", "-g", "pixelHeight", src], { stdout: "pipe", stderr: "pipe", timeout: SIPS_TIMEOUT, killSignal: "SIGKILL" }).stdout.toString();
       const w = Number(g.match(/pixelWidth:\s*(\d+)/)?.[1]), h = Number(g.match(/pixelHeight:\s*(\d+)/)?.[1]);
+      if (w && h && w * h > MAX_PIXELS) fail(`이미지가 너무 크다(${w}x${h}). 가로 x 세로가 ${MAX_PIXELS / 1e6}백만 픽셀 이하여야 한다`);
       zoom = !(w && h) || Math.max(w, h) > max;
     }
-    const r = Bun.spawnSync(["sips", ...(kind === "heic" ? ["-s", "format", "jpeg", "-s", "formatOptions", "85"] : []), ...(zoom ? ["-Z", String(max)] : []), src, "--out", dst], { stdout: "pipe", stderr: "pipe" });
+    const r = Bun.spawnSync(["sips", ...(kind === "heic" ? ["-s", "format", "jpeg", "-s", "formatOptions", "85"] : []), ...(zoom ? ["-Z", String(max)] : []), src, "--out", dst], { stdout: "pipe", stderr: "pipe", timeout: SIPS_TIMEOUT, killSignal: "SIGKILL" });
     return r.exitCode === 0 && existsSync(dst) ? new Uint8Array(readFileSync(dst)) : null;
   } finally { rmSync(work, { recursive: true, force: true }); }
 }
@@ -179,13 +263,14 @@ export function saveAsset(deckDir: string, name: string, bytes: Uint8Array, opts
     data = j!; outExt = "jpg"; resized = true;
   } else if (kind === "png" || kind === "jpg") {
     const d = dimensions(bytes, kind);
+    if (d && d.width * d.height > MAX_PIXELS) fail(`이미지가 너무 크다(${d.width}x${d.height}). 가로 x 세로가 ${MAX_PIXELS / 1e6}백만 픽셀 이하여야 한다`);
     if (d && Math.max(d.width, d.height) > max) {
       const s = hasSips() ? sips(bytes, kind, max) : null;
       if (s) { data = s; resized = true; }
       else warnings.push(`가로세로 ${d.width}x${d.height}가 ${max}보다 커서 줄이고 싶지만 sips가 없거나 실패해 원본을 저장했다`);
     }
   }
-  if (outExt === "jpg") data = stripJpeg(data); else if (outExt === "png") data = stripPng(data);
+  if (outExt === "jpg") data = stripJpeg(data); else if (outExt === "png") data = stripPng(data); else if (outExt === "webp") data = stripWebp(data); else if (outExt === "gif") data = stripGif(data);
   if (data.length > LARGE_BYTES) warnings.push(`큰 이미지(${(data.length / 1024).toFixed(0)} KB). 번들과 배포가 무거워진다. 더 줄이면 열리는 속도가 빨라진다`);
 
   const dir = join(deckDir, "assets");

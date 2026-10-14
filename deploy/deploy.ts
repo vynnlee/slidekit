@@ -76,7 +76,7 @@ if (arg === "--worker") {
   process.exit(0);
 }
 
-if (!/^[\w-]+$/.test(arg)) { console.error("덱 이름이 올바르지 않습니다"); process.exit(1); }
+if (!/^[A-Za-z0-9_][\w-]*$/.test(arg)) { console.error("덱 이름이 올바르지 않습니다"); process.exit(1); }
 if (!existsSync(join(root, "dist", `${arg}.html`))) { console.error(`dist/${arg}.html이 없습니다. 먼저 slidekit bundle ${arg} 로 묶으세요.`); process.exit(1); }
 const html = readFileSync(join(root, "dist", `${arg}.html`), "utf8");
 const metaJson = html.match(/<script[^>]*id="deck-meta"[^>]*>([\s\S]*?)<\/script>/)?.[1];

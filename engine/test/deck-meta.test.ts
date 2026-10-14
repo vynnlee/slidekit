@@ -44,3 +44,13 @@ test("lint가 이 모듈을 쓴다: 기존 오류 메시지는 그대로, 새 �
   expect(w.map((i) => i.level)).toEqual(["warn", "warn", "warn"]);
   expect(lintErr({ title: "t", lang: "en-US", pageNumber: true, progress: true })).toEqual([]);
 });
+
+test("보안 감사: 제어 문자와 유니코드 줄 구분자와 양방향 제어 문자 거부, 공백만 있는 값은 지우기로 본다", () => {
+  for (const bad of ["a\u0000b", "a\u000bb", "a\u000cb", "a\u0085b", "a b", "a b", "gnp‮fdp.exe", "a⁦b"])
+    expect(validatePatch({ title: bad })[0]?.code, JSON.stringify(bad)).toBe("title-format");
+  expect(validatePatch({ subtitle: "   ", author: "\t" })).toEqual([]);
+  expect(applyPatch({ subtitle: "x", author: "y", title: "t" }, { subtitle: "   ", author: " \n " })).toEqual({ title: "t" });
+  expect(validatePatch({ title: "   " })[0].code).toBe("title-missing");
+  expect(validatePatch({ title: " " + "가".repeat(120) + " " })).toEqual([]); // 길이는 다듬은 뒤 기준
+  expect(validateMeta({ title: "ok", subtitle: "a‮b" })[0].field).toBe("subtitle");
+});

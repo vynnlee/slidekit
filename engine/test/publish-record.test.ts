@@ -57,3 +57,13 @@ test("recordPublish와 recordUnpublish: current 교체, 최신순 history 최대
   expect(existsSync(join(d, ".publish.json"))).toBe(true);
   rmSync(d, { recursive: true, force: true });
 });
+
+test("보안 감사: 기록의 url은 PUBLISH_HOST와 name으로 만든 값만, name은 맨 앞에 하이픈이나 옵션 모양을 허용하지 않는다", () => {
+  const d = deck("<html></html>");
+  writeFileSync(join(d, ".publish.json"), JSON.stringify({ current: entry(1, { url: "https://evil.example/login" }), history: [entry(2), entry(3, { name: "-x", url: "https://static.vynnlee.com/-x" }), entry(4, { name: "--yes", url: "https://static.vynnlee.com/--yes" }), entry(5, { name: "a b", url: "https://static.vynnlee.com/a b" }), entry(6, { url: "http://static.vynnlee.com/x" })] }));
+  const r = readPublish(d);
+  expect(r.current).toBeNull();
+  expect(r.history.map((e) => e.bytes)).toEqual([102]);
+  expect(() => recordPublish(d, entry(7, { url: "https://evil.example/x" }))).toThrow();
+  rmSync(d, { recursive: true, force: true });
+});

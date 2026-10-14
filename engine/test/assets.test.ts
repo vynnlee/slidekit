@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deflateSync } from "node:zlib";
-import { AssetError, dimensions, safeName, saveAsset, sniff, stripJpeg, stripPng, svgProblem } from "../assets";
+import { AssetError, dimensions, safeName, saveAsset, sniff, stripGif, stripJpeg, stripPng, stripWebp, svgProblem } from "../assets";
 
 const dirs: string[] = [];
 const deck = () => { const d = mkdtempSync(join(tmpdir(), "sk-asset-")); dirs.push(d); writeFileSync(join(d, "index.html"), "<html></html>"); return d; };
@@ -144,4 +144,55 @@ test("heic: sips가 있으면 jpg로 바꿔 저장하고 작은 이미지는 키
   expect(Math.max(s.width!, s.height!)).toBe(64);
   process.env.SLIDEKIT_NO_SIPS = "1";
   try { expect(() => saveAsset(d, "x.heic", new Uint8Array(readFileSync(join(work, "a.heic"))))).toThrow("sips"); } finally { delete process.env.SLIDEKIT_NO_SIPS; }
+});
+
+test("svg 우회 시도(보안 감사): 접두사 script, 엔티티로 인코딩한 javascript:, href 애니메이션, 외부 주소, CSS url, 개행 변형", () => {
+  const w = (b: string) => `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:s="http://www.w3.org/2000/svg">${b}</svg>`;
+  for (const [name, body] of Object.entries({
+    prefixScript: '<s:script>alert(1)</s:script>',
+    hexEntity: '<a xlink:href="&#x6A;avascript:alert(1)"><rect width="9" height="9"/></a>',
+    decEntityTab: '<a href="java&#9;script:alert(1)"><rect/></a>',
+    newlineInScheme: '<a href="java\nscript:alert(1)"><rect/></a>',
+    setHref: '<a href="#x"><set attributeName="href" to="javascript:alert(1)"/><rect/></a>',
+    animateXlink: '<a><animate attributeName="xlink:href" values="javascript:alert(1)"/><rect/></a>',
+    useExternal: '<use xlink:href="https://evil.example/x.svg#a"/>',
+    imageExternal: '<image href="http://evil.example/track.png"/>',
+    cssUrl: '<style>rect{fill:url(javascript:alert(1))}</style><rect/>',
+    cssExternal: '<rect style="fill:url(https://evil.example/x)"/>',
+    cssImport: '<style>@import "https://evil.example/x.css";</style>',
+    dataHtml: '<image href="data:text/html;base64,PHNjcmlwdD4="/>',
+    dataSvg: '<image href="data:image/svg+xml;base64,PHN2Zz4="/>',
+    slashOn: '<rect/onload="alert(1)"/>',
+    handler: '<handler type="text/javascript">alert(1)</handler>',
+  })) expect(svgProblem(w(body)), name).not.toBeNull();
+  // 정상 svg는 통과: 그라디언트 #참조, 래스터 data 주소, <a> 링크, 접두사가 붙은 메타데이터 요소
+  expect(svgProblem(w('<defs><linearGradient id="g"/></defs><rect fill="url(#g)"/><image href="data:image/png;base64,iVBORw0KGgo="/><a href="https://example.com"><text>링크</text></a><use xlink:href="#g"/><s:metadata>x</s:metadata>'))).toBeNull();
+  expect(svgProblem(w("<text>Learn Java Script tips</text>"))).toBeNull();
+});
+
+test("보안 감사: webp의 EXIF와 XMP 청크, gif의 주석과 XMP 확장을 지우고 나머지는 그대로, 헤더가 1억 픽셀을 넘으면 거부", () => {
+  const le = (n: number) => new Uint8Array([n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >>> 24) & 255]);
+  const rc = (t: string, d: Uint8Array) => cat(text(t), le(d.length), d, d.length & 1 ? new Uint8Array(1) : new Uint8Array());
+  const vp8x = new Uint8Array(10); vp8x[0] = 0x0c; // EXIF와 XMP 표시
+  const body = cat(text("WEBP"), rc("VP8X", vp8x), rc("EXIF", text("GPS secret")), rc("VP8L", new Uint8Array([0x2f, 0, 0, 0, 0])), rc("XMP ", text("<x:xmpmeta gps/>")));
+  const webp = cat(text("RIFF"), le(body.length), body);
+  expect(Buffer.from(webp).toString("latin1")).toContain("GPS secret");
+  const sw = stripWebp(webp);
+  const swt = Buffer.from(sw).toString("latin1");
+  expect(swt).not.toContain("GPS secret"); expect(swt).not.toContain("xmpmeta");
+  expect(sniff(sw)).toBe("webp");
+  expect(new DataView(sw.buffer).getUint32(4, true)).toBe(sw.length - 8);
+  expect(sw[20] & 0x0c).toBe(0);
+  const gif = cat(text("GIF89a"), new Uint8Array([1, 0, 1, 0, 0x00, 0, 0]), new Uint8Array([0x21, 0xfe, 6]), text("secret"), new Uint8Array([0]), new Uint8Array([0x21, 0xff, 11]), text("XMP DataXMP"), new Uint8Array([3, 1, 2, 3, 0]), new Uint8Array([0x2c, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 0x44, 1, 0]), new Uint8Array([0x3b]));
+  const sg = stripGif(gif);
+  expect(Buffer.from(sg).toString("latin1")).not.toContain("secret");
+  expect(Buffer.from(sg).toString("latin1")).not.toContain("XMP Data");
+  expect(sg.length).toBeLessThan(gif.length);
+  expect(sg.at(-1)).toBe(0x3b);
+  expect(stripGif(text("not a gif"))).toEqual(text("not a gif")); // 읽지 못하면 원본
+  const d = deck();
+  const hdr = new Uint8Array(13), hv = new DataView(hdr.buffer); hv.setUint32(0, 20000); hv.setUint32(4, 20000); hdr[8] = 8; hdr[9] = 2;
+  const bomb = cat(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", hdr), chunk("IEND", new Uint8Array())); // 헤더만 있는 가짜: 실제로 풀지 않는다
+  expect(() => saveAsset(d, "bomb.png", bomb)).toThrow("너무 크다");
+  expect(existsSync(join(d, "assets"))).toBe(false);
 });

@@ -17,7 +17,11 @@ ${Array.from({ length: TOTAL - 1 }, (_, i) => `<section data-slide="content"><h2
 const DECK2 = '_e2e-present-nonotes', ID2 = 'e2e-present-nonotes', DIR2 = path.join(__dirname, '..', '..', 'decks', DECK2);
 fs.mkdirSync(DIR2, { recursive: true });
 fs.writeFileSync(path.join(DIR2, 'index.html'), fs.readFileSync(path.join(DIR, 'index.html'), 'utf8').replaceAll(ID, ID2).replace(/<aside data-notes>[^<]*<\/aside>/, ''));
-process.on('exit', () => { fs.rmSync(DIR, { recursive: true, force: true }); fs.rmSync(DIR2, { recursive: true, force: true }); });
+// 슬라이드가 0장인 덱: 빈 칸 대신 안내와 편집기로 가는 단추가 보인다.
+const DECK3 = '_e2e-present-zero', ID3 = 'e2e-present-zero', DIR3 = path.join(__dirname, '..', '..', 'decks', DECK3);
+fs.mkdirSync(DIR3, { recursive: true });
+fs.writeFileSync(path.join(DIR3, 'index.html'), `<!doctype html><html lang="en" data-slidekit="1"><head><meta charset="utf-8"><title>${ID3}</title><script type="application/json" id="deck-meta">{ "title": "${ID3}", "id": "${ID3}" }</script><link rel="stylesheet" href="../../engine/slidekit.css"></head><body><script src="../../engine/slidekit.js"></script></body></html>`);
+process.on('exit', () => { fs.rmSync(DIR, { recursive: true, force: true }); fs.rmSync(DIR2, { recursive: true, force: true }); fs.rmSync(DIR3, { recursive: true, force: true }); });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fail = 0;
 let __last = Date.now(); // TIMING=1이면 직전 검사 이후 1.5초 넘게 걸린 구간을 보여 준다(느린 단계 찾기)
@@ -120,6 +124,16 @@ const MOCKS = {
     check('방향키 반복 입력은 한 장만 넘긴다', (await counter()) === `14 / ${TOTAL}`, await counter());
     await page.keyboard.down('t'); await page.keyboard.down('t'); await page.keyboard.up('t');
     check('T 반복 입력은 한 번만 토글한다', await until(async () => (await page.locator('[role=timer]').first().innerText()) !== '00:00:00', 5000)); // 두 번 토글됐다면 시작하자마자 멈춰 0으로 남는다
+    await ctx.close();
+  }
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/present/${ID3}`, { waitUntil: 'domcontentloaded' });
+    check('슬라이드 0장 덱은 안내와 편집기 단추를 보인다', await until(async () => (await page.getByText('This deck has no slides').count()) === 1 && (await page.getByRole('button', { name: 'Open in editor' }).count()) === 1));
+    await page.getByRole('button', { name: 'Open in editor' }).click();
+    check('Open in editor는 편집기로 간다', await until(async () => new URL(page.url()).pathname === `/edit/${ID3}`), page.url());
     await ctx.close();
   }
   // 발표 전 점검: 노트가 없으면 한 번 묻고(Cancel로 돌아가거나 Present anyway로 시작), 노트가 있으면 묻지 않는다

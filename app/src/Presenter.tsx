@@ -343,6 +343,10 @@ export function Presenter({ id }: { id: string }) {
       ? <StatusPage role="alert" title="Could not load decks" actions={<>{back}<Button variant="primary" size="compact" onClick={() => location.reload()}>Retry</Button></>}>Check that the slidekit server is running.</StatusPage>
       : <StatusPage role="alert" title="Deck not found" actions={back}>No deck named {id} exists.</StatusPage>;
   }
+  // 슬라이드가 0장인 덱: 빈 칸 대신 이유와 다음 동작을 보인다.
+  if (deck.slides === 0 || (info && info.slides.length === 0)) { // 슬라이드가 없으면 엔진이 준비 신호를 내지 않을 수 있어 목록의 슬라이드 수로도 판단한다
+    return <StatusPage role="status" title="This deck has no slides" actions={<><Button variant="secondary" size="compact" leadingIcon={ArrowLeft} onClick={() => go("/")}>Back to decks</Button><Button variant="primary" size="compact" onClick={() => go(`/edit/${encodeURIComponent(id)}`)}>Open in editor</Button></>}>Add a slide in the editor, then present again.</StatusPage>;
+  }
   if (stalled && !info) {
     return <StatusPage role="alert" title="This deck did not respond" actions={<><Button variant="secondary" size="compact" leadingIcon={ArrowLeft} onClick={() => go("/")}>Back to decks</Button><Button variant="primary" size="compact" onClick={() => location.reload()}>Reload</Button></>}>The slides did not load. The deck file may have an error.</StatusPage>;
   }

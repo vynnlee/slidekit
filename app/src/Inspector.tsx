@@ -4,6 +4,7 @@ import {
   ArrowDown, ArrowRight, Blend, CaseLower, CaseSensitive, CaseUpper, ALargeSmall, Droplets, Expand, EyeOff, Frame, Layers as LayersIcon,
   Minus, Plus, RotateCw, Shrink, Square, SquareRoundCorner, Strikethrough, TextAlignCenter, TextAlignEnd, TextAlignJustify, TextAlignStart,
   Underline, WrapText, Scan, Spline, Footprints, Ban, MousePointer2, MoveHorizontal, ListCollapse, Space, BetweenHorizontalStart, BetweenVerticalStart, Type,
+  Play,
 } from "lucide-react";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,8 @@ import { Card, CardGroup, CardHeader, CardTitle, CardDescription } from "@/compo
 import { textual } from "./Canvas";
 import { iconOf, nameOf } from "./LayerTree";
 import { readTranslate } from "@/lib/move";
+import { TEXT_STYLES, currentTextStyle } from "@/lib/text-styles";
+import { STEP_EFFECTS } from "../../engine/steps"; // 효과 목록의 원천(엔진 CSS와 같은 목록)
 import { parseGradient, serializeGradient, type Gradient } from "@/lib/gradient";
 import { GradientEditor } from "@/components/ui/gradient-editor";
 import { LAYOUTS } from "../../engine/layouts";
@@ -40,7 +43,6 @@ const BLENDS: Items = [["normal", "Normal"], ["multiply", "Multiply"], ["screen"
 const FITS: Items = [["fill", "Fill"], ["contain", "Contain"], ["cover", "Cover"], ["none", "None"]];
 const OBJECT_POSITIONS: Items = [["center", "Center"], ["top", "Top"], ["bottom", "Bottom"], ["left", "Left"], ["right", "Right"]];
 const POSITION_OF: Record<string, string> = { "50% 50%": "center", "50% 0%": "top", "50% 100%": "bottom", "0% 50%": "left", "100% 50%": "right" };
-const STEP_EFFECTS: Items = [["rise", "Rise"], ["fade", "Fade"], ["none", "None"]];
 const BORDER_STYLES: Items = [["solid", "Solid"], ["dashed", "Dashed"], ["dotted", "Dotted"]];
 
 // 클래스나 인라인이 이 축의 크기를 정했는지 알아보려고 auto로 바꿔 재 본다(재고 나서 style 속성은 원래대로 돌린다).
@@ -105,6 +107,8 @@ type Props = {
   hoverId: string | null;
   onHover(id: string | null): void;
   onStyle(prop: string, value: string): void;
+  onPreviewStep(): void; // 선택한 단계 요소의 등장 효과를 한 번 재생한다
+  onStyles(map: Record<string, string>): void; // 여러 속성을 한 번에(실행 취소 한 건)
   onAttr(name: string, value: string | null): void;
   onElAttr(name: string, value: string | null): void;
   onShowLayers(): void;
@@ -148,7 +152,8 @@ export function Inspector(p: Props) {
   const cs = el && win ? win.getComputedStyle(el) : null;
   const parent = el?.parentElement && win ? win.getComputedStyle(el.parentElement) : null;
   const inl = (prop: string) => el?.style.getPropertyValue(prop) ?? "";
-  const val = (prop: string) => inl(prop) || cs?.getPropertyValue(prop) || "";
+  // 인라인 값이 var()이면 숫자 칸이 읽을 수 있게 계산값을 보인다(색 칸은 var()를 직접 읽는다)
+  const val = (prop: string) => { const v = inl(prop); return v && (!/var\(/.test(v) || /color|background-image|shadow/.test(prop)) ? v : cs?.getPropertyValue(prop) || v; };
   const set = (prop: string, v: string) => { p.onStyle(prop, v); bump((n) => n + 1); };
   const multi = p.more.length > 0;
   const imgInput = useRef<HTMLInputElement>(null);
@@ -411,7 +416,12 @@ export function Inspector(p: Props) {
               <Grid>
                 <NumberField label={<Footprints />} aria-label="Appears at step" unit="" min={1} step={1} value={el.getAttribute("data-step") ?? "1"} muted={!el.hasAttribute("data-step")}
                   onChange={(v) => p.onElAttr("data-step", +v >= 2 ? String(Math.round(+v)) : null)} />
-                {el.hasAttribute("data-step") && <Pick label="Step effect" value={el.getAttribute("data-step-effect") ?? "rise"} items={STEP_EFFECTS} onChange={(v) => p.onElAttr("data-step-effect", v === "rise" ? null : v)} />}
+                {el.hasAttribute("data-step") && (
+                  <div className="flex items-center gap-1">
+                    <div className="min-w-0 flex-1"><Pick label="Step effect" value={el.getAttribute("data-step-effect") ?? "rise"} items={[...STEP_EFFECTS]} onChange={(v) => p.onElAttr("data-step-effect", v === "rise" ? null : v)} /></div>
+                    <Tooltip content="Play the appear effect" side="top"><Button aria-label="Preview step effect" variant="ghost" size="icon-compact" onClick={p.onPreviewStep}><Play /></Button></Tooltip>
+                  </div>
+                )}
               </Grid>
               </div>
             </InspectorSection>
@@ -434,6 +444,12 @@ export function Inspector(p: Props) {
 
             {isText && (
               <InspectorSection id="typography" title="Typography">
+                <div className="flex flex-col gap-1">
+                  <span className="text-micro text-muted-foreground">Text style</span>
+                  <Pick label="Text style" value={currentTextStyle(inl)?.id ?? (TEXT_STYLES.some((t) => Object.keys(t.props).some((k) => inl(k))) ? "custom" : "none")}
+                    items={[["none", "None"], ...TEXT_STYLES.map((t) => [t.id, t.label] as const), ["custom", "Custom"]]}
+                    onChange={(v) => { const t = TEXT_STYLES.find((x) => x.id === v); if (t) { p.onStyles(t.props); bump((n) => n + 1); } }} />
+                </div>
                 <Pick label="Font" value={cs?.fontFamily ?? ""} items={families} onChange={(v) => set("font-family", v)} />
                 <Pick label="Weight" value={WEIGHTS.some(([w]) => w === val("font-weight")) ? val("font-weight") : String(Math.round(+val("font-weight") / 100) * 100)} items={WEIGHTS} onChange={(v) => set("font-weight", v)} />
                 <Grid>

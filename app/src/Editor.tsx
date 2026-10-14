@@ -22,6 +22,7 @@ import type { CommentActions } from "@/lib/comment-actions";
 import { numbering } from "@/lib/comment-state";
 import { firstChild, isLeaf, isLockedDeep, parentOf, siblings } from "@/lib/selection";
 import { EditorTip } from "./EditorTip";
+import { readStyle, writeStyle } from "@/lib/style-props";
 import { FindBar, type FindState } from "./FindBar";
 import { findInUnits, replaceInUnits } from "@/lib/find";
 import type { Overflow } from "@/lib/overflow";
@@ -36,7 +37,7 @@ import { startPresentation } from "@/lib/present";
 import type { Comment, DeckEntry } from "@/lib/deck";
 
 const KEY_GROUPS: [string, [string, string][]][] = [
-  ["Edit", [["Cmd+S", "Save"], ["Cmd+Z", "Undo"], ["Shift+Cmd+Z", "Redo"], ["Cmd+D", "Duplicate"], ["Cmd+G", "Group"], ["Shift+Cmd+G", "Ungroup"], ["Cmd+[", "Send backward"], ["Cmd+]", "Bring forward"], ["F2", "Rename layer"], ["Cmd+C", "Copy"], ["Cmd+V", "Paste"], ["Delete", "Delete selection"], ["Cmd+B", "Bold"], ["Cmd+I", "Italic"]]],
+  ["Edit", [["Cmd+S", "Save"], ["Cmd+Z", "Undo"], ["Shift+Cmd+Z", "Redo"], ["Cmd+D", "Duplicate"], ["Cmd+G", "Group"], ["Shift+Cmd+G", "Ungroup"], ["Cmd+[", "Send backward"], ["Cmd+]", "Bring forward"], ["F2", "Rename layer"], ["Cmd+C", "Copy"], ["Cmd+Opt+C", "Copy style"], ["Cmd+Opt+V", "Paste style"], ["Cmd+V", "Paste"], ["Delete", "Delete selection"], ["Cmd+B", "Bold"], ["Cmd+I", "Italic"]]],
   ["Select", [["Click", "Select a top-level element"], ["Double-click", "Go one level in, or edit text"], ["Cmd+Click", "Select the innermost element"], ["Enter", "First child, or edit text"], ["Shift+Enter", "Select the parent"], ["Shift+Click", "Add to selection"], ["Tab", "Next sibling"], ["Esc", "Finish editing, or deselect"]]],
   ["View", [["Up, Down", "Go to slide (no selection)"], ["Arrows", "Nudge 1px (Shift: 10px)"], ["Drag", "Move (Shift: lock axis)"], ["Cmd+Scroll", "Zoom"], ["Shift+1", "Zoom to fit"], ["Shift+0", "Zoom to 100%"], ["Cmd+0", "Zoom to fit"], ["Cmd+\\", "Toggle panels"], ["Shift+Cmd+\\", "Toggle filmstrip"]]],
   ["General", [["Cmd+K", "Command palette"], ["Cmd+F", "Find and replace"], ["Cmd+Enter", "Present from this slide"], ["Shift+Cmd+Enter", "Present from the start"], ["Opt+Enter", "Present from this slide"], ["Shift+F10", "Context menu"], ["Cmd+/", "Shortcuts"]]],
@@ -438,6 +439,25 @@ export function Editor({ id }: { id: string }) {
     changePrefix(r.html);
     if (typeof patch.title === "string" && patch.title) setDeck((d) => (d ? { ...d, title: patch.title as string } : d));
   };
+  // 스타일 복사와 붙여넣기: 인라인 모양 속성만 옮긴다(lib/style-props.ts). 붙이기는 선택한 모든 요소에 한 번(실행 취소 한 건)이다.
+  const styleClip = useRef<Record<string, string> | null>(null);
+  const copyStyle = () => {
+    const el = sel as HTMLElement | null;
+    if (!el) return;
+    styleClip.current = readStyle(el);
+    toast(Object.keys(styleClip.current).length ? "Style copied" : "Style copied (this element has no inline style)", { ms: 1800 });
+  };
+  const applyStyles = (map: Record<string, string>) => {
+    const els = ([sel, ...more].filter(Boolean) as HTMLElement[]).filter((e) => !isLockedDeep(e));
+    if (!els.length || !Object.keys(map).length) return;
+    for (const e of els) writeStyle(e, map);
+    pickGroup(els); commit();
+  };
+  const pasteStyle = () => {
+    if (!styleClip.current) { toast("Copy a style first", { ms: 2000 }); return; }
+    if (!Object.keys(styleClip.current).length) { toast("The copied element had no inline style", { ms: 2000 }); return; }
+    applyStyles(styleClip.current);
+  };
   // 그룹: 같은 부모의 선택 요소들을 div(data-name="Group") 하나로 감싼다. 문서 순서와 자리는 그대로고, 한 번 = 실행 취소 한 건.
   const groupSel = () => {
     const els = [sel, ...more].filter(Boolean) as Element[];
@@ -572,7 +592,7 @@ export function Editor({ id }: { id: string }) {
     comment: () => canvas.current?.compose(), editText: () => sel && canvas.current?.edit(sel),
     up: upSel, child: enterSel, next: () => cycle(1), prev: () => cycle(-1),
     forward: () => reorder(1), backward: () => reorder(-1), rename: () => setRenameTick((n) => n + 1),
-    group: groupSel, ungroup: ungroupSel, lock: () => toggleAll("lock"), hide: () => toggleAll("hide"), reset: resetChanges, dup: dupSelected, del: delSelected, align: alignGroup,
+    copyStyle, pasteStyle, group: groupSel, ungroup: ungroupSel, lock: () => toggleAll("lock"), hide: () => toggleAll("hide"), reset: resetChanges, dup: dupSelected, del: delSelected, align: alignGroup,
     zoomFit: () => canvas.current?.zoom(0), zoom100: () => canvas.current?.zoom100(),
     addAfter: () => addSlide(indexRef.current), dupSlide: () => dupSlide(indexRef.current), delSlide: () => delSlide(indexRef.current),
   };
@@ -585,7 +605,7 @@ export function Editor({ id }: { id: string }) {
   const menuFor = (els: Element[]): MenuItem[] => {
     const s = canvas.current?.slide(indexRef.current);
     if (!els.length || !s) return slideMenu(slideActions(true));
-    if (els.length > 1) return groupMenu({ group: call("group"), align: call("align") as never, duplicate: call("dup"), toggleLock: call("lock"), toggleHidden: call("hide"), remove: call("del") });
+    if (els.length > 1) return groupMenu({ group: call("group"), pasteStyle: call("pasteStyle"), canPaste: !!styleClip.current, align: call("align") as never, duplicate: call("dup"), toggleLock: call("lock"), toggleHidden: call("hide"), remove: call("del") });
     const el = els[0] as HTMLElement, sibs = siblings<Element>(s, el), i = sibs.indexOf(el);
     return elementMenu({
       editText: !isLockedDeep(el) && isLeaf(el) && textual(el) ? call("editText") : undefined,
@@ -593,6 +613,7 @@ export function Editor({ id }: { id: string }) {
       bringForward: call("forward"), sendBackward: call("backward"), rename: call("rename"),
       ungroup: el.tagName === "DIV" && el.children.length > 0 && !isLockedDeep(el) ? call("ungroup") : undefined, group: call("group"),
       locked: el.hasAttribute("data-locked"), toggleLock: call("lock"), hidden: el.style.display === "none", toggleHidden: call("hide"),
+      copyStyle: call("copyStyle"), pasteStyle: call("pasteStyle"), canPaste: !!styleClip.current,
       resetChanges: call("reset"), duplicate: call("dup"), remove: call("del"),
       has: { parent: !!parentOf<Element>(s, el), child: !isLeaf(el) && !!firstChild<Element>(el), next: sibs.length > 1, prev: sibs.length > 1, forward: i >= 0 && i < sibs.length - 1, backward: i > 0, reset: !!el.getAttribute("style") },
     });
@@ -628,6 +649,8 @@ export function Editor({ id }: { id: string }) {
     else if (mod && k === "/") { e.preventDefault(); setHelp((v) => !v); }
     else if (mod && e.key === "Enter") { e.preventDefault(); present(e.shiftKey); }
     else if (mod && (k === "b" || k === "i") && !/^(INPUT|TEXTAREA)$/.test(t.tagName) && (sel || t.isContentEditable || e.view !== window)) { e.preventDefault(); emphasis(k); }
+    else if (mod && e.altKey && e.code === "KeyC") { e.preventDefault(); copyStyle(); }
+    else if (mod && e.altKey && e.code === "KeyV") { e.preventDefault(); pasteStyle(); }
     else if (mod && k === "g") { e.preventDefault(); if (e.shiftKey) ungroupSel(); else groupSel(); }
     else if (mod && k === "f") { e.preventDefault(); setFind((f) => f ?? { q: "", r: "", matchCase: false, notes: false }); setFindTick((n) => n + 1); }
     else if (typing) return;
@@ -689,6 +712,8 @@ export function Editor({ id }: { id: string }) {
     { value: "act-save", label: "Save", group: "Actions", shortcut: "mod+s", onSelect: () => { save(true); } },
     { value: "act-settings", label: "Deck settings", group: "Actions", onSelect: () => setSettingsOpen(true) },
     { value: "act-find", label: "Find and replace", group: "Actions", shortcut: "mod+f", onSelect: () => { setFind((f) => f ?? { q: "", r: "", matchCase: false, notes: false }); setFindTick((n) => n + 1); } },
+    { value: "act-copy-style", label: "Copy style", group: "Selection", shortcut: "mod+alt+c", disabled: !sel, onSelect: () => copyStyle() },
+    { value: "act-paste-style", label: "Paste style", group: "Selection", shortcut: "mod+alt+v", disabled: !sel || !styleClip.current, onSelect: () => pasteStyle() },
     { value: "act-group", label: "Group selection", group: "Selection", shortcut: "mod+g", disabled: !sel, onSelect: () => groupSel() },
     { value: "act-ungroup", label: "Ungroup", group: "Selection", shortcut: "mod+shift+g", disabled: !sel, onSelect: () => ungroupSel() },
     { value: "act-undo", label: "Undo", group: "Actions", shortcut: "mod+z", disabled: !past.current.length, onSelect: () => restore(past.current, future.current) },
@@ -756,7 +781,7 @@ export function Editor({ id }: { id: string }) {
         }
         right={
           <Inspector sel={sel} slide={canvas.current?.slide(index) ?? null} more={more} onAlignGroup={alignGroup} selId={selId} tab={tab} onTab={setTab}
-            comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} onRemove={live.remove} onRevert={live.revert} onImageFile={(f) => addImage(f, sel)} hoverId={hoverId} onHover={setHoverId} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
+            comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} onRemove={live.remove} onRevert={live.revert} onStyles={applyStyles} onPreviewStep={() => sel && canvas.current?.previewStep(sel)} onImageFile={(f) => addImage(f, sel)} hoverId={hoverId} onHover={setHoverId} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
         }
       >
         <div className="flex h-full flex-col">

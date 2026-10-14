@@ -24,6 +24,7 @@ export type CanvasApi = {
   edit(el: Element): void;
   select(el: Element | null): void;
   zoom(dir: 1 | -1 | 0): void; // 0은 맞춤
+  previewStep(el: Element): void; // data-step 요소의 등장 효과를 한 번 재생한다(편집 중에는 모든 단계가 보이므로 잠깐 숨겼다 보인다)
   zoom100(): void; // 슬라이드가 1920px 폭으로 보이는 배율
   anchor(el: Element | null): { x: number; y: number }; // 메뉴를 키보드로 열 때의 화면 좌표(요소 왼쪽 아래, 없으면 캔버스 중앙)
   compose(): void; // 선택한 요소에 코멘트 작성창을 연다
@@ -160,6 +161,18 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     edit: (el) => startEdit(el as HTMLElement),
     select: (el) => P.current.onSel(el),
     zoom: (d) => zoomBy(d),
+    previewStep(el) {
+      const d = doc(), sl = cur();
+      const html = d?.documentElement;
+      if (!d || !sl || !html || !html.hasAttribute("data-sk-show-steps")) return;
+      const n = Number(el.getAttribute("data-step")) || 1;
+      const shown = [...sl.querySelectorAll("[data-step]")].filter((e) => e !== el && (Number(e.getAttribute("data-step")) || 1) < n);
+      html.removeAttribute("data-sk-show-steps"); // 엔진 CSS의 숨김 규칙이 돌게 한다(저장 글자에는 data-shown이 새지 않게 serializeSlide가 지운다)
+      for (const e of shown) e.setAttribute("data-shown", "");
+      el.removeAttribute("data-shown");
+      requestAnimationFrame(() => requestAnimationFrame(() => el.setAttribute("data-shown", "")));
+      setTimeout(() => { for (const e of [...shown, el]) e.removeAttribute("data-shown"); html.setAttribute("data-sk-show-steps", ""); }, 1500);
+    },
     zoom100: () => setZoom(size.w ? 1920 / size.w : 1),
     anchor(el) {
       const fr = frame.current?.getBoundingClientRect();

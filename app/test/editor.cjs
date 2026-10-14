@@ -294,9 +294,21 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   await page.keyboard.press('Escape'); await focusBody(); await page.keyboard.press('Tab'); await settle();
   const st = page.getByLabel('Appears at step'); await st.fill('3'); await st.press('Enter'); await settle();
   check('data-step이 요소에 설정', await inDoc((s) => !!s.querySelector('[data-step="3"]')));
-  check('Effect Select 표시', (await page.getByLabel('Step effect').count()) === 1);
+  check('Effect Select 표시', (await page.getByLabel('Step effect', { exact: true }).count()) === 1);
   check('캔버스에 모든 단계 표시(data-sk-show-steps)', await page.evaluate(() => document.querySelector('iframe[title="Canvas"]').contentDocument.documentElement.hasAttribute('data-sk-show-steps')));
   check('Layers 단계 배지', (await page.getByTitle('Appears at step 3').count()) >= 1);
+  // 효과 목록(engine/steps.ts)과 미리보기 재생
+  await page.getByLabel('Step effect', { exact: true }).click();
+  const effOpts = await page.getByRole('option').allTextContents();
+  check('효과 목록이 6종(Rise, Fade, Slide, Scale, Blur, None)', ['Rise', 'Fade', 'Slide', 'Scale', 'Blur', 'None'].every((l) => effOpts.some((o) => o.includes(l))), effOpts);
+  await page.getByRole('option', { name: 'Slide' }).click(); await settle();
+  check('효과가 data-step-effect로 저장됨', await inDoc((s) => !!s.querySelector('[data-step-effect="left"]')));
+  await page.getByRole('button', { name: 'Preview step effect' }).click();
+  await cond(() => !document.querySelector('iframe[title="Canvas"]').contentDocument.documentElement.hasAttribute('data-sk-show-steps'), null, 3000);
+  check('미리보기 중에는 모든 단계 표시가 잠깐 꺼짐', true);
+  await cond(() => document.querySelector('iframe[title="Canvas"]').contentDocument.documentElement.hasAttribute('data-sk-show-steps') && !document.querySelector('iframe[title="Canvas"]').contentDocument.querySelector('[data-shown]'), null, 6000);
+  check('미리보기가 끝나면 표시와 data-shown이 정리됨', await page.evaluate(() => { const d = document.querySelector('iframe[title="Canvas"]').contentDocument; return d.documentElement.hasAttribute('data-sk-show-steps') && !d.querySelector('[data-shown]'); }));
+  await page.getByLabel('Step effect', { exact: true }).click(); await page.getByRole('option', { name: 'Rise' }).click(); await settle();
   await page.locator('body').click({ position: { x: 5, y: 5 } }); await page.keyboard.press('Meta+s'); await saveDone();
   const stepSaved = fs.readFileSync(FILE, 'utf8');
   check('저장 파일에 data-step, show-steps는 새지 않음', /data-step="3"/.test(stepSaved) && !stepSaved.includes('data-sk-show-steps'));
@@ -546,7 +558,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   await page.mouse.click(h2b.x + 20, h2b.y + h2b.height / 2, { button: 'right' }); await settle();
   check('요소 우클릭이 먼저 선택함', (await page.getByRole('button', { name: 'Show in layers' }).count()) === 1);
   const ml = (await menuLabels()).join('|');
-  check('요소 메뉴 항목(글자 요소)', /Edit text/.test(ml) && /Add comment/.test(ml) && /Select/.test(ml) && /Duplicate/.test(ml) && /Delete/.test(ml) && /Reset changes/.test(ml), ml);
+  check('요소 메뉴 항목(글자 요소)', /Edit text/.test(ml) && /Add comment/.test(ml) && /Select/.test(ml) && /Duplicate/.test(ml) && /Delete/.test(ml) && /Style/.test(ml), ml);
   const dupBefore = await nKids();
   await page.getByRole('menuitem', { name: /^Duplicate/ }).click(); await settle();
   check('메뉴의 Duplicate가 동작', (await nKids()) === dupBefore + 1, [dupBefore, await nKids()]);
@@ -698,6 +710,36 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   await page.keyboard.press('Escape'); await settle();
   await focusBody(); await page.keyboard.press('Meta+z'); await settle();
   check('토큰 선택 실행 취소', (await inDoc((s) => s.querySelector('h2').style.color)) === '');
+  await page.keyboard.press('Escape');
+
+  // 스타일 복사와 붙여넣기(Cmd+Alt+C, Cmd+Alt+V): 인라인 모양 속성만 옮기고 한 번에 되돌린다
+  await layers.nth(1).click(); await settle(); await focusBody(); await page.keyboard.press('Escape');
+  await fr().locator('[data-active] > :nth-child(1)').first().click(); await settle();
+  const fmtG2 = page.getByRole('group', { name: 'Text format' });
+  await fmtG2.getByRole('button', { name: 'Larger text' }).click(); await settle();
+  await fmtG2.getByRole('button', { name: 'Text align center' }).click(); await settle();
+  await focusBody(); await page.keyboard.press('Meta+Alt+KeyC'); await settle();
+  const srcStyle = await inDoc((s) => s.children[0].getAttribute('style') || '');
+  await fr().locator('[data-active] > :nth-child(2)').first().click(); await settle();
+  const dstBefore = await inDoc((s) => s.children[1].getAttribute('style') || '');
+  await focusBody(); await page.keyboard.press('Meta+Alt+KeyV'); await settle();
+  const dstAfter = await inDoc((s) => s.children[1].getAttribute('style') || '');
+  check('스타일 붙여넣기가 글자 크기와 정렬을 옮김', /font-size/.test(dstAfter) && /text-align:\s*center/.test(dstAfter) && /text-align:\s*center/.test(srcStyle), [srcStyle, dstAfter]);
+  await focusBody(); await page.keyboard.press('Meta+z'); await settle();
+  check('스타일 붙여넣기는 실행 취소 한 번에 되돌아감', (await inDoc((s) => s.children[1].getAttribute('style') || '')) === dstBefore);
+  await page.keyboard.press('Meta+z'); await settle(); await page.keyboard.press('Meta+z'); await settle(); await page.keyboard.press('Escape');
+
+  // 텍스트 스타일 프리셋: 한 번에 여섯 속성이 토큰 var()로 들어가고 실행 취소 한 건
+  await layers.nth(1).click(); await settle(); await focusBody(); await page.keyboard.press('Escape');
+  await fr().locator('[data-active] h2').first().click(); await settle();
+  const tsSel = page.getByLabel('Text style', { exact: true });
+  await tsSel.click(); await page.getByRole('option', { name: 'Caption' }).click(); await settle();
+  const capStyle = await inDoc((s) => s.querySelector('h2').getAttribute('style') || '');
+  check('Caption 프리셋이 토큰 var()로 크기와 색을 넣음', /font-size:\s*var\(--sk-fs-small\)/.test(capStyle) && /color:\s*var\(--sk-muted\)/.test(capStyle) && /line-height:\s*1\.4/.test(capStyle), capStyle);
+  check('선택한 프리셋 이름이 표시됨', ((await tsSel.textContent()) || '').includes('Caption'));
+  check('크기 칸이 var() 대신 계산된 숫자를 보임', /^\d+(\.\d+)?$/.test(await page.getByLabel('Font size', { exact: true }).inputValue()), await page.getByLabel('Font size', { exact: true }).inputValue());
+  await focusBody(); await page.keyboard.press('Meta+z'); await settle();
+  check('텍스트 스타일은 실행 취소 한 번에 되돌아감', !/var\(--sk-fs-small\)/.test(await inDoc((s) => s.querySelector('h2').getAttribute('style') || '')));
   await page.keyboard.press('Escape');
 
   // 그룹과 그룹 해제(Cmd+G, Shift+Cmd+G): 같은 부모의 선택을 div 하나로 감싸고 되돌린다

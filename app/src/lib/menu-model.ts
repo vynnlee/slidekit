@@ -112,6 +112,7 @@ export type ElementMenuActions = {
   group(): void; ungroup?(): void;
   locked: boolean; toggleLock(): void;
   hidden: boolean; toggleHidden(): void;
+  copyStyle(): void; pasteStyle(): void; canPaste: boolean;
   resetChanges(): void;
   duplicate(): void;
   remove(): void;
@@ -147,7 +148,11 @@ export function elementMenu(a: ElementMenuActions): MenuItem[] {
     item("lock", "Lock", a.toggleLock),
     item("hide", a.hidden ? "Show" : "Hide", a.toggleHidden),
     separator,
-    item("reset", "Reset changes", a.resetChanges, { disabled: !a.has.reset }),
+    { type: "sub", id: "style", label: "Style", items: [
+      item("copy-style", "Copy style", a.copyStyle, { shortcut: "mod+alt+c" }),
+      item("paste-style", "Paste style", a.pasteStyle, { shortcut: "mod+alt+v", disabled: !a.canPaste }),
+      item("reset", "Reset changes", a.resetChanges, { disabled: !a.has.reset }),
+    ] },
     item("duplicate", "Duplicate", a.duplicate, { shortcut: "mod+d" }),
     separator,
     item("delete", "Delete", a.remove, { shortcut: "delete", destructive: true }),
@@ -156,6 +161,7 @@ export function elementMenu(a: ElementMenuActions): MenuItem[] {
 
 export type GroupMenuActions = {
   group(): void;
+  pasteStyle?(): void; canPaste?: boolean;
   align(axis: "h" | "v", where: "start" | "center" | "end"): void;
   duplicate(): void; toggleLock(): void; toggleHidden(): void; remove(): void;
 };
@@ -172,6 +178,7 @@ export function groupMenu(a: GroupMenuActions): MenuItem[] {
     ] },
     separator,
     item("group", "Group", a.group, { shortcut: "mod+g" }),
+    a.pasteStyle && item("paste-style", "Paste style", a.pasteStyle, { shortcut: "mod+alt+v", disabled: !a.canPaste }),
     item("duplicate", "Duplicate", a.duplicate, { shortcut: "mod+d" }),
     item("lock", "Lock", a.toggleLock),
     item("hide", "Hide", a.toggleHidden),

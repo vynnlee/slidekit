@@ -692,11 +692,12 @@ export function Editor({ id }: { id: string }) {
 
   if (!deck || !shell) {
     if (!err && !notFound) return null;
+    const empty = err === "This deck has no slides yet."; // 슬라이드 0장은 오류가 아니라 시작 상태
     return (
-      <StatusPage role="alert" title={notFound ? "Deck not found" : "Could not open the deck"} actions={<>
+      <StatusPage role="alert" title={notFound ? "Deck not found" : empty ? "This deck has no slides yet" : "Could not open the deck"} actions={<>
         <Button variant="primary" size="compact" onClick={() => go("/")}>Back to decks</Button>
-        <Button variant="ghost" size="compact" onClick={() => location.reload()}>Retry</Button>
-      </>}>{notFound ? "This deck does not exist or was moved to the trash." : err}</StatusPage>
+        {!notFound && <Button variant="ghost" size="compact" onClick={() => location.reload()}>Retry</Button>}
+      </>}>{notFound ? "This deck does not exist or was moved to the trash." : empty ? "Ask Claude to add a first slide, or add one in the deck's HTML, then retry." : err}</StatusPage>
     );
   }
 

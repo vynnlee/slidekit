@@ -45,7 +45,7 @@ function sections(src: string) {
 
 export function splitDeck(src: string): Doc {
   const slides = sections(src).filter((r) => r.slide).map((r) => [r.a, r.b] as const);
-  if (!slides.length) throw new Error("슬라이드가 없습니다");
+  if (!slides.length) throw new Error("This deck has no slides yet.");
   const units = slides.map(([a, b], i) => ({
     key: newKey(),
     gap: i ? src.slice(slides[i - 1][1], a) : undefined,

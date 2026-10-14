@@ -87,5 +87,13 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   await focusBody(); for (let i = 0; i < 2; i++) { await page.keyboard.press('Meta+z'); await settle(); }
   check('이미지 추가와 교체 실행 취소', (await inDoc((s) => s.querySelectorAll('img').length)) === imgBefore);
 
+  // 슬라이드가 0장인 덱: 오류가 아니라 시작 안내(영어), 없는 덱이 아니므로 Retry는 있다
+  const { BASE } = H;
+  fs.writeFileSync(FILE, fs.readFileSync(FILE, 'utf8').replace(/\sdata-slide(?==|\s|>)(=("[^"]*"|'[^']*'|[^\s>]*))?/g, '')); // 슬라이드 표시를 모두 떼어 0장으로 만든다(deck-meta는 그대로)
+  await page.goto(BASE + '/edit/' + T.id);
+  check('슬라이드 0장 덱은 시작 안내', await page.getByText('This deck has no slides yet', { exact: true }).waitFor({ timeout: 8000 }).then(() => true).catch(() => false));
+  check('한국어 오류 문장이 화면에 없음', !/[가-힣]/.test(await page.locator('body').innerText()));
+  check('안내 화면에 Back to decks와 Retry', (await page.getByRole('button', { name: 'Back to decks' }).count()) === 1 && (await page.getByRole('button', { name: 'Retry' }).count()) === 1, (await page.locator('body').innerText()).slice(0, 200));
+
   await H.finish();
 })();

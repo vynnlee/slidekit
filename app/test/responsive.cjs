@@ -119,6 +119,23 @@ const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.
         await menu.waitFor({ state: 'detached', timeout: 3000 }).catch(() => {});
       }
     }
+    if (w < 640) { // 인스펙터 Effects의 + 메뉴도 같다: 넓은 화면에서 요소를 고른 뒤 좁게 줄여 상세 패널을 열고 연다
+      await page.setViewportSize({ width: 1440, height: 900 });
+      const frame = page.frames().find((f) => f.url().startsWith('blob:'));
+      await frame.locator('[data-active] h1, [data-active] h2').first().click({ modifiers: ['Meta'] });
+      await page.getByRole('button', { name: 'Add effect' }).waitFor({ timeout: 8000 }).catch(() => {});
+      await page.setViewportSize({ width: w, height: h });
+      await sleep(400);
+      if (!(await page.getByRole('button', { name: 'Add effect' }).isVisible())) await page.getByRole('button', { name: 'Toggle details' }).click({ force: true }).catch(() => {});
+      await page.getByRole('button', { name: 'Add effect' }).click({ force: true }).catch(() => {});
+      const fx = page.getByRole('menu');
+      await fx.waitFor({ timeout: 3000 }).catch(() => {});
+      let fb = null;
+      for (let i = 0; i < 20; i++) { const n = await fx.boundingBox(); if (n && fb && n.x === fb.x && n.width === fb.width) { fb = n; break; } fb = n; await sleep(60); }
+      check(`[편집기 ${w}px] Effects + 메뉴가 화면 가장자리에서 8px 이상 떨어짐`, !!fb && fb.x >= 8 && fb.x + fb.width <= w - 8, fb);
+      await page.keyboard.press('Escape');
+      await fx.waitFor({ state: 'detached', timeout: 3000 }).catch(() => {});
+    }
     if (w === 390) { // 좁은 폭의 찾기 줄: Find와 Replace 입력의 높이와 글자 크기가 같고 줄이 화면 밖으로 넘치지 않는다
       await page.keyboard.press('Meta+f');
       await page.getByLabel('Find', { exact: true }).waitFor({ timeout: 5000 }).catch(() => {});

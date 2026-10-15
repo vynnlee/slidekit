@@ -1,6 +1,6 @@
 // comments.json이 깨졌을 때 코멘트를 잃지 않는지 확인한다. 실행: bun test app/test/comments.test.ts
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -99,4 +99,63 @@ test("큰 입력과 이상한 글자: 본문 2000자 초과는 400, excerpt와 p
   const b = l.find((c) => c.text === odd)!;
   expect(b.text).toBe(odd); // 본문은 사용자가 쓴 그대로(채널이 알림에서 \\uXXXX로 풀어 쓴다)
   expect(/[\u0000-\u001f]/.test(b.excerpt + b.path)).toBe(false); // 덱에서 온 값의 제어 문자(널과 줄바꿈 포함)는 공백이 된다
+});
+
+// ---- 영역 코멘트(region)와 이미지 ----
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+const post = (b: Record<string, unknown>) => routes["/api/comments"].POST(new Request("http://x/", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ deck: "d", slide: 2, text: "영역 코멘트", ...b }) }));
+const waitImage = async (id: string, not = "pending") => { for (let i = 0; i < 100; i++) { const c = load("d").find((x) => x.id === id); if (c && c.image !== not) return c; await Bun.sleep(30); } return load("d").find((x) => x.id === id)!; };
+
+test("영역 코멘트: 잘못된 region, step, overlap은 400", async () => {
+  expect((await post({ region: { x: 2, y: 0, w: 0.5, h: 0.5 } })).status).toBe(400);
+  expect((await post({ region: "x" })).status).toBe(400);
+  expect((await post({ step: 0 })).status).toBe(400);
+  expect((await post({ step: 1.5 })).status).toBe(400);
+  expect((await post({ overlap: "h1" })).status).toBe(400);
+});
+
+test("영역 코멘트: 저장하면 이미지가 만들어지고(ready) 이미지 경로가 PNG를 주며, 서명에 새 필드가 들어가고, 지우면 파일도 지워진다", async () => {
+  writeFileSync(join(dir, "d", "index.html"), `<html><head></head><body><section data-slide="cover"><h1>x</h1></section></body></html>`);
+  const cap = await import("../capture");
+  cap.backend.find = () => "/fake/chrome";
+  cap.backend.shot = (async ({ out }) => { writeFileSync(out, PNG); return true; }) as typeof cap.backend.shot;
+  cap.backend.crop = (async ({ src, dst }) => { writeFileSync(dst, readFileSync(src)); return true; }) as typeof cap.backend.crop;
+  const res = await post({ region: { x: 0.1, y: 0.2, w: 0.3, h: 0.4 }, overlap: ["h1", "p:nth-of-type(2)"], step: 3, path: "ignored > path", excerpt: "겹치는 글자" });
+  expect(res.status).toBe(200);
+  const { id } = (await res.json()) as { id: string };
+  const c = await waitImage(id);
+  expect(c).toMatchObject({ path: "", region: { x: 0.1, y: 0.2, w: 0.3, h: 0.4 }, overlap: ["h1", "p:nth-of-type(2)"], step: 3, image: "ready", trusted: true });
+  expect(existsSync(join(dir, "d", ".comments", `${id}.png`))).toBe(true);
+  // 이미지 경로
+  const img = await routes["/api/comments/:id/image"].GET(Object.assign(new Request(`http://x/?deck=d`), { params: { id } }) as any);
+  expect(img.status).toBe(200);
+  expect(img.headers.get("content-type")).toBe("image/png");
+  expect(img.headers.get("x-content-type-options")).toBe("nosniff");
+  expect(Buffer.from(await img.arrayBuffer()).equals(PNG)).toBe(true);
+  expect((await routes["/api/comments/:id/image"].GET(Object.assign(new Request(`http://x/?deck=d`), { params: { id: "../x" } }) as any)).status).toBe(404);
+  // 서명: region을 바꾸면 검증이 깨진다
+  const raw = JSON.parse(readFileSync(file, "utf8"));
+  raw.find((x: any) => x.id === id).region.x = 0.5;
+  writeFileSync(file, JSON.stringify(raw));
+  expect(load("d").find((x) => x.id === id)!.trusted).toBe(false);
+  raw.find((x: any) => x.id === id).region.x = 0.1;
+  writeFileSync(file, JSON.stringify(raw));
+  expect(load("d").find((x) => x.id === id)!.trusted).toBe(true);
+  // 지우면 이미지 파일도 지워지고, 되돌리면 failed
+  await routes["/api/comments/:id/delete"].POST(Object.assign(new Request("http://x/", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ deck: "d" }) }), { params: { id } }) as any);
+  expect(existsSync(join(dir, "d", ".comments", `${id}.png`))).toBe(false);
+  await routes["/api/comments/:id/restore"].POST(Object.assign(new Request("http://x/", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ deck: "d" }) }), { params: { id } }) as any);
+  expect(load("d").find((x) => x.id === id)!.image).toBe("failed");
+});
+
+test("이미지가 실패하면 failed로 남고 이미지 경로는 404, 파일이 사라지면 목록에서 failed로 보인다", async () => {
+  const cap = await import("../capture");
+  cap.backend.shot = (async () => false) as typeof cap.backend.shot;
+  const { id } = (await (await post({ region: { x: 0, y: 0, w: 0.2, h: 0.2 } })).json()) as { id: string };
+  expect((await waitImage(id)).image).toBe("failed");
+  expect((await routes["/api/comments/:id/image"].GET(Object.assign(new Request(`http://x/?deck=d`), { params: { id } }) as any)).status).toBe(404);
+  // 요소 코멘트(region 없음)에도 step을 기록할 수 있고 이미지는 없다
+  const el = (await (await post({ path: "h1", excerpt: "x", step: 2 })).json()) as { id: string };
+  expect(load("d").find((x) => x.id === el.id)).toMatchObject({ step: 2, trusted: true });
+  expect(load("d").find((x) => x.id === el.id)!.image).toBeUndefined();
 });

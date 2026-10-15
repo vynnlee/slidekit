@@ -1,7 +1,8 @@
 // 앱 서버(3210)와 채널을 띄워 핸드셰이크, 알림, reply, 파일 감시를 확인한다.
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { existsSync, readdirSync, rmSync, utimesSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync, utimesSync } from "node:fs";
+import { findChrome } from "../engine/chrome";
 import { join } from "node:path";
 
 const assert = (c: unknown, m = "assert") => { if (!c) throw new Error(m); };
@@ -74,6 +75,21 @@ try {
   assert(afterCap.filter((c) => many.includes(c.id) && c.held).length === 2, "the 2 over the cap stay held");
   const s2 = await sendAll();
   assert(s2.count === 2 && s2.remaining === 0, `second ${JSON.stringify(s2)}`);
+  // 영역 코멘트: Chrome이 있으면 이미지가 만들어진 뒤 알림 meta에 이미지 경로가 실리고(없으면 이미지 없이 region과 overlap만), 지우면 파일도 지워진다
+  const regionId = ((await (await fetch(`${url}/api/comments`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deck, slide: 1, path: "", excerpt: "", text: "영역 알림 시험", region: { x: 0.1, y: 0.1, w: 0.3, h: 0.2 }, overlap: ["h1"], step: 1 }) })).json()) as any).id as string;
+  for (let i = 0; i < 100 && !got.some((g) => g.params?.meta?.comment_id === regionId); i++) await Bun.sleep(100);
+  const rn = got.find((g) => g.params?.meta?.comment_id === regionId);
+  assert(!!rn, "region comment notification arrives");
+  assert(rn.params.content.includes('"region":{"x":0.1,"y":0.1,"w":0.3,"h":0.2}') && rn.params.content.includes('"overlap":["h1"]') && rn.params.content.includes('"step":1'), rn.params.content);
+  const imgRel = `decks/${deck}/.comments/${regionId}.png`;
+  if (findChrome()) {
+    assert(rn.params.meta.image === imgRel && rn.params.content.includes('"imageState":"ready"'), JSON.stringify(rn.params));
+    const png = readFileSync(join(root, imgRel));
+    assert(png[0] === 0x89 && png[1] === 0x50 && png.length > 100 && png.length < 2 * 1024 * 1024, "png file created");
+  } else assert(!rn.params.meta.image && /"imageState":"(failed|none)"/.test(rn.params.content), "fallback without image");
+  await fetch(`${url}/api/comments/${regionId}/delete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deck }) });
+  assert(!existsSync(join(root, imgRel)), "deleting the comment removes the image");
+  try { rmSync(join(root, "decks", deck, ".comments"), { recursive: false }); } catch { /* 비어 있지 않거나 없다 */ }
   // 삭제와 되돌리기: restore는 서버가 보관한 코멘트만 되살린다(없는 id는 404)
   const delPost = (path: string, body: unknown) => fetch(`${url}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const before = ((await (await fetch(`${url}/api/comments?deck=${deck}`)).json()) as any[]).length;

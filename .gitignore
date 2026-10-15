@@ -14,3 +14,4 @@ decks/*/.publish.json
 .wrangler/
 .claude/scheduled_tasks.lock
 .claude/settings.local.json
+decks/*/.comments/

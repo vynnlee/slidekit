@@ -7,6 +7,8 @@ import { dirname } from "node:path";
 import { editsBetween, hash, noteFileChanged, restore } from "./versions";
 import { readOnlyDeck, withDeckLock } from "./deck-lock";
 
+import { cancelCapture, captureImage, imagePath, parseRegion, removeImage, type Region } from "./capture";
+
 const decksDir = process.env.SLIDEKIT_DECKS ?? join(import.meta.dir, "..", "decks");
 
 export type Comment = {
@@ -19,6 +21,10 @@ export type Comment = {
   reply?: string;
   createdAt: string;
   repliedAt?: string;
+  region?: Region; // 영역 코멘트의 사각형(슬라이드 기준 0 에서 1). 있으면 path는 빈 문자열
+  overlap?: string[]; // 사각형과 겹치는 요소의 path(최대 8개)
+  step?: number; // 코멘트를 남긴 순간의 단계(재생 헤드)
+  image?: "pending" | "ready" | "failed"; // 영역 코멘트의 이미지 상태(파일은 .comments/<id>.png)
   held?: boolean; // 쓸 때 "Hold"를 켠 코멘트. Send all to Claude를 누를 때까지 채널로 보내지 않는다
   recheck?: boolean; // 버전 복원 뒤 그 슬라이드에서 발췌문을 찾지 못한 코멘트. 위치 확인이 필요하다고 표시만 한다
   slideDeleted?: boolean; // 저장 때 슬라이드가 지워진 코멘트. 지우지 않고 표시만 한다
@@ -97,7 +103,12 @@ function key(): Buffer {
   keyCache = createKeyFile(keyFile, fresh) ? fresh : (readKeySettled() ?? fresh);
   return keyCache;
 }
-const canon = (deck: string, c: Comment) => JSON.stringify([deck, c.id, c.slide, c.path, c.excerpt, c.text, c.createdAt]);
+// 서명 대상: 기존 배열은 그대로 두고, 새 필드(region, overlap, step)가 있는 코멘트에만 뒤에 덧붙인다(그래서 이전 코멘트의 서명이 모두 계속 유효하다).
+// image는 서버가 나중에 만드는 상태이고 파일 이름이 id에서 정해지므로 서명하지 않는다.
+const canon = (deck: string, c: Comment) => {
+  const base = [deck, c.id, c.slide, c.path, c.excerpt, c.text, c.createdAt];
+  return JSON.stringify(c.region || c.overlap || c.step !== undefined ? [...base, c.region ? [c.region.x, c.region.y, c.region.w, c.region.h] : null, c.overlap ?? null, c.step ?? null] : base);
+};
 export const sign = (deck: string, c: Comment) => createHmac("sha256", key()).update(canon(deck, c)).digest("hex");
 export function verify(deck: string, c: Comment): boolean {
   if (typeof c.sig !== "string" || !/^[0-9a-f]{64}$/.test(c.sig)) return false;
@@ -146,6 +157,10 @@ export function sanitize(list: unknown[]): Comment[] {
     if (c.slideDeleted === true) s.slideDeleted = true;
     if (c.recheck === true) s.recheck = true;
     if (c.held === true) s.held = true;
+    const region = parseRegion(c.region); if (region) s.region = region;
+    if (Array.isArray(c.overlap)) { const o = c.overlap.filter((p): p is string => typeof p === "string").slice(0, 8).map((p) => clip(p, 200)); if (o.length) s.overlap = o; }
+    if (Number.isInteger(c.step) && (c.step as number) >= 1 && (c.step as number) <= 999) s.step = c.step as number;
+    if (region && (c.image === "pending" || c.image === "ready" || c.image === "failed")) s.image = c.image; // 이미지는 영역 코멘트에만 있다
     out.push(s);
   }
   return out;
@@ -179,6 +194,28 @@ export const save = (deck: string, list: Comment[]) => {
 const SEND_BATCH = 10; // 묶음 알림 하나에 담는 코멘트 수(channel/index.ts의 BATCH와 같다)
 const clip = (v: unknown, n: number) => String(v ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, n);
 const bad = (msg: string, status = 400) => Response.json({ error: msg }, { status });
+
+// ---- 영역 코멘트의 이미지(app/capture.ts) ----
+const deckDirOf = (deck: string) => join(decksDir, deck);
+const serverPort = () => Number(process.env.PORT ?? 3200);
+const IMAGE_WAIT_MS = 5000; // 보내기 전에 이미지를 기다리는 최대 시간(그 뒤에는 이미지 없이 보낸다)
+/** 캡처 결과를 코멘트에 적고 갱신 이벤트를 보낸다. 그 사이 코멘트가 지워졌으면 만든 파일도 지운다. */
+function applyImage(deck: string, id: string, state: "ready" | "failed") {
+  const list = load(deck);
+  const c = list.find((x) => x.id === id);
+  if (!c) { removeImage(deckDirOf(deck), id); return null; }
+  c.image = state;
+  save(deck, list);
+  emit("reply", { deck, comment: c });
+  return c;
+}
+/** 지정한 코멘트들의 이미지가 모두 정해지거나 ms가 지날 때까지 기다린다. */
+async function settleImages(deck: string, ids: string[], ms: number) {
+  const until = Date.now() + ms;
+  while (Date.now() < until && load(deck).some((c) => ids.includes(c.id) && c.image === "pending")) await Bun.sleep(100);
+}
+/** 저장된 이미지가 실제로 있는지(파일이 지워졌다면 failed로 보인다). */
+const withImageState = (deck: string, list: Comment[]) => list.map((c) => (c.image === "ready" && !(imagePath(deckDirOf(deck), c.id) && existsSync(imagePath(deckDirOf(deck), c.id)!)) ? { ...c, image: "failed" as const } : c));
 const body = async (req: Request) => (await req.json().catch(() => null)) as Record<string, unknown> | null;
 
 // decks/ 변경 감지. comments.json 변경은 무시하고 덱별로 디바운스한다.
@@ -197,7 +234,7 @@ export const routes = {
   "/api/comments": {
     GET: (req: Request) => {
       const deck = new URL(req.url).searchParams.get("deck");
-      return validDeck(deck) ? Response.json(load(deck)) : bad("deck");
+      return validDeck(deck) ? Response.json(withImageState(deck, load(deck))) : bad("deck");
     },
     POST: async (req: Request) => {
       const b = await body(req);
@@ -205,21 +242,43 @@ export const routes = {
       const slide = Number(b.slide);
       if (!Number.isInteger(slide) || slide < 1) return bad("slide");
       if (typeof b.text !== "string" || !b.text.trim() || b.text.length > 2000) return bad("text");
+      // 영역 코멘트(region)와 단계(step)와 겹치는 요소 목록(overlap): 틀리면 400, 값은 정규화해서 받는다
+      let region: Region | undefined, overlap: string[] | undefined, step: number | undefined;
+      if (b.region !== undefined) { region = parseRegion(b.region) ?? undefined; if (!region) return bad("region"); }
+      if (b.overlap !== undefined) {
+        if (!Array.isArray(b.overlap)) return bad("overlap");
+        overlap = b.overlap.filter((p): p is string => typeof p === "string").slice(0, 8).map((p) => clip(p, 200));
+        if (!overlap.length) overlap = undefined;
+      }
+      if (b.step !== undefined) { if (!Number.isInteger(b.step) || (b.step as number) < 1 || (b.step as number) > 999) return bad("step"); step = b.step as number; }
       const comment: Comment = {
         id: crypto.randomUUID().slice(0, 8),
         slide,
-        path: clip(b.path, 200),
+        path: region ? "" : clip(b.path, 200),
         excerpt: clip(b.excerpt, 80),
         text: b.text,
         status: "open",
         createdAt: new Date().toISOString(),
         ...(b.hold === true ? { held: true } : {}),
+        ...(region ? { region, image: "pending" as const } : {}),
+        ...(overlap ? { overlap } : {}),
+        ...(step !== undefined ? { step } : {}),
       };
       try { comment.sig = sign(b.deck, comment); } catch (e) { if (e instanceof KeyError) return bad(e.message, 500); throw e; }
       save(b.deck, [...load(b.deck), comment]);
       // 보류한 코멘트는 "comment"(채널이 세션에 밀어 넣는 이벤트)가 아니라 갱신 이벤트로 알려, 어떤 채널 소비자도 Send all 전에는 받지 못한다.
-      emit(comment.held ? "reply" : "comment", { deck: b.deck, comment: { ...comment, trusted: true } });
-      return Response.json({ id: comment.id });
+      if (!region) { emit(comment.held ? "reply" : "comment", { deck: b.deck, comment: { ...comment, trusted: true } }); return Response.json({ id: comment.id }); }
+      // 영역 코멘트: 저장한 순간의 화면을 한 번 찍는다(직렬 큐). 화면에는 바로 알리고, 채널로 가는 코멘트는 이미지가 되거나 5초가 지날 때까지 기다렸다가 보낸다.
+      emit("reply", { deck: b.deck, comment: { ...comment, trusted: true } });
+      const deck = b.deck, id = comment.id;
+      const done = captureImage({ deck, id, slide, step: step ?? 1, region, port: serverPort() }).then((r) => applyImage(deck, id, r));
+      void (async () => {
+        await Promise.race([done, Bun.sleep(IMAGE_WAIT_MS)]);
+        if (comment.held) return;
+        const now = load(deck).find((c) => c.id === id);
+        if (now) emit("comment", { deck, comment: { ...now, trusted: true } });
+      })();
+      return Response.json({ id });
     },
   },
   "/api/comments/:id/reply": {
@@ -290,6 +349,17 @@ export const routes = {
       });
     },
   },
+  // 영역 코멘트의 이미지(PNG). 코멘트가 있고 image가 ready일 때만 준다. 파일 이름은 id에서만 정해진다.
+  "/api/comments/:id/image": {
+    GET: (req: Request & { params: { id: string } }) => {
+      const deck = new URL(req.url).searchParams.get("deck");
+      if (!validDeck(deck)) return bad("deck");
+      const c = load(deck).find((x) => x.id === req.params.id);
+      const file = c?.image === "ready" ? imagePath(deckDirOf(deck), c.id) : null;
+      if (!file || !existsSync(file)) return bad("no image", 404);
+      return new Response(Bun.file(file), { headers: { "Content-Type": "image/png", "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox", "Cache-Control": "private, max-age=3600" } });
+    },
+  },
   "/api/comments/:id/ack": {
     POST: async (req: Request & { params: { id: string } }) => {
       const b = await body(req);
@@ -314,6 +384,7 @@ export const routes = {
       const at = list.findIndex((c) => c.id === req.params.id);
       if (at < 0) return bad("not found", 404);
       const [gone] = list.splice(at, 1);
+      cancelCapture(gone.id); removeImage(deckDirOf(b.deck), gone.id); // 이미지도 같이 지운다(큐에서도 뺀다)
       removed.set(`${b.deck}/${gone.id}`, gone);
       if (removed.size > 50) removed.delete(removed.keys().next().value!);
       save(b.deck, list);
@@ -328,6 +399,7 @@ export const routes = {
       const k = `${b.deck}/${req.params.id}`;
       const gone = removed.get(k);
       if (!gone) return bad("nothing to restore", 404);
+      if (gone.image) gone.image = "failed"; // 지울 때 이미지 파일도 지웠다
       const list = load(b.deck);
       if (!list.some((c) => c.id === gone.id)) list.push(gone);
       list.sort((x, y) => x.createdAt.localeCompare(y.createdAt));
@@ -351,7 +423,11 @@ export const routes = {
       for (const c of todo) delete c.held;
       save(b.deck, list);
       emit("comments", { deck: b.deck, comments: load(b.deck) });
-      if (channelClients.size) emit("batch", { deck: b.deck, comments: todo.map((c) => ({ ...c, trusted: true })) });
+      if (channelClients.size) {
+        await settleImages(b.deck, todo.map((c) => c.id), IMAGE_WAIT_MS); // 이미지가 아직 만들어지는 중이면 최대 5초 기다린 뒤 이미지 없이 보낸다
+        const fresh = load(b.deck);
+        emit("batch", { deck: b.deck, comments: todo.map((c) => ({ ...(fresh.find((x) => x.id === c.id) ?? c), trusted: true })) });
+      }
       return Response.json({ count: todo.length, remaining: all.length - todo.length });
     },
   },

@@ -156,5 +156,17 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   check('Insert text는 문단을 넣고 편집을 시작함', (await inDoc((s) => s.querySelectorAll(':scope > p').length)) === pBefore + 1 && (await inDoc((s) => !!s.querySelector('p[contenteditable]'))));
   await page.keyboard.press('Escape'); await settle();
 
+  // 글자를 편집하다 Shift+Enter로 줄을 바꾸면 화면에서도 줄이 바뀐다(문서에 개행 글자만 남아 한 줄로 합쳐 보이면 안 된다)
+  await page.keyboard.press('Escape'); await palRun('Insert text'); await page.keyboard.type('line one'); await page.keyboard.press('Shift+Enter'); await page.keyboard.type('line two'); await page.keyboard.press('Escape'); await settle();
+  const lines = await inDoc((s) => { const p = [...s.querySelectorAll(':scope > p')].find((x) => /line one/.test(x.textContent)); return p ? { text: p.textContent, ws: p.style.whiteSpace, rows: (() => { const r = p.ownerDocument.createRange(); r.selectNodeContents(p); return new Set([...r.getClientRects()].map((q) => Math.round(q.top))).size; })() } : null; });
+  check('Shift+Enter로 바꾼 줄이 화면에서도 두 줄(white-space: pre-line)', !!lines && lines.text === 'line one\nline two' && lines.ws === 'pre-line' && lines.rows >= 2, lines);
+
+  // cover가 첫 자리를 벗어나게 옮기면 알림에 Undo가 있어 한 번에 되돌린다
+  const coverFirst = () => inDoc((s) => s.ownerDocument.querySelector('#sk-stage > [data-slide]').getAttribute('data-slide') === 'cover');
+  await page.keyboard.press('Escape'); await H.layers.nth(1).click(); await settle(); await palRun('Move slide to start');
+  check('cover가 밀리면 Undo 단추가 있는 알림', await page.getByText('The cover slide should stay first').first().waitFor({ timeout: 5000 }).then(() => true).catch(() => false) && !(await coverFirst()));
+  await page.getByRole('button', { name: 'Undo', exact: true }).last().click(); await settle();
+  check('알림의 Undo로 cover가 다시 첫 자리', await coverFirst());
+
   await H.finish();
 })();

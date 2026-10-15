@@ -43,7 +43,7 @@ import type { Comment, DeckEntry } from "@/lib/deck";
 
 const KEY_GROUPS: KeyGroup[] = [
   ["Edit", [["Cmd+S", "Save"], ["Cmd+Z", "Undo"], ["Shift+Cmd+Z", "Redo"], ["Cmd+D", "Duplicate"], ["Cmd+G", "Group"], ["Shift+Cmd+G", "Ungroup"], ["Cmd+[", "Send backward"], ["Cmd+]", "Bring forward"], ["F2", "Rename layer"], ["Cmd+C", "Copy"], ["Cmd+Opt+C", "Copy style"], ["Cmd+Opt+V", "Paste style"], ["Cmd+V", "Paste (an image too)"], ["Delete", "Delete selection"], ["Cmd+B", "Bold"], ["Cmd+I", "Italic"]]],
-  ["Select", [["Click", "Select a top-level element"], ["Double-click", "Go one level in, or edit text"], ["Cmd+Click", "Select the innermost element"], ["Enter", "First child, or edit text"], ["Shift+Enter", "Select the parent"], ["Shift+Click", "Add to selection"], ["Tab", "Next sibling"], ["Esc", "Finish editing, or deselect"]]],
+  ["Select", [["Click", "Select a top-level element"], ["Double-click", "Go one level in, or edit text"], ["Cmd+Click", "Select the innermost element"], ["Enter", "First child, or edit text (while editing: finish, Shift+Enter for a new line)"], ["Shift+Enter", "Select the parent"], ["Shift+Click", "Add to selection"], ["Tab", "Next sibling"], ["Esc", "Finish editing, or deselect"]]],
   ["View", [["Up, Down", "Go to slide (no selection)"], ["Arrows", "Nudge 1px (Shift: 10px)"], ["Drag", "Move (Shift: lock axis)"], ["Cmd+Scroll", "Zoom"], ["Shift+1", "Zoom to fit"], ["Shift+0", "Zoom to 100%"], ["Cmd+0", "Zoom to fit"], ["Cmd+\\", "Toggle panels"], ["Shift+Cmd+\\", "Toggle filmstrip"]]],
   ["Insert", [["Cmd+V", "Paste an image from the clipboard"], ["Drop", "Drop an image on the canvas, or on an image to replace it"], ["1, 2, 3, 4, 5", "Pick a layout in the Add slide menu"]]],
   ["General", [["Cmd+K", "Command palette"], ["Cmd+F", "Find and replace"], ["Cmd+Enter", "Present from this slide"], ["Shift+Cmd+Enter", "Present from the start"], ["Opt+Enter", "Present from this slide"], ["Shift+F10", "Context menu"], ["Cmd+/", "Shortcuts"]]],
@@ -330,7 +330,7 @@ export function Editor({ id }: { id: string }) {
     const a = [...unitsRef.current], [u] = a.splice(from, 1);
     a.splice(to, 0, u);
     const isCover = (x: Unit) => /^<section\b[^>]*\bdata-slide="cover"/i.test(x.html.trimStart());
-    if (a.some(isCover) && !isCover(a[0])) toast("The cover slide should stay first. Move it back to the start.", { ms: 6000 }); // lint 규칙(cover는 첫 슬라이드)
+    if (a.some(isCover) && !isCover(a[0])) toast("The cover slide should stay first", { ms: 7000, action: { label: "Undo", onClick: () => restore(past.current, future.current) } }); // lint 규칙(cover는 첫 슬라이드)
     structure(a, to);
   };
   const dupSlide = (i: number) => {

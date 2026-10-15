@@ -507,6 +507,8 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     }, true);
     d.addEventListener("keydown", (e) => {
       const ed = editing.current;
+      // Shift+Enter: plaintext-only 편집은 개행 글자(\n)를 넣는다. 보통 줄바꿈으로는 한 줄로 합쳐 보이므로 이 요소에 white-space: pre-line을 달아 저장 글자와 발표 화면에서도 줄이 바뀌게 한다.
+      if (ed && e.key === "Enter" && e.shiftKey && !e.isComposing) { if (!ed.style.whiteSpace) ed.style.whiteSpace = "pre-line"; return; }
       if (ed && (e.key === "Escape" || (e.key === "Enter" && !e.shiftKey))) { e.preventDefault(); e.stopPropagation(); ed.blur(); return; }
       P.current.onKey(e);
     }, true);

@@ -75,6 +75,7 @@ const steps: Step[] = [
   browser("editor-multi", "app/test/editor-multi.cjs", "app", APP),
   browser("editor-menus", "app/test/editor-menus.cjs", "app", APP),
   browser("editor-panels", "app/test/editor-panels.cjs", "app", APP),
+  browser("editor-animation", "app/test/editor-animation.cjs", "app", APP), // 하단 Animation 탭: 막대 끌기, 머리글, 키보드, 실행 취소
   browser("editor-external", "app/test/editor-external.cjs", "app", APP), // 밖의 변경(Claude, 다른 탭): 자동 반영, 충돌 안내, 중간 상태, Undo
   { ...browser("editor-a11y", "app/test/editor-a11y.cjs", "app", APP, { AXE }), needs: "axe" }, // 필름스트립 axe(기본, 코멘트 표시, 찾기 배지, 넘침 표시)
   browser("comments-e2e", "app/test/comments-e2e.cjs", "app", APP),
@@ -96,6 +97,7 @@ const steps: Step[] = [
   // 테마 변경 반복(느린 CPU, 밖의 변경 끼움)으로 오류 경계와 콘솔 오류를 센다. --slow 또는 --only로만 돈다.
   { ...browser("editor-theme-stress", "app/test/editor-theme-stress.cjs", "app", APP, { CPU_SLOW: "4", ROUNDS: "30" }), slow: true },
   { ...browser("editor-perf", "app/test/editor-perf.cjs", "app", APP), slow: true },
+  { ...browser("anim-perf", "scripts/anim-perf.cjs", "app", APP, { SLIDEKIT_NORMAL_PRIORITY: "1" }), slow: true }, // 단계 전환 성능과 누수(기준선 scripts/anim-perf.baseline.json과 비교). 낮은 우선순위(taskpolicy -b)로 돌리면 rAF가 5fps로 떨어져 수치가 무의미하다
   // 덱 30개 목록의 부하 한도 검사(동시에 올라 있는 썸네일 수와 브라우저 메모리). 측정이 길어 --slow 또는 --only로만 돈다.
   { ...browser("list-load", "app/test/list-load.cjs", "app", APP, { CHECK: "1" }), slow: true },
   // 덱 목록과 발표자 화면의 axe 접근성 검사(serious와 critical 위반). axe-core가 없으면 건너뜀으로 크게 알린다.
@@ -247,7 +249,7 @@ async function run(name: string, cmd: string[], env: Record<string, string> = {}
   const logPath = join(logDir, `${name}.log`), firstPath = join(logDir, `${name}.attempt1.log`);
   if (keepFirst) { try { renameSync(logPath, firstPath); } catch { /* 첫 로그가 없으면 그대로 */ } } else rmSync(firstPath, { force: true });
   const out = createWriteStream(logPath);
-  const p = Bun.spawn(["taskpolicy", "-b", ...cmd], { cwd: root, env: { ...process.env, ...env }, stdout: "pipe", stderr: "pipe", detached: true }); running = p.pid;
+  const p = Bun.spawn([...(env.SLIDEKIT_NORMAL_PRIORITY ? [] : ["taskpolicy", "-b"]), ...cmd], { cwd: root, env: { ...process.env, ...env }, stdout: "pipe", stderr: "pipe", detached: true }); running = p.pid; // SLIDEKIT_NORMAL_PRIORITY: 낮은 우선순위에서는 rAF가 5fps로 떨어지는 측정 단계(anim-perf)만 쓴다
   // 출력 사이가 3초 넘게 벌어지면 "[느림 +N초]" 줄을 넣는다. 고정 sleep과 긴 대기가 어느 검사 앞에 있는지 찾는 용도다.
   let prev = Date.now();
   const pump = async (s: ReadableStream<Uint8Array>, to: NodeJS.WriteStream) => {

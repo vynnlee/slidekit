@@ -1,6 +1,8 @@
 # slidekit 배포
 
-**승인 뒤 Worker 배포 체크리스트** (사용자 승인 전에는 실행하지 않는다. 자세한 설명은 아래 "Worker 배포 준비와 점검")
+**배포 이력**: 2026-10-15 Worker 배포(사용자 승인, 버전 ID `1e8ae8bc-4516-40a1-bb54-7a5ac73f8b04`). 리허설 전체 통과, `bun run deploy --worker`, `bun run deploy --smoke vibe-coding-workshop` 전체 통과. 롤백은 `cd deploy/worker && bunx wrangler@4.150.0 rollback`.
+
+**Worker 배포 체크리스트** (다음 Worker 변경 때도 사용자 승인 전에는 실행하지 않는다. 자세한 설명은 아래 "Worker 배포 준비와 점검")
 1. 사전: `git status`가 깨끗하고 `bun deploy/rehearse.ts`가 전체 통과(단위 테스트, 드라이런, 로컬 Worker와 로그인 제한 리허설. 원격 호출과 토큰이 없다).
 2. 토큰: 키체인 `slidekit-cloudflare-token`이 있는지 `bun run slidekit doctor`로 본다(값은 출력하지 않는다).
 3. 배포: `bun run deploy --worker`(코드, Durable Object 바인딩, 마이그레이션 v1이 한 번에 올라간다. `COOKIE_SECRET`은 이미 설정되어 있다).
@@ -16,13 +18,13 @@
 
 공개 덱은 올릴 때 `deck-meta`의 `title`도 함께 올라간다. 비밀번호 덱은 인증 전에 제목이 보이므로 `deck-meta`에 `"lockTitle": true`를 적은 경우에만 올린다. 비밀번호는 8자 이상이고, 바꾸면 이미 발급된 쿠키가 모두 무효가 된다. 비밀번호, 잠금(5회 틀리면 15분), 404 안내 페이지는 같은 모양이며 모바일 390px에서도 한 칸 폭을 지킨다. Worker 변경은 `bun run deploy --worker`로 올려야 반영된다.
 
-## Worker 배포 준비와 점검 (2026-10-14 작성, 2026-10-15 재확인, 아직 배포 전)
+## Worker 배포 준비와 점검 (2026-10-14 작성, 2026-10-15 배포 완료)
 
-사용자 승인 뒤에만 `bun run deploy --worker`를 실행한다. 아래는 승인 전에 끝낸 읽기와 드라이런 결과다.
+사용자 승인 뒤에만 `bun run deploy --worker`를 실행한다. 아래는 2026-10-15 배포 전에 끝낸 읽기와 드라이런 결과이고, 다음 변경 때 같은 순서를 쓴다.
 
 **드라이런**: `cd deploy/worker && bunx wrangler@4.150.0 deploy --dry-run --outdir <임시폴더>`(토큰 없이 됨). 번들 9.0 KiB, gzip 3.9 KiB, 바인딩은 KV `DECKS` 하나. 새 바인딩이나 마이그레이션은 없다.
 
-**지금 배포된 것과의 차이**: 배포된 Worker는 2026-10-13 커밋 `451f134` 시점이다. 이후 `a7715c6`, `a727d33`가 `deploy/worker/src/index.ts`를 바꿨다(57줄 추가, 33줄 삭제). 사용자에게 보이는 변화:
+**2026-10-15 배포 전 구버전과의 차이**(모두 배포되었다): 이전 Worker는 2026-10-13 커밋 `451f134` 시점이었다. 이후 `a7715c6`, `a727d33`가 `deploy/worker/src/index.ts`를 바꿨다(57줄 추가, 33줄 삭제). 사용자에게 보이는 변화:
 - 비밀번호 덱의 기존 로그인 쿠키가 모두 무효가 된다(서명에 비밀번호 salt를 넣음). 모두 한 번 다시 입력한다. 공개 덱은 영향 없다.
 - 비밀번호 덱은 주소창 이동(문서 요청)에만 응답한다. 다른 덱의 스크립트가 `fetch`로 읽으면 403이다. 정상적인 열람은 같다.
 - 안내 페이지(비밀번호 폼, 잠금, 404, 설정 오류)가 한 모양으로 통일되고 한국어와 영어로 나온다. 비밀번호 폼은 nonce CSP이며, 덱 제목은 `lockTitle` 옵트인 덱만 보인다.
@@ -30,16 +32,16 @@
 - GET, HEAD, POST 외 메서드는 405, `Origin: null`이나 깨진 Origin의 POST는 403이다.
 - 이미 올린 덱은 다시 올릴 필요가 없다(KV 형식 변경 없음). 새 `title`은 다시 올릴 때부터 meta에 들어간다.
 
-**배포 뒤 점검**: `bun run deploy --smoke [공개덱 [비밀번호덱]]`. GET만 보내며 토큰이 필요 없다. 공개 덱과 없는 덱 응답의 보안 헤더(nosniff, COOP, HSTS, frame-ancestors none, noindex), 공개 덱 200과 캐시 `must-revalidate`, 슬라이드 HTML, 없는 덱 404, 비밀번호 덱의 폼(슬라이드 없음, nonce CSP, no-store)과 문서가 아닌 요청 403을 확인한다. 지금 배포된 구버전에 실행하면 COOP, HSTS, 캐시 항목이 FAIL로 나오는 것이 정상이고, 배포 뒤에는 모두 PASS여야 한다. 손으로 할 것(시도 횟수를 쓰므로 스크립트에 넣지 않았다): 비밀번호 덱에서 틀린 비밀번호 한 번(401 안내가 뜨는지), 맞는 비밀번호 한 번(덱이 열리고 쿠키가 생기는지). 문제가 있으면 `cd deploy/worker && bunx wrangler@4.150.0 rollback`으로 직전 버전으로 되돌린다(KV 데이터는 그대로다).
+**배포 뒤 점검**: `bun run deploy --smoke [공개덱 [비밀번호덱]]`. GET만 보내며 토큰이 필요 없다. 공개 덱과 없는 덱 응답의 보안 헤더(nosniff, COOP, HSTS, frame-ancestors none, noindex), 공개 덱 200과 캐시 `must-revalidate`, 슬라이드 HTML, 없는 덱 404, 비밀번호 덱의 폼(슬라이드 없음, nonce CSP, no-store)과 문서가 아닌 요청 403을 확인한다. 2026-10-15 배포 뒤 전체 PASS였다(구버전에 실행하면 COOP, HSTS, 캐시 항목이 FAIL로 나오는 것이 정상이었다). 손으로 할 것은 사용자 몫으로 남아 있다(시도 횟수를 쓰므로 스크립트에 넣지 않았고, 비밀번호 덱을 올려야 해서 에이전트는 하지 않았다): 비밀번호 덱에서 틀린 비밀번호 한 번(401 안내가 뜨는지), 맞는 비밀번호 한 번(덱이 열리고 쿠키가 생기는지). 문제가 있으면 `cd deploy/worker && bunx wrangler@4.150.0 rollback`으로 직전 버전으로 되돌린다(KV 데이터는 그대로다).
 
-**로그인 시도 제한(구현 완료, 미배포)**: Durable Object `Limiter`(SQLite 기반)가 덱과 IP를 키로 시도를 세고, 검사와 증가를 한 번에 해서 동시 요청이 5번을 넘기지 못한다(15분 창에서 5회, 맞으면 지움, 창이 끝나면 알람으로 저장소를 비움). `LIMITER` 바인딩이 없으면 이전과 같은 KV 카운터로 동작해 구버전 배포와도 호환된다. 단위 테스트가 동시 요청 30개 중 정확히 5개만 비밀번호를 시험함을 보이고, 같은 조건에서 KV 폴백이 5개를 넘기는 것도 보인다. `wrangler.toml`에 바인딩과 마이그레이션 `v1`(`new_sqlite_classes`)이 있고 `--dry-run`이 통과한다(번들 10.6 KiB, gzip 4.4 KiB, 바인딩 LIMITER와 DECKS). 마이그레이션 적용 자체는 드라이런으로 검증할 수 없고 첫 실제 배포에서 일어난다.
+**로그인 시도 제한(2026-10-15 배포됨)**: Durable Object `Limiter`(SQLite 기반)가 덱과 IP를 키로 시도를 세고, 검사와 증가를 한 번에 해서 동시 요청이 5번을 넘기지 못한다(15분 창에서 5회, 맞으면 지움, 창이 끝나면 알람으로 저장소를 비움). `LIMITER` 바인딩이 없으면 이전과 같은 KV 카운터로 동작해 구버전 배포와도 호환된다. 단위 테스트가 동시 요청 30개 중 정확히 5개만 비밀번호를 시험함을 보이고, 같은 조건에서 KV 폴백이 5개를 넘기는 것도 보인다. `wrangler.toml`에 바인딩과 마이그레이션 `v1`(`new_sqlite_classes`)이 있고 `--dry-run`이 통과한다(번들 10.6 KiB, gzip 4.4 KiB, 바인딩 LIMITER와 DECKS). 마이그레이션 적용 자체는 드라이런으로 검증할 수 없고 첫 실제 배포에서 일어난다.
 
 선택지 비교(공식 문서로 확인한 수치):
 - Durable Object: 무료 플랜은 SQLite 기반만 쓸 수 있고, 하루 요청 100,000건, 기간 13,000 GB-s, 행 읽기 500만, 행 쓰기 100,000, SQL 저장 5 GB(합계) 한도다. 이 용도(시도 한 번에 쓰기 두세 행)는 한도에 한참 못 미친다. https://developers.cloudflare.com/durable-objects/platform/pricing/
 - Rate Limiting 바인딩: 기간이 10초 또는 60초뿐이고 데이터센터별 집계이며 비동기로 동기화되어 허용 쪽으로 느슨하다. 15분 5회를 표현하지 못한다. 요금제 조건은 문서에 없다. https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/
 - 결론: Durable Object를 쓴다(구현함).
 
-**승인 시 실행 순서** (이 순서대로, 모두 한 번에 적용되고 덱을 다시 올릴 필요는 없다):
+**실행 순서** (2026-10-15에 이 순서로 실행했다. 다음 변경 때도 승인 뒤에 이 순서로, 모두 한 번에 적용되고 덱을 다시 올릴 필요는 없다):
 1. 작업트리가 깨끗한지 `git status`로 확인하고 `bun test deploy`가 통과하는지 본다(unpublish 단위 테스트와 Worker 동시 요청 테스트 포함).
 2. `cd deploy/worker && bunx wrangler@4.150.0 deploy --dry-run --outdir /tmp/sk-wr`로 번들과 바인딩(LIMITER, DECKS)을 확인한다.
 3. `bun run deploy --worker`: 코드, Durable Object 바인딩, 마이그레이션 v1이 함께 올라간다(`COOKIE_SECRET`은 이미 설정되어 있다).

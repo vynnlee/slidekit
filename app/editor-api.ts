@@ -17,7 +17,14 @@ export const routes = {
       const { folder } = req.params;
       if (!folderOk(folder)) return bad("deck", 404);
       const file = join(decksDir, folder, "index.html");
-      return Response.json({ source: readFileSync(file, "utf8"), mtime: statSync(file).mtimeMs });
+      // 앱의 쓰기와는 잠금으로, 앱 밖의 쓰기(Claude, 다른 편집기)와는 읽기 전후의 mtime 비교로 맞춘다.
+      // 사이에 파일이 바뀌면 옛 내용에 새 mtime이 붙어 이후 저장이 409 없이 외부 변경을 덮어쓰므로 다시 읽는다.
+      return withDeckLock(folder, async () => {
+        for (let i = 0; ; i++) {
+          const before = statSync(file).mtimeMs, source = readFileSync(file, "utf8"), after = statSync(file).mtimeMs;
+          if (before === after || i >= 4) return Response.json({ source, mtime: before }); // 끝까지 안 맞으면 읽기 전 mtime(더 낡은 쪽)을 줘서 다음 저장이 409로 걸리게 한다
+        }
+      });
     },
   },
   "/api/decks/:folder": {

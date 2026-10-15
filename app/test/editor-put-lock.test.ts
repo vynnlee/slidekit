@@ -38,3 +38,24 @@ test("저장 뒤 코멘트 번호 갱신이 실패해도(comments.json 손상) P
     rmSync(d, { recursive: true, force: true });
   }
 });
+
+test("GET source는 PUT과 같은 잠금을 쓰고 source와 mtime이 같은 시점의 값이다", async () => {
+  const d = join(import.meta.dir, "..", "..", "decks", "_put-lock");
+  mkdirSync(d, { recursive: true });
+  try {
+    writeFileSync(join(d, "index.html"), html("one"));
+    const get = () => routes["/api/decks/:folder/source"].GET(Object.assign(new Request("http://x/api/decks/_put-lock/source"), { params: { folder: "_put-lock" } }));
+    const a = await (await get()).json() as { source: string; mtime: number };
+    expect(a.source).toContain(">one<");
+    expect(a.mtime).toBe(statSync(join(d, "index.html")).mtimeMs);
+    // 읽는 사이 쓰기가 끼어도(저장과 동시에 요청) 돌려준 mtime으로 저장하면 최신 내용 기준이다
+    const [r1, r2] = await Promise.all([put(html("two"), a.mtime), get()]);
+    expect(r1.status).toBe(200);
+    const b = await r2.json() as { source: string; mtime: number };
+    // 응답은 한 시점의 쌍이다: 옛 내용이면 옛 mtime, 새 내용이면 새 mtime
+    if (b.source.includes(">one<")) expect(b.mtime).toBe(a.mtime);
+    else { expect(b.source).toContain(">two<"); expect(b.mtime).toBe(statSync(join(d, "index.html")).mtimeMs); }
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});

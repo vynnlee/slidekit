@@ -36,6 +36,8 @@ bun run slidekit pdf my-talk --notes       # 백업: 노트가 붙은 PDF
 3. 백업 PDF를 같은 노트북과 휴대폰에 둔다.
 4. 휴대폰 리모컨과 프로젝터는 `docs/DEVICE-CHECKLIST.md`로 실기기에서 확인한다.
 
+그동안 무엇이 바뀌었는지는 `docs/CHANGELOG.md`에 영역별로 한 장으로 정리했다.
+
 ## 설치와 실행
 - `bun install` 후 `bun run slidekit`. 앱은 http://127.0.0.1:3200 에만 열린다(`PORT`로 바꿈).
 

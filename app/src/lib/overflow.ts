@@ -27,7 +27,8 @@ export function findOverflow(slide: Element): Overflow[] {
   const nthOf = (e: Element) => {
     let v = nth.get(e);
     if (!v) {
-      const seen = new Map<string, number>(), sibs = [...(e.parentElement?.children ?? [])];
+      const seen = new Map<string, number>();
+      const sibs: Element[] = [...(e.parentElement?.children ?? [])];
       for (const x of sibs) { const c = (seen.get(x.tagName) ?? 0) + 1; seen.set(x.tagName, c); nth.set(x, { n: c, of: 0 }); }
       for (const x of sibs) nth.get(x)!.of = seen.get(x.tagName)!;
       v = nth.get(e)!;

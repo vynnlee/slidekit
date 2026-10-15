@@ -38,6 +38,7 @@ const browser = (name: string, file: string, server: "app" | "dry" | "static", b
 const bun = (name: string, ...cmd: string[]): Step => ({ name, cmd: ["bun", ...cmd] });
 
 const steps: Step[] = [
+  { name: "typecheck", cmd: ["bunx", "tsc", "--noEmit"] }, // 타입 검사(.ts와 .tsx가 바뀔 때 변경 매핑이 고른다)
   bun("roundtrip", "app/test/roundtrip.ts"),
   bun("deck-source.fuzz", "app/test/deck-source.fuzz.ts"),
   bun("deck-tokens", "test", "app/test/deck-tokens.test.ts"),
@@ -115,6 +116,7 @@ const NOSTEP = /^(package\.json|bun\.lock|\.gitignore|\.githooks\/|tsconfig.*\.j
 const DOCS = /(^|\/)(HANDOFF|README|PLAN|SKILL|INTERACTION|SPEC)\.md$|^(spec|docs)\/|\.md$/;
 const EDITOR_ALL = ["editor", "editor-assets", "editor-multi", "editor-menus", "editor-panels", "editor-a11y", "editor-external"]; // 편집기 브라우저 검증은 영역별 파일로 나뉘어 있다(app/test/editor-*.cjs, 하네스는 app/test/lib/editor-harness.cjs)
 const BROWSER_APP = ["routes", "responsive", "list"]; // 앱 공통 화면 변경 때의 연기 검사
+  [/\.(ts|tsx)$/, ["typecheck"]],
 const MAP: [RegExp, string[]][] = [
   [/^engine\/(slidekit\.(js|css)|test\/(verify|moved|gradient|offline)\.cjs)/, ["engine-verify", "engine-moved", "engine-gradient", "engine-offline", "bundler-bundle"]],
   [/^engine\/(lint\.ts|test\/lint\.test\.ts|doctor\.ts|new\.ts|template\/)/, ["lint", "tokens"]],

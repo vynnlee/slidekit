@@ -137,9 +137,10 @@ export function pathOf(slide: Element, el: Element, memo?: PathMemo) {
   const parts: string[] = [];
   for (let e: Element | null = el; e && e !== slide; e = e.parentElement) {
     const tag = e.tagName.toLowerCase();
-    let v = memo?.get(e);
+    let v: { n: number; of: number } | undefined = memo?.get(e);
     if (!v) {
-      const seen = new Map<string, number>(), sibs = [...(e.parentElement?.children ?? [])];
+      const seen = new Map<string, number>();
+      const sibs: Element[] = [...(e.parentElement?.children ?? [])];
       for (const x of sibs) { const c = (seen.get(x.tagName) ?? 0) + 1; seen.set(x.tagName, c); if (memo) memo.set(x, { n: c, of: 0 }); else if (x === e) v = { n: c, of: 0 }; }
       if (memo) { for (const x of sibs) memo.get(x)!.of = seen.get(x.tagName)!; v = memo.get(e); } else if (v) v.of = seen.get(e.tagName)!;
       v ??= { n: 1, of: 1 }; // 부모가 없는 요소(떼어 낸 것)

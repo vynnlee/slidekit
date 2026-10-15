@@ -6,11 +6,13 @@ import { toast, TOAST } from "@/Toaster";
 import { ago } from "@/lib/comment-state";
 import { diffDecks, slidesLabel } from "@/lib/deck-diff";
 
-type Version = { id: string; at: string; kind: "save" | "external" | "restore"; slides: number; bytes: number };
+type Version = { id: string; at: string; kind: "save" | "external" | "restore" | "mine" | "disk"; slides: number; bytes: number };
 const KIND: Record<Version["kind"], string> = {
   save: "Before a save",
   external: "Before a change outside the editor",
   restore: "Before a restore",
+  mine: "Before reload (my edits)",
+  disk: "Before overwrite (file on disk)",
 };
 const post = (path: string) => fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
 

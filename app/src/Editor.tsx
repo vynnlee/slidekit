@@ -115,6 +115,11 @@ export function Editor({ id }: { id: string }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const gearBtn = useRef<HTMLButtonElement>(null); // 설정 대화상자를 닫으면 포커스를 이 단추로 돌린다
   const [metaError, setMetaError] = useState("");
+  // Reload로 내 편집을 버리거나 Overwrite로 파일을 덮기 전에 그 내용을 버전 기록에 남긴다(Version history에서 Restore). 실패해도 동작은 막지 않는다.
+  const backup = async (kind: "mine" | "disk", source: string) => {
+    if (!deck) return;
+    await fetch(`/api/decks/${deck.folder}/versions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ source, kind }) }).catch(() => {});
+  };
   const [reloadAsk, setReloadAsk] = useState(false); // 저장 안 한 편집이 있을 때 Reload는 한 번 더 눌러야 한다
   useEffect(() => { if (!changed) setReloadAsk(false); }, [changed]);
   const [updated, setUpdated] = useState<Set<number>>(new Set()); // 밖에서 바뀐 슬라이드(필름스트립에 4초 표시)
@@ -807,8 +812,8 @@ export function Editor({ id }: { id: string }) {
             {changed && (
               <>
                 <span className="text-caption text-muted-foreground max-sm:hidden">File changed outside the editor</span>
-                <Button variant="ghost" size="compact" onClick={() => { if (dirty && !reloadAsk) { setReloadAsk(true); return; } setReloadAsk(false); load(deck.folder, indexRef.current).catch((e) => setErr(String(e.message ?? e))); }}>{reloadAsk ? "Discard my edits and reload" : "Reload"}</Button>
-                <Button variant="ghost" size="compact" onClick={() => save(true)}>Overwrite</Button>
+                <Button variant="ghost" size="compact" onClick={() => { if (dirty && !reloadAsk) { setReloadAsk(true); return; } setReloadAsk(false); backup("mine", text).then(() => load(deck.folder, indexRef.current)).catch((e) => setErr(String(e.message ?? e))); }}>{reloadAsk ? "Discard my edits and reload" : "Reload"}</Button>
+                <Button variant="ghost" size="compact" onClick={async () => { const disk = await fetch(`/api/decks/${deck.folder}/source`).then((r) => (r.ok ? r.json() : null)).catch(() => null); if (disk?.source) await backup("disk", disk.source); save(true); }}>Overwrite</Button>
               </>
             )}
             {err && <span className="text-caption text-muted-foreground">{err}</span>}

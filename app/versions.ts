@@ -1,5 +1,6 @@
 // 덱 버전 기록: 덱 폴더 안 `.versions/`에 index.html 스냅샷을 남기고 되돌린다.
 // 종류: save(편집기 저장 직전의 내용, 60초 안의 연속 저장은 처음 것 하나), external(편집기 밖에서 파일이 바뀌기 직전의 내용),
+// mine(Reload로 버리기 전 내 저장 안 한 편집), disk(Overwrite로 덮기 전 파일 내용: 편집기가 올린다),
 // restore(복원 직전의 현재 내용). 파일 이름이 곧 정보다: <UTC시각>-<종류>-<슬라이드 수>-<난수>.html (id는 .html을 뺀 이름).
 // 점으로 시작하는 폴더라 정적 서빙, 검색, 복제, 번들러가 다루지 않는다(복제 필터는 decks-api.ts에 따로 있다).
 import { createHash, randomBytes } from "node:crypto";
@@ -8,14 +9,14 @@ import { join } from "node:path";
 import { deckFolder, decksDir } from "./folder";
 import { readOnlyDeck, withDeckLock } from "./deck-lock";
 
-export type Kind = "save" | "external" | "restore";
+export type Kind = "save" | "external" | "restore" | "mine" | "disk"; // mine: 편집기가 Reload로 버리기 전 내 저장 안 한 편집, disk: 편집기가 Overwrite로 덮기 전 파일 내용
 export type Version = { id: string; at: string; kind: Kind; slides: number; bytes: number };
 
 const KEEP = 50; // 덱마다 최근 50개
 const KEEP_RESTORE = 10; // restore 종류는 따로 10개까지: 같은 두 버전을 번갈아 복원해 다른 기록을 밀어내지 못하게
 const MAX_BYTES = 30 * 1024 * 1024; // 덱마다 30MB
 const BURST_MS = 60_000; // 이 안의 연속 저장은 하나로
-const ID = /^\d{8}T\d{6}Z-(save|external|restore)-\d{1,5}-[0-9a-f]{4}$/;
+const ID = /^\d{8}T\d{6}Z-(save|external|restore|mine|disk)-\d{1,5}-[0-9a-f]{4}$/;
 
 const bad = (error: string, status = 400) => Response.json({ error }, { status });
 export const hash = (s: string) => createHash("sha1").update(s).digest("hex");
@@ -148,6 +149,18 @@ const deckOf = (req: Req) => (deckFolder(req.params.folder) ? req.params.folder 
 export const routes = {
   "/api/decks/:folder/versions": {
     GET: (req: Req) => (deckOf(req) ? Response.json(list(req.params.folder)) : bad("deck", 404)),
+    // 편집기가 내용을 버리거나 덮기 전에 백업을 올린다(kind는 mine 또는 disk만). 같은 내용이 이미 마지막 스냅샷이면 건너뛴다.
+    POST: async (req: Req) => {
+      const deck = deckOf(req);
+      if (!deck) return bad("deck", 404);
+      if (readOnlyDeck(deck)) return bad("read-only deck", 403);
+      const b = (await req.json().catch(() => null)) as { source?: unknown; kind?: unknown } | null;
+      if (!b || typeof b.source !== "string" || (b.kind !== "mine" && b.kind !== "disk")) return bad("source and kind (mine or disk) are required");
+      if (Buffer.byteLength(b.source) > MAX_BYTES) return bad("too large", 413);
+      const kind = b.kind, source = b.source;
+      const v = await withDeckLock(deck, async () => snapshot(deck, source, kind));
+      return Response.json({ saved: !!v, id: v?.id ?? null });
+    },
   },
   "/api/decks/:folder/versions/:vid": {
     GET: (req: Req) => {

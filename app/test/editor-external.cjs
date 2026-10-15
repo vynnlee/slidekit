@@ -16,7 +16,7 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   const header = () => page.getByText(/^Slide \d+ \/ \d+$/).first().textContent();
   const failPut = async (pg) => { await pg.route(/\/api\/decks\/[^/]+$/, (r) => (r.request().method() === 'PUT' ? r.fulfill({ status: 500, body: '{}' }) : r.fallback())); };
   const passPut = async (pg) => { await pg.unroute(/\/api\/decks\/[^/]+$/); };
-  const bannerSeen = () => page.getByText('File changed outside the editor').first().waitFor({ timeout: 8000 }).then(() => true).catch(() => false);
+  const bannerSeen = async () => { await page.bringToFront(); return page.waitForFunction(() => document.body.innerText.includes('File changed outside the editor'), null, { timeout: 20000, polling: 200 }).then(() => true).catch(() => false); };
 
   // (1) 저장 안 한 변경 없음: 2번 슬라이드에서 요소를 고르고, 5번 슬라이드를 밖에서 바꾼다
   await goSlide2(); await focusBody(); await page.keyboard.press('Tab'); await settle();
@@ -114,9 +114,14 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   b.on('pageerror', (e) => errors.push('B: ' + String(e)));
   await b.goto(BASE + '/edit/' + T.id);
   await b.getByPlaceholder('Speaker notes (Markdown)').waitFor();
+  await b.waitForFunction(() => document.querySelector('iframe[title="Canvas"]')?.contentDocument?.querySelector('[data-active]'), null, { timeout: 30000 }); // 캔버스가 준비되기 전에 노트를 고치면 편집이 문서에 반영되지 않는다
+  await b.evaluate(() => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 300))));
   await b.getByPlaceholder('Speaker notes (Markdown)').fill('FROM-TAB-B');
   await b.keyboard.press('Meta+s');
-  const reflected = await page.getByText('Slide 1 updated').first().waitFor({ timeout: 20000 }).then(() => true).catch(() => false);
+  // 탭 A는 B가 열리면 배경 탭이 되어 렌더링과 rAF가 멈출 수 있다: 앞으로 가져오고 타이머 기반(polling 200ms)으로 본다
+  await page.bringToFront();
+  const reflected = await page.waitForFunction(() => document.body.innerText.includes('Slide 1 updated'), null, { timeout: 30000, polling: 200 }).then(() => true).catch(() => false);
+  if (!reflected) console.log('INFO 상태', JSON.stringify({ aVis: await page.evaluate(() => document.visibilityState), bVis: await b.evaluate(() => document.visibilityState), aUrl: page.url(), bUrl: b.url(), aCanvas: await page.evaluate(() => !!document.querySelector('iframe[title="Canvas"]')?.contentDocument?.querySelector('[data-active]')), bCanvas: await b.evaluate(() => !!document.querySelector('iframe[title="Canvas"]')?.contentDocument?.querySelector('[data-active]')), bStatus: await b.evaluate(() => document.querySelector('[data-testid=status]')?.textContent), mtime: fs.statSync(FILE).mtimeMs, fileHasB: read().includes('FROM-TAB-B') }));
   if (!reflected) console.log('INFO 탭 A 화면', JSON.stringify((await page.locator('body').innerText()).replace(/\s+/g, ' ').slice(0, 500)), 'B 파일에 있음', read().includes('FROM-TAB-B'));
   check('탭 B의 저장이 탭 A에 반영됨(Slide 1 updated)', reflected);
   await failPut(page);

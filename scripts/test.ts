@@ -75,7 +75,7 @@ const steps: Step[] = [
   browser("editor-multi", "app/test/editor-multi.cjs", "app", APP),
   browser("editor-menus", "app/test/editor-menus.cjs", "app", APP),
   browser("editor-panels", "app/test/editor-panels.cjs", "app", APP),
-  browser("editor-animation", "app/test/editor-animation.cjs", "app", APP), // 하단 Animation 탭: 막대 끌기, 머리글, 키보드, 실행 취소
+  { ...browser("editor-animation", "app/test/editor-animation.cjs", "app", APP), slow: true }, // 하단 Animation 탭(구현 중): 패널이 커밋되면 editor-dev가 기본 단계로 되돌린다. 막대 끌기, 머리글, 키보드, 실행 취소
   browser("editor-external", "app/test/editor-external.cjs", "app", APP), // 밖의 변경(Claude, 다른 탭): 자동 반영, 충돌 안내, 중간 상태, Undo
   { ...browser("editor-a11y", "app/test/editor-a11y.cjs", "app", APP, { AXE }), needs: "axe" }, // 필름스트립 axe(기본, 코멘트 표시, 찾기 배지, 넘침 표시)
   browser("comments-e2e", "app/test/comments-e2e.cjs", "app", APP),

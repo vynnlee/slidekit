@@ -143,7 +143,8 @@ const MAP: [RegExp, string[]][] = [
   [/^app\/src\/(FindBar|DeckSettings|EditorTip|lib\/(find|overflow|deck-meta))/, ["editor-assets"]],
   [/^app\/test\/editor-assets\.cjs/, ["editor-assets"]],
   [/^app\/test\/(editor\.cjs|lib\/editor-harness\.cjs)/, EDITOR_ALL],
-  [/^app\/src\/(Inspector|components\/inspector)/, ["inspector", "inspector-a11y", "editor"]],
+  [/^app\/src\/Inspector/, ["inspector", "inspector-a11y", "editor-panels"]], // Inspector의 편집 동작은 panels가 가장 많이 본다(정확도 우선)
+  [/^app\/src\/components\/inspector\//, ["inspector", "inspector-a11y"]], // 하위 표시 파일은 표시 검사만(애매하면 위 규칙 쪽으로)
   [/^app\/src\/(TokensPanel|harness\/TokensDemo|lib\/deck-(tokens|fonts))|^app\/test\/deck-(tokens|fonts)/, ["deck-tokens", "deck-fonts", "tokens"]],
   [/^app\/src\/harness\/InspectorDemo/, ["inspector", "inspector-a11y"]],
   [/^app\/src\/(components\/ui\/|lib\/control-surface|index\.css|harness\/ControlStates)|^app\/test\/controls/, ["controls"]],

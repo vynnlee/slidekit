@@ -33,6 +33,12 @@
     .flow .node { background: var(--sk-panel); border: 1px solid var(--sk-line); border-radius: 14px; padding: 30px 34px; display: flex; flex-direction: column; gap: 16px; }
     .flow .node .t { font: 500 30px var(--sk-font-mono); color: var(--sk-fg); }
     .flow .node .d { word-break: keep-all; font-size: 28px; line-height: 1.45; color: var(--sk-muted); }
+    [data-slide].two-col { display: grid; grid-template-columns: 1fr 1fr; align-content: start; column-gap: var(--sk-gap); row-gap: var(--sk-gap); }
+    .two-col > :not(.col) { grid-column: 1 / -1; }
+    .two-col > .col { display: flex; flex-direction: column; gap: calc(var(--sk-gap) / 2); min-width: 0; }
+    .two-col > .col h3 { margin: 0; font-size: calc(var(--sk-fs-body) * 1.1); font-weight: 700; line-height: 1.3; color: var(--sk-fg); }
+    [data-slide].big-number { justify-content: center; padding-block: var(--sk-pad-y); }
+    .big-number .big { font-size: 260px; font-weight: 800; line-height: 1; letter-spacing: -.04em; color: var(--sk-accent); max-width: none; }
     code { font-family: var(--sk-font-mono); font-size: 0.82em; color: var(--sk-fg); background: var(--sk-panel); border: 1px solid var(--sk-line); border-radius: 8px; padding: .08em .45em; margin: 0 .12em; white-space: nowrap; }
   </style>
 </head>
@@ -154,7 +160,7 @@
   <h1>만들기</h1>
   <aside data-notes>세 번째 장은 덱을 쓰는 규격이다.
 
-종류, 레이아웃, 토큰, 테마, 설정, 단계 등장을 다룬다.</aside>
+종류, 모양 만들기, 토큰, 테마, 설정, 단계 등장을 다룬다.</aside>
 </section>
 
 <section data-slide="content">
@@ -171,51 +177,34 @@
 </section>
 
 <section data-slide="content">
-  <h2>모양은 레이아웃으로 고른다</h2>
-  <div class="grid2">
-    <div class="key"><span class="k">two-column</span><span class="d">비교, 전과 후, 글과 그림처럼 둘을 나란히 놓는다.</span></div>
-    <div class="key"><span class="k">big-number</span><span class="d">숫자 하나로 말한다.</span></div>
-    <div class="key"><span class="k">quote</span><span class="d">인용과 출처를 보여 준다.</span></div>
-    <div class="key"><span class="k">image-full</span><span class="d">이미지가 슬라이드를 채우고 글은 아래쪽에 겹친다.</span></div>
+  <h2>모양은 덱의 style로 만든다</h2>
+  <div class="flow">
+    <div class="node"><span class="t">프리셋 없음</span><span class="d">엔진은 슬라이드 모양 프리셋을 제공하지 않는다. 정해 둔 것은 HTML 구조뿐이다</span></div>
+    <div class="node"><span class="t">클래스</span><span class="d">덱의 style에 클래스를 만들어 section에 붙인다</span></div>
+    <div class="node"><span class="t">예시</span><span class="d">새 덱의 style에는 두 열과 큰 숫자 예가 들어 있다</span></div>
   </div>
-  <p>본문 슬라이드에 <code>data-layout</code>을 달면 된다. 없으면 제목과 본문이다. 목록은 <code>slidekit layouts</code>로 보고, 편집기에서는 Add slide 메뉴, 필름스트립 타일 우클릭의 Layout(숫자 키 1~5), Inspector의 Layout 칩으로 고른다.</p>
-  <aside data-notes>레이아웃은 슬라이드 **종류가 아니라 본문의 변형**이다. 종류 네 가지 규칙은 그대로이다.
-
-편집기에서는 슬라이드를 추가할 때 고르고 Inspector에서 바꾼다.
-다섯 레이아웃을 차례로 소개한다. 뒤의 두 장이 big-number와 two-column의 실제 예이다.</aside>
+  <p>AI에게 맡길 때도 같다. 필요한 모양은 덱 CSS로 쓰게 한다.</p>
+  <aside data-notes>모양을 고르는 목록은 없다. **덱 CSS가 곧 모양**이다.
+다음 두 장이 그 예이다. 클래스 이름은 덱마다 정한다.</aside>
 </section>
 
-<section data-slide="content" data-layout="big-number">
-  <p data-big>5</p>
-  <p>레이아웃 프리셋은 다섯 가지이다. 이 슬라이드가 big-number이다.</p>
-  <aside data-notes>숫자 하나가 말하게 하는 레이아웃이다. 설명은 한 줄로 줄인다.
-숫자 하나가 말하게 한다. 숫자 5를 말하고 다음 장으로 넘어간다.</aside>
+<section data-slide="content" class="big-number">
+  <p class="big">1</p>
+  <p>숫자 하나로 말하는 장은 클래스 두 개와 덱 CSS 몇 줄이면 된다.</p>
+  <aside data-notes>숫자 하나가 말하게 한다. 설명은 한 줄로 줄이고 숫자 1을 말하고 넘어간다.</aside>
 </section>
 
-<section data-slide="content" data-layout="two-column">
+<section data-slide="content" class="two-col">
   <h2>두 열은 비교에 쓴다</h2>
-  <div data-col>
+  <div class="col">
     <h3>파일을 직접 고칠 때</h3>
     <p>원본 HTML 한 파일을 연다. AI에게 맡기거나 직접 쓴다.</p>
   </div>
-  <div data-col>
+  <div class="col">
     <h3>편집기를 쓸 때</h3>
     <p>캔버스에서 고르고 속성 패널로 바꾼다. 저장은 자동이다.</p>
   </div>
   <aside data-notes>두 방법은 **같은 파일**을 고친다. 어느 쪽으로 시작해도 된다.</aside>
-</section>
-<section data-slide="content" data-layout="quote">
-<blockquote>
-<p>도구는 생각을 가리지 않을 때 가장 좋다.</p>
-<footer>quote 레이아웃</footer>
-</blockquote>
-<aside data-notes>인용과 출처를 보여 주는 레이아웃이다. 인용은 한 문장으로 줄인다.
-인용 레이아웃이다. 한 문장만 읽고 넘어간다.</aside>
-</section>
-<section data-slide="content" data-layout="image-full">
-<img alt="파란색에서 보라색으로 이어지는 그라디언트 배경" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 9'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%231d4ed8'/%3E%3Cstop offset='1' stop-color='%237c3aed'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='16' height='9' fill='url(%23g)'/%3E%3C/svg%3E">
-<h2>image-full은 이미지가 채운다</h2>
-<aside data-notes>이미지가 슬라이드를 채우고 글은 아래쪽에 겹친다. 이미지에는 항상 alt를 적는다.</aside>
 </section>
 
 <section data-slide="content">

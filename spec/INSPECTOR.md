@@ -262,11 +262,12 @@ Figma 포럼에는 "Position, Auto layout, Appearance가 관련 없는 속성을
 | 1 | Align | 노출 | 노출 | 정렬 바 6개 아이콘 |
 | 2 | Layout | 일부 | 전체 | display, W/H, 모드, 방향, 정렬, gap, padding, margin, Clip |
 | 3 | Position | 조건부 | 조건부 | Offset X/Y(`translate`), Position Select, 회전, Z는 항상. X/Y(`left`, `top`)는 position이 static이 아닐 때만 |
-| 4 | Appearance | 노출 | 노출 | Opacity, Radius, Blend, 단계 등장 편집(Appears at step, Step effect 6종: Rise, Fade, Slide, Scale, Blur, None, 미리보기 버튼) |
-| 5 | Typography | 노출 | 숨김 | 4.4 참고 |
-| 6 | Fill | 노출 | 노출 | background-color 목록(최대 1) |
-| 7 | Stroke | 노출 | 노출 | border |
-| 8 | Effects | 노출 | 노출 | shadow, blur |
+| 4 | Appearance | 노출 | 노출 | Opacity, Radius, Blend |
+| 5 | Animation | 노출 | 노출 | Appears at step, Disappears at step, Quick effect(Fade, Rise, Slide, Scale, Blur), 벗어난 상태 5값(Away opacity, X, Y, Scale, Blur), Duration, Delay, After previous, Play animation. 하단 Animation 탭과 같은 사양을 편집한다(SPEC 9.7). 여러 요소를 선택하면 한 번의 커밋으로 각각에 적용 |
+| 6 | Typography | 노출 | 숨김 | 4.4 참고 |
+| 7 | Fill | 노출 | 노출 | background-color 목록(최대 1) |
+| 8 | Stroke | 노출 | 노출 | border |
+| 9 | Effects | 노출 | 노출 | shadow, blur |
 
 Figma는 Position이 맨 위지만, 우리는 흐름 레이아웃이 중심이라 Layout을 앞에 둔다(제안). 사용 빈도가 높은 크기와 간격이 위에 온다.
 
@@ -438,7 +439,7 @@ UI는 Fluid Functionalism 컴포넌트와 `app/src/components/ui/field.tsx` 입�
 | Stroke | "Stroke color", "Stroke width", "Stroke style"(항목 "Solid", "Dashed", "Dotted"), "Add stroke", "Remove stroke" |
 | Effects | "Add effect", 항목 "Drop shadow", "Inner shadow", "Layer blur", "Background blur". 그림자 칸은 "Shadow 1 X", "Shadow 1 Y", "Shadow 1 blur", "Shadow 1 spread", "Shadow 1 color", "Remove shadow 1", 블러는 "Remove layer blur", "Remove background blur" |
 | 이미지 | "Image fit"(항목 "Cover", "Contain" 등), "Image position", "Choose image file", "Replace image..." |
-| 슬라이드 | "Type", "Chapter title", "Background", "Background type", "Background gradient", "Steps", "Appears at step", "Step effect", "Preview step effect" |
+| 슬라이드 | "Type", "Chapter title", "Background", "Background type", "Background gradient", "Steps" |
 | 레이어 | "Show in layers" |
 | 값 | "Mixed", "Auto" |
 | 슬라이드 | "Type", "Chapter title", "Background", "Steps" |

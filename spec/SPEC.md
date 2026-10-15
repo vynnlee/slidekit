@@ -434,6 +434,17 @@ Figma식 계층 선택이다. 구현은 `app/src/lib/selection.ts`(DOM 없이 �
 - 맥락별 메뉴: 캔버스 요소(글자 편집, 코멘트, 선택 이동, 순서, 이름 변경, 잠금과 숨김, 변경 되돌리기, 복제, 삭제), 캔버스 빈 곳(코멘트, 맞춤과 100% 확대, 슬라이드 추가, 복제, 삭제), Layers 행(요소 메뉴와 같고 `Slide N` 행은 슬라이드 메뉴), 필름스트립 타일(여기서 발표, 코멘트, 앞뒤 추가, 처음과 끝으로 이동, 복제, 삭제), 코멘트(패널에서 열기, 해결, 신뢰, 복사, 삭제), 덱 카드와 행(열기, 발표, 이름 변경, 복제, 게시 링크 복사, 휴지통으로, 카드의 `...` 버튼과 같은 목록). 잠긴 요소는 Unlock, Select Parent, Add comment만 보인다. 메뉴를 두지 않는 곳은 Inspector 입력, 노트 영역, 발표자 화면, 청중 화면, 줌 컨트롤, 헤더 버튼이다.
 - 커서: 앱 UI는 화살표(`default`)가 기본이고 손가락(`pointer`)은 덱 카드와 링크에만 쓴다. 캔버스에서는 선택된 요소 위가 `move`, 글자 편집 중이 `text`, 리사이즈 핸들이 방향별 `ns-resize`, `ew-resize`, `nwse-resize`, `nesw-resize`이고 끌기가 끝날 때까지 유지한다. Space는 `grab`, Space 팬 중은 `grabbing`, 잠긴 요소는 `default`다. 숫자 칸의 라벨은 `ew-resize`, 색 칸의 스포이트는 `crosshair`, 놓을 수 없는 자리는 끌기 중에만 `not-allowed`다. 캔버스는 iframe 안이라 끌기 시작 때 전체 화면 투명 방패로 커서를 고정한다. 커서 값은 `lib/cursors.ts` 한 곳의 표에서만 정한다. 청중 화면은 포인터를 2초 뒤 숨기고 전체 보기 썸네일은 `pointer`다.
 
+### 9.7 단계 애니메이션 편집
+
+속성과 의미는 6.3과 `spec/ANIMATION.md`가 기준이다. 편집기는 UI 문구를 영어로 쓴다.
+
+- 하단 탭 Notes와 Animation. Animation 탭은 단계 격자와 요소별 막대(보이는 구간 N부터 M 직전)다. 막대 끝을 끌면 등장(`data-step`)과 퇴장(`data-step-out`), 몸통을 끌면 둘 다 같은 간격으로 이동한다. 끄는 동안은 막대 DOM만 바꾸고 놓을 때 한 번 저장한다(실행 취소 한 건).
+- 머리글을 누르면 재생 헤드가 그 단계로 옮겨 가고(기본은 마지막 단계) 캔버스는 요소의 `data-shown`과 `data-away`만 토글한다. 헤드 이동과 끌기는 iframe을 다시 만들지 않는다. 헤드는 React 상태가 아니라 외부 저장소(`lib/play-head.ts`)라 옮겨도 Editor 전체가 다시 그려지지 않는다. `data-shown`, `data-away`, `data-step-run`, `data-step-instant`는 저장 글자에서 제거한다. `data-sk-show-steps`는 편집기가 더 쓰지 않는다.
+- Play는 1단계부터 마지막 단계까지 차례로 재생하고, `+ Step`은 빈 단계를 더한다(`data-steps`). 탭이 열려 있을 때 캔버스 요소 모서리에 등장 번호와 `out N`을 단다(저장되지 않음).
+- 키보드: 막대에서 방향키는 둘 다 이동, Shift+방향키는 등장, Alt+방향키는 퇴장, Delete는 단계 속성 모두 지움, Enter는 요소 선택. 막대의 aria-label이 이름과 등장, 퇴장 단계를 읽고, 헤드 라벨(`Step k of S`)이 `aria-live`로 알린다.
+- 인스펙터 Animation 섹션: Appears at step, Disappears at step, Quick effect(Fade, Rise, Slide, Scale, Blur는 변수 값을 채우는 단추이고 이름은 저장하지 않는다), 벗어난 상태 5값(opacity, x, y, scale, blur), Duration, Delay, After previous, Play animation. 여러 요소를 선택하면 한 번의 커밋으로 각각에 적용한다. 기본값과 같은 변수는 쓰지 않는다. `data-step-effect`는 읽기만 하고 편집하면 변수로 바꿔 쓴다.
+- 검증: `editor-animation`(막대, 헤드, 키보드, 밖의 변경, axe), `editor-anim-perf`(요소 100개와 단계 20개, 느린 단계), `editor-fuzz` 시드 `a5`(단계 속성 불변식과 누수), 단위 `animation-model`.
+
 ## 10. 텍스트 내보내기 (Markdown 개요)
 
 덱 내용을 Claude나 다른 도구에 붙여 넣거나 문서로 쓰려고 Markdown으로 바꾼다. 본체는 `engine/outline.ts`의 순수 함수 `outline(html, { notes })`이고 CLI는 `slidekit outline <덱> [--notes]`, 앱은 Export 메뉴의 Copy as Markdown과 Download .md다(앱은 노트를 넣는다).

@@ -46,6 +46,18 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 - 수동 도구(집계 밖): `app/test/remote-qa.cjs`(폰 4종 크기 스크린샷과 axe). list-load(덱 30개 합성 부하)와 a11y-app(axe와 스크린샷)은 `--slow`나 `--only`로 돈다.
 - 시간은 sleep이 아니라 낮은 우선순위(`taskpolicy -b`)에서의 페이지 로드와 렌더 CPU가 지배한다(sleep 정리와 가짜 시계의 효과는 약 4%). 남은 고정 sleep(editor.cjs 약 137곳, inspector-a11y.cjs 약 32곳)은 시간 단축보다 흔들림 감소 목적으로만 조건 대기로 바꾼다. `[느림 +N초]` 표시로 찾는다.
 
+## 테스트 공백 (2026-10-15, 단위 기준 점검)
+
+`bun test --coverage`는 띄운 서버와 CLI 프로세스를 세지 않아 단위 기준이다. 아래는 단위로도 e2e로도 직접 닿지 않거나 약한 곳이고, 이번에 `preview-proxy`(Host와 Origin 거절), `search-api`(색인 추출과 캐시), `decks-trash`(이름 바꾸기, 휴지통, 복원, 영구 삭제 확인)를 채웠다.
+- `app/launch.ts`: `openApp`의 열지 않는 조건(PORT, SSH, mac-cloud)과 `alreadyUp` 판정은 테스트가 없다(17줄, 낮음).
+- `engine/chrome.ts`: Chrome 경로 찾기(환경 변수, Playwright, 설치된 브라우저 순서)는 단위 25%이고 순서 검증이 없다(낮음, 없으면 doctor와 pdf가 안내).
+- `engine/*-cli.ts`(image, layouts, templates, lint, outline): 얇은 래퍼라 `cli.test.ts`가 일부만 본다.
+- `deploy/deploy.ts`: 올리기와 비밀번호 흐름은 dry-run e2e로만 본다(스크립트라 단위 불가, 원격 쓰기는 승인 뒤 `--smoke`). Worker는 `deploy/rehearse.ts`가 로컬로 본다.
+- `engine/pdf.ts`와 `bundler/bundle.ts`: export e2e와 번들러 단위가 프로세스를 띄워 본다(옵션 조합은 일부만).
+- `channel/index.ts`: 단위 34%이고 나머지(재연결, 백필, 도구 호출)는 channel 통합 3단계가 본다.
+- `app/decks-api.ts`의 `createDeck`와 `retitleDeck`: `engine/new.ts`를 띄워 실제 덱 폴더에 쓰므로 단위가 없다(list e2e만).
+- `app/server.ts`: 라우팅과 정적 서빙 규칙(점 파일, 심볼릭 링크)은 e2e로만 본다.
+
 ## 팀 운영 규칙
 
 - mac-cloud는 열에 약하다. 빌드, 타입 검사, 브라우저 테스트는 팀 전체에서 한 번에 하나: `mkdir /tmp/slidekit-heavy.lock`(잡을 때 `echo <이름> > .../pid`로 표시, 끝나면 내 표시일 때만 `rm -rf`), `taskpolicy -b`, 작업자 1개. 서브에이전트는 빌드와 테스트를 직접 돌리지 않는다.

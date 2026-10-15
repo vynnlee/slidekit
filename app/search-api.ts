@@ -1,7 +1,8 @@
 import { join } from "node:path";
 import { readdir, stat } from "node:fs/promises";
+import { decksDir } from "./folder";
 
-const decks = join(import.meta.dir, "..", "decks");
+const decks = decksDir; // 다른 API와 같은 폴더(테스트는 SLIDEKIT_DECKS로 임시 폴더를 쓴다)
 const ENT: Record<string, string> = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'", "&nbsp;": " " };
 const plain = (h: string) => h.replace(/<!--[\s\S]*?-->/g, " ").replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (m) => ENT[m]).replace(/\s+/g, " ").trim();
 

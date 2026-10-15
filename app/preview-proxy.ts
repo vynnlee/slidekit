@@ -8,16 +8,21 @@ const local = `127.0.0.1:${up}`;
 
 type Data = { url: string; upstream?: WebSocket; queue: (string | Buffer)[] };
 
-Bun.serve<Data>({
+/** 이 Host와 Origin의 요청을 거절해야 하는지. Host는 허용 목록만, Origin은 있으면 Host와 같아야 하고 깨진 값("null" 등)은 거절한다. */
+export function forbidden(host: string, origin: string | null): boolean {
+  let originHost = "";
+  if (origin) { try { originHost = new URL(origin).host; } catch { return true; } }
+  return !allowedHosts.has(host.replace(/:\d+$/, "")) || (!!origin && originHost !== host);
+}
+
+if (import.meta.main) Bun.serve<Data>({
   hostname: "127.0.0.1",
   port,
   async fetch(req, server) {
     const u = new URL(req.url);
     // Origin을 지우기 전에 확인한다. 다른 사이트가 이 프록시를 통해 앱 API를 부르지 못하게 한다.
     const host = req.headers.get("host") ?? "", origin = req.headers.get("origin");
-    let originHost = "";
-    if (origin) { try { originHost = new URL(origin).host; } catch { return new Response("forbidden", { status: 403 }); } } // Origin: null 같은 깨진 값은 403
-    if (!allowedHosts.has(host.replace(/:\d+$/, "")) || (origin && originHost !== host)) return new Response("forbidden", { status: 403 });
+    if (forbidden(host, origin)) return new Response("forbidden", { status: 403 });
     if (req.headers.get("upgrade") === "websocket") {
       return server.upgrade(req, { data: { url: `ws://${local}${u.pathname}${u.search}`, queue: [] } })
         ? undefined
@@ -50,4 +55,4 @@ Bun.serve<Data>({
     },
   },
 });
-console.log(`preview-proxy http://127.0.0.1:${port} -> ${local}`);
+if (import.meta.main) console.log(`preview-proxy http://127.0.0.1:${port} -> ${local}`);

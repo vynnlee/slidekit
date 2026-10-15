@@ -37,7 +37,7 @@ if (mode !== "slides") {
   const src = readFileSync(bundled, "utf8");
   writeFileSync(html, src.includes("</body>") ? src.replace("</body>", () => extra + "</body>") : src + extra);
 }
-const r = Bun.spawnSync([chrome, "--headless", "--disable-gpu", "--no-pdf-header-footer", "--print-to-pdf-no-header", "--generate-pdf-document-outline", `--print-to-pdf=${out}`, "--virtual-time-budget=5000", `file://${html}`], { stdout: "ignore", stderr: "pipe" });
+const r = Bun.spawnSync([chrome, "--headless", "--disable-gpu", "--no-pdf-header-footer", "--print-to-pdf-no-header", "--generate-pdf-document-outline", `--print-to-pdf=${out}`, "--virtual-time-budget=5000", "--host-resolver-rules=MAP * ~NOTFOUND", `file://${html}`], { stdout: "ignore", stderr: "pipe" });
 if (html !== bundled && !process.env.SLIDEKIT_KEEP_PRINT) rmSync(html, { force: true }); // 확인용: SLIDEKIT_KEEP_PRINT=1이면 인쇄용 사본을 남긴다
 if (!existsSync(out) || r.exitCode !== 0) { console.error(r.stderr.toString().slice(-400) || "PDF 생성 실패"); process.exit(1); }
 const pages = (Buffer.from(await Bun.file(out).arrayBuffer()).toString("latin1").match(/\/Type\s*\/Page\b/g) ?? []).length;

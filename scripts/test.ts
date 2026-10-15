@@ -56,7 +56,9 @@ const steps: Step[] = [
   browser("engine-verify", "engine/test/verify.cjs", "static", STATIC),
   { ...browser("engine-moved", "engine/test/moved.cjs", "static", STATIC), server: undefined }, // file:// 로 연다
   { ...browser("engine-gradient", "engine/test/gradient.cjs", "static", STATIC), server: undefined }, // file:// 로 연다, PDF 바이트의 셰이딩까지 본다
+  { ...browser("engine-offline", "engine/test/offline.cjs", "static", STATIC), server: undefined }, // 번들과 PDF가 네트워크 없이 같은지(외부 호출 없음)
   browser("routes", "app/test/routes.cjs", "app", APP),
+  browser("offline-app", "app/test/offline-app.cjs", "app", APP), // 앱 화면이 외부 호스트로 요청하지 않는지
   browser("list", "app/test/list.cjs", "app", APP),
   browser("present", "app/test/present.cjs", "app", APP),
   browser("remote", "app/test/remote.cjs", "app", APP),
@@ -109,7 +111,7 @@ const DOCS = /(^|\/)(HANDOFF|README|PLAN|SKILL|INTERACTION|SPEC)\.md$|^(spec|doc
 const EDITOR_ALL = ["editor", "editor-assets", "editor-multi", "editor-menus", "editor-panels", "editor-a11y"]; // 편집기 브라우저 검증은 영역별 파일로 나뉘어 있다(app/test/editor-*.cjs, 하네스는 app/test/lib/editor-harness.cjs)
 const BROWSER_APP = ["routes", "responsive", "list"]; // 앱 공통 화면 변경 때의 연기 검사
 const MAP: [RegExp, string[]][] = [
-  [/^engine\/(slidekit\.(js|css)|test\/(verify|moved|gradient)\.cjs)/, ["engine-verify", "engine-moved", "engine-gradient", "bundler-bundle"]],
+  [/^engine\/(slidekit\.(js|css)|test\/(verify|moved|gradient|offline)\.cjs)/, ["engine-verify", "engine-moved", "engine-gradient", "engine-offline", "bundler-bundle"]],
   [/^engine\/(lint\.ts|test\/lint\.test\.ts|doctor\.ts|new\.ts|template\/)/, ["lint", "tokens"]],
   [/^bundler\//, ["bundler-bundle", "bundler-fonts"]],
   [/^deploy\//, ["deploy-worker", "export-api"]],

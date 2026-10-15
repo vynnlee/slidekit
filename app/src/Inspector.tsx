@@ -25,7 +25,7 @@ import { textual } from "./Canvas";
 import { iconOf, nameOf } from "./LayerTree";
 import { readTranslate } from "@/lib/move";
 import { TEXT_STYLES, currentTextStyle } from "@/lib/text-styles";
-import { STEP_EFFECTS } from "../../engine/steps"; // 효과 목록의 원천(엔진 CSS와 같은 목록)
+import { AnimationSection } from "./AnimationSection";
 import { parseGradient, serializeGradient, type Gradient } from "@/lib/gradient";
 import { GradientEditor } from "@/components/ui/gradient-editor";
 import { TokensPanel } from "./TokensPanel";
@@ -106,7 +106,8 @@ type Props = {
   onSendAll?(): void;
   onResolveReplied?(): void;
   onStyle(prop: string, value: string): void;
-  onPreviewStep(): void; // 선택한 단계 요소의 등장 효과를 한 번 재생한다
+  onAnim(edits: [HTMLElement, import("@/lib/animation-model").StepSpec][]): void; // 단계 사양을 쓴다(실행 취소 한 건)
+  onAnimPlay(el: HTMLElement): void; // 이 요소의 등장과 퇴장을 한 번 미리 본다
   onStyles(map: Record<string, string>): void; // 여러 속성을 한 번에(실행 취소 한 건)
   onAttr(name: string, value: string | null): void;
   onElAttr(name: string, value: string | null): void;
@@ -421,19 +422,10 @@ export function Inspector(p: Props) {
                 ))}
               </Grid>
               <Pick label="Blend mode" value={val("mix-blend-mode")} items={BLENDS} onChange={(v) => set("mix-blend-mode", v)} />
-              <div className="flex flex-col gap-1">
-              <span className="text-micro text-muted-foreground">Appears at step</span>
-              <Grid>
-                <NumberField label={<Footprints />} aria-label="Appears at step" unit="" min={1} step={1} value={el.getAttribute("data-step") ?? "1"} muted={!el.hasAttribute("data-step")}
-                  onChange={(v) => p.onElAttr("data-step", +v >= 2 ? String(Math.round(+v)) : null)} />
-                {el.hasAttribute("data-step") && (
-                  <div className="flex items-center gap-1">
-                    <div className="min-w-0 flex-1"><Pick label="Step effect" value={el.getAttribute("data-step-effect") ?? "rise"} items={[...STEP_EFFECTS]} onChange={(v) => p.onElAttr("data-step-effect", v === "rise" ? null : v)} /></div>
-                    <Tooltip content="Play the appear effect" side="top"><Button aria-label="Preview step effect" variant="ghost" size="icon-compact" onClick={p.onPreviewStep}><Play /></Button></Tooltip>
-                  </div>
-                )}
-              </Grid>
-              </div>
+            </InspectorSection>
+
+            <InspectorSection id="animation" title="Animation">
+              <AnimationSection els={[el, ...p.more] as HTMLElement[]} slide={p.slide as HTMLElement | null} onAnim={p.onAnim} onPlay={p.onAnimPlay} />
             </InspectorSection>
 
             {el.tagName === "IMG" && (

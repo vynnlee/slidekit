@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { TextArea } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
 import { byPath, previewHtml, serializeSlide, type Unit } from "@/lib/deck-source";
+import { applyPlayhead, readSlide, slideStepCount } from "@/lib/animation-dom";
 import { childToward, isLeaf, isLockedDeep, pick as pickEl, siblings } from "@/lib/selection";
 import { canMove, canResize, fixSize, moveBy, readTranslate, toLocal, writeTranslate } from "@/lib/move";
 import { lockAxis, snapMove, snapResize, toSlide, unionRect, type Gap, type Guide, type Rect } from "@/lib/guides";
@@ -24,7 +25,6 @@ export type CanvasApi = {
   edit(el: Element): void;
   select(el: Element | null): void;
   zoom(dir: 1 | -1 | 0): void; // 0은 맞춤
-  previewStep(el: Element): void; // data-step 요소의 등장 효과를 한 번 재생한다(편집 중에는 모든 단계가 보이므로 잠깐 숨겼다 보인다)
   zoom100(): void; // 슬라이드가 1920px 폭으로 보이는 배율
   anchor(el: Element | null): { x: number; y: number }; // 메뉴를 키보드로 열 때의 화면 좌표(요소 왼쪽 아래, 없으면 캔버스 중앙)
   compose(): void; // 선택한 요소에 코멘트 작성창을 연다
@@ -60,6 +60,8 @@ type Props = {
   onDelete(): void;
   onComment(text: string): Promise<void>;
   onMarker(id: string): void;
+  stepBadges?: boolean; // Animation 탭이 열려 있을 때 요소 모서리에 등장 번호와 out 번호를 단다
+  step?: { k: number | null; animate: boolean }; // 재생 헤드: 단계 k의 상태를 그린다(null이면 마지막 단계). animate면 전환을 보인다
   commentActions: CommentActions;
   onReady(): void;
 };
@@ -105,6 +107,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   const guideSvg = useRef<SVGSVGElement>(null);
   const handles = useRef<HTMLDivElement>(null);
   const extraBoxes = useRef<HTMLDivElement>(null);
+  const badgeLayer = useRef<HTMLDivElement>(null), badgeList = useRef<{ el: Element; text: string; right?: boolean }[]>([]); // 단계 번호 배지(편집 표시일 뿐 저장되지 않는다)
   const overflowBoxes = useRef<HTMLDivElement>(null), safeBox = useRef<HTMLDivElement>(null);
   const overflowList = useRef<Overflow[]>([]);
   // 끌어서 이동: 시작 상태. moved는 3px 넘게 움직인 뒤에만 참이다.
@@ -127,7 +130,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   const build = useCallback((units: Unit[]) => {
     shown.current = { keys: units.map((u) => u.key), html: new Map(units.map((u) => [u.key, u.html])) };
     const go = () => {
-      const html = previewHtml({ ...P.current.shell, units }, units, P.current.folder, { embed: true, showSteps: true }); // 편집 중에는 모든 단계의 요소를 보인다(저장 글자에는 슬라이드만 쓰여 새지 않는다)
+      const html = previewHtml({ ...P.current.shell, units }, units, P.current.folder, { embed: true }); // 단계 요소는 재생 헤드가 가리키는 단계의 상태로 그린다(applyStep, data-shown과 data-away만 토글하고 저장 글자에는 새지 않는다)
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
       urlRef.current = URL.createObjectURL(new Blob([html], { type: "text/html" }));
       setUrl(urlRef.current);
@@ -159,18 +162,6 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     edit: (el) => startEdit(el as HTMLElement),
     select: (el) => P.current.onSel(el),
     zoom: (d) => zoomBy(d),
-    previewStep(el) {
-      const d = doc(), sl = cur();
-      const html = d?.documentElement;
-      if (!d || !sl || !html || !html.hasAttribute("data-sk-show-steps")) return;
-      const n = Number(el.getAttribute("data-step")) || 1;
-      const shown = [...sl.querySelectorAll("[data-step]")].filter((e) => e !== el && (Number(e.getAttribute("data-step")) || 1) < n);
-      html.removeAttribute("data-sk-show-steps"); // 엔진 CSS의 숨김 규칙이 돌게 한다(저장 글자에는 data-shown이 새지 않게 serializeSlide가 지운다)
-      for (const e of shown) e.setAttribute("data-shown", "");
-      el.removeAttribute("data-shown");
-      requestAnimationFrame(() => requestAnimationFrame(() => el.setAttribute("data-shown", "")));
-      setTimeout(() => { for (const e of [...shown, el]) e.removeAttribute("data-shown"); html.setAttribute("data-sk-show-steps", ""); }, 1500);
-    },
     zoom100: () => setZoom(size.w ? 1920 / size.w : 1),
     anchor(el) {
       const fr = frame.current?.getBoundingClientRect();
@@ -378,12 +369,24 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", up); window.addEventListener("keydown", key, true);
   };
 
+  // 재생 헤드(단계 k)를 현재 슬라이드에 그린다. 속성만 토글하므로 가볍다(막대 끌기와 재생 중에 iframe을 다시 만들지 않는다).
+  const applyStep = (instant: boolean) => {
+    const sl = cur();
+    if (!sl) return;
+    const rows = readSlide(sl);
+    badgeList.current = P.current.stepBadges ? rows.flatMap((r) => [...(r.spec.in !== null ? [{ el: r.el, text: String(r.spec.in) }] : []), ...(r.spec.out !== null ? [{ el: r.el, text: `out ${r.spec.out}`, right: true }] : [])]) : [];
+    if (!rows.length) return;
+    const S = slideStepCount(sl, rows), k = P.current.step?.k ?? S;
+    applyPlayhead(sl, Math.min(Math.max(1, k), S), rows, instant);
+  };
+  useEffect(() => { applyStep(!p.step?.animate); }, [p.step?.k, p.step?.animate, p.index, p.units, url, p.stepBadges]); // eslint-disable-line
   const attach = () => {
     const d = doc();
     if (!d) return;
     const st = d.createElement("style");
     st.textContent = EDIT_CSS;
     d.head.appendChild(st);
+    applyStep(true); // 새로 그린 문서의 단계 요소를 재생 헤드 상태로
     d.addEventListener("pointerdown", (e) => {
       const sl = cur();
       if (e.button !== 0 || editing.current || !sl) return;
@@ -520,6 +523,21 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   };
 
   // 오버레이: 선택 상자, 호버 상자, 선택 컨트롤, 코멘트 표시. iframe 안 좌표가 곧 이 영역의 좌표다.
+  // 배지 위치(읽기를 모은 뒤 쓴다)
+  const placeBadges = () => {
+    const bl = badgeLayer.current;
+    if (!bl) return;
+    const list = badgeList.current.filter((b) => b.el.isConnected && !editing.current);
+    while (bl.children.length < list.length) { const d = document.createElement("div"); d.className = "absolute left-0 top-0 rounded bg-foreground px-1 text-micro leading-4 tabular-nums text-background"; bl.appendChild(d); }
+    const rects = list.map((b) => b.el.getBoundingClientRect());
+    [...bl.children].forEach((c, i) => {
+      const d = c as HTMLElement, b = list[i], q = rects[i];
+      if (!b || !q) { d.style.display = "none"; return; }
+      if (d.textContent !== b.text) d.textContent = b.text;
+      d.style.display = "block";
+      d.style.transform = b.right ? `translate(${q.right}px,${q.top}px) translate(-100%,-4px)` : `translate(${q.left}px,${q.top}px) translateY(-4px)`;
+    });
+  };
   const place = useCallback(() => {
     const put = (div: HTMLElement | null, el: Element | null, dy = 0) => {
       if (!div) return null;
@@ -575,6 +593,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
         h.style.transform = `translate(${x - 4}px,${y - 4}px)`;
       });
     }
+    placeBadges();
     const ob = overflowBoxes.current;
     if (ob) {
       const list = P.current.overflowOn ? overflowList.current.filter((o) => o.el.isConnected) : [];
@@ -636,6 +655,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
           <div ref={selBox} className="absolute left-0 top-0 hidden border-2 border-focus-ring" />
           <div ref={safeBox} data-testid="safe-area" className="absolute left-0 top-0 hidden border border-dashed border-white/30" />
           <div ref={overflowBoxes} />
+          <div ref={badgeLayer} aria-hidden="true" data-testid="step-badges" />
           <div ref={marqueeBox} className="absolute left-0 top-0 hidden border border-focus-ring bg-focus-ring/10" />
           <div ref={extraBoxes} />
           <div ref={handles}>

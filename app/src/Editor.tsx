@@ -10,6 +10,9 @@ import { StatusPage } from "./StatusPage";
 import { Canvas, textual, type CanvasApi } from "./Canvas";
 import { Filmstrip } from "./Filmstrip";
 import { LayerTree } from "./LayerTree";
+import { AnimationPanel } from "./AnimationPanel";
+import { writeSpec, readSpec, readSlide as readAnimRows, slideStepCount } from "@/lib/animation-dom";
+import { DEFAULT_MS, type StepSpec } from "@/lib/animation-model";
 import { Inspector } from "./Inspector";
 import { go } from "./App";
 import { byPath, compose, duplicateHtml, freshIds, newKey, newSlideHtml, pathOf, splitDeck, type Unit } from "@/lib/deck-source";
@@ -80,6 +83,10 @@ export function Editor({ id }: { id: string }) {
   const [palette, setPalette] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ key: string; text: string } | null>(null);
+  const [bottomTab, setBottomTab] = useState<"notes" | "animation">("notes"); // 하단 패널: 노트와 Animation 탭
+  const [animStep, setAnimStep] = useState<{ k: number | null; animate: boolean }>({ k: null, animate: false }); // 재생 헤드(null이면 마지막 단계)
+  const [playing, setPlaying] = useState(false);
+  const playTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [notesH, setNotesH] = useState(() => Number(localStorage.getItem("slidekit:notesH")) || 140);
   useEffect(() => { localStorage.setItem("slidekit:notesH", String(notesH)); }, [notesH]);
   useEffect(() => { setDraft(null); }, [index, selId]);
@@ -586,6 +593,38 @@ export function Editor({ id }: { id: string }) {
     if (v === null) s.removeAttribute(name); else s.setAttribute(name, v);
     commit("attr:" + name);
   };
+  // Animation 탭: 요소의 단계 사양을 쓰고(실행 취소 한 건), 재생 헤드를 옮기고, 단계를 재생한다.
+  const animEdit = (el: HTMLElement, spec: StepSpec) => { writeSpec(el, spec); commit(); };
+  const animEditMany = (edits: [HTMLElement, StepSpec][]) => { for (const [e, s] of edits) writeSpec(e, s); commit(); };
+  // 한 요소만 미리 본다: 등장(또는 퇴장) 직전 단계에서 시작해 한 단계 전환을 보이고 헤드를 마지막 단계로 되돌린다
+  const animPreviewEl = (el: HTMLElement) => {
+    const sp = readSpec(el), k = sp.in ?? sp.out;
+    if (k === null) return;
+    clearTimeout(playTimer.current); setPlaying(false);
+    setAnimStep({ k: Math.max(1, k - 1), animate: false });
+    playTimer.current = setTimeout(() => {
+      setAnimStep({ k, animate: true });
+      playTimer.current = setTimeout(() => setAnimStep({ k: null, animate: false }), (sp.delay ?? 0) + (sp.ms ?? DEFAULT_MS) + 700);
+    }, 450);
+  };
+  const stopPlay = () => { clearTimeout(playTimer.current); setPlaying(false); setAnimStep({ k: null, animate: false }); };
+  const animPlay = () => {
+    if (playing) { stopPlay(); return; }
+    const sl = canvas.current?.slide(indexRef.current);
+    if (!sl) return;
+    const rows = readAnimRows(sl), S = slideStepCount(sl, rows);
+    if (S < 2) return;
+    setPlaying(true); setAnimStep({ k: 1, animate: false });
+    const next = (k: number) => {
+      if (k > S) { stopPlay(); return; }
+      setAnimStep({ k, animate: true });
+      const ends = rows.filter((r) => r.spec.in === k || r.spec.out === k).map((r) => (r.spec.delay ?? 0) + (r.spec.ms ?? DEFAULT_MS));
+      playTimer.current = setTimeout(() => next(k + 1), Math.max(Math.max(0, ...ends) + 500, 600));
+    };
+    playTimer.current = setTimeout(() => next(2), 500);
+  };
+  useEffect(() => { stopPlay(); }, [index]); // eslint-disable-line
+  useEffect(() => () => clearTimeout(playTimer.current), []);
   const notes = (t: string) => {
     const s = canvas.current?.slide(indexRef.current);
     if (!s) return;
@@ -877,7 +916,7 @@ export function Editor({ id }: { id: string }) {
         }
         right={
           <Inspector sel={sel} slide={canvas.current?.slide(index) ?? null} more={more} onAlignGroup={alignGroup} selId={selId} tab={tab} onTab={setTab}
-            comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} onRemove={live.remove} onRevert={live.revert} onSendAll={live.sendAll} onResolveReplied={live.resolveReplied} onStyles={applyStyles} onPreviewStep={() => sel && canvas.current?.previewStep(sel)} onImageFile={(f) => addImage(f, sel)} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
+            comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} onRemove={live.remove} onRevert={live.revert} onSendAll={live.sendAll} onResolveReplied={live.resolveReplied} onStyles={applyStyles} onAnim={animEditMany} onAnimPlay={animPreviewEl} onImageFile={(f) => addImage(f, sel)} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
         }
       >
         <div className="flex h-full flex-col">
@@ -896,7 +935,7 @@ export function Editor({ id }: { id: string }) {
         <Canvas ref={canvas} shell={shell} folder={folder} units={units} index={index} sel={sel} more={more} onMulti={toggleSel} onGroup={pickGroup}
           comments={comments.filter((c) => !c.slideDeleted && c.slide === origin.current.get(units[index]?.key ?? ""))}
           commentActions={commentActions} overflowOn={overflowOn} safeArea={safeArea} onToggleGuide={toggleGuide} onOverflow={(l) => { setOverflowEls(l); const k = unitsRef.current[indexRef.current]?.key; if (k) setOverflowByKey((m) => (m[k] === l.length ? m : { ...m, [k]: l.length })); }} onImage={addImage} onStyle={style} onContext={({ el, x, y }) => contextAt({ x, y }, el)} onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
-          numbers={nums} channel={live.channel}
+          numbers={nums} channel={live.channel} step={animStep} stepBadges={bottomTab === "animation"}
           onComment={postComment} onMarker={(cid) => { setTab("comments"); const c = comments.find((x) => x.id === cid); if (c) jump(c); }} />
         </div>
         <div className="shrink-0 border-t border-border" style={{ height: notesH }}>
@@ -909,16 +948,25 @@ export function Editor({ id }: { id: string }) {
               window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
             }}
           />
-          <div className="flex h-7 items-center px-3">
-            <span className="text-caption text-muted-foreground">Notes</span>
+          <div role="tablist" aria-label="Bottom panel" className="flex h-7 items-center gap-3 px-3">
+            {(["notes", "animation"] as const).map((t) => (
+              <button key={t} type="button" role="tab" id={`bottom-tab-${t}`} aria-selected={bottomTab === t} aria-controls="bottom-panel" onClick={() => setBottomTab(t)}
+                className={`rounded text-caption outline-none focus-visible:ring-2 focus-visible:ring-focus-ring ${bottomTab === t ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{t === "notes" ? "Notes" : "Animation"}</button>
+            ))}
           </div>
-          <div className="px-2 pb-2" style={{ height: notesH - 36 }}>
-            <TextArea
-              className="h-full"
-              placeholder="Speaker notes (Markdown)"
-              value={draft?.key === units[index]?.key ? draft.text : noteOf(units[index]?.html ?? "")}
-              onChange={(e) => { setDraft({ key: units[index].key, text: e.target.value }); notes(e.target.value); }}
-            />
+          <div id="bottom-panel" role="tabpanel" aria-labelledby={`bottom-tab-${bottomTab}`} className="px-2 pb-2" style={{ height: notesH - 36 }}>
+            {bottomTab === "notes" ? (
+              <TextArea
+                className="h-full"
+                placeholder="Speaker notes (Markdown)"
+                value={draft?.key === units[index]?.key ? draft.text : noteOf(units[index]?.html ?? "")}
+                onChange={(e) => { setDraft({ key: units[index].key, text: e.target.value }); notes(e.target.value); }}
+              />
+            ) : (
+              <AnimationPanel slide={canvas.current?.slide(index) ?? null} sel={sel} rev={units} step={animStep.k} playing={playing}
+                onStep={(k) => { clearTimeout(playTimer.current); setPlaying(false); setAnimStep({ k, animate: false }); }} onEdit={animEdit} onSelect={(el) => pickSel(el)}
+                onAddStep={(total) => attr("data-steps", String(total))} onPlay={animPlay} />
+            )}
           </div>
         </div>
         </div>

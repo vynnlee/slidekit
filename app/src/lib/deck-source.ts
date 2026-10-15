@@ -85,7 +85,7 @@ export function previewHtml(doc: Doc, units: Unit[], folder: string, opts: { emb
 // 살아 있는 슬라이드를 저장용 글자로 되돌린다. 엔진과 편집기가 붙인 것을 뺀다.
 export function serializeSlide(el: Element) {
   const c = el.cloneNode(true) as Element;
-  for (const e of [c, ...c.querySelectorAll("[data-shown]")]) e.removeAttribute("data-shown"); // 등장 효과 미리보기가 남긴 표시
+  for (const e of [c, ...c.querySelectorAll("[data-shown],[data-away],[data-step-instant],[data-step-run]")]) { for (const n of ["data-shown", "data-away", "data-step-instant", "data-step-run"]) e.removeAttribute(n); } // 재생 헤드와 미리보기가 남긴 표시
   for (const e of [c, ...c.querySelectorAll("[data-active],[contenteditable],[inert]")]) {
     e.removeAttribute("data-active");
     e.removeAttribute("contenteditable");

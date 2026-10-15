@@ -15,7 +15,7 @@
    ```
    이 플래그는 `claude --help`에 나오지 않지만 Claude Code 2.1.x에서 받는다. 시작할 때 개발용 채널이라는 확인을 한 번 묻는다.
 3. 연결을 확인한다. 편집기의 Comments 탭 위 배지가 "Claude connected"이면 된다. "Claude not connected"이면 그 줄을 펼쳐 명령을 복사해 2번을 다시 한다.
-4. 코멘트를 남긴다. 요소를 고르고 `C`를 눌러 요청을 쓴 뒤 `Cmd+Enter`로 보낸다. 요소를 고르지 않고 `C`를 누르면 슬라이드 전체에 건다. 연결되어 있으면 바로 전달되고 상태가 Sent to Claude, Claude is working으로 바뀐다. 연결이 없어도 저장되어 있다가 세션이 붙으면 오래된 것부터 전달된다.
+4. 코멘트를 남긴다. 요소를 고르고 `C`를 눌러 요청을 쓴 뒤 `Enter`로 등록(Add, 보류)하거나 `Cmd+Enter`로 곧바로 보낸다(Send now, `Shift+Enter`는 줄바꿈). 요소를 고르지 않고 `C`를 누르면 코멘트 모드가 켜지고(`Shift+C`는 언제나 켜고 끈다), 요소를 클릭하거나 영역을 끌어 고른다(키보드는 `Tab`, `A`, 방향키, `Enter`). 영역 코멘트는 그 영역의 그림(`.comments/<id>.png`)과 겹치는 요소 목록이 함께 가고, 그림은 Claude가 `meta.image` 파일로 읽는다. 연결되어 있으면 바로 전달되고 상태가 Sent to Claude, Claude is working으로 바뀐다. 연결이 없어도 저장되어 있다가 세션이 붙으면 오래된 것부터 전달된다.
 5. 답을 받는다. Claude가 고치고 답하면 상태가 Replied가 되고 토스트가 뜬다. 마음에 들면 Resolve, 아니면 Revert Claude's edit로 그 수정만 되돌린다(그 사이 덱이 더 바뀌었으면 Version history에서 고른다).
 
 ## 도구와 설정

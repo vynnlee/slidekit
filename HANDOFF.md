@@ -74,7 +74,7 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 - 발표자 화면 항목(현재와 다음 슬라이드, 노트, 타이머와 시계, 장 위치)은 각각 토글. 노트는 마크다운 원문.
 - 문구: em-dash, en-dash, 가운뎃점, 이모지, 구어체, 비유 금지(사용자가 직접 요청한 예외만). 배경 검정, 글자 흰색, 페이지 번호와 꾸밈 없이 미니멀. 로고는 브랜드 색, 사용자 이미지는 원본 그대로.
 - 코멘트는 Claude Code Channels(연구 프리뷰)로 보내고 `comments.json`에도 저장. 띄우기: `claude --dangerously-load-development-channels server:slidekit`(`channel/README.md`).
-  - 흐름: 편집기에서 C 키(또는 우클릭, 툴바)로 요소나 슬라이드 전체(path가 빈 값)에 코멘트, 빠른 문구 칩 3개, Cmd+Enter 전송 -> 서버가 이 기기 키(`~/.config/slidekit/comments.key`, 0600)의 HMAC 서명을 달아 저장 -> 채널(SSE `?client=channel`)이 서명 검증된 코멘트만 Claude 세션에 전달(연결 때 못 받은 것은 오래된 순 10개 + "더 있다" 알림, `get_pending`) -> Claude가 `ack`, 수정, `reply` -> 패널 상태(Waiting, Sent to Claude, Claude is working, Replied, Resolved, Unverified), 번호 핀, 답 토스트. 해결(E), 삭제(Delete, Undo 토스트), 우클릭 메뉴, J/K 이동.
+  - 흐름: 편집기에서 C 키(또는 우클릭, 툴바)로 요소나 슬라이드 전체(path가 빈 값)에 코멘트, 빠른 문구 칩 3개, Enter 등록(Held)과 Cmd+Enter 즉시 전송 -> 서버가 이 기기 키(`~/.config/slidekit/comments.key`, 0600)의 HMAC 서명을 달아 저장 -> 채널(SSE `?client=channel`)이 서명 검증된 코멘트만 Claude 세션에 전달(연결 때 못 받은 것은 오래된 순 10개 + "더 있다" 알림, `get_pending`) -> Claude가 `ack`, 수정, `reply` -> 패널 상태(Waiting, Sent to Claude, Claude is working, Replied, Resolved, Unverified), 번호 핀, 답 토스트. 해결(E), 삭제(Delete, Undo 토스트), 우클릭 메뉴, J/K 이동.
   - 서명 없는(또는 본문이 바뀐) 코멘트는 Unverified로 보이고 전달되지 않는다. 사용자가 Trust 하면 이 기기 키로 다시 서명한다. 키 파일을 지우면 기존 코멘트는 모두 Unverified가 된다.
   - Revert Claude's edit: 답이 달릴 때 서버가 그 사이의 편집기 밖 수정(`.versions`의 external 스냅샷)을 코멘트에 연결한다. 덱이 그 수정 뒤로 더 바뀌지 않았을 때만(해시 비교) 한 번에 되돌리고, 바뀌었으면 거절하고 Version history를 안내한다. 수정 연결은 ack부터 reply 사이의 시간 창 기준이라 그 사이 사용자가 직접 고친 것도 같은 수정으로 묶일 수 있다(해시 검사가 막아 준다).
   - Version history(Export 메뉴): 위 기능 절 참조. `decks/<덱>/.versions/`는 .gitignore이고 복제에서 제외된다. HTML만 기록하고 이미지 변경은 기록하지 않는다. 복원 뒤 발췌문이 그 슬라이드에 없는 열린 코멘트는 확인 필요로 표시된다.
@@ -122,3 +122,5 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 ## 환경 메모
 
 - 경로 `~/Developer/slidekit`(mac-local과 mac-cloud 동일). 기계 지침은 `~/.claude/CLAUDE.md`. 점검은 `bun app/server.ts doctor`.
+
+- 코멘트 모드(spec/COMMENT-MODE.md): 모드 층 `CommentModeLayer.tsx`, 순수 계산 `lib/comment-mode.ts`, 캡처 `app/capture.ts`(Chrome CLI와 sips, 이미지 `.comments/<id>.png`, gitignore). 테스트 `comment-mode` 단계와 단위 `comment-mode.test.ts`, `capture.test.ts`. 미검증: 시스템 Chrome(`--headless=new`) 캡처는 mac-local에서 확인 필요.

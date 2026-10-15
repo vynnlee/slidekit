@@ -88,6 +88,8 @@ const steps: Step[] = [
   // 큰 덱(80장, Layers 1000행)에서 편집기 응답 시간. 수치를 찍는다. --slow 또는 --only로만 돈다.
   { ...browser("editor-save-shots", "scripts/ux-shots-save-failure.cjs", "app", APP, { OUT: "/tmp/slidekit-ux-shots/save-failure" }), slow: true }, // 저장 실패 화면 캡처(1440, 390)
   // 편집기 조작 퍼즈(시드 1~3, 조작 40개씩, 끝에서 Undo로 원본과 바이트 동일). --slow 또는 --only로만 돈다.
+  // 도그푸딩: 빈 덱에서 편집기만으로 발표를 만들며 마찰을 기록한다(FRICTION 줄). --slow 또는 --only로만 돈다.
+  { ...browser("editor-dogfood", "scripts/ux-dogfood.cjs", "app", APP, { OUT: "/tmp/slidekit-dogfood" }), slow: true },
   { ...browser("editor-fuzz", "app/test/editor-fuzz.cjs", "app", APP), slow: true },
   { ...browser("editor-perf", "app/test/editor-perf.cjs", "app", APP), slow: true },
   { ...browser("ux-shots-1440", "scripts/ux-shots-comments2.cjs", "app", APP, { VIEWPORT: "1440x900", OUT: "/tmp/slidekit-ux-shots/1440" }), slow: true },

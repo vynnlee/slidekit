@@ -527,6 +527,24 @@ export function Editor({ id }: { id: string }) {
     try { for (const [k, v] of Object.entries(th.tokens)) next = setToken(next, k, v); } catch { return; }
     changePrefix(next);
   };
+  // 슬라이드에 글 상자나 목록을 넣고 바로 편집을 시작한다(노트 앞에 둔다). 목록 항목은 Cmd+D로 늘린다.
+  const insertEl = (html: string) => {
+    const s = canvas.current?.slide(indexRef.current);
+    if (!s) return;
+    const t = s.ownerDocument.createElement("template");
+    t.innerHTML = html;
+    const el = t.content.firstElementChild as HTMLElement | null;
+    if (!el) return;
+    const notes = s.querySelector(":scope > aside[data-notes]");
+    if (notes) s.insertBefore(el, notes); else s.appendChild(el);
+    commit();
+    const target = (el.querySelector("li") ?? el) as HTMLElement;
+    pickSel(target);
+    // 편집을 시작하고 자리표시 글자를 모두 선택해 두어 바로 쓰면 바뀌게 한다
+    requestAnimationFrame(() => { canvas.current?.edit(target); requestAnimationFrame(() => target.ownerDocument.getSelection()?.selectAllChildren(target)); });
+  };
+  const insertText = () => insertEl("<p>Text</p>");
+  const insertList = (tag: "ul" | "ol" = "ul") => insertEl(`<${tag} style="margin:0;padding-left:1.2em;font-size:var(--sk-fs-body);line-height:1.65;color:var(--sk-muted)"><li>First point</li><li>Second point</li><li>Third point</li></${tag}>`);
   const imageInput = useRef<HTMLInputElement>(null);
   const alignGroup = (axis: "h" | "v", where: "start" | "center" | "end") => {
     const s = canvas.current?.slide(indexRef.current);
@@ -650,12 +668,12 @@ export function Editor({ id }: { id: string }) {
     up: upSel, child: enterSel, next: () => cycle(1), prev: () => cycle(-1),
     forward: () => reorder(1), backward: () => reorder(-1), rename: () => setRenameTick((n) => n + 1),
     copyStyle, pasteStyle, group: groupSel, ungroup: ungroupSel, lock: () => toggleAll("lock"), hide: () => toggleAll("hide"), reset: resetChanges, dup: dupSelected, del: delSelected, align: alignGroup,
-    insertImage: () => imageInput.current?.click(), zoomFit: () => canvas.current?.zoom(0), zoom100: () => canvas.current?.zoom100(),
+    insertImage: () => imageInput.current?.click(), insertText: () => insertText(), insertList: () => insertList(), zoomFit: () => canvas.current?.zoom(0), zoom100: () => canvas.current?.zoom100(),
     addAfter: () => addSlide(indexRef.current), dupSlide: () => dupSlide(indexRef.current), delSlide: () => delSlide(indexRef.current),
   };
   const call = (k: string, ...a: any[]) => () => act.current[k]?.(...a);
   const slideActions = (canvasOnly: boolean): SlideMenuActions => ({
-    ...(canvasOnly ? { insertImage: call("insertImage"), addComment: call("comment"), zoomFit: call("zoomFit"), zoom100: call("zoom100") } : {}),
+    ...(canvasOnly ? { insertImage: call("insertImage"), insertText: call("insertText"), insertList: call("insertList"), addComment: call("comment"), zoomFit: call("zoomFit"), zoom100: call("zoom100") } : {}),
     addAfter: call("addAfter"), duplicate: call("dupSlide"), remove: call("delSlide"), canDelete: unitsRef.current.length > 1,
   });
   // 대상(요소 묶음, 없으면 빈 곳)에 맞는 항목. 호출 전에 선택은 이미 바뀐 상태여야 한다.
@@ -775,6 +793,9 @@ export function Editor({ id }: { id: string }) {
     { value: "act-group", label: "Group selection", group: "Selection", shortcut: "mod+g", disabled: !sel, onSelect: () => groupSel() },
     { value: "act-ungroup", label: "Ungroup", group: "Selection", shortcut: "mod+shift+g", disabled: !sel, onSelect: () => ungroupSel() },
     ...LAYOUTS.map((l, i) => ({ value: `act-layout-${l.id}`, label: `Add slide: ${l.label}`, group: "Slides", keywords: ["layout", "new"], onSelect: () => addSlide(indexRef.current, l.id) })),
+    { value: "act-text", label: "Insert text", group: "Slides", keywords: ["text box", "paragraph", "add"], onSelect: () => insertText() },
+    { value: "act-list", label: "Insert bulleted list", group: "Slides", keywords: ["bullets", "list", "add"], onSelect: () => insertList("ul") },
+    { value: "act-olist", label: "Insert numbered list", group: "Slides", keywords: ["numbers", "list", "add"], onSelect: () => insertList("ol") },
     { value: "act-image", label: "Insert image...", group: "Slides", keywords: ["picture", "photo"], onSelect: () => imageInput.current?.click() },
     ...THEMES.map((t) => ({ value: `act-theme-${t.id}`, label: `Theme: ${t.label}`, group: "Theme", keywords: ["colors", "tokens"], onSelect: () => applyTheme(t.id) })),
     ...TEXT_STYLES.map((t) => ({ value: `act-textstyle-${t.id}`, label: `Text style: ${t.label}`, group: "Selection", disabled: !sel, keywords: ["typography", "font"], onSelect: () => applyStyles(t.props) })),

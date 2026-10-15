@@ -141,5 +141,20 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   check('필름스트립 타일 메뉴', /Present from here/.test(tileL) && /Add slide before/.test(tileL) && /Move to start/.test(tileL) && /Move to end/.test(tileL) && /Delete/.test(tileL), tileL);
   await page.keyboard.press('Escape'); await settle();
 
+  // 글 상자와 목록 넣기: 팔레트에서 넣으면 바로 편집이 시작되고, 항목은 Cmd+D로 늘린다
+  const palRun = async (q) => { await focusBody(); await page.keyboard.press('Meta+k'); await settle(); await page.keyboard.type(q); await settle(); await page.keyboard.press('Enter'); await settle(); };
+  const liBefore = await inDoc((s) => s.querySelectorAll('ul li').length);
+  await palRun('Insert bulleted list');
+  check('Insert bulleted list는 항목 3개짜리 목록을 넣음', (await inDoc((s) => s.querySelectorAll('ul li').length)) === liBefore + 3);
+  check('넣자마자 첫 항목이 편집 중', await cond(() => { const e = document.querySelector('iframe[title="Canvas"]').contentDocument.querySelector('[contenteditable]'); return !!e && e.tagName === 'LI'; }, null, 3000).then(() => inDoc((s) => !!s.querySelector('li[contenteditable]'))));
+  await page.keyboard.type('Alpha'); await page.keyboard.press('Escape'); await settle();
+  check('넣은 항목에 바로 쓰면 자리표시 글자가 바뀜(덧붙지 않음)', await inDoc((s) => [...s.querySelectorAll('ul li')].some((l) => l.textContent === 'Alpha')) && !(await inDoc((s) => /AlphaFirst point|First pointAlpha/.test(s.textContent))));
+  await page.keyboard.press('Meta+d'); await settle();
+  check('Cmd+D로 항목을 늘림', (await inDoc((s) => s.querySelectorAll('ul li').length)) === liBefore + 4);
+  const pBefore = await inDoc((s) => s.querySelectorAll(':scope > p').length);
+  await page.keyboard.press('Escape'); await palRun('Insert text');
+  check('Insert text는 문단을 넣고 편집을 시작함', (await inDoc((s) => s.querySelectorAll(':scope > p').length)) === pBefore + 1 && (await inDoc((s) => !!s.querySelector('p[contenteditable]'))));
+  await page.keyboard.press('Escape'); await settle();
+
   await H.finish();
 })();

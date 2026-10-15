@@ -350,7 +350,8 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.getByRole('button', { name: 'New deck' }).click();
   await page.getByRole('dialog').getByLabel('Title').click({ button: 'right' });
   check('입력 칸 우클릭은 네이티브 메뉴(우리 메뉴 없음)', (await page.getByRole('menu').count()) === 0);
-  await page.keyboard.press('Escape'); await sleep(300);
+  // 부하 때 대화상자가 열리는 도중의 Esc는 무시될 수 있어, 닫힐 때까지 다시 누른다(덜 닫힌 대화상자의 오버레이가 아래 카드의 우클릭을 가로챈다)
+  check('Esc로 새 덱 대화상자가 닫힌다', await until(async () => { if ((await page.getByRole('dialog').count()) === 0) return true; await page.keyboard.press('Escape'); return false; }, 15000));
   // 가장자리: 카드가 화면 오른쪽 아래에 있어도 메뉴가 화면 안에서 뒤집힌다
   await page.setViewportSize({ width: 420, height: 380 });
   await sleep(500);

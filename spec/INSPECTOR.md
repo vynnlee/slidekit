@@ -425,15 +425,22 @@ UI는 Fluid Functionalism 컴포넌트와 `app/src/components/ui/field.tsx` 입�
 | 탭 | "Design", "Comments" |
 | 빈 코멘트 | "Select an element and leave a comment" |
 | 섹션 | Align, Layout, Position, Appearance, Typography, Fill, Stroke, Effects |
-| 크기 모드 | "Fixed", "Hug", "Fill" |
-| display | "Block", "Flex", "Grid", "Inline", "Inline block", "Inline flex", "None" |
-| 방향 툴팁 | "Row", "Column", "Wrap" |
-| 정렬 툴팁 | "Align left", "Align horizontal center", "Align right", "Align top", "Align vertical center", "Align bottom" |
-| padding | "Padding", "Horizontal padding", "Vertical padding", "Top", "Right", "Bottom", "Left" |
-| radius | "Corner radius", "Top left", "Top right", "Bottom right", "Bottom left" |
-| 텍스트 | "Font", "Weight", "Size", "Line height", "Letter spacing", "Underline", "Strikethrough", "Uppercase", "Lowercase", "Capitalize" |
-| Fill, Stroke | "Add fill", "Remove fill", "Add stroke", "Hide", "Show", "Width", "Style" |
-| Effects | "Add effect", "Drop shadow", "Inner shadow", "Layer blur", "Background blur" |
+| 크기 모드 | aria-label "Width mode", "Height mode", 항목 "Fixed width", "Fixed height", "Hug contents", "Fill container" |
+| display | aria-label "Display", 항목 "Block", "Flex", "Grid", "Inline", "Inline block", "Inline flex", "None" |
+| 방향, 줄바꿈 | "Direction", 항목 "Row", "Column", 토글 "Wrap" |
+| 간격 | "Gap" |
+| 정렬 | "Align left", "Align horizontal center", "Align right", "Align top", "Align vertical center", "Align bottom" (Align 섹션) |
+| padding, margin | 그룹 "Padding", "Margin". 칸은 "Padding horizontal", "Padding vertical", 펼치면 "Padding top", "Padding right", "Padding bottom", "Padding left", 토글 "Padding show each side" 또는 "Padding combine sides" (Margin도 같은 형식) |
+| radius | "Corner radius", 토글 "Individual corners", 모서리는 "Top left radius", "Top right radius", "Bottom right radius", "Bottom left radius" |
+| 위치 | "Position", "Offset X", "Offset Y", "Rotation", "Z-index", 종류 "Static", "Relative", "Absolute" |
+| 외형 | "Opacity", "Blend mode", "Clip content" |
+| 텍스트 | "Font", "Weight", "Font size", "Line height", "Letter spacing", "Text align"(항목 "Text align left", "Text align center", "Text align right", "Justify text"), "Text case"(항목 "No case change", "Uppercase", "Lowercase", "Capitalize"), "Underline", "Strikethrough", "Text color", "Text style" |
+| Fill | "Fill", "Fill type"(항목 "Solid", "Linear gradient", "Image"), "Fill gradient", "Add fill", "Remove fill" |
+| Stroke | "Stroke color", "Stroke width", "Stroke style"(항목 "Solid", "Dashed", "Dotted"), "Add stroke", "Remove stroke" |
+| Effects | "Add effect", 항목 "Drop shadow", "Inner shadow", "Layer blur", "Background blur". 그림자 칸은 "Shadow 1 X", "Shadow 1 Y", "Shadow 1 blur", "Shadow 1 spread", "Shadow 1 color", "Remove shadow 1", 블러는 "Remove layer blur", "Remove background blur" |
+| 이미지 | "Image fit"(항목 "Cover", "Contain" 등), "Image position", "Choose image file", "Replace image..." |
+| 슬라이드 | "Type", "Chapter title", "Background", "Background type", "Background gradient", "Steps", "Appears at step", "Step effect", "Preview step effect" |
+| 레이어 | "Show in layers" |
 | 값 | "Mixed", "Auto" |
 | 슬라이드 | "Type", "Chapter title", "Background", "Steps" |
 

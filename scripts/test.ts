@@ -60,6 +60,7 @@ const steps: Step[] = [
   { ...browser("engine-moved", "engine/test/moved.cjs", "static", STATIC), server: undefined }, // file:// 로 연다
   { ...browser("engine-gradient", "engine/test/gradient.cjs", "static", STATIC), server: undefined }, // file:// 로 연다, PDF 바이트의 셰이딩까지 본다
   { ...browser("engine-offline", "engine/test/offline.cjs", "static", STATIC), server: undefined }, // 번들과 PDF가 네트워크 없이 같은지(외부 호출 없음)
+  { ...browser("engine-anim", "engine/test/anim-stress.cjs", "static", STATIC), server: undefined, slow: true }, // 단계 애니메이션 퍼즈(CPU 1/4/8배, 연타, 청중 동기화), 누수, 긴 작업, 사용자 덱 호환 비교. 시드와 이동 열을 출력. --slow 또는 --only engine-anim
   browser("routes", "app/test/routes.cjs", "app", APP),
   browser("offline-app", "app/test/offline-app.cjs", "app", APP), // 앱 화면이 외부 호스트로 요청하지 않는지
   browser("list", "app/test/list.cjs", "app", APP),
@@ -125,7 +126,7 @@ const EDITOR_ALL = ["editor", "editor-assets", "editor-multi", "editor-menus", "
 const BROWSER_APP = ["routes", "responsive", "list"]; // 앱 공통 화면 변경 때의 연기 검사
 const MAP: [RegExp, string[]][] = [
   [/\.(ts|tsx)$/, ["typecheck"]],
-  [/^engine\/(slidekit\.(js|css)|test\/(verify|moved|gradient|offline)\.cjs)/, ["engine-verify", "engine-moved", "engine-gradient", "engine-offline", "bundler-bundle"]],
+  [/^engine\/(slidekit\.(js|css)|test\/(verify|moved|gradient|offline|anim-stress)\.cjs)/, ["engine-verify", "engine-moved", "engine-gradient", "engine-offline", "engine-anim", "bundler-bundle"]],
   [/^engine\/(lint\.ts|test\/lint\.test\.ts|doctor\.ts|new\.ts|template\/)/, ["lint", "tokens"]],
   [/^bundler\//, ["bundler-bundle", "bundler-fonts"]],
   [/^deploy\//, ["deploy-worker", "export-api"]],

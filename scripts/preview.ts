@@ -3,6 +3,7 @@
 //   Live   작업트리를 그대로 읽는 개발 서버(HMR). 팀원이 저장하는 중간 상태가 보이고 가끔 깨진다. 3220 -> 프록시 3221
 //   Stable main 최신 커밋의 스냅샷으로 띄운 서버(HMR 없음). 새 커밋이 생기면 옆에 새로 띄워 건강할 때만 바꾸고, 실패하면 이전 것을 유지한다.
 //          앱 코드는 스냅샷이고 decks/는 실제 저장소 폴더를 가리키는 심볼릭 링크라 편집 내용은 실제 덱에 저장된다. 3250/3251 -> 프록시 3230
+// 안정판은 푸시된 커밋(origin/main)만 따른다: 로컬에만 있는 미완성·미검증 커밋은 보이지 않는다.
 // 사용: nohup bun scripts/preview.ts > /tmp/sk-preview.log 2>&1 &   (종료는 이 프로세스의 pid에만 SIGTERM)
 // tailnet에는 프록시 포트(3221, 3230)를 homelab-preview 도구로 연다. 프록시는 Host와 Origin을 검사하고 Host를 로컬로 다시 쓴다.
 import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -10,6 +11,7 @@ import { join } from "node:path";
 
 const repo = join(import.meta.dir, "..");
 const LIVE = { app: 3220, proxy: 3221 };
+const LIVE_ON = process.env.PREVIEW_LIVE !== "0"; // PREVIEW_LIVE=0이면 라이브(작업트리) 서버와 프록시를 띄우지 않고 안정판만 띄운다(발열 부담이 작다)
 const STABLE = { proxy: 3230, apps: [3250, 3251] };
 const SNAP_ROOT = "/tmp/sk-stable";
 const PID_FILE = "/tmp/sk-preview.pid";
@@ -141,13 +143,13 @@ async function deployStable(sha: string) {
   if (old.pid) setTimeout(() => { killPid(old.pid); rmSync(old.dir, { recursive: true, force: true }); }, 30000); // 열린 SSE가 정리되도록 잠시 둔다
 }
 async function ensureStable() {
-  const sha = sh(["git", "rev-parse", "main"]);
+  const sha = sh(["git", "rev-parse", "origin/main"]);
   if (!sha) return;
   if (stable.pid && !alive(stable.pid)) { log("stable: 서버가 죽음, 같은 스냅샷으로 다시 띄움"); stable.pid = startServer(stable.dir, stable.port, true); await waitHealthy(stable.port, true, 30000); return; }
   if (sha !== stable.sha && sha !== failedSha) await deployStable(sha);
 }
 
-serveProxy(LIVE.proxy, () => (live.pid ? LIVE.app : null), () => "live");
+if (LIVE_ON) serveProxy(LIVE.proxy, () => (live.pid ? LIVE.app : null), () => "live");
 serveProxy(STABLE.proxy, () => (stable.pid ? stable.port : null), () => `stable ${stable.sha.slice(0, 7)}`, () => ({ sha: stable.sha, since: stable.since, port: stable.port, lastError, failedSha }));
 
 const stop = () => { killPid(live.pid); killPid(stable.pid); rmSync(PID_FILE, { force: true }); process.exit(0); };
@@ -155,7 +157,7 @@ process.on("SIGINT", stop); process.on("SIGTERM", stop);
 
 log(`미리보기 감독 시작 pid ${process.pid}: live ${LIVE.proxy}, stable ${STABLE.proxy}`);
 while (true) {
-  try { await ensureLive(); } catch (e) { log("live 오류", e); }
+  if (LIVE_ON) try { await ensureLive(); } catch (e) { log("live 오류", e); }
   try { await ensureStable(); } catch (e) { log("stable 오류", e); }
   await sleep(4000);
 }

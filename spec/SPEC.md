@@ -4,7 +4,7 @@
 
 ## 1. 덱 파일
 
-덱의 이미지는 덱 폴더의 `assets/`에 두고 상대 경로(`assets/foo.jpg`)로 부른다. 앱의 붙여넣기와 업로드, `slidekit image <덱> <파일>`이 같은 저장 규칙(`engine/assets.ts`)을 쓴다: 파일명은 소문자, 숫자, 하이픈이고 충돌하면 `-2`를 붙이며, 확장자는 png, jpg, webp, gif, svg만 되고(heic는 macOS `sips`가 있으면 jpg로 바꿔 저장) 20MB를 넘지 않는다. 내용(매직 바이트)이 확장자와 맞아야 하고, 스크립트나 `on*` 속성이 든 svg는 거부한다. jpg의 GPS 위치정보와 XMP, png의 텍스트 메타데이터는 저장할 때 지운다. `sips`가 있으면 긴 변이 2400px(`--max`)을 넘는 png, jpg를 줄이고, 없으면 원본을 저장하고 경고한다. `<img>`에는 `alt`를 적는다(장식이면 `alt=""`, 없으면 lint가 경고한다). 400KB를 넘는 이미지는 lint와 번들이 경고한다.
+덱의 이미지는 덱 폴더의 `assets/`에 두고 상대 경로(`assets/foo.jpg`)로 부른다. 앱의 붙여넣기와 업로드, `slidekit image <덱> <파일>`이 같은 저장 규칙(`engine/assets.ts`)을 쓴다: 파일명은 소문자, 숫자, 하이픈이고 충돌하면 `-2`를 붙이며, 확장자는 png, jpg, webp, gif, svg만 되고(heic는 macOS `sips`가 있으면 jpg로 바꿔 저장) 20MB를 넘지 않는다. 내용(매직 바이트)이 확장자와 맞아야 하고, 스크립트나 `on*` 속성이 든 svg는 거부한다. jpg의 GPS 위치정보와 XMP, png의 텍스트 메타데이터, webp의 EXIF와 XMP, gif의 주석과 XMP 확장은 저장할 때 지우고, 가로 x 세로가 1억 픽셀을 넘는 이미지는 거부한다. `sips`가 있으면 긴 변이 2400px(`--max`)을 넘는 png, jpg를 줄이고, 없으면 원본을 저장하고 경고한다. `<img>`에는 `alt`를 적는다(장식이면 `alt=""`, 없으면 lint가 경고한다). 400KB를 넘는 이미지는 lint와 번들이 경고한다.
 
 ```html
 <!doctype html>
@@ -36,7 +36,7 @@
 - 슬라이드는 `<body>`의 직계 자식 `<section data-slide>`이다. 문서 순서가 슬라이드 순서다. 엔진이 `#sk-stage`를 만들어 슬라이드를 옮겨 담으므로 덱은 `viewport`나 `stage` 래퍼를 쓰지 않는다.
 - 엔진 스크립트는 덱 스크립트보다 앞에 둔다. 엔진은 `DOMContentLoaded`에서 시작한다.
 - 글꼴은 `<head>`의 `<link>`로 불러도 된다(`slidekit bundle`이 덱이 쓰는 글자만 남긴 woff2로 내장한다).
-- 명령: `slidekit new <이름> [--template <id>]`는 `engine/templates.ts`의 템플릿(`talk` 기본, `blank`, `workshop`, 목록은 `slidekit templates`)으로 새 덱을 만들고, `slidekit lint <덱>`은 이 문서의 형식 위반을 규칙별로 출력하며(오류가 있으면 종료 코드 1), `slidekit bundle <덱>`은 단독 파일 하나로 묶고, `slidekit pdf <덱>`은 슬라이드당 한 페이지의 PDF로 내보내고(`--notes`는 A4 세로 쪽마다 슬라이드 한 장과 마크다운으로 렌더한 노트, `--handout [2|3|4|6]`은 쪽마다 그 수만큼의 슬라이드 격자, 파일은 `dist/<덱>.notes.pdf`와 `dist/<덱>.handout.pdf`), `slidekit deploy <덱>`은 배포하고, `slidekit doctor`는 환경을 점검한다.
+- 명령: `slidekit new <이름> [--template <id>]`는 `engine/templates.ts`의 템플릿(`talk` 기본, `blank`, `workshop`, 목록은 `slidekit templates`)으로 새 덱을 만들고, `slidekit lint <덱>`은 이 문서의 형식 위반을 규칙별로 출력하며(오류가 있으면 종료 코드 1), `slidekit bundle <덱>`은 단독 파일 하나로 묶고, `slidekit pdf <덱>`은 슬라이드당 한 페이지의 PDF로 내보내고(`--notes`는 A4 세로 쪽마다 슬라이드 한 장과 마크다운으로 렌더한 노트, `--handout [2|3|4|6]`은 쪽마다 그 수만큼의 슬라이드 격자, 파일은 `dist/<덱>.notes.pdf`와 `dist/<덱>.handout.pdf`), `slidekit deploy <덱>`은 배포하고, `slidekit doctor`는 환경을 점검하고(`doctor <덱>`은 그 덱의 lint, 크기, 이미지, 노트, 대비, 외부 글꼴, `--layout`은 넘침까지), `slidekit unpublish <덱>`은 배포한 덱을 지우되 `--yes`가 있어야 실제로 지우고 없으면 지울 목록만 보인다. `slidekit image`, `slidekit outline`, `slidekit layouts`, `slidekit templates`는 이 문서의 해당 절에 있다.
 
 ## 2. 슬라이드
 
@@ -81,7 +81,7 @@
 - 무대는 1920x1080 고정이다. 덱 내용은 px로 설계하고 `vw`, `vh`, `100vh`를 쓰지 않는다.
 - 엔진은 `scale = min(창폭/1920, 창높이/1080)`로 무대를 줄이고 늘려 창 가운데에 둔다(`transform: translate() scale()`). 남는 영역은 `--sk-bg`로 채운다. `resize`와 `fullscreenchange`에서 다시 계산한다. 현재 배율은 `SlideKit.scale`로 읽는다.
 - 활성 슬라이드에 `data-active` 속성을 붙인다. 나머지는 `visibility:hidden`이고 `display:none`을 쓰지 않는다. `url(#id)` 참조와 크기 측정이 비활성 슬라이드에서도 동작해야 하기 때문이다.
-- 슬라이드가 켜질 때 0.34초 페이드인을 쓴다. 방향키 이동(앞뒤, 단계 끝)에서는 떠나는 슬라이드가 0.2초 동안 남아 서로 겹치며 사라지는 크로스페이드가 된다(`data-leaving`, 약 0.36초 뒤 제거). 해시, 숫자 입력, 전체 보기, 동기화로 건너뛸 때와 임베드 모드에서는 크로스페이드 없이 바로 바뀐다(새 슬라이드의 페이드인만 재생된다). `prefers-reduced-motion: reduce`이면 전부 끈다. 곡선은 토큰 `--sk-ease`다.
+- 슬라이드가 켜질 때 0.34초 페이드인을 쓴다. 방향키 이동(앞뒤, 단계 끝)에서는 떠나는 슬라이드가 0.2초 동안 남아 서로 겹치며 사라지는 크로스페이드가 된다(`data-leaving`, 약 0.36초 뒤 제거). 해시, 숫자 입력, 전체 보기, 동기화로 건너뛸 때와 임베드 모드에서는 크로스페이드 없이 바로 바뀐다(새 슬라이드의 페이드인만 재생된다). `prefers-reduced-motion: reduce`이면 전부 끈다. 페이드인 곡선은 토큰 `--sk-ease`이고 떠나는 슬라이드의 페이드아웃은 `ease-out`이다.
 - 덱 CSS는 활성 여부를 `[data-slide][data-active]`로 선택한다.
 - 슬라이드 기본 배치(엔진 CSS): 무대 전체를 덮고, `flex` 세로 배치, 세로 가운데 정렬, 안쪽 여백과 간격은 토큰을 따른다. 종류별 모양(`cover`, `chapter`)은 덱 CSS가 정한다.
 - 무대 밖으로 넘친 내용은 잘린다(`overflow:hidden`).
@@ -117,7 +117,7 @@
 
 엔진 CSS는 `body` 배경과 글자색, 글꼴, `h1`, `h2`, `p`의 크기를 위 토큰으로 정한다. 색은 `color-scheme: dark`를 전제한다. 표의 기본값은 엔진 CSS의 값이다(워크숍 덱처럼 덱 CSS가 일부를 덮어쓸 수 있다).
 
-엔진이 붙이는 요소(페이지 번호, 진행률, 전체 보기, 숫자 입력 표시)는 `--sk-fg`, `--sk-faint`, `--sk-muted`, `--sk-bg`, `--sk-line`, `--sk-font`를 쓴다. 숫자 입력 알약의 배경(`rgba(255,255,255,.14)`)과 가리기 덮개(`#000`, `#fff`)만 고정 색이다.
+엔진이 붙이는 요소(페이지 번호, 진행률, 전체 보기, 숫자 입력 표시)는 `--sk-fg`, `--sk-faint`, `--sk-muted`, `--sk-bg`, `--sk-line`, `--sk-font`를 쓴다. 숫자 입력 알약의 배경(`rgba(255,255,255,.14)`)과 가리기 덮개(`#000`, `#fff`), `?debug=1` 진단 표시, `image-full`의 어두운 그라디언트만 고정 색이다.
 
 ## 5. `#deck-meta`
 
@@ -204,7 +204,7 @@ JS 없이 슬라이드 안 요소를 단계마다 나타나게 한다(Keynote의
 </section>
 ```
 
-- `data-step="N"`: N은 2 이상 정수. 이 요소는 N단계부터 보인다. 속성이 없거나 1이면 처음부터 보인다. 정수가 아니거나 1 이하이면 엔진이 경고하고 무시한다.
+- `data-step="N"`: N은 2 이상 정수. 이 요소는 N단계부터 보인다. 속성이 없거나 1이면 처음부터 보인다. 정수가 아니거나 0 이하이면 엔진이 경고하고 무시한다. 1은 경고 없이 무시한다.
 - 슬라이드의 단계 수는 `data-steps`와 요소의 `data-step` 최댓값 중 큰 쪽이다(둘 중 하나만 있어도 된다).
 - `data-step="1"`과 정수가 아닌 값은 경고 없이(1) 또는 경고하고(그 밖의 값) 무시하며 요소는 처음부터 보인다. `slidekit lint`는 이를 오류로 막고, `data-steps`를 쓰면 section `id`와 `SlideKit.stepper` 등록이 있어야 한다(`data-step`만 쓰는 슬라이드에는 해당 없다).
 - 같은 슬라이드에 `SlideKit.stepper`로 등록한 구현이 있으면 그쪽이 우선이고 `data-step`은 동작하지 않는다(요소는 숨겨진 채로 남는다).
@@ -289,7 +289,7 @@ JS 없이 슬라이드 안 요소를 단계마다 나타나게 한다(Keynote의
 }
 ```
 
-- `slides`는 문서 순서 전체이고 `n`은 슬라이드 번호다. `steps`는 `data-steps`(없으면 1)다. `title`은 `data-title`이 없으면 `null`이다. `notes`는 2절 규칙의 마크다운 원문 문자열이다.
+- `slides`는 문서 순서 전체이고 `n`은 슬라이드 번호다. `steps`는 `data-steps`와 요소의 `data-step` 최댓값 중 큰 쪽(둘 다 없으면 1)이다. `title`은 `data-title`이 없으면 `null`이다. `notes`는 2절 규칙의 마크다운 원문 문자열이다.
 - `chapters`는 `chapter` 슬라이드만 문서 순서로 모은 목차다.
 - 발표자 화면의 구성: 현재 슬라이드 iframe과 다음 슬라이드 iframe(`goto`로 `slide+1`, step 1)에 `?embed=1`을 쓰고, 노트와 장 위치는 `info`에서 읽는다. 위치 변화는 BroadcastChannel `state`와 iframe `state`를 함께 듣는다.
 
@@ -383,13 +383,13 @@ JS 없이 슬라이드 안 요소를 단계마다 나타나게 한다(Keynote의
   - 편집한 슬라이드만 `outerHTML`로 다시 쓴다. 이때 `data-active`, `contenteditable`, `inert`를 뺀다. 따옴표 모양과 속성 공백은 브라우저 직렬화를 따른다.
   - 순서를 바꿔도 각 슬라이드는 자기 앞 간격을 달고 이동한다. 맨 앞 슬라이드의 앞 간격은 `prefix`에 속하므로 쓰지 않고, 복제와 추가로 만든 슬라이드는 기준 슬라이드의 앞 간격을 이어받고, 간격 정보가 없으면 덱에서 처음 보이는 공백 간격을 쓴다.
 - 덱 스크립트가 런타임에 바꾼 DOM(stepper가 붙인 클래스 등)은 편집한 슬라이드를 직렬화할 때 섞일 수 있다. 도식과 인터랙션이 든 슬라이드는 텍스트만 고치고, 구조는 파일에서 고친다.
-- 저장은 `PUT /api/decks/<폴더>`(본문 `{source, base, force, slideMap}`)다. `slideMap`은 슬라이드를 옮기거나 지웠을 때 옛 번호에서 새 번호로의 대응이고 서버가 코멘트 번호를 갱신하는 데 쓴다(9.3). 본문에 `data-slidekit=`와 `<section data-slide>`가 없으면 400으로 거부하고, 읽기 전용 덱(테스트 서버의 `SLIDEKIT_READONLY_DECKS`)에는 403을 낸다. 서버는 임시 파일에 쓴 뒤 `rename`한다. `base`는 읽을 때 받은 파일 수정 시각이고, 그 뒤 파일이 바뀌었으면 `409`를 돌려준다. `force`가 참이면 덮어쓴다. 이력은 git이 맡으므로 백업 파일을 만들지 않는다. `GET /api/decks/<폴더>/source`는 `{source, mtime}`을 준다.
+- 저장은 `PUT /api/decks/<폴더>`(본문 `{source, base, force, slideMap}`)다. `slideMap`은 슬라이드를 옮기거나 지웠을 때 옛 번호에서 새 번호로의 대응이고 서버가 코멘트 번호를 갱신하는 데 쓴다(9.3). 본문에 `data-slidekit=`와 `<section data-slide>`가 없으면 400으로 거부하고, 읽기 전용 덱(테스트 서버의 `SLIDEKIT_READONLY_DECKS`)에는 403을 낸다. 서버는 임시 파일에 쓴 뒤 `rename`한다. `base`는 읽을 때 받은 파일 수정 시각이고, 그 뒤 파일이 바뀌었으면 `409`를 돌려준다. `force`가 참이면 덮어쓴다. 저장할 때마다 덮어쓰기 전 내용을 덱 폴더의 `.versions/`에 스냅샷으로 남긴다(덱마다 최근 50개와 30MB, 60초 안의 연속 저장은 처음 것 하나, 복원 직전 스냅샷은 별도로 10개까지). 앱의 Version history가 `GET /api/decks/<폴더>/versions`와 `versions/<id>`, `versions/<id>/preview`, `POST versions/<id>/restore`로 비교, 미리보기, 복원을 한다. `.versions/`는 점 폴더라 서빙, 검색, 복제, 번들에서 빠진다. `GET /api/decks/<폴더>/source`는 `{source, mtime}`을 준다.
 
 ### 9.2 편집 범위
 
 - 텍스트: 글자만 담은 요소(자식이 `b`, `i`, `span`, `code`, `br` 같은 인라인뿐)를 `contenteditable="plaintext-only"`로 고친다. `Enter`나 포커스 이동으로 끝낸다. `chapter` 슬라이드의 `h1`을 고치면 `data-title`도 같은 글자로 맞춘다(2절).
 - 스타일: 선택한 요소의 인라인 `style`만 바꾼다. Inspector가 다루는 속성은 글자(`font-size`, `font-weight`, `font-family`, `line-height`, `letter-spacing`, `text-align`, `color`), 배경(`background-color`, `background-image` 그라디언트), 테두리(`border*`, `border-radius`), `opacity`, `rotate`, `position`, `z-index`, `display`와 flex, gap, 정렬(margin), `object-fit`, `filter`, `box-shadow`, `mix-blend-mode`, `overflow`다. 슬라이드의 배경색(인라인 `style`)과 `data-steps`, 요소의 `data-step`(2 이상)과 `data-step-effect`도 편집한다. 클래스와 덱 CSS는 건드리지 않는다.
-- 슬라이드: 순서 변경, 복제, 삭제, 추가(본문 슬라이드), 종류(`data-slide`), 장 제목(`data-title`), 노트(`<aside data-notes>`)를 바꾼다. 노트는 캔버스 아래 pane에서 마크다운 원문으로 고치고 `textContent`로 써서 `<`, `&`가 이스케이프된다. 노트가 없던 슬라이드는 입력할 때 `aside`를 만들고, 비우면 `aside`를 지운다. 복제본은 루트 `id`와 `data-steps`를 잃는다(`id`가 겹치지 않게, stepper는 `id`로 붙으므로 복제본은 일반 슬라이드가 된다).
+- 슬라이드: 순서 변경, 복제, 삭제, 추가(본문 슬라이드), 종류(`data-slide`), 장 제목(`data-title`), 노트(`<aside data-notes>`)를 바꾼다. 노트는 캔버스 아래 pane에서 마크다운 원문으로 고치고 `textContent`로 써서 `<`, `&`가 이스케이프된다. 노트가 없던 슬라이드는 입력할 때 `aside`를 만들고, 비우면 `aside`를 지운다. 복제본은 루트 `id`와 `data-steps`를 잃는다(`id`가 겹치지 않게, stepper는 `id`로 붙으므로 복제본은 일반 슬라이드가 된다). `cover`를 복제하면 복제본은 `content`가 되고(cover는 덱에 하나), 복제한 조각 안의 모든 `id`와 `url(#id)`, `href="#id"` 참조는 새 값으로 바뀐다.
 - 레이어: 편집기 좌측 Layers 탭에서 요소 이름을 바꾸면 `data-name` 속성에 저장한다(없으면 태그나 첫 줄 글자로 보인다). 엔진은 이 속성을 쓰지 않는다. 눈 아이콘은 `style="display: none"`을 넣고 빼므로 저장하면 발표에서도 숨겨진다.
 - 위치와 크기: 캔버스에서 요소를 끌어 옮기면 인라인 `translate: Xpx Ypx`(CSS 개별 속성, 0이면 속성 삭제)가 바뀌고, 8방향 핸들로 크기를 바꾸면 인라인 `width`와 `height`(px)가 바뀐다. 흐름 레이아웃과 클래스는 건드리지 않으며, `translate`는 표준 속성이라 엔진 렌더, PDF, 번들 모두에서 같게 보인다(`data-step`의 `transform` 등장 효과와도 합쳐진다). 한 번 끌기는 실행 취소 한 건이다. Shift는 축 고정(이동)이나 비율 유지(모서리 핸들), Alt는 중심 기준(리사이즈), `Esc`는 취소이고, 다른 요소와 슬라이드 가장자리에 스냅 가이드가 나온다. 리사이즈는 고정할 변이 움직이지 않도록 `translate`도 함께 보정하고, `flex: 1 1`을 지우며 flex 부모 안에서는 `flex-shrink: 0`을 넣는다. 글자 블록은 높이를 바꾸지 않아 가로 변과 모서리 핸들만 나온다. 이동 수치가 `%`나 `calc`인 요소, 크기 0, `display: none` 요소는 끌지 않는다. 회전한 조상 아래에서는 화면 방향대로 움직이도록 조상 변환의 역행렬로 `translate`를 계산한다. 자신이나 조상이 회전, 기울임이면 크기 핸들은 나오지 않고, `viewBox`가 없는 `svg`는 크기를 바꾸지 않는다. 방향키는 1px, Shift+방향키는 10px씩 옮긴다(Inspector의 Offset X, Y도 같은 `translate`다). 잠긴 요소(`data-locked`, Layers의 잠금 토글)는 끌지 않고 캔버스에서 고르지도 않는다(9.5).
 - 도식(`svg`)과 인터랙션 내부는 편집하지 않는다. 선택과 코멘트, 삭제와 복제는 된다.

@@ -4,7 +4,7 @@ import {
   ArrowDown, ArrowRight, Blend, CaseLower, CaseSensitive, CaseUpper, ALargeSmall, Droplets, Expand, EyeOff, Frame, Layers as LayersIcon,
   Minus, Plus, RotateCw, Shrink, Square, SquareRoundCorner, Strikethrough, TextAlignCenter, TextAlignEnd, TextAlignJustify, TextAlignStart,
   Underline, WrapText, Scan, Spline, Footprints, Ban, MousePointer2, MoveHorizontal, ListCollapse, Space, BetweenHorizontalStart, BetweenVerticalStart, Type,
-  Play,
+  Play, Link2, Unlink2, Columns3,
 } from "lucide-react";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
@@ -144,6 +144,9 @@ export function Inspector(p: Props) {
   const el = p.sel as HTMLElement | null;
   const [, bump] = useState(0);
   useEffect(() => bump((n) => n + 1), [el, p.selId]);
+  // 비율 잠금(편집기 세션 상태, 문서에 저장하지 않는다): 잠글 때의 가로세로 비율을 기억하고 선택이 바뀌면 풀린다.
+  const [lock, setLock] = useState<number | null>(null);
+  useEffect(() => setLock(null), [el, p.selId]);
   const [fxMenu, setFxMenu] = useState(false);
   const [radiusOpen, setRadiusOpen] = useState(false);
   const [sidesOpen, setSidesOpen] = useState(false);
@@ -162,8 +165,8 @@ export function Inspector(p: Props) {
   const scrub = { onScrubStart: () => p.onScrub(true), onScrubEnd: () => p.onScrub(false) };
 
   // 계산값 그대로 쓰는 일반 숫자 필드
-  const n = (prop: string, label: ReactNode, aria: string, o: { unit?: string; step?: number; min?: number; max?: number } = {}) => (
-    <NumberField label={label} aria-label={aria} value={val(prop)} mixed={mixedOf(prop)} muted={!inl(prop)} dirty={!!inl(prop)} onReset={() => set(prop, "")} onChange={(v) => set(prop, v)} {...scrub} {...o} />
+  const n = (prop: string, label: ReactNode, aria: string, { on, show, ...o }: { unit?: string; step?: number; min?: number; max?: number; on?: (v: string) => void; show?: string } = {}) => (
+    <NumberField label={label} aria-label={aria} value={show ?? val(prop)} mixed={mixedOf(prop)} muted={!inl(prop)} dirty={!!inl(prop)} onReset={() => set(prop, "")} onChange={(v) => (on ? on(v) : set(prop, v))} {...scrub} {...o} />
   );
 
   // 글자 색 대비를 재는 배경: 슬라이드(없으면 문서 body)의 불투명한 배경색
@@ -212,6 +215,17 @@ export function Inspector(p: Props) {
     else if (parentFlexRow || parentGrid) set("align-self", where === "start" ? "flex-start" : where === "end" ? "flex-end" : "center");
   };
 
+  // 열 수: 직접 쓴 repeat(N, ...)는 N, 계산값(트랙 크기 목록)은 트랙 개수
+  const colCount = (v: string) => String(/^repeat\(\s*(\d+)/.exec(v)?.[1] ?? (v.split(/\s+/).filter((t) => t && t !== "none").length || 1));
+  // 한 축을 바꾸면 잠긴 비율대로 다른 축도 함께 바꾼다(실행 취소 한 건). 잠기지 않았거나 Fill인 축이 있으면 그 축만 바꾼다(Hug인 축은 고정 크기가 된다).
+  const setSize = (axis: "width" | "height", v: string) => {
+    const other = axis === "width" ? "height" : "width", num = parseFloat(v);
+    if (!lock || !Number.isFinite(num) || mode(other) === "fill" || mode(axis) === "fill") { set(axis, v); return; }
+    const unit = v.replace(/^[\d.\s-]+/, "") || "px";
+    const o = axis === "width" ? num / lock : num * lock;
+    p.onStyles({ [axis]: v, [other]: `${Math.round(o * 100) / 100}${unit}` });
+    bump((n) => n + 1);
+  };
   // 크기 모드: Fixed, Hug, Fill
   const mode = (axis: "width" | "height") => {
     const v = inl(axis);
@@ -341,9 +355,19 @@ export function Inspector(p: Props) {
 
             <InspectorSection id="layout" title="Layout">
               <Pick label="Display" value={display} items={DISPLAYS} onChange={(v) => set("display", v)} />
+              <div className="flex items-center gap-1">
+                <div className="min-w-0 flex-1"><Grid>
+                  {n("width", "W", "Width", { min: 0, on: (v) => setSize("width", v) })}
+                  {n("height", "H", "Height", { min: 0, on: (v) => setSize("height", v) })}
+                </Grid></div>
+                <Tooltip content={lock ? "Unlock aspect ratio" : "Lock aspect ratio"} side="top">
+                  <Button aria-label="Lock aspect ratio" aria-pressed={!!lock} variant={lock ? "secondary" : "ghost"} size="icon-compact" disabled={p.more.length > 0 || !el}
+                    onClick={() => setLock(lock ? null : el && el.offsetHeight ? el.offsetWidth / el.offsetHeight : null)}>
+                    {lock ? <Link2 /> : <Unlink2 />}
+                  </Button>
+                </Tooltip>
+              </div>
               <Grid>
-                {n("width", "W", "Width", { min: 0 })}
-                {n("height", "H", "Height", { min: 0 })}
                 <SegmentedControl aria-label="Width mode" value={mode("width")} onChange={(m) => setMode("width", m)} options={modes("width")} />
                 <SegmentedControl aria-label="Height mode" value={mode("height")} onChange={(m) => setMode("height", m)} options={modes("height")} />
               </Grid>
@@ -358,6 +382,7 @@ export function Inspector(p: Props) {
                   )}
                   {flex && <AlignBox direction={val("flex-direction").startsWith("column") ? "column" : "row"} justify={val("justify-content")} align={val("align-items")}
                     onChange={(j, a) => { set("justify-content", j); set("align-items", a); }} />}
+                  {grid && n("grid-template-columns", <span title="Columns" className="flex"><Columns3 /></span>, "Columns", { min: 1, max: 12, step: 1, unit: "", show: colCount(val("grid-template-columns")), on: (v) => { const c = Math.max(1, Math.min(12, Math.round(parseFloat(v)) || 1)); set("grid-template-columns", `repeat(${c}, 1fr)`); } })}
                   {n("gap", <span title="Gap" className="flex">{flex && val("flex-direction").startsWith("column") ? <BetweenVerticalStart /> : <BetweenHorizontalStart />}</span>, "Gap", { min: 0 })}
                 </Grid>
               )}

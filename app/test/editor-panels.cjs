@@ -22,11 +22,34 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   // 측정값 표시, 크기 모드, 코너별 radius, 그림자 여러 개, 그라디언트, 변별 stroke
   await page.keyboard.press('Escape'); await focusBody(); await page.keyboard.press('Tab'); await settle();
   check('W 표시는 소수 둘째 자리까지', /^\d+(\.\d{1,2})?$/.test(await page.getByLabel('Width', { exact: true }).inputValue()), await page.getByLabel('Width', { exact: true }).inputValue());
+  // 비율 잠금: 잠그고 W를 두 배로 하면 H도 같은 비율로 바뀌고 실행 취소는 한 번에 둘 다 되돌린다. 풀면 한 축만 바뀐다.
+  const wIn = page.getByLabel('Width', { exact: true }), hIn = page.getByLabel('Height', { exact: true }), lockBtn = page.getByRole('button', { name: 'Lock aspect ratio' });
+  const w0 = parseFloat(await wIn.inputValue()), h0 = parseFloat(await hIn.inputValue());
+  check('비율 잠금 토글이 있고 처음엔 꺼짐', (await lockBtn.getAttribute('aria-pressed')) === 'false');
+  await lockBtn.click();
+  await wIn.fill(String(Math.round(w0 * 2))); await wIn.press('Enter'); await settle();
+  const lw1 = parseFloat(await wIn.inputValue()), lh1 = parseFloat(await hIn.inputValue());
+  check('잠그고 W를 두 배로 하면 H도 같은 비율로 바뀜', Math.abs(lh1 / lw1 - h0 / w0) < 0.02 && lw1 > w0 * 1.9, [w0, h0, lw1, lh1]);
+  await focusBody(); await page.keyboard.press('Meta+z'); await settle();
+  check('실행 취소 한 번에 W와 H가 함께 돌아옴', Math.abs(parseFloat(await wIn.inputValue()) - w0) < 0.6 && Math.abs(parseFloat(await hIn.inputValue()) - h0) < 0.6, [await wIn.inputValue(), await hIn.inputValue()]);
+  check('실행 취소로 선택이 다시 잡히면 잠금은 풀려 있음', (await lockBtn.getAttribute('aria-pressed')) === 'false');
+  const h2 = parseFloat(await hIn.inputValue()); await wIn.fill(String(Math.round(w0 + 30))); await wIn.press('Enter'); await settle();
+  check('잠금을 풀면 W만 바뀜', Math.abs(parseFloat(await hIn.inputValue()) - h2) < 0.6 && (await lockBtn.getAttribute('aria-pressed')) === 'false', [h2, await hIn.inputValue()]);
+  await focusBody(); await page.keyboard.press('Meta+z'); await settle();
   check('크기 모드 컨트롤에 W/H 이름', (await page.getByRole('radio', { name: 'Fixed width' }).count()) === 1 && (await page.getByRole('radio', { name: 'Fill container' }).count()) === 2);
   const styleOf = () => page.evaluate(() => { const e = [...document.querySelector('iframe[title="Canvas"]').contentDocument.querySelectorAll('[style]')].find((x) => x.closest('[data-active]') && x.style.length); return e ? e.getAttribute('style') : ''; });
   await page.getByRole('button', { name: 'Individual corners' }).click();
   const tl = page.getByLabel('Top left radius'); await tl.fill('10'); await tl.press('Enter'); await settle();
   check('코너별 radius', /border-top-left-radius:\s*10px/.test(await styleOf()), await styleOf());
+  // Grid 열 수: display를 Grid로 바꾸면 Columns 칸이 나타나고 repeat(N, 1fr)로 쓴다
+  await page.getByLabel('Display', { exact: true }).click(); await page.getByRole('option', { name: 'Grid', exact: true }).click(); await settle();
+  const colIn = page.getByLabel('Columns', { exact: true });
+  check('Display를 Grid로 바꾸면 Columns 칸이 나타남', (await colIn.count()) === 1);
+  await colIn.fill('3'); await colIn.press('Enter'); await settle();
+  check('Columns 3은 repeat(3, 1fr)로 기록됨', /grid-template-columns:\s*repeat\(3,\s*1fr\)/.test(await styleOf()), await styleOf());
+  check('Columns 표시값이 3', (await colIn.inputValue()) === '3', await colIn.inputValue());
+  await focusBody(); await page.keyboard.press('Meta+z'); await page.keyboard.press('Meta+z'); await settle();
+  check('Grid 변경 실행 취소 뒤 Columns 칸이 사라짐', (await page.getByLabel('Columns', { exact: true }).count()) === 0);
   for (const name of ['Drop shadow', 'Inner shadow']) { await page.getByRole('button', { name: 'Add effect' }).click(); await page.getByRole('menuitem', { name }).click(); await settle(); }
   const b2 = page.getByLabel('Shadow 2 blur'); await b2.fill('12'); await b2.press('Enter'); await settle();
   check('그림자 2개와 inset', /box-shadow:[^;]*,[^;]*inset/.test(await styleOf()) || /box-shadow:[^;]*inset[^;]*,/.test(await styleOf()), await styleOf());

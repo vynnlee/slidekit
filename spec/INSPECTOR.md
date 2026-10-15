@@ -96,8 +96,8 @@ Figma 포럼에는 "Position, Auto layout, Appearance가 관련 없는 속성을
 | Fixed | `width: Npx` | |
 | Hug contents | `width: fit-content` (또는 `auto`와 `flex: none`) | 인라인 흐름에서는 `auto`와 동일할 수 있음 |
 | Fill container | 부모가 flex이고 주축이면 `flex: 1 1 0`, 교차축이면 `align-self: stretch`. 그 밖이면 `width: 100%` | 부모 display를 읽어 CSS를 고른다 |
-| min/max | `min-width`, `max-width`, `min-height`, `max-height` | 미구현(후속). 지금은 W/H 옆 Width mode와 Height mode 세그먼트만 있다 |
-| 비율 잠금 | `aspect-ratio: w / h` | 미구현(후속) |
+| min/max | `min-width`, `max-width`, `min-height`, `max-height` | 미구현(보류: 사용 빈도가 낮고 레이아웃 칸이 늘어남). 지금은 W/H 옆 Width mode와 Height mode 세그먼트만 있다 |
+| 비율 잠금 | 값을 쓰지 않고 입력만 묶는다(문서에 저장하지 않음) | 구현됨. W/H 옆 "Lock aspect ratio" 토글(편집기 세션 상태, 선택이 바뀌면 풀림). 잠그면 W나 H를 바꿀 때 잠글 때의 비율로 다른 축도 함께 바꾸고 실행 취소 한 건이다. 다중 선택에서는 꺼진다. 캔버스 모서리 리사이즈는 Shift로 비례 |
 | Constraints | 해당 없음 | 숨김(절대 배치 편집기가 아님) |
 | Ignore auto layout | `position: absolute` | 숨김. 필요하면 후속 |
 | z-order | `z-index` (+ `position`이 static이면 효과 없음에 주의) | Position 섹션의 "Z" 필드(구현됨) |
@@ -118,7 +118,7 @@ Figma 포럼에는 "Position, Auto layout, Appearance가 관련 없는 속성을
 | Frame / Auto layout 켜기 | `display: flex` | 섹션 이름은 "Layout". 토글 대신 display 7택(Block, Flex, Grid, Inline, Inline block, Inline flex, None)으로 노출 |
 | 방향 Horizontal / Vertical | `flex-direction: row / column` | 아이콘 2개 세그먼트 |
 | Wrap | `flex-wrap: wrap` | 아이콘 토글 |
-| Grid | `display: grid` + `grid-template-columns` | 미구현(후속) |
+| Grid | `display: grid` + `grid-template-columns` | 열 수만 구현됨: Display가 Grid일 때 "Columns" 숫자 한 칸(1~12)이 `repeat(N, 1fr)`로 쓴다. 트랙 크기와 행은 후속 |
 | Spacing(gap) | `gap`, 필요 시 `row-gap`/`column-gap` | 필드 1개. 확장하면 둘로 분리 |
 | Spacing Auto (Between/Around/Evenly) | `justify-content: space-between / space-around / space-evenly` | gap 필드 대신 "Auto" 선택 시 |
 | Alignment 3x3 박스 | `justify-content` + `align-items` | 3x3 점 격자 하나로 두 속성 동시 설정. 방향에 따라 축이 바뀐다 |

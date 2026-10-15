@@ -112,9 +112,10 @@ export function freshIds(root: Element) {
   for (const e of [root, ...root.querySelectorAll("*")]) {
     for (const a of [...e.attributes]) {
       if (/^(href|xlink:href)$/.test(a.name) && a.value.startsWith("#") && map.has(a.value.slice(1))) e.setAttribute(a.name, "#" + map.get(a.value.slice(1)));
+      else if (/^(for|aria-labelledby|aria-controls|aria-describedby|aria-owns|aria-details)$/.test(a.name)) e.setAttribute(a.name, a.value.split(/\s+/).map((t) => map.get(t) ?? t).join(" "));
       else if (a.value.includes("url(")) e.setAttribute(a.name, swap(a.value));
     }
-    if (e.tagName.toLowerCase() === "style") e.textContent = swap(e.textContent ?? "");
+    if (e.tagName.toLowerCase() === "style") e.textContent = swap(e.textContent ?? "").replace(/#([A-Za-z_][\w-]*)/g, (m, id) => (map.has(id) ? `#${map.get(id)}` : m)); // 슬라이드 안 <style>의 #id 선택자도
   }
 }
 

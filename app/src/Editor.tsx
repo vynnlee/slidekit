@@ -70,6 +70,7 @@ export function Editor({ id }: { id: string }) {
   const [units, setUnitsState] = useState<Unit[]>([]);
   const [index, setIndexState] = useState(0);
   const [sel, setSel] = useState<Element | null>(null);
+  const selNow = useRef<Element | null>(null); selNow.current = sel; // 이벤트 처리기(오래된 클로저)가 지금 선택을 읽는 용도
   const [more, setMore] = useState<Element[]>([]); // 다중 선택의 나머지(같은 부모). sel이 대표다
   const [selId, setSelId] = useState(0);
   const [tab, setTab] = useState("props");
@@ -114,6 +115,8 @@ export function Editor({ id }: { id: string }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const gearBtn = useRef<HTMLButtonElement>(null); // 설정 대화상자를 닫으면 포커스를 이 단추로 돌린다
   const [metaError, setMetaError] = useState("");
+  const [reloadAsk, setReloadAsk] = useState(false); // 저장 안 한 편집이 있을 때 Reload는 한 번 더 눌러야 한다
+  useEffect(() => { if (!changed) setReloadAsk(false); }, [changed]);
   const [updated, setUpdated] = useState<Set<number>>(new Set()); // 밖에서 바뀐 슬라이드(필름스트립에 4초 표시)
   const updatedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const comments = live.comments;
@@ -132,7 +135,7 @@ export function Editor({ id }: { id: string }) {
 
   // 저장이 실패한 동안은 10초마다, 그리고 네트워크가 돌아오는 즉시 다시 시도한다(편집 내용은 편집기에 그대로 남아 있다).
   useEffect(() => {
-    if (status !== "error" || !dirty) return;
+    if (status !== "error" || !dirty || retryOff.current) return;
     const t = setTimeout(() => { save(); }, 10000);
     const on = () => { save(); };
     window.addEventListener("online", on);
@@ -140,14 +143,18 @@ export function Editor({ id }: { id: string }) {
   }, [status, dirty]); // eslint-disable-line
 
   // 불러오기
-  const load = useCallback(async (folder: string, keepIndex = 0) => {
+  const load = useCallback(async (folder: string, keepIndex = 0, keepSel = false) => {
     const res = await fetch(`/api/decks/${folder}/source`);
     if (!res.ok) throw new Error(`Could not load the deck (${res.status})`);
     const r = await res.json();
     const d = splitDeck(r.source);
+    setErr(""); setDraft(null); setStatus("idle"); failToast.current = false; retryOff.current = false; // 새로 불러오면 이전 저장 실패 표시도 푼다(자동 저장이 막혀 있지 않게)
+    // 밖의 변경 반영에서 슬라이드 수가 같으면 슬라이드 키를 이어 받아, 캔버스가 바뀐 슬라이드만 제자리에서 갈아 끼우고 나머지(선택, 스크롤)는 그대로 둔다
+    if (keepSel && d.units.length === unitsRef.current.length) d.units = d.units.map((u, i) => ({ ...u, key: unitsRef.current[i].key }));
     past.current = []; future.current = [];
     savedRef.current = r.source; mtime.current = r.mtime;
-    setSaved(r.source); setChanged(false); setSel(null);
+    // 편집 여부의 기준은 파일 글자가 아니라 편집기가 다시 쓸 글자다: 반쯤 잘린 파일처럼 다시 쓰면 달라지는 파일을 열어도 "저장 안 한 변경"으로 오인해 자동 저장이 파일을 덮어쓰지 않게 한다
+    setSaved(compose({ prefix: d.prefix, suffix: d.suffix, units: d.units })); setChanged(false); if (!keepSel) setSel(null); // 밖의 변경 반영(keepSel)은 바뀌지 않은 슬라이드의 선택을 그대로 둔다
     const i = Math.min(keepIndex, d.units.length - 1);
     unitsRef.current = d.units;
     origin.current = new Map(d.units.map((u, i) => [u.key, i + 1]));
@@ -173,24 +180,39 @@ export function Editor({ id }: { id: string }) {
     const on = (type: string, fn: (d: any) => void) => es.addEventListener(type, (e) => {
       try { const d = JSON.parse((e as MessageEvent).data); if (d.deck === folder) fn(d); } catch {}
     });
-    on("deck-changed", async () => {
+    const check = async () => {
       try {
         const res = await fetch(`/api/decks/${folder}/source`);
         if (!res.ok) throw new Error(`Could not check the file (${res.status})`);
         const r = await res.json();
-        if (r.source === savedRef.current) return; // 우리가 쓴 저장
+        if (!shellRef.current) return; // 아직 못 불러왔다
+        if (r.source === savedRef.current) { setErr(""); return; } // 우리가 쓴 저장(오류 글자가 남아 있었으면 파일이 고쳐진 것이다)
+        if (inflight.current) return; // 저장이 진행 중이면 앞선 쓰기의 이벤트일 수 있어 비교하지 않는다(저장이 끝나면 파일은 savedRef와 같다)
         const d = diffDecks(savedRef.current, r.source);
         if (dirtyRef.current) setChanged(true);
         else {
-          await load(folder, indexRef.current);
+          const cs = canvas.current?.slide(indexRef.current);
+          const keepPath = cs && selNow.current ? pathOf(cs, selNow.current) : null; // 밖에서 바뀌어도 같은 요소를 계속 선택해 둔다
+          const hadHistory = past.current.length > 0;
+          await load(folder, indexRef.current, true);
+          setErr("");
+          if (keepPath !== null) { // 바뀐 슬라이드의 요소는 새로 만들어졌으니 같은 경로로 다시 고른다. 바뀌지 않은 슬라이드의 선택은 그대로 살아 있다.
+            const s = canvas.current?.slide(indexRef.current);
+            if (!s || !selNow.current || !s.contains(selNow.current)) {
+              const el = s && byPath(s, keepPath);
+              if (el && el !== s) pickSel(el); else pickSel(null);
+            }
+          }
           if (d.changed.length) { // 밖에서 바뀐 슬라이드를 알린다(예: Claude가 코멘트를 처리했을 때)
             setUpdated(new Set(d.changed));
             clearTimeout(updatedTimer.current); updatedTimer.current = setTimeout(() => setUpdated(new Set()), 4000);
-            toast(`${slidesLabel(d.changed)} updated`, { action: { label: "View", onClick: () => setIndex(d.changed[0]) } });
-          }
+            toast(`${slidesLabel(d.changed)} updated${hadHistory ? ". Undo history cleared." : ""}`, { action: { label: "View", onClick: () => setIndex(d.changed[0]) } });
+          } else if (hadHistory) toast("The file changed outside the editor. Undo history cleared.");
         }
       } catch (e: any) { setErr(String(e.message ?? e)); }
-    });
+    };
+    on("deck-changed", check);
+    es.addEventListener("open", () => { check(); }); // 연결이 끊겼다 돌아오거나 막 열렸을 때 놓친 변경을 한 번 확인한다
     return () => es.close();
   }, [folder, load]);
 
@@ -293,9 +315,10 @@ export function Editor({ id }: { id: string }) {
   };
   const shownPrefix = useRef<string | null>(null);
   useEffect(() => {
-    if (shownPrefix.current !== null && shell && shownPrefix.current !== shell.prefix) canvas.current?.reload();
-    shownPrefix.current = shell?.prefix ?? null;
-  }, [shell?.prefix]); // eslint-disable-line
+    const k = shell ? shell.prefix + "\u0000" + shell.suffix : null; // head(prefix)나 꼬리(suffix: 엔진 스크립트)가 바뀌면 캔버스를 다시 만든다(밖에서 파일이 잘렸다 돌아올 때 꼬리가 달라진다)
+    if (shownPrefix.current !== null && k !== null && shownPrefix.current !== k) canvas.current?.reload();
+    shownPrefix.current = k;
+  }, [shell?.prefix, shell?.suffix]); // eslint-disable-line
 
   const moveSlide = (from: number, to: number) => {
     if (from === to) return;
@@ -541,6 +564,7 @@ export function Editor({ id }: { id: string }) {
   // 저장: 임시 파일에 쓰고 rename은 서버가 한다. 읽은 뒤 파일이 바뀌었으면 409.
   // 저장 요청은 한 번에 하나만 보낸다(자동 저장과 Cmd+S가 겹치면 낡은 base로 409가 나기 때문).
   const inflight = useRef<Promise<boolean> | null>(null);
+  const retryOff = useRef(false); // 영구 오류(4xx) 뒤에는 자동 재시도를 멈춘다
   const failToast = useRef(false); // 실패 알림은 연속 실패 중 한 번만
   const save = async (force = false): Promise<boolean> => {
     while (inflight.current) await inflight.current;
@@ -552,7 +576,7 @@ export function Editor({ id }: { id: string }) {
     if (!deck || !shellRef.current) return true;
     const us = unitsRef.current;
     const body = compose({ ...shellRef.current, units: us });
-    if (!force && body === savedRef.current) return true;
+    if (!force && body === savedRef.current) { setStatus("idle"); failToast.current = false; return true; } // 되돌려서 저장본과 같아지면 실패 표시를 풀고 끝낸다
     const slideMap: Record<number, number> = {};
     us.forEach((u, i) => { const o = origin.current.get(u.key); if (o && !(o in slideMap)) slideMap[o] = i + 1; });
     setStatus("saving");
@@ -563,15 +587,23 @@ export function Editor({ id }: { id: string }) {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ source: body, base: mtime.current, force, slideMap }),
       });
-      if (r.status === 409) { savedRef.current = prev; setChanged(true); setStatus("idle"); return false; }
-      if (!r.ok) throw new Error(String(r.status));
+      if (r.status === 409) {
+        // 응답이 유실되어 서버는 이미 쓴 경우가 있다: 파일이 우리 본문과 같으면 충돌이 아니라 성공이다
+        const cur = await fetch(`/api/decks/${deck.folder}/source`).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+        if (cur && cur.source === body) { mtime.current = cur.mtime; origin.current = new Map(us.map((u, i) => [u.key, i + 1])); setSaved(body); setChanged(false); setStatus("idle"); failToast.current = false; return true; }
+        savedRef.current = prev; setChanged(true); setStatus("idle"); return false;
+      }
+      if (!r.ok) throw Object.assign(new Error(String(r.status)), { code: r.status });
       mtime.current = (await r.json()).mtime;
       origin.current = new Map(us.map((u, i) => [u.key, i + 1]));
-      setSaved(body); setChanged(false); setStatus("idle"); failToast.current = false;
+      setSaved(body); setChanged(false); setStatus("idle"); failToast.current = false; retryOff.current = false;
       return true;
-    } catch {
-      savedRef.current = prev; setStatus("error");
-      if (!failToast.current) { failToast.current = true; toast("Could not save. Your edits are kept here. Retrying automatically.", { ms: 7000 }); }
+    } catch (e: any) {
+      savedRef.current = prev;
+      const code = Number(e?.code ?? 0);
+      retryOff.current = code >= 400 && code < 500; // 권한이나 없어진 덱 같은 영구 오류는 되풀이해도 소용없다
+      setStatus("error");
+      if (!failToast.current) { failToast.current = true; toast(retryOff.current ? "Could not save. The deck may have been moved or removed. Your edits are kept here." : "Could not save. Your edits are kept here. Retrying automatically.", { ms: 7000 }); }
       return false;
     }
   };
@@ -730,7 +762,7 @@ export function Editor({ id }: { id: string }) {
     { value: "act-add", label: "Add slide after this one", group: "Actions", onSelect: () => addSlide(indexRef.current) },
     { value: "act-dup", label: "Duplicate slide", group: "Actions", onSelect: () => dupSlide(indexRef.current) },
     { value: "act-del", label: "Delete slide", group: "Actions", disabled: units.length < 2, onSelect: () => delSlide(indexRef.current) },
-    { value: "act-save", label: "Save", group: "Actions", shortcut: "mod+s", onSelect: () => { save(true); } },
+    { value: "act-save", label: "Save", group: "Actions", shortcut: "mod+s", onSelect: () => { save(); } },
     { value: "act-settings", label: "Deck settings", group: "Actions", onSelect: () => setSettingsOpen(true) },
     { value: "act-find", label: "Find and replace", group: "Actions", shortcut: "mod+f", onSelect: () => { setFind((f) => f ?? { q: "", r: "", matchCase: false, notes: false }); setFindTick((n) => n + 1); } },
     { value: "act-copy-style", label: "Copy style", group: "Selection", shortcut: "mod+alt+c", disabled: !sel, onSelect: () => copyStyle() },
@@ -775,7 +807,7 @@ export function Editor({ id }: { id: string }) {
             {changed && (
               <>
                 <span className="text-caption text-muted-foreground max-sm:hidden">File changed outside the editor</span>
-                <Button variant="ghost" size="compact" onClick={() => load(deck.folder, indexRef.current)}>Reload</Button>
+                <Button variant="ghost" size="compact" onClick={() => { if (dirty && !reloadAsk) { setReloadAsk(true); return; } setReloadAsk(false); load(deck.folder, indexRef.current).catch((e) => setErr(String(e.message ?? e))); }}>{reloadAsk ? "Discard my edits and reload" : "Reload"}</Button>
                 <Button variant="ghost" size="compact" onClick={() => save(true)}>Overwrite</Button>
               </>
             )}

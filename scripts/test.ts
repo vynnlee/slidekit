@@ -70,6 +70,8 @@ const steps: Step[] = [
   browser("editor-assets", "app/test/editor-assets.cjs", "app", APP),
   browser("comments-e2e", "app/test/comments-e2e.cjs", "app", APP),
   browser("comments-a11y", "app/test/comments-a11y.cjs", "app", APP, { AXE }),
+  browser("editor-panels", "app/test/editor-panels.cjs", "app", APP),
+  browser("editor-external", "app/test/editor-external.cjs", "app", APP), // 밖의 변경(Claude, 다른 탭): 자동 반영, 충돌 안내, 중간 상태, Undo
   { ...browser("comments-perf", "scripts/comments-perf.cjs", "app", APP), slow: true }, // 코멘트 300개 성능 측정(수치를 출력한다, --only comments-perf)
   browser("editor-multi", "app/test/editor-multi.cjs", "app", APP),
   browser("editor-menus", "app/test/editor-menus.cjs", "app", APP),
@@ -111,7 +113,7 @@ if (flag("--list")) { console.log(steps.map((s) => s.name + (s.slow ? " (slow)" 
 // 변경 파일 -> 단계 매핑표(여기 한 곳). 규칙은 모두 적용해 단계를 합친다. 문서만 바뀌면 단계가 없다.
 const NOSTEP = /^(package\.json|bun\.lock|\.gitignore|\.githooks\/|tsconfig.*\.json)$/;
 const DOCS = /(^|\/)(HANDOFF|README|PLAN|SKILL|INTERACTION|SPEC)\.md$|^(spec|docs)\/|\.md$/;
-const EDITOR_ALL = ["editor", "editor-assets", "editor-multi", "editor-menus", "editor-panels", "editor-a11y"]; // 편집기 브라우저 검증은 영역별 파일로 나뉘어 있다(app/test/editor-*.cjs, 하네스는 app/test/lib/editor-harness.cjs)
+const EDITOR_ALL = ["editor", "editor-assets", "editor-multi", "editor-menus", "editor-panels", "editor-a11y", "editor-external"]; // 편집기 브라우저 검증은 영역별 파일로 나뉘어 있다(app/test/editor-*.cjs, 하네스는 app/test/lib/editor-harness.cjs)
 const BROWSER_APP = ["routes", "responsive", "list"]; // 앱 공통 화면 변경 때의 연기 검사
 const MAP: [RegExp, string[]][] = [
   [/^engine\/(slidekit\.(js|css)|test\/(verify|moved|gradient|offline)\.cjs)/, ["engine-verify", "engine-moved", "engine-gradient", "engine-offline", "bundler-bundle"]],

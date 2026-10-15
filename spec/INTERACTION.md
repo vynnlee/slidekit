@@ -1,81 +1,88 @@
 # 컨텍스트 메뉴와 커서 설계
 
-앱(편집기, 덱 목록, 발표자 화면)의 우클릭 메뉴와 마우스 커서 규칙이다. 구현 전에 이 문서가 기준이고, 확정된 내용은 SPEC 9절로 옮긴다. UI 문구는 영어, 이 문서는 한국어다.
+앱(편집기, 덱 목록, 발표자 화면)의 우클릭 메뉴와 마우스 커서 규칙이다. 이 문서는 설계 근거이고 현재 항목과 순서의 원천은 `app/src/lib/menu-model.ts`다. 확정된 내용은 SPEC 9절에 있다. UI 문구는 영어, 이 문서는 한국어다.
 
 ## 1. 원칙
 
 1. **메뉴는 명령의 다른 입구일 뿐이다.** 메뉴에 있는 모든 항목은 단축키나 Cmd+K 팔레트로도 실행된다. 메뉴에만 있는 기능은 없다. 단축키가 있으면 오른쪽에 키캡으로 보인다.
-2. **맥락이 곧 메뉴다.** 우클릭한 대상(요소, 빈 곳, 레이어 행, 슬라이드 타일, 코멘트 핀, 덱 카드)에 맞는 항목만 보인다. 한 메뉴는 12개 이하, 서브메뉴는 최대 1개다. 그룹은 구분선으로 나누고 순서는 고정이다: 열기·편집 → 선택·탐색 → 정리(순서·잠금·숨김) → 복제 → 파괴적 동작(빨강, 맨 아래).
+2. **맥락이 곧 메뉴다.** 우클릭한 대상(요소, 빈 곳, 레이어 행, 슬라이드 타일, 코멘트 핀, 덱 카드)에 맞는 항목만 보인다. 서브메뉴는 1단까지다(요소 메뉴는 Select와 Style 둘). 항목이 많은 요소 메뉴 외에는 한 메뉴를 12개 이하로 둔다. 그룹은 구분선으로 나누고 순서는 고정이다: 열기, 편집 → 선택, 탐색 → 정리(순서, 잠금, 숨김) → 복제 → 파괴적 동작(빨강, 맨 아래).
 3. **우클릭은 먼저 선택한다.** 대상이 현재 선택에 없으면 왼쪽 클릭과 같은 규칙(첫 클릭은 최상위 요소, Cmd는 가장 안쪽)으로 선택하고 나서 메뉴를 연다. 이미 선택에 있으면 선택을 바꾸지 않는다.
 4. **쓸 수 없는 항목은 숨기지 않고 흐리게 둔다.** 같은 메뉴에서 항목 위치가 바뀌지 않게 한다. 단, 그 맥락에 아예 해당 없는 그룹은 통째로 뺀다(예: 이미지에는 Edit text가 없다).
 5. **네이티브 메뉴를 남겨야 하는 곳은 건드리지 않는다.** 입력 칸, 텍스트 영역(노트, 코멘트 작성창), 글자 편집 중인 요소는 브라우저 기본 메뉴(잘라내기, 복사, 붙여넣기, 맞춤법)를 쓴다.
 6. **발표 중에는 메뉴가 없다.** 엔진은 `?sync=1` 창(청중 화면)이거나 전체화면일 때만 우클릭을 막아 브라우저 메뉴가 뜨지 않게 한다. 일반 페이지, 배포된 공개 덱, 임베드 모드(편집기와 발표자 화면의 미리보기)는 기본 메뉴를 그대로 둔다(열람자의 이미지 저장과 검사를 막지 않는다). 발표자 화면도 기본 메뉴를 그대로 둔다.
 7. **키보드로도 연다.** ContextMenu 키와 Shift+F10은 현재 선택(없으면 캔버스 중앙)에서 메뉴를 연다. 화살표 이동, Enter 실행, Esc 닫기와 포커스 복귀, 첫 글자 이동을 지원한다.
-8. **닫는 조건.** 항목 실행, Esc, 바깥 클릭, 스크롤·줌·창 크기 변경, 포커스 이동, 다른 곳 우클릭(새 메뉴로 교체). 드래그 중에는 열리지 않는다.
-9. **구현은 하나의 부품과 하나의 목록 원천이다.** Fluid 메뉴 스타일(`dropdown`, `menu-item`)을 쓰는 `ContextMenu` 부품 하나와, 맥락별 항목을 만드는 `lib/menu-model.ts`(순수 함수)를 둔다. 덱 카드의 `...` 버튼 메뉴와 우클릭 메뉴는 같은 목록을 쓴다. 이미 있는 필름스트립 우클릭 메뉴도 이 부품으로 옮긴다.
+8. **닫는 조건.** 항목 실행, Esc, 바깥 클릭, 스크롤, 줌, 창 크기 변경, 포커스 이동, 다른 곳 우클릭(새 메뉴로 교체). 드래그 중에는 열리지 않는다.
+9. **구현은 하나의 부품과 하나의 목록 원천이다.** Fluid 메뉴 스타일(`dropdown`, `menu-item`)을 쓰는 `ContextMenu` 부품 하나와, 맥락별 항목을 만드는 `lib/menu-model.ts`(순수 함수)를 둔다. 덱 카드의 `...` 버튼 메뉴와 우클릭 메뉴는 같은 목록을 쓴다. 필름스트립 우클릭 메뉴도 이 부품을 쓴다.
 
 ## 2. 맥락별 메뉴
 
-항목은 `이름 (단축키)` 형식이다. 괄호 없는 항목은 단축키가 아직 없는 것이므로 추가하거나 팔레트에만 둔다.
+항목은 `이름 (단축키)` 형식이다. 괄호 없는 항목은 단축키가 없고 Cmd+K 팔레트나 메뉴로 실행한다.
 
 ### 2.1 캔버스: 요소
 
 잠기지 않은 단일 요소.
 
-- Edit text (Enter) — 글자 요소만
+- Edit text (Enter) - 글자 요소만
 - Add comment (C)
 - ─
 - Select ▸ Parent (Shift+Enter) / First child (Enter) / Next sibling (Tab) / Previous sibling (Shift+Tab)
 - ─
 - Bring forward (⌘]) / Send backward (⌘[)
+- Group (⌘G) / Ungroup (⇧⌘G, 자식이 있는 div일 때만)
 - Rename layer (F2)
-- Lock / Hide
+- Lock / Hide (숨김 상태면 Show)
 - ─
-- Reset changes — 이 요소에 편집으로 생긴 스타일이 있을 때만 켜짐
+- Style ▸ Copy style (⌥⌘C) / Paste style (⌥⌘V, 복사한 스타일이 있을 때) / Reset changes (이 요소에 편집으로 생긴 스타일이 있을 때만 켜짐)
 - Duplicate (⌘D)
 - ─
-- Delete (Delete) — 빨강
+- Delete (Delete) - 빨강
 
 잠긴 요소(우클릭은 잠긴 덮개 아래 요소를 통과해 고르는 규칙을 따른다): Unlock, Select ▸ Parent, Add comment 세 가지만 보인다.
 
-다중 선택: Align ▸ 6방향, Duplicate, Lock, Hide, Delete.
+다중 선택: Align ▸ (Left / Horizontal center / Right / Top / Vertical center / Bottom), Group (⌘G), Paste style (⌥⌘V), Duplicate (⌘D), Lock, Hide, Delete.
 
 ### 2.2 캔버스: 슬라이드 빈 곳
 
 슬라이드 바탕이나 선택이 없는 곳.
 
 - Add comment (C)
+- Insert image...
 - ─
-- Zoom to fit (⇧1) / Zoom to 100% (⇧0, 아직 없으면 추가)
+- Zoom to fit (⇧1) / Zoom to 100% (⇧0)
 - ─
-- Add slide after (⌘↵) / Duplicate slide / Delete slide — 빨강
+- Add slide after / Duplicate slide
+- ─
+- Delete slide - 빨강(슬라이드가 하나뿐이면 흐림)
 
 ### 2.3 Layers 행
 
-- 요소 행: 2.1과 같다. 잠금·숨김은 같은 항목이 토글로 보인다.
+- 요소 행: 2.1과 같다. 잠금, 숨김은 같은 항목이 토글로 보인다.
 - `Slide N` 루트 행: 2.2의 슬라이드 그룹(Add slide after, Duplicate slide, Delete slide).
 - 이름 변경은 F2 또는 메뉴. 더블클릭은 글자 편집이 아니라 이름 변경이다(레이어 행 안에서만).
 
 ### 2.4 필름스트립 슬라이드 타일
 
 - Present from here (⌥↵)
-- Add comment (C) — 그 슬라이드 전체에 거는 코멘트
+- Add comment - 그 슬라이드 전체에 거는 코멘트(단축키 없음)
 - ─
-- Add slide after / Add slide before
-- Move to start / Move to end
+- Add slide after
+- Add slide with layout ▸ (레이아웃 5종)
+- Add slide before
+- Move to start / Move to end (처음과 끝이면 흐림)
 - ─
 - Duplicate (⌘D)
 - ─
-- Delete (Delete) — 빨강
+- Delete (Delete) - 빨강
 
 ### 2.5 코멘트 핀과 코멘트 패널 항목
 
-- Open in panel — 핀에서만
+- Open in panel - 핀에서만
 - Resolve (E) / Reopen (E)
-- Trust — 서명 없음(Unverified)일 때만
+- Revert Claude's edit - Claude가 답하며 고친 덱을 되돌릴 수 있을 때만
+- Trust - 서명 없음(Unverified)일 때만
 - Copy text
 - ─
-- Delete — 빨강, Undo 토스트
+- Delete - 빨강, Undo 토스트
 
 ### 2.6 덱 목록 카드와 행
 
@@ -83,11 +90,13 @@
 
 - Open (↵) / Present (⌘↵)
 - ─
-- Rename
+- Pin to top / Unpin from top
+- Rename...
 - Duplicate
-- Copy published link — 게시한 적이 있을 때만
+- Settings... - 덱 설정 대화상자
+- Copy published link - 게시한 적이 있을 때만
 - ─
-- Move to trash — 빨강, Undo 토스트(확인 창 없음)
+- Move to trash - 빨강, Undo 토스트(확인 창 없음)
 
 휴지통 행: Restore, Delete forever(이름 입력 확인 유지, 빨강).
 
@@ -107,13 +116,13 @@ Inspector 입력과 색 칸(네이티브 유지), 노트 영역(네이티브), �
 | 선택된 요소의 몸통 위(끌어서 이동 가능) | `move` |
 | 이동 끌기 중 | `move` (끝날 때까지 유지, 화면 전체에 방패를 깔아 iframe 위에서도 바뀌지 않게) |
 | 글자 편집 중인 요소 안 | `text` |
-| 리사이즈 핸들 위: 위·아래 가장자리 | `ns-resize` |
-| 리사이즈 핸들 위: 왼쪽·오른쪽 가장자리 | `ew-resize` |
-| 리사이즈 핸들 위: 왼쪽 위·오른쪽 아래 모서리 | `nwse-resize` |
-| 리사이즈 핸들 위: 오른쪽 위·왼쪽 아래 모서리 | `nesw-resize` |
+| 리사이즈 핸들 위: 위, 아래 가장자리 | `ns-resize` |
+| 리사이즈 핸들 위: 왼쪽, 오른쪽 가장자리 | `ew-resize` |
+| 리사이즈 핸들 위: 왼쪽 위, 오른쪽 아래 모서리 | `nwse-resize` |
+| 리사이즈 핸들 위: 오른쪽 위, 왼쪽 아래 모서리 | `nesw-resize` |
 | 리사이즈 끌기 중 | 시작한 핸들의 커서를 끝날 때까지 유지 |
-| 글자 블록(가로만 조절)의 위·아래 | 핸들 자체가 없으므로 `move` 또는 `default` |
-| 회전·기울임 조상 아래 요소(리사이즈 비활성) | 핸들 없음, `move`만 |
+| 글자 블록(가로만 조절)의 위, 아래 | 핸들 자체가 없으므로 `move` 또는 `default` |
+| 회전, 기울임 조상 아래 요소(리사이즈 비활성) | 핸들 없음, `move`만 |
 | Space 누름 | `grab` |
 | Space 팬 끌기 중 | `grabbing` |
 | 잠긴 요소 위 | `default`, 외곽선 없음 |
@@ -125,8 +134,8 @@ Inspector 입력과 색 칸(네이티브 유지), 노트 영역(네이티브), �
 | 상황 | 커서 |
 |---|---|
 | 일반 버튼, 탭, 스위치, 메뉴 항목, 행 | `default` |
-| 숫자 칸의 아이콘·라벨(끌어서 값 조절) | `ew-resize`, 끌기 중 유지 |
-| 숫자·글자 입력 칸 안 | `text` |
+| 숫자 칸의 아이콘, 라벨(끌어서 값 조절) | `ew-resize`, 끌기 중 유지 |
+| 숫자, 글자 입력 칸 안 | `text` |
 | 슬라이더 손잡이 | `default`, 끌기 중 `ew-resize` |
 | 색 칸의 스포이트 | `crosshair` |
 | 노트 패널 위쪽 가장자리(높이 조절) | `ns-resize` |
@@ -134,7 +143,7 @@ Inspector 입력과 색 칸(네이티브 유지), 노트 영역(네이티브), �
 | 끌어서 놓을 수 없는 자리(자기 자신 안, 잠긴 부모) | `not-allowed` (드래그 중에만) |
 | 비활성 컨트롤 | `default`(투명도로만 표시, `not-allowed` 쓰지 않음) |
 | 덱 카드, 링크 | `pointer` |
-| 저장·내보내기 진행 중 | `progress`는 쓰지 않고 상태 텍스트로 표시 |
+| 저장, 내보내기 진행 중 | `progress`는 쓰지 않고 상태 텍스트로 표시 |
 
 ### 3.3 발표
 
@@ -148,9 +157,6 @@ Inspector 입력과 색 칸(네이티브 유지), 노트 영역(네이티브), �
 - 커서는 Tailwind 기본(`cursor-default` 등)으로 표현하고, 새 CSS 변수는 만들지 않는다.
 - 테스트: 핸들 8개와 Space, 끌기 중 커서를 `getComputedStyle(...).cursor`로 확인한다. 방패는 끌기 시작과 끝에서만 존재함을 확인한다.
 
-## 4. 구현 분담
+## 4. 구현 상태
 
-- **app-dev**: `components/ui/context-menu.tsx`(Fluid `dropdown`/`menu-item` 기반 부품, 포인터 위치 앵커, 화면 가장자리에서 뒤집기, 키보드, 포커스 복귀)와 `lib/menu-model.ts`의 덱 카드·휴지통 목록, 덱 카드 `...` 메뉴와 우클릭 통일. 부품을 먼저 끝내 다른 팀원이 쓸 수 있게 한다.
-- **editor-dev**: `lib/cursors.ts`와 캔버스·패널 커서 전부, 2.1~2.4(요소, 빈 곳, Layers, 필름스트립) 메뉴 목록과 연결, 기존 필름스트립 메뉴를 새 부품으로 이전, 다중 선택 메뉴는 다중 선택 작업이 끝난 뒤.
-- **channel-dev**: 2.5 코멘트 메뉴(핀, 패널 항목)와 키보드 E/Delete 일치.
-- **engine-dev**: 청중 화면 우클릭 막기(sync 창과 전체화면에서만)와 verify 항목, 이 문서를 SPEC 9절에 요약 이전하고 SKILL에 필요한 한 줄 추가, 문서와 구현의 불일치 점검.
+2절의 모든 메뉴, 3절의 커서 표, 청중 화면 우클릭 막기는 구현되어 있다. 메뉴 목록의 원천은 `app/src/lib/menu-model.ts`(순수 함수 `elementMenu`, `groupMenu`, `slideMenu`, `tileMenu`, `commentMenu`, `deckMenu`, `trashMenu`), 부품은 `components/ui/context-menu.tsx`, 커서는 `lib/cursors.ts`, 청중 화면 우클릭 막기는 `engine/slidekit.js`(sync 창과 전체화면)다.

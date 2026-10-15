@@ -76,3 +76,18 @@ test("처음 만들 때 프로세스 여럿이 동시에 와도 키는 하나만
   const C = await fresh(file);
   expect(C.sign("d", c)).toBe(outs[0]); // 파일의 키와도 같다
 }, 30_000);
+
+test("하드링크를 못 쓰는 파일시스템(EPERM 등)에서는 배타 생성으로 물러나고, 이미 있으면 false", async () => {
+  const C = await fresh(join(dir, "unused.key"));
+  const noLink = (() => { throw Object.assign(new Error("no link"), { code: "EPERM" }); }) as never;
+  const file = join(dir, "fallback", "comments.key");
+  const k1 = Buffer.alloc(32, 1), k2 = Buffer.alloc(32, 2);
+  expect(C.createKeyFile(file, k1, noLink)).toBe(true);
+  expect(readFileSync(file, "utf8").trim()).toBe(k1.toString("hex"));
+  expect(statSync(file).mode & 0o777).toBe(0o600);
+  expect(C.createKeyFile(file, k2, noLink)).toBe(false); // 졌다: 먼저 만든 키가 그대로
+  expect(readFileSync(file, "utf8").trim()).toBe(k1.toString("hex"));
+  expect(readdirSync(join(dir, "fallback"))).toEqual(["comments.key"]); // 임시 파일이 남지 않는다
+  const other = (() => { throw Object.assign(new Error("disk"), { code: "EIO" }); }) as never;
+  expect(() => C.createKeyFile(join(dir, "fallback", "x.key"), k1, other)).toThrow(/disk/); // 그 밖의 오류는 삼키지 않는다
+});

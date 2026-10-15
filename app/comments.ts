@@ -1,6 +1,6 @@
 import { deckFolder } from "./folder";
 import { join } from "node:path";
-import { chmodSync, copyFileSync, existsSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, watch, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, copyFileSync, existsSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, watch, writeFileSync, writeSync } from "node:fs";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
@@ -54,22 +54,48 @@ function readKey(): Buffer | null {
   try { if (statSync(keyFile).mode & 0o077) chmodSync(keyFile, 0o600); } catch { /* 소유자가 아니면 그대로 둔다 */ }
   return k;
 }
+/** 하드링크를 못 쓰는 파일시스템(외장 디스크, 네트워크 디스크)에서 link가 내는 오류들 */
+const NO_LINK = new Set(["EPERM", "ENOTSUP", "EOPNOTSUPP", "ENOSYS", "EXDEV", "EACCES"]);
+/** keyFile이 없을 때만 만든다. 만들었으면 true, 이미 있으면 false. 임시 파일에 다 쓴 뒤 link로 걸어 읽는 쪽이 쓰다 만 파일을 보지 않게 하고,
+    link가 안 되는 파일시스템에서는 배타 생성(wx)으로 물러난다(이때는 아주 짧게 빈 파일이 보일 수 있어 읽는 쪽이 다시 읽는다). */
+export function createKeyFile(file: string, k: Buffer, link: typeof linkSync = linkSync): boolean {
+  mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
+  const tmp = `${file}.tmp-${process.pid}-${randomBytes(4).toString("hex")}`;
+  writeFileSync(tmp, k.toString("hex") + "\n", { mode: 0o600 });
+  try {
+    try { link(tmp, file); return true; }
+    catch (e) {
+      const code = (e as NodeJS.ErrnoException).code ?? "";
+      if (code === "EEXIST") return false;
+      if (!NO_LINK.has(code)) throw e;
+    }
+    let fd: number;
+    try { fd = openSync(file, "wx", 0o600); }
+    catch (e) { if ((e as NodeJS.ErrnoException).code === "EEXIST") return false; throw e; }
+    try { writeSync(fd, k.toString("hex") + "\n"); } finally { closeSync(fd); }
+    return true;
+  } finally { rmSync(tmp, { force: true }); }
+}
+/** 다른 프로세스가 막 만든 빈 파일을 읽는 경우를 위해, 빈 파일이면 잠깐 기다렸다가 다시 읽는다. */
+function readKeySettled(): Buffer | null {
+  for (let i = 0; ; i++) {
+    try { return readKey(); }
+    catch (e) {
+      let empty = false;
+      try { empty = statSync(keyFile).size === 0; } catch { /* 없어졌다 */ }
+      if (!(e instanceof KeyError) || !empty || i >= 10) throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+    }
+  }
+}
 function key(): Buffer {
   if (keyCache) return keyCache;
-  const have = readKey();
+  const have = readKeySettled();
   if (have) return (keyCache = have);
-  // 두 프로세스가 동시에 처음 쓰더라도 키가 하나만 남도록, 임시 파일에 다 쓴 뒤 link로 건다(이미 있으면 EEXIST라 먼저 만든 쪽의 키를 읽는다).
-  // 읽는 쪽이 쓰다 만 파일을 보는 일도 없다.
-  mkdirSync(dirname(keyFile), { recursive: true, mode: 0o700 });
-  const tmp = `${keyFile}.tmp-${process.pid}-${randomBytes(4).toString("hex")}`;
+  // 두 프로세스가 동시에 처음 쓰더라도 키가 하나만 남는다: 만든 쪽의 키를 쓰고, 졌으면(EEXIST) 먼저 만든 쪽의 키를 읽는다.
   const fresh = randomBytes(32);
-  writeFileSync(tmp, fresh.toString("hex") + "\n", { mode: 0o600 });
-  try { linkSync(tmp, keyFile); keyCache = fresh; }
-  catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-    keyCache = readKey() ?? fresh;
-  } finally { rmSync(tmp, { force: true }); }
-  return keyCache!;
+  keyCache = createKeyFile(keyFile, fresh) ? fresh : (readKeySettled() ?? fresh);
+  return keyCache;
 }
 const canon = (deck: string, c: Comment) => JSON.stringify([deck, c.id, c.slide, c.path, c.excerpt, c.text, c.createdAt]);
 export const sign = (deck: string, c: Comment) => createHmac("sha256", key()).update(canon(deck, c)).digest("hex");

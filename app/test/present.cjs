@@ -190,6 +190,9 @@ const MOCKS = {
     await page.keyboard.press('Enter');
     check('Enter로 그 슬라이드로 이동', await until(async () => (await counter()) === `12 / ${TOTAL}`), await counter());
     check('팔레트는 이동 뒤 닫힌다', await until(async () => (await pal.count()) === 0));
+    await openPal('2');
+    check('숫자만 치면 번호가 그 숫자로 시작하는 슬라이드만 나온다(노트 속 숫자가 앞지르지 않음)', await until(async () => (await pal.getByRole('option', { name: /^\d+\. / }).count()) === 11) && (await pal.getByRole('option', { name: /^\d+\. / }).evaluateAll((els) => els.every((e) => /^2/.test(e.textContent)))), await pal.getByRole('option', { name: /^\d+\. / }).count());
+    await page.keyboard.press('Escape'); await until(async () => (await pal.count()) === 0);
     await openPal('Notes for cover');
     await page.keyboard.press('Enter');
     check('노트 글자로 찾아 이동한다', await until(async () => (await counter()) === `1 / ${TOTAL}`), await counter());
@@ -217,13 +220,22 @@ const MOCKS = {
     check('리셋도 안내한다', await until(async () => (await page.locator('[role=status][aria-live=polite].sr-only').innerText()) === 'Timer reset'));
     await openPal('Black screen'); await pal.getByRole('option', { name: /^Black screen/ }).first().click();
     check('발표 창이 없으면 가리기는 안내만 한다', await until(async () => (await page.getByText('Open the presentation window first').count()) >= 1));
+    await until(async () => (await page.getByRole('dialog').count()) === 0); // 팔레트 닫힘 애니메이션이 끝나야 한 글자 단축키가 먹는다
     await page.mouse.click(640, 780);
     await page.keyboard.press('Shift+?');
     const help = page.getByRole('dialog', { name: 'Shortcuts' });
     check("'?'로 단축키 안내가 열린다", await until(async () => (await help.count()) === 1 && (await help.getByText('Search slides, chapters, and actions').count()) === 1));
+    // 대화상자가 열려 있으면 한 글자 단축키가 뒤의 화면을 건드리지 않는다
+    await until(async () => (await page.getByText(/again to confirm/).count()) === 0, 10000); // 앞 단계의 확인 안내가 사라진 뒤에 본다
+    await page.keyboard.press('t'); await page.keyboard.press('r'); await sleep(1500);
+    check('대화상자가 열려 있으면 T는 타이머를 켜지 않는다', (await timer()) === '00:00:00', await timer());
+    check('대화상자가 열려 있으면 R은 리셋 확인을 띄우지 않는다', (await page.getByText(/again to confirm/).count()) === 0);
     check('+ 키캡이 비어 있지 않다("+, -")', await help.locator('kbd').evaluateAll((els) => els.every((k) => k.textContent.trim().length > 0)));
     await page.keyboard.press('Escape');
     check('Esc로 닫힌다', await until(async () => (await help.count()) === 0));
+    // 한글 입력 상태(e.key가 ㅅ)에서도 물리 키 T로 타이머가 켜진다
+    await page.evaluate(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ㅅ', code: 'KeyT', bubbles: true })));
+    check('한글 입력 상태에서도 T 단축키가 동작한다', await until(async () => (await timer()) !== '00:00:00', 6000), await timer());
     await ctx.close();
   }
   // ?from=N: 그 장에서 시작, 범위 밖은 가장 가까운 장. 발표 시작은 현재 장부터.

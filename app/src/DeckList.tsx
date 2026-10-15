@@ -206,14 +206,18 @@ export function DeckList() {
   // 마지막으로 연 덱: 지금 있는 덱 중 가장 최근 것(지워졌거나 없는 덱의 기록은 건너뛴다).
   const lastOpened = useMemo(() => recent.find((r) => decks?.some((d) => d.id === r.id || d.folder === r.id)), [recent, decks]);
   // 핀한 덱은 어떤 정렬에서도 맨 위(안에서는 선택한 정렬 순서). 칩 필터는 목록만 줄인다.
-  const sorted = useMemo(() => {
+  // 정렬은 전체 덱에, 칩 필터는 그 위에 건다. 검색 팔레트는 칩과 상관없이 모든 덱을 찾아야 하니 정렬만 된 전체를 쓴다.
+  const ordered = useMemo(() => {
     const at = (d: DeckEntry) => recent.find((r) => r.id === d.id || r.id === d.folder)?.t ?? 0;
-    const l = (decks ?? []).filter((d) => filter === "all" || (filter === "pinned" ? pins.includes(d.id) : filter === "recent" ? at(d) > 0 : d.visibility === "password"));
     const by = sort === "title" ? (a: DeckEntry, b: DeckEntry) => a.title.localeCompare(b.title, "ko")
       : sort === "recent" ? (a: DeckEntry, b: DeckEntry) => at(b) - at(a) || (b.date ?? "").localeCompare(a.date ?? "")
       : (a: DeckEntry, b: DeckEntry) => (b.date ?? "").localeCompare(a.date ?? "");
-    return l.sort((a, b) => Number(pins.includes(b.id)) - Number(pins.includes(a.id)) || by(a, b));
-  }, [decks, sort, recent, filter, pins]);
+    return [...(decks ?? [])].sort((a, b) => Number(pins.includes(b.id)) - Number(pins.includes(a.id)) || by(a, b));
+  }, [decks, sort, recent, pins]);
+  const sorted = useMemo(() => {
+    const at = (d: DeckEntry) => recent.find((r) => r.id === d.id || r.id === d.folder)?.t ?? 0;
+    return ordered.filter((d) => filter === "all" || (filter === "pinned" ? pins.includes(d.id) : filter === "recent" ? at(d) > 0 : d.visibility === "password"));
+  }, [ordered, recent, filter, pins]);
 
   const open = (d: DeckEntry) => go(`/edit/${encodeURIComponent(d.id)}`);
   // 한 글자 단축키: ? 단축키 안내, / 검색, N 새 덱(입력 칸이나 다른 대화상자가 열려 있을 때는 쓰지 않는다).
@@ -225,7 +229,7 @@ export function DeckList() {
       if (t?.closest("input,textarea,select,[contenteditable]") || document.querySelector("[role=dialog]")) return;
       if (e.key === "?") { e.preventDefault(); setHelp(true); }
       else if (e.key === "/") { e.preventDefault(); keyActions.current.search(); }
-      else if ((e.key === "n" || e.key === "N") && !e.shiftKey) { e.preventDefault(); keyActions.current.create(); }
+      else if ((e.key === "n" || e.key === "N" || (!/^[\x00-\x7f]$/.test(e.key) && e.code === "KeyN")) && !e.shiftKey) { e.preventDefault(); keyActions.current.create(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -400,7 +404,7 @@ export function DeckList() {
       <ShortcutHelp open={help} onOpenChange={setHelp} groups={KEY_GROUPS} description="Keyboard shortcuts for the deck list" />
       <DeckSettingsDialog folder={settingsFor?.folder ?? null} title={settingsFor?.title} onClose={() => setSettingsFor(null)} onSaved={load} />
 
-      <DeckPalette open={palette} onOpenChange={setPalette} sorted={sorted} view={view} sortLabel={`Sort by ${SORTS[ORDER[(ORDER.indexOf(sort) + 1) % ORDER.length]]}`}
+      <DeckPalette open={palette} onOpenChange={setPalette} sorted={ordered} view={view} sortLabel={`Sort by ${SORTS[ORDER[(ORDER.indexOf(sort) + 1) % ORDER.length]]}`}
         onNew={startCreate} onToggleView={() => setView(view === "grid" ? "list" : "grid")} onCycleSort={cycleSort} onHelp={() => setHelp(true)} onOpen={open} />
 
       <Dialog open={!!renaming} onOpenChange={(o) => !o && setRenaming(null)}>

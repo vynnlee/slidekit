@@ -16,7 +16,7 @@ import { saveRun, type Run } from "@/lib/rehearsals";
 import { isLocalOrigin, remoteUrl, useRemoteHost, type Cmd } from "@/lib/remote-host";
 import { qrMatrix, qrPath } from "@/lib/qr";
 import { ShortcutHelp, type KeyGroup } from "./ShortcutHelp";
-import { CommandMenu, CommandMenuDialog, CommandMenuEmpty, CommandMenuFooter, CommandMenuInput, CommandMenuItem, CommandMenuList, type CommandMenuItemData } from "@/components/ui/command-menu";
+import { CommandMenu, CommandMenuDialog, CommandMenuEmpty, CommandMenuFooter, CommandMenuInput, CommandMenuItem, CommandMenuList, defaultCommandMenuFilter, type CommandMenuItemData } from "@/components/ui/command-menu";
 import { cn } from "@/lib/utils";
 import { Field } from "@/components/ui/field";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -244,6 +244,10 @@ export function Presenter({ id }: { id: string }) {
       const once = e.repeat;
       const t = e.target as HTMLElement;
       if (t.closest("input,textarea,select,[contenteditable]")) return;
+      // 대화상자(단축키 안내, 요약, 리모컨 등)가 열려 있으면 화살표 말고는 뒤의 화면을 건드리지 않는다(타이머, 전체화면, 리셋이 새지 않게).
+      if (!e.key.startsWith("Arrow") && document.querySelector("[role=dialog]")) return;
+      // 한글 등 비영문 입력 상태에서도 단축키가 동작하게 물리 키(e.code)로 폴백한다(영문 키는 배열이 달라도 e.key를 따른다).
+      const k = /^[\x00-\x7f]$/.test(e.key) ? e.key.toLowerCase() : /^Key[A-Z]$/.test(e.code) ? e.code.slice(3).toLowerCase() : e.key;
       // 화살표는 포커스된 위젯(탭, 스위치, 목록, 메뉴, 대화상자)의 것이고, 노트 영역에서 위아래는 노트 스크롤이다.
       const arrow = e.key.startsWith("Arrow");
       if (arrow && (t.closest("[role=tablist],[role=tab],[role=switch],[role=slider],[role=listbox],[role=combobox],[role=menu],[role=menuitem],[role=dialog]") || (t.closest("[data-notes]") && (e.key === "ArrowUp" || e.key === "ArrowDown")))) return;
@@ -251,14 +255,14 @@ export function Presenter({ id }: { id: string }) {
       if (!arrow && e.key.length === 1 && t.closest("button,a,[role=button],[role=tab],[role=switch],[role=menuitem]")) return;
       if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); if (!once) { localMove(); post(curRef.current, { type: "next" }); } }
       else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); if (!once) { localMove(); post(curRef.current, { type: "prev" }); } }
-      else if (once && /^[ftr]$/i.test(e.key)) return;
-      else if (e.key === "f" || e.key === "F") {
+      else if (once && /^[ftr]$/.test(k)) return;
+      else if (k === "f") {
         document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
       }
       else if (e.key === "+" || e.key === "=") setNotesSize((n) => Math.min(NOTES_MAX, n + 2));
       else if (e.key === "-" || e.key === "_") setNotesSize((n) => Math.max(NOTES_MIN, n - 2));
-      else if (e.key === "t" || e.key === "T") setRunning((r) => !r);
-      else if (e.key === "r" || e.key === "R") requestReset("key");
+      else if (k === "t") setRunning((r) => !r);
+      else if (k === "r") requestReset("key");
       else if (e.key === "?") setHelp(true);
       else if (e.key === "PageDown" || e.key === "PageUp") {
         e.preventDefault();
@@ -510,7 +514,8 @@ export function Presenter({ id }: { id: string }) {
         )}
       </div>
       <CommandMenuDialog open={palette} onOpenChange={setPalette} title="Search" description="Go to a slide or run an action">
-        <CommandMenu items={paletteItems}>
+        {/* 숫자만 치면 번호로 찾는다(노트 속 같은 숫자가 번호 이동을 앞지르지 않게): 슬라이드 행은 번호가 그 숫자로 시작할 때만 남긴다. */}
+        <CommandMenu items={paletteItems} filter={(item, query) => /^\d+$/.test(query.trim()) && item.value.startsWith("slide:") ? item.value.slice(6).startsWith(query.trim()) : defaultCommandMenuFilter(item, query)}>
           <CommandMenuInput placeholder="Slides, chapters, notes, or actions" />
           <CommandMenuList renderItem={(item) => (
             <CommandMenuItem value={item.value}>

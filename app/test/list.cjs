@@ -249,6 +249,10 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.getByRole('dialog', { name: 'New deck' }).getByLabel('Title').fill('n');
   await page.keyboard.press('Escape');
   check('Esc로 새 덱 대화상자가 닫힌다', await until(async () => (await page.getByRole('dialog').count()) === 0));
+  await page.evaluate(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ㅜ', code: 'KeyN', bubbles: true })));
+  check('한글 입력 상태에서도 N으로 새 덱 대화상자가 열린다', await until(async () => (await page.getByRole('dialog', { name: 'New deck' }).count()) === 1));
+  await page.keyboard.press('Escape');
+  await until(async () => (await page.getByRole('dialog').count()) === 0);
   await page.getByRole('button', { name: 'zz-e2e-k1', exact: true }).focus();
   const rings = [];
   for (let i = 0; i < 3; i++) { rings.push(await page.evaluate(() => { const e = document.activeElement; const cs = e && getComputedStyle(e); return !!cs && (cs.boxShadow !== 'none' || (cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0)); })); await page.keyboard.press('ArrowRight'); }
@@ -261,6 +265,14 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   check('고정된 덱에 Pinned 표시', (await page.getByRole('img', { name: 'Pinned' }).count()) === 1);
   await page.getByRole('button', { name: 'Pinned', exact: true }).click();
   check('Pinned 칩은 고정한 덱만 보인다', await until(async () => (await page.locator('[data-deck]').count()) === 1));
+  // 칩 필터와 상관없이 검색 팔레트는 모든 덱을 찾는다
+  await page.keyboard.press('Control+k');
+  await page.getByRole('dialog').getByRole('combobox').fill('zz-e2e-k1');
+  check('칩 필터가 켜져 있어도 팔레트는 필터 밖 덱을 찾는다', await until(async () => (await page.getByRole('dialog').getByRole('option', { name: /zz-e2e-k1/ }).count()) >= 1));
+  // 흔한 낱말은 덱마다 3장까지만 보이고 더 있음을 알린다
+  await page.getByRole('dialog').getByRole('combobox').fill('슬라이드');
+  check('결과가 잘리면 더 있음을 알린다', await until(async () => (await page.getByRole('dialog').getByText('More slides not shown').count()) === 1), await page.getByRole('dialog').innerText());
+  await page.keyboard.press('Escape'); await sleep(400);
   await page.getByRole('button', { name: 'Password', exact: true }).click();
   check('결과가 없으면 안내', await until(async () => (await page.getByText('No password decks.').count()) === 1));
   await page.getByRole('button', { name: 'All', exact: true }).click();
@@ -419,6 +431,18 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await p5.reload({ waitUntil: 'domcontentloaded' });
   await sleep(2500);
   check('닫은 뒤에는 다시 뜨지 않는다', (await tip.count()) === 0);
+  // 수정키(Tab, Shift)는 안내를 지우지 않고 글자 키는 지운다
+  const ctx6 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await ctx6.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+  const p6 = await ctx6.newPage();
+  await p6.goto(BASE + '/edit/slidekit-guide', { waitUntil: 'domcontentloaded' });
+  const tip6 = p6.getByRole('region', { name: 'Editor tips' });
+  await until(async () => (await tip6.count()) === 1);
+  await p6.keyboard.press('Shift'); await p6.keyboard.press('Tab'); await p6.keyboard.press('Meta'); await sleep(500);
+  check('Tab, Shift, Cmd에는 안내가 남는다', (await tip6.count()) === 1);
+  await p6.keyboard.press('a');
+  check('글자 키에는 안내가 사라진다', await until(async () => (await tip6.count()) === 0));
+  await ctx6.close();
   await ctx5.close();
   check('페이지 오류 없음', errors.length === 0, errors);
   await browser.close();

@@ -12,6 +12,7 @@ if (process.env.NODE_ENV !== "production") {
   dev["/dev/inspector"] = lazy(() => import("./harness/InspectorDemo").then((m) => ({ default: m.InspectorDemo })));
   dev["/dev/tokens"] = lazy(() => import("./harness/TokensDemo").then((m) => ({ default: m.TokensDemo })));
   dev["/dev/controls"] = lazy(() => import("./harness/ControlStates").then((m) => ({ default: m.ControlStates })));
+  dev["/dev/boom"] = lazy(() => import("./harness/Boom").then((m) => ({ default: m.Boom })));
   dev["/dev/export"] = lazy(() => import("./harness/ExportDemo").then((m) => ({ default: m.ExportDemo })));
 }
 

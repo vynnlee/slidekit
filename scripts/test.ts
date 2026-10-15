@@ -66,6 +66,7 @@ const steps: Step[] = [
   browser("present", "app/test/present.cjs", "app", APP),
   browser("remote", "app/test/remote.cjs", "app", APP),
   browser("responsive", "app/test/responsive.cjs", "app", APP),
+  browser("error-boundary", "app/test/error-boundary.cjs", "app", APP), // 오류 경계(/dev/boom): Copy details, 스택 기록, 편집기 안내, Reload
   browser("controls", "app/test/controls.cjs", "app", APP),
   browser("inspector", "app/test/inspector.cjs", "app", APP),
   browser("inspector-a11y", "app/test/inspector-a11y.cjs", "app", APP, { AXE }),

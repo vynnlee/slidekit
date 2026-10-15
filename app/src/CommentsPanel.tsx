@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Check, CheckCheck, Clock, Copy, Loader2, MessageSquare, Pause, RotateCcw, Send, ShieldAlert, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ContextMenu, useContextMenu } from "@/components/ui/context-menu";
@@ -6,6 +6,7 @@ import { commentMenu } from "@/lib/comment-actions";
 import { cn } from "@/lib/utils";
 import type { Comment } from "@/lib/deck";
 import { STATE_LABEL, ago, numbering, stateOf, type CommentState } from "@/lib/comment-state";
+import { hoveredComment, setHoveredComment, subscribeHover } from "@/lib/comment-hover";
 
 const CMD = "claude --dangerously-load-development-channels server:slidekit";
 type Filter = "all" | "open" | "replied" | "resolved";
@@ -80,19 +81,28 @@ interface CommentsPanelProps {
   onRemove?(c: Comment): void;
   /** Claude의 수정 되돌리기와(undo=true) 그 취소. 없으면 되돌리기 버튼을 보이지 않는다. */
   onRevert?(c: Comment, undo?: boolean): void;
-  /** 캔버스 핀과 목록이 서로를 강조하도록 마우스나 포커스가 올라간 코멘트 id를 맞춘다. */
-  hoverId?: string | null;
-  onHover?(id: string | null): void;
   /** 보류했거나 아직 전달되지 않은 코멘트를 한 번에 Claude에 보낸다(묶음 알림 하나). 없으면 버튼을 보이지 않는다. */
   onSendAll?(): void;
   /** 답이 달린 코멘트를 한꺼번에 해결 처리한다. 없으면 버튼을 보이지 않는다. */
   onResolveReplied?(): void;
 }
 
-export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, onRemove, onRevert, hoverId, onHover, onSendAll, onResolveReplied }: CommentsPanelProps) {
+export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, onRemove, onRevert, onSendAll, onResolveReplied }: CommentsPanelProps) {
   const [filter, setFilter] = useState<Filter>("all");
   const [open, setOpen] = useState<Set<string>>(new Set()); // 길어서 펼친 코멘트
   const root = useRef<HTMLDivElement>(null);
+  // 핀과 서로 강조: React 상태를 거치지 않고 속성만 바꾼다(목록이 수백 개여도 마우스를 옮길 때 다시 그리지 않는다).
+  useEffect(() => {
+    let prev: Element | null = null;
+    const apply = () => {
+      prev?.removeAttribute("data-hover");
+      const id = hoveredComment();
+      prev = id ? root.current?.querySelector(`li[data-comment-id="${CSS.escape(id)}"]`) ?? null : null;
+      prev?.setAttribute("data-hover", "true");
+    };
+    apply();
+    return subscribeHover(apply);
+  }, []);
   const cm = useContextMenu();
   // 우클릭 메뉴(INTERACTION 2.5): 삭제 연결이 있을 때만 연다. 핀 전용 항목(Open in panel)은 없다.
   const actions = onRemove ? { resolve: onResolve, trust: onTrust, remove: onRemove, revert: onRevert } : null;
@@ -172,11 +182,11 @@ export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, o
                   data-comment-id={c.id}
                   data-state={st}
                   {...(actions ? cm.bind(() => commentMenu(c, actions, "panel")) : {})}
-                  onMouseEnter={() => onHover?.(c.id)}
-                  onMouseLeave={() => onHover?.(null)}
-                  onFocus={() => onHover?.(c.id)}
-                  onBlur={() => onHover?.(null)}
-                  className={cn("flex flex-col gap-1 rounded-lg p-2", hoverId === c.id ? "bg-hover ring-1 ring-focus-ring/60" : "bg-hover/60", st === "resolved" && "opacity-70")}
+                  onMouseEnter={() => setHoveredComment(c.id)}
+                  onMouseLeave={() => setHoveredComment(null)}
+                  onFocus={() => setHoveredComment(c.id)}
+                  onBlur={() => setHoveredComment(null)}
+                  className={cn("flex flex-col gap-1 rounded-lg p-2", "bg-hover/60 data-[hover=true]:bg-hover data-[hover=true]:ring-1 data-[hover=true]:ring-focus-ring/60", st === "resolved" && "opacity-70")}
                 >
                   <button
                     type="button"

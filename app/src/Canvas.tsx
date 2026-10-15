@@ -44,8 +44,6 @@ type Props = {
   more: Element[]; // 다중 선택의 나머지(같은 부모, sel과 함께 한 묶음)
   comments: Comment[];
   numbers: Map<string, number>; // 목록과 같은 코멘트 번호
-  hoverId: string | null;
-  onHover(id: string | null): void;
   channel: boolean | null;
   onStyle(prop: string, value: string): void; // 선택한 글자 요소의 서식 도구줄
   onImage(file: File, over: Element | null): void; // 붙여넣거나 끌어 놓은 이미지(img 위면 교체)
@@ -602,18 +600,22 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     if (pop.current && !r) pop.current.style.transform = "translate(16px,16px)"; // 선택이 없으면 슬라이드 전체에 거는 코멘트
     else if (pop.current && r) pop.current.style.transform = `translate(${Math.max(0, Math.min(r.left, size.w * zoom - 260))}px,${Math.min(r.bottom + 6, size.h * zoom - 130)}px)`;
     const sl = cur();
-    markers.current?.querySelectorAll<HTMLElement>("[data-path]").forEach((m) => {
-      const t = sl ? byPath(sl, m.dataset.path!) : null;
-      const mr = put(m, t);
-      if (mr) {
-        // 요소가 슬라이드 오른쪽 끝까지 닿거나 위쪽 끝에 붙어도 핀이 잘리지 않게 캔버스 안으로 밀어 넣는다.
-        // 같은 요소의 핀 개수만큼 줄 전체를 왼쪽으로 당겨 순서를 지킨 채 들어가게 한다.
-        const same = markers.current!.querySelectorAll(`[data-path="${CSS.escape(m.dataset.path!)}"]`).length;
-        const maxX = size.w * zoom - 24 - (same - 1) * 22;
-        const x = Math.max(0, Math.min(mr.right - 6, maxX)) + Number(m.dataset.off ?? 0) * 22;
-        m.style.transform = `translate(${x}px,${Math.max(0, mr.top - 6)}px)`;
-      }
-    });
+    // 코멘트 핀: 위치를 모두 읽은 뒤에 한꺼번에 쓴다. 읽기(getBoundingClientRect)와 쓰기(transform)를 번갈아 하면 핀마다 레이아웃이 다시 계산되어
+    // 핀 100개에서 60ms마다 수백 ms가 걸린다. 같은 요소의 핀 개수와 요소 찾기도 경로마다 한 번만 한다.
+    const pins = markers.current ? [...markers.current.querySelectorAll<HTMLElement>("[data-path]")] : [];
+    const same = new Map<string, number>(), rectOf = new Map<string, DOMRect | null>();
+    for (const m of pins) same.set(m.dataset.path!, (same.get(m.dataset.path!) ?? 0) + 1);
+    for (const path of same.keys()) { const t = sl ? byPath(sl, path) : null; rectOf.set(path, t && t.isConnected ? t.getBoundingClientRect() : null); }
+    for (const m of pins) {
+      const mr = rectOf.get(m.dataset.path!);
+      if (!mr) { m.style.display = "none"; continue; }
+      m.style.display = "block";
+      // 요소가 슬라이드 오른쪽 끝까지 닿거나 위쪽 끝에 붙어도 핀이 잘리지 않게 캔버스 안으로 밀어 넣는다.
+      // 같은 요소의 핀 개수만큼 줄 전체를 왼쪽으로 당겨 순서를 지킨 채 들어가게 한다.
+      const maxX = size.w * zoom - 24 - (same.get(m.dataset.path!)! - 1) * 22;
+      const x = Math.max(0, Math.min(mr.right - 6, maxX)) + Number(m.dataset.off ?? 0) * 22;
+      m.style.transform = `translate(${x}px,${Math.max(0, mr.top - 6)}px)`;
+    }
   }, [size.w, size.h, zoom, composing]);
   useEffect(() => { place(); const t = setInterval(place, 60); return () => clearInterval(t); });
 
@@ -645,8 +647,8 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
           <div ref={markers}>
             {here.map((c, ci) => (
               <div key={c.id} data-path={c.path} data-off={here.slice(0, ci).filter((o) => o.path === c.path).length} className="pointer-events-auto absolute left-0 top-0 hidden">
-                <CommentPin comment={c} number={p.numbers.get(c.id) ?? ci + 1} highlighted={p.hoverId === c.id}
-                  onClick={() => p.onMarker(c.id)} onHover={(on) => p.onHover(on ? c.id : null)} actions={p.commentActions} />
+                <CommentPin comment={c} number={p.numbers.get(c.id) ?? ci + 1}
+                  onClick={() => p.onMarker(c.id)} actions={p.commentActions} />
               </div>
             ))}
           </div>

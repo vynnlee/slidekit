@@ -4,6 +4,7 @@ import type { Comment } from "@/lib/deck";
 import { commentMenu, type CommentActions } from "@/lib/comment-actions";
 import { ContextMenu, useContextMenu } from "@/components/ui/context-menu";
 import { STATE_LABEL, stateOf, type CommentState } from "@/lib/comment-state";
+import { setHoveredComment, useCommentHovered } from "@/lib/comment-hover";
 
 // 캔버스 위 코멘트 핀. 번호는 목록과 같고(lib/comment-state numbering), 상태는 색과 모양으로 함께 구분한다.
 const FILL: Record<CommentState, string> = {
@@ -28,16 +29,14 @@ const OUTLINE: Record<CommentState, string> = {
 interface CommentPinProps {
   comment: Comment;
   number: number;
-  /** 목록에서 같은 코멘트에 마우스나 포커스가 있을 때 */
-  highlighted?: boolean;
   onClick(): void;
-  onHover?(on: boolean): void;
   /** 있으면 우클릭과 ContextMenu 키로 메뉴(INTERACTION 2.5)가 열리고, 핀에 포커스가 있을 때 E(해결)와 Delete(삭제)가 동작한다. */
   actions?: CommentActions;
 }
 
-export function CommentPin({ comment, number, highlighted, onClick, onHover, actions }: CommentPinProps) {
+export function CommentPin({ comment, number, onClick, actions }: CommentPinProps) {
   const st = stateOf(comment);
+  const highlighted = useCommentHovered(comment.id); // 목록에서 같은 코멘트에 마우스나 포커스가 있을 때
   const cm = useContextMenu();
   const menu = actions ? cm.bind(() => commentMenu(comment, actions, "pin")) : null;
   return (
@@ -55,10 +54,10 @@ export function CommentPin({ comment, number, highlighted, onClick, onHover, act
         if (e.key.toLowerCase() === "e") { e.preventDefault(); e.stopPropagation(); actions.resolve(comment, st !== "resolved"); }
         else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); e.stopPropagation(); actions.remove(comment); }
       }}
-      onMouseEnter={() => onHover?.(true)}
-      onMouseLeave={() => onHover?.(false)}
-      onFocus={() => onHover?.(true)}
-      onBlur={() => onHover?.(false)}
+      onMouseEnter={() => setHoveredComment(comment.id)}
+      onMouseLeave={() => setHoveredComment(null)}
+      onFocus={() => setHoveredComment(comment.id)}
+      onBlur={() => setHoveredComment(null)}
       // cn은 text-micro를 글자색으로 보고 지우므로 클래스를 일반 문자열로 잇고, 링 색은 한 곳에서만 정한다.
       className={`flex h-5 min-w-5 cursor-default items-center justify-center rounded-full px-1 text-micro tabular-nums ring-2 outline-none transition-transform focus-visible:ring-focus-ring ${FILL[st]} ${highlighted ? "scale-125 ring-focus-ring" : OUTLINE[st]}`}
     >

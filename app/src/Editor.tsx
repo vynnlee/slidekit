@@ -118,7 +118,6 @@ export function Editor({ id }: { id: string }) {
   const updatedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const comments = live.comments;
   const nums = useMemo(() => numbering(comments), [comments]);
-  const [hoverId, setHoverId] = useState<string | null>(null);
   const text = useMemo(() => (shell ? compose({ ...shell, units }) : ""), [shell, units]);
   const dirty = !!shell && text !== saved;
   const dirtyRef = useRef(dirty);
@@ -807,7 +806,7 @@ export function Editor({ id }: { id: string }) {
         }
         right={
           <Inspector sel={sel} slide={canvas.current?.slide(index) ?? null} more={more} onAlignGroup={alignGroup} selId={selId} tab={tab} onTab={setTab}
-            comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} onRemove={live.remove} onRevert={live.revert} onSendAll={live.sendAll} onResolveReplied={live.resolveReplied} onStyles={applyStyles} onPreviewStep={() => sel && canvas.current?.previewStep(sel)} onImageFile={(f) => addImage(f, sel)} hoverId={hoverId} onHover={setHoverId} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
+            comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} onRemove={live.remove} onRevert={live.revert} onSendAll={live.sendAll} onResolveReplied={live.resolveReplied} onStyles={applyStyles} onPreviewStep={() => sel && canvas.current?.previewStep(sel)} onImageFile={(f) => addImage(f, sel)} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
         }
       >
         <div className="flex h-full flex-col">
@@ -826,7 +825,7 @@ export function Editor({ id }: { id: string }) {
         <Canvas ref={canvas} shell={shell} folder={folder} units={units} index={index} sel={sel} more={more} onMulti={toggleSel} onGroup={pickGroup}
           comments={comments.filter((c) => !c.slideDeleted && c.slide === origin.current.get(units[index]?.key ?? ""))}
           commentActions={commentActions} overflowOn={overflowOn} safeArea={safeArea} onToggleGuide={toggleGuide} onOverflow={(l) => { setOverflowEls(l); const k = unitsRef.current[indexRef.current]?.key; if (k) setOverflowByKey((m) => (m[k] === l.length ? m : { ...m, [k]: l.length })); }} onImage={addImage} onStyle={style} onContext={({ el, x, y }) => contextAt({ x, y }, el)} onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
-          numbers={nums} hoverId={hoverId} onHover={setHoverId} channel={live.channel}
+          numbers={nums} channel={live.channel}
           onComment={postComment} onMarker={(cid) => { setTab("comments"); const c = comments.find((x) => x.id === cid); if (c) jump(c); }} />
         </div>
         <div className="shrink-0 border-t border-border" style={{ height: notesH }}>

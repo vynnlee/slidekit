@@ -106,8 +106,6 @@ type Props = {
   onRevert?(c: Comment, undo?: boolean): void;
   onSendAll?(): void;
   onResolveReplied?(): void;
-  hoverId: string | null;
-  onHover(id: string | null): void;
   onStyle(prop: string, value: string): void;
   onPreviewStep(): void; // 선택한 단계 요소의 등장 효과를 한 번 재생한다
   onStyles(map: Record<string, string>): void; // 여러 속성을 한 번에(실행 취소 한 건)
@@ -572,7 +570,7 @@ export function Inspector(p: Props) {
         )}
       </TabPanel>
       <TabPanel value="comments">
-        <CommentsPanel comments={p.comments} channel={p.channel} onJump={p.onJump} onResolve={p.onResolve} onTrust={p.onTrust} onRemove={p.onRemove} onRevert={p.onRevert} onSendAll={p.onSendAll} onResolveReplied={p.onResolveReplied} hoverId={p.hoverId} onHover={p.onHover} />
+        <CommentsPanel comments={p.comments} channel={p.channel} onJump={p.onJump} onResolve={p.onResolve} onTrust={p.onTrust} onRemove={p.onRemove} onRevert={p.onRevert} onSendAll={p.onSendAll} onResolveReplied={p.onResolveReplied} />
       </TabPanel>
     </Tabs>
   );

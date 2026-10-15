@@ -70,6 +70,7 @@ const steps: Step[] = [
   browser("editor-assets", "app/test/editor-assets.cjs", "app", APP),
   browser("comments-e2e", "app/test/comments-e2e.cjs", "app", APP),
   browser("comments-a11y", "app/test/comments-a11y.cjs", "app", APP, { AXE }),
+  { ...browser("comments-perf", "scripts/comments-perf.cjs", "app", APP), slow: true }, // 코멘트 300개 성능 측정(수치를 출력한다, --only comments-perf)
   browser("editor-multi", "app/test/editor-multi.cjs", "app", APP),
   browser("editor-menus", "app/test/editor-menus.cjs", "app", APP),
   { ...browser("editor-a11y", "app/test/editor-a11y.cjs", "app", APP, { AXE }), needs: "axe" }, // 필름스트립 axe(기본, 코멘트 표시, 찾기 배지, 넘침 표시)

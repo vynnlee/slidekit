@@ -140,6 +140,8 @@ const MAP: [RegExp, string[]][] = [
   [/^app\/src\/Canvas\.tsx/, ["editor", "editor-assets", "editor-multi", "editor-menus"]],
   [/^app\/src\/Filmstrip\.tsx/, ["editor", "editor-assets", "editor-menus", "editor-a11y"]],
   [/^app\/src\/Notes/, ["editor"]],
+  [/^app\/src\/(AnimationPanel|AnimationSection|lib\/(animation-model|animation-dom|play-head))|^app\/test\/(editor-animation|editor-anim-perf)/, ["editor-animation", "editor-panels", "unit-other", "unit-isolated"]], // Animation 탭과 인스펙터 섹션
+  [/^app\/src\/(Editor|Canvas)\.tsx/, ["editor-animation"]], // 재생 헤드와 막대 배선
   [/^app\/src\/(ErrorBoundary|harness\/Boom)|^app\/test\/error-boundary/, ["error-boundary"]],
   // import 그래프와 검사가 쓰는 화면으로 좁힌 규칙: LayerTree는 Layers 행을 보는 파일만(panels는 행을 길 찾기로만 쓴다), menu-model은 메뉴를 쓰는 화면(편집기 타일 메뉴, 덱 목록, 코멘트 메뉴)만
   [/^app\/src\/LayerTree/, ["editor", "editor-assets", "editor-multi", "editor-menus", "inspector"]],

@@ -79,7 +79,7 @@ export function Presenter({ id }: { id: string }) {
   // 시간은 밀리초로 쌓고 틱마다 Date.now() 차이를 더한다(백그라운드 탭에서 틱이 늦어도 정확하다).
   const dwell = useRef<Record<number, number>>({});
   // 발표 창 생존 확인: 1초마다 hello를 보내고, 발표 창(role이 presenter가 아닌 쪽)의 답이 3.5초 안에 있으면 열려 있다고 본다.
-  const peerAt = useRef(0), everSeen = useRef(false), hb = useRef<{ key: string; t: number } | null>(null), wasOpen = useRef<boolean | null>(null);
+  const peerAt = useRef(0), everSeen = useRef(false), hb = useRef<{ key: string; t: number } | null>(null), movedFrom = useRef<{ key: string; t: number } | null>(null), wasOpen = useRef<boolean | null>(null);
   const accMs = useRef(0), lastTick = useRef(Date.now()), resetArmed = useRef(0);
   const [blank, setBlank] = useState<"black" | "white" | null>(null); // 발표 창이 B 또는 W로 가려진 상태(엔진이 알려 줄 때만)
   const [screens, setScreens] = useState<string[] | null>(listScreens);
@@ -165,6 +165,8 @@ export function Presenter({ id }: { id: string }) {
 
   const post = (f: HTMLIFrameElement | null, msg: object) =>
     f?.contentWindow?.postMessage({ source: "slidekit", v: 1, ...msg }, location.origin);
+  // 키나 리모컨으로 직접 움직였다: 떠나온 위치를 잠깐 기억해, 발표 창이 그 위치를 뒤늦게 알려 와도(하트비트 답, 새로 열린 창의 첫 상태, 우리가 보낸 상태의 메아리) 되돌아가지 않는다. 부하로 iframe 왕복이 늦어 위치(posRef)가 갱신되기 전에 오는 낡은 보고가 한 칸 되돌리던 경쟁이다.
+  const localMove = () => { movedFrom.current = { key: `${posRef.current.slide}:${posRef.current.step}`, t: Date.now() }; };
   const send = (msg: object) => chan.current?.postMessage({ v: 1, from: me.current, role: "presenter", ...msg });
   const total = info?.slides.length ?? 0;
   const goto = useCallback((slide: number, step = 1) => {
@@ -184,6 +186,8 @@ export function Presenter({ id }: { id: string }) {
       if (m.type === "blank") { setBlank(m.mode === "black" || m.mode === "white" ? m.mode : null); return; }
       if (startFrom.current && !ready.current) return;
       if (m.type === "state") {
+        const mf = movedFrom.current;
+        if (mf && Date.now() - mf.t < 1000 && mf.key === `${m.slide}:${m.step}`) return;
         // 하트비트 hello에 대한 답인데 그 사이 우리가 움직였으면 낡은 위치이니 따르지 않는다.
         const h = hb.current;
         if (h && Date.now() - h.t < 800 && h.key !== `${posRef.current.slide}:${posRef.current.step}`) return;
@@ -245,8 +249,8 @@ export function Presenter({ id }: { id: string }) {
       if (arrow && (t.closest("[role=tablist],[role=tab],[role=switch],[role=slider],[role=listbox],[role=combobox],[role=menu],[role=menuitem],[role=dialog]") || (t.closest("[data-notes]") && (e.key === "ArrowUp" || e.key === "ArrowDown")))) return;
       // 한 글자 단축키는 버튼과 링크에 포커스가 있을 때 쓰지 않는다(그 위젯의 입력과 겹치지 않게).
       if (!arrow && e.key.length === 1 && t.closest("button,a,[role=button],[role=tab],[role=switch],[role=menuitem]")) return;
-      if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); if (!once) post(curRef.current, { type: "next" }); }
-      else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); if (!once) post(curRef.current, { type: "prev" }); }
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); if (!once) { localMove(); post(curRef.current, { type: "next" }); } }
+      else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); if (!once) { localMove(); post(curRef.current, { type: "prev" }); } }
       else if (once && /^[ftr]$/i.test(e.key)) return;
       else if (e.key === "f" || e.key === "F") {
         document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
@@ -287,7 +291,7 @@ export function Presenter({ id }: { id: string }) {
   // 휴대폰 리모컨: 명령은 키보드와 같은 동작(post/goto/타이머)으로 실행하고, 상태는 서버로 올린다. 이 대화상자와 코드는 발표자 화면에만 있다.
   const [remoteOpen, setRemoteOpen] = useState(false);
   const runCmd = (c: Cmd) => {
-    if (c.type === "next" || c.type === "prev") post(curRef.current, { type: c.type });
+    if (c.type === "next" || c.type === "prev") { localMove(); post(curRef.current, { type: c.type }); }
     else if (c.type === "goto") goto(Math.min(Math.max(1, c.n), Math.max(1, total)));
     else if (c.type === "timer") { if (c.action === "toggle") setRunning((r) => !r); else { setRunning(false); setElapsed(0); accMs.current = 0; dwell.current = {}; } }
     else send({ type: "setblank", mode: c.mode });

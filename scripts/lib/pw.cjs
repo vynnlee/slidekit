@@ -13,7 +13,7 @@
    - browser.close()는 연결만 끊고 서버는 러너가 끝낼 때까지 산다. 브라우저 프로세스 수준의 상태(다른 테스트의 쿠키)는 컨텍스트로 격리된다. */
 const path = require('path');
 
-async function launch(opts = {}) {
+async function launchBase(opts = {}) {
   const { chromium } = require(process.env.PW || 'playwright-core');
   const ws = process.env.SLIDEKIT_PW_WS;
   const browser = ws ? await chromium.connect(ws) : await chromium.launch({ executablePath: process.env.CHROME, args: ['--disable-gpu'], ...opts });
@@ -37,6 +37,20 @@ async function launch(opts = {}) {
   };
   const close = browser.close.bind(browser);
   browser.close = async (...a) => { for (const ctx of [...live.keys()]) await save(ctx); return close(...a); };
+  return browser;
+}
+
+/** 부하 재현: CPU_SLOW=4처럼 주면 이 브라우저가 여는 모든 페이지(팝업 포함)의 CPU를 그 배수로 늦춘다. 느린 기계나 게이트에서 조건 대기가 버티는지 미리 보는 용도다. */
+async function launch(opts = {}) {
+  const browser = await launchBase(opts);
+  const rate = Number(process.env.CPU_SLOW);
+  if (!(rate > 1)) return browser;
+  const newContext = browser.newContext.bind(browser);
+  browser.newContext = async (o) => {
+    const ctx = await newContext(o);
+    ctx.on('page', async (page) => { const cdp = await ctx.newCDPSession(page).catch(() => null); if (cdp) await cdp.send('Emulation.setCPUThrottlingRate', { rate }).catch(() => {}); });
+    return ctx;
+  };
   return browser;
 }
 

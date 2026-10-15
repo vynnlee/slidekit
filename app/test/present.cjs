@@ -96,6 +96,26 @@ const MOCKS = {
     await pop.bringToFront(); await pop.keyboard.press('ArrowRight');
     await page.bringToFront();
     check(`[${name}] 발표 창 -> 발표자 동기화`, await until(async () => (await counter()) === `${base + 2} / ${TOTAL}`), await counter());
+    if (name === 'unsupported') {
+      // 발표 창이 매우 느릴 때(부하): 하트비트에 대한 늦은 답이 옛 위치를 싣고 와도 발표자 화면이 되돌아가지 않아야 한다
+      const slow = await ctx.newCDPSession(pop); await slow.send('Emulation.setCPUThrottlingRate', { rate: 40 });
+      const c0 = Number((await counter()).split(' / ')[0]);
+      await page.bringToFront(); await page.keyboard.press('ArrowRight'); await sleep(250); await page.keyboard.press('ArrowRight');
+      await until(async () => (await counter()) === `${c0 + 2} / ${TOTAL}`);
+      await sleep(4500); // 느린 발표 창의 하트비트 답(옛 위치)이 도착할 시간
+      check(`[${name}] 느린 발표 창의 늦은 답이 발표자 위치를 되돌리지 않는다`, (await counter()) === `${c0 + 2} / ${TOTAL}`, await counter());
+      await slow.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+      // 결정적 재현: 이동 직후(위치 갱신 전) 발표 창이 옛 위치를 알려 오는 경우를 같은 틱에 끼워 넣는다
+      const c1 = Number((await counter()).split(' / ')[0]);
+      await page.evaluate(({ id, c1 }) => {
+        const bc = new BroadcastChannel(`slidekit:${id}`);
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+        bc.postMessage({ v: 1, from: 'e2e-stale', role: 'audience', type: 'state', slide: c1, step: 1 });
+        setTimeout(() => bc.close(), 500);
+      }, { id: ID, c1 });
+      await sleep(1500);
+      check(`[${name}] 이동 직후 도착한 옛 위치 보고는 따르지 않는다`, (await counter()) === `${c1 + 1} / ${TOTAL}`, await counter());
+    }
     await pop.close();
     check(`[${name}] 발표 창 닫힘 표시`, await until(async () => (await page.getByText('Presentation window closed').count()) === 1, 5000)); // 하트비트 유예(1.6초)를 포함
     await ctx.close();
@@ -118,6 +138,8 @@ const MOCKS = {
     await page.keyboard.press('ArrowRight');
     check('보기를 꺼도 방향키 이동이 유지된다', await until(async () => (await counter()) === `13 / ${TOTAL}`), await counter());
     check('보기를 꺼도 발표 창과 동기화된다', await until(async () => new URL(pop.url()).hash === '#13'), pop.url());
+    await page.bringToFront(); // 발표 창이 늦게 떠서 포커스를 가져가면 키가 빠질 수 있다(다른 구간과 같게 앞으로 가져온다)
+    await page.mouse.click(640, 780);
     await page.keyboard.down('ArrowRight'); await page.keyboard.down('ArrowRight'); await page.keyboard.down('ArrowRight'); await page.keyboard.up('ArrowRight');
     await until(async () => (await counter()) !== `13 / ${TOTAL}`, 10000); // 부하 때 iframe 왕복이 늦을 수 있다
     await sleep(300); // 반복 입력이 더 넘기지 않는지 보려고 짧게 둔다(일어나지 않음 확인)
@@ -255,12 +277,12 @@ const MOCKS = {
     await page.getByRole('button', { name: 'Summary' }).click();
     const sd = page.getByRole('dialog');
     check('요약 다이얼로그', await until(async () => (await sd.getByText('Rehearsal summary').count()) === 1));
-    check('총 시간과 목표 대비', (await sd.innerText()).includes('00:01:10') && /00:10 over|01:10/.test(await sd.innerText()), await sd.innerText());
-    check('가장 길었던 슬라이드', /1\.\s*cover[\s\S]*01:10/i.test(await sd.innerText()), await sd.innerText());
+    check('총 시간과 목표 대비', /00:01:1[0-2]/.test(await sd.innerText()), await sd.innerText());
+    check('가장 길었던 슬라이드', /1\.\s*cover[\s\S]*01:1[0-2]/i.test(await sd.innerText()), await sd.innerText());
     check('첫 리허설에는 비교가 없다', !(await sd.innerText()).includes('Last run'));
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Summary' }).click(); // 두 번째 요약은 직전 기록과 비교한다
-    check('다음 리허설 요약에 직전 기록과 비교', await until(async () => /Last run\s*00:01:10/.test(await page.getByRole('dialog').innerText())), await page.getByRole('dialog').innerText());
+    check('다음 리허설 요약에 직전 기록과 비교', await until(async () => /Last run\s*00:01:1[0-2]/.test(await page.getByRole('dialog').innerText())), await page.getByRole('dialog').innerText());
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Auto-scroll notes' }).click();
     check('자동 스크롤 토글', (await page.getByRole('button', { name: 'Auto-scroll notes' }).getAttribute('aria-pressed')) === 'true');

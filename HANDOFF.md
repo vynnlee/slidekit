@@ -4,7 +4,7 @@
 
 ## 목적
 
-HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 도구. 덱은 폴더 하나(`decks/<이름>/index.html`)이고, 엔진이 1920x1080 맞춤, 방향키 이동, F 전체화면, O 전체 보기, 발표 동기화를 맡는다. 예제 덱은 워크숍 덱(53장, `decks/vibe-coding-workshop`)과 기능 안내 덱(25장, `decks/slidekit-guide`).
+HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 도구. 덱은 폴더 하나(`decks/<이름>/index.html`)이고, 엔진이 1920x1080 맞춤, 방향키 이동, F 전체화면, O 전체 보기, 발표 동기화를 맡는다. 예제 덱은 워크숍 덱(53장, `decks/vibe-coding-workshop`)과 기능 안내 덱(27장, `decks/slidekit-guide`).
 
 ## 구성
 
@@ -28,7 +28,7 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 - **버전 기록**: 저장 직전과 편집기 밖 수정 직전 스냅샷, 비교, 새 탭 sandbox 미리보기, 복원(현재를 먼저 남기고 Undo). 덱당 50개와 30MB, restore 종류는 10개 상한.
 - **코멘트**: 요소 코멘트를 Claude Code 세션에 전달하고 답과 해결까지 추적(아래 결정 절).
 - **내보내기와 게시**: HTML 번들, PDF(`--notes`, `--handout 2|3|4|6`), `deploy`(공개 또는 비밀번호), `unpublish`(확인 뒤 KV 삭제, 이름이 다르면 이름 입력), 게시 기록 `.publish.json`, `deploy --smoke`.
-- **CLI**: `new --template talk|blank|workshop`, `templates`, `layouts`, `lint`, `doctor [덱] [--layout]`, `image`, `bundle`, `pdf`, `deploy`, `unpublish`.
+- **CLI**: `new --template talk|blank|workshop`, `templates`, `layouts`, `lint`, `doctor [덱] [--layout]`, `image`, `outline`, `bundle`, `pdf`, `deploy`, `unpublish`.
 
 ## 실행과 명령
 
@@ -39,10 +39,10 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 ## 테스트
 
 - `bun run test [--only <이름|글로브|그룹>] [--changed] [--list] [--bail] [--slow] [--trace]`. 공정 큐(`/tmp/slidekit-heavy.queue`)로 잠금 `/tmp/slidekit-heavy.lock`을 순서대로 잡고, 단계 로그는 `/tmp/slidekit-test-logs/`, 단계당 상한 900초(`SLIDEKIT_STEP_TIMEOUT`). 실패한 브라우저 단계는 트레이스를 켜고 한 번 더 돈다. **단계 이름은 위치 인자가 아니라 `--only`로 준다**(위치 인자는 무시되고 전체가 돈다). `--only editor`는 editor 단계 하나만(정확 일치), 여럿은 글로브 `--only 'editor*'`, 그룹 별칭은 `unit`, `channel`, `ux-shots`, `bundler`(`scripts/lib/select-steps.ts`). 시작 줄의 `선택:`으로 고른 단계를 확인한다.
-- 집계 단계 33개(약 880초): roundtrip, deck-source.fuzz, deck-tokens, deck-fonts, editor-readonly, export-api, comments, lint, bundler-bundle, bundler-fonts, scan-secrets, deploy-worker, unit-other, unit-isolated, channel, channel-resilience, channel-trust, engine-verify(약 75초, 145검사), engine-moved, engine-gradient, routes, list, present, remote, responsive, inspector, inspector-a11y, editor, editor-assets, editor-multi, comments-e2e, versions-e2e, tokens, export. `--slow`나 `--only`로만 도는 단계: ux-shots-1440, ux-shots-390, bundler-fonts-e2e(인터넷과 uv 필요).
+- 집계 단계 42개(전체 게이트는 약 15분, 정확한 시간은 재측정 필요): roundtrip, deck-source.fuzz, deck-tokens, deck-fonts, editor-readonly, export-api, comments, lint, bundler-bundle, bundler-fonts, scan-secrets, deploy-worker, unit-other, unit-isolated, channel, channel-resilience, channel-trust, engine-verify, engine-moved, engine-gradient, engine-offline, routes, offline-app, list, present, remote, responsive, controls, inspector, inspector-a11y, editor, editor-assets, editor-multi, editor-menus, editor-panels, editor-external, editor-a11y, comments-e2e, comments-a11y, versions-e2e, tokens, export. `--slow`나 `--only`로만 도는 단계 8개: ux-shots-1440, ux-shots-390, editor-save-shots, editor-fuzz, editor-perf, list-load, a11y-app, bundler-fonts-e2e(인터넷과 uv 필요). 최신 목록은 `bun run test --list`.
 - 덱 60개 성능(2026-10-15, 격리 worktree, 덱 20개는 53장 워크숍 사본, mac-cloud `taskpolicy -b`): `/api/decks` 15~22ms(12.5KB), `/api/search-index` 첫 호출 57ms와 이후 4~6ms(653KB), 목록 카드 60개 표시 1.4~2.3초, 썸네일 로드가 메인 스레드를 400~800ms 점유하는 긴 작업이 몇 번 생긴다(같은 출처 iframe, 동시 3개 상한). 병목은 서버가 아니라 팔레트였고 입력 상태를 별도 컴포넌트(`DeckPalette.tsx`)로 빼고 줄 수를 제한해 글자당 입력 지연 264~304ms에서 128ms(일반 우선순위)로, 팔레트 열기 923ms에서 542ms로 줄었다. 캐시는 필요 없었다.
 - 큰 덱 편집기 성능(2026-10-15, dev 서버, mac-cloud `taskpolicy -b`, `bun scripts/test.ts --only editor-perf`, 80장 덱에 한 장 요소 1000개): 열기 3.5~4.5초, 요소 선택 응답 0.5~1초, 드래그 프레임 간격 최대 0.4~0.9초, Layers 150행 2.6초와 1000행 8.6초(dev 빌드 React 비용이 지배적, 가상화는 하지 않음), 찾기 3.6초(경로 계산 제곱 비용 제거 전 5~12초), 넘침 검사는 느린 슬라이드에서 간격을 10배로 물려 CPU 10% 이내.
-- 수동 도구(집계 밖): `app/test/list-load.cjs`(덱 30개 합성 부하), `app/test/a11y-app.cjs`(axe와 스크린샷), `app/test/remote-qa.cjs`(폰 4종 크기).
+- 수동 도구(집계 밖): `app/test/remote-qa.cjs`(폰 4종 크기 스크린샷과 axe). list-load(덱 30개 합성 부하)와 a11y-app(axe와 스크린샷)은 `--slow`나 `--only`로 돈다.
 - 시간은 sleep이 아니라 낮은 우선순위(`taskpolicy -b`)에서의 페이지 로드와 렌더 CPU가 지배한다(sleep 정리와 가짜 시계의 효과는 약 4%). 남은 고정 sleep(editor.cjs 약 137곳, inspector-a11y.cjs 약 32곳)은 시간 단축보다 흔들림 감소 목적으로만 조건 대기로 바꾼다. `[느림 +N초]` 표시로 찾는다.
 
 ## 팀 운영 규칙

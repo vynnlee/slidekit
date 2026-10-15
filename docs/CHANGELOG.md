@@ -45,8 +45,8 @@
 - 게시 전 점검은 lint, 큰 이미지, 노트 없는 장, 색 대비를 보여 주고 비밀번호 덱은 8자 이상이다.
 - `slidekit unpublish`와 Export의 Unpublish는 확인을 거쳐 KV에서 지우고, 기록의 이름이 폴더와 다르면 이름을 직접 입력받는다.
 - 번들은 엔진, 이미지, 글꼴 서브셋을 내장해 오프라인에서도 같은 화면이 뜬다. PDF는 제목 책갈피와 링크를 남긴다.
-- Worker: 비밀번호와 잠금과 404 페이지, 로그인 시도 제한(Durable Object), 보안 헤더. 변경분은 아직 배포 전이며 승인 순서는 `deploy/README.md`다.
-- 승인 전 리허설(`deploy/rehearse.ts`)이 로컬 Worker로 로그인과 5회 잠금까지 확인하며 런타임 인자 오류로 로그인이 500이던 것을 잡았다.
+- Worker: 비밀번호와 잠금과 404 페이지, 로그인 시도 제한(Durable Object), 보안 헤더. 2026-10-15에 배포되었다(이력과 롤백은 `deploy/README.md`).
+- 배포 전 리허설(`deploy/rehearse.ts`)이 로컬 Worker로 로그인과 5회 잠금까지 확인하며 런타임 인자 오류로 로그인이 500이던 것을 잡았다.
 
 ## 엔진과 CLI
 - 단계 등장은 `data-step`과 `data-step-effect`(rise, fade, left, scale, blur, none)로 JS 없이 쓴다.

@@ -25,10 +25,10 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   await page.keyboard.press('Meta+/'); await settle();
   await page.getByRole('dialog').getByText('Shortcuts', { exact: true }).waitFor({ timeout: 5000 }).catch(() => {});
   const helpTxt = (await page.getByRole('dialog').innerText()).replace(/\s+/g, ' ');
-  const inHelp = ['Group', 'Ungroup', 'Find and replace', 'Copy style', 'Paste style', 'Paste an image from the clipboard', 'Drop an image', 'Pick a layout', 'Context menu', 'Add to selection'];
+  const inHelp = ['Group', 'Ungroup', 'Find and replace', 'Copy style', 'Paste style', 'Paste an image from the clipboard', 'Drop an image', 'Context menu', 'Add to selection'];
   check('단축키 안내에 최근 기능이 모두 있음', inHelp.every((t) => helpTxt.includes(t)), inHelp.filter((t) => !helpTxt.includes(t)));
   await page.keyboard.press('Escape'); await settle();
-  const inPalette = ['Group selection', 'Ungroup', 'Find and replace', 'Copy style', 'Paste style', 'Deck settings', 'Insert image', 'Add slide: Quote', 'Theme: Paper', 'Text style: Caption', 'Zoom to 100%', 'Show safe area', 'overflow outlines', 'Undo'];
+  const inPalette = ['Group selection', 'Ungroup', 'Find and replace', 'Copy style', 'Paste style', 'Deck settings', 'Insert image', 'Theme: Paper', 'Text style: Caption', 'Zoom to 100%', 'Show safe area', 'overflow outlines', 'Undo'];
   const missingP = [];
   await page.keyboard.press('Meta+k'); await settle(); // 팔레트를 한 번 열어 두고 검색어만 바꿔 가며 본다
   const palIn = page.getByPlaceholder('Slides or actions');
@@ -167,6 +167,40 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   check('cover가 밀리면 Undo 단추가 있는 알림', await page.getByText('The cover slide should stay first').first().waitFor({ timeout: 5000 }).then(() => true).catch(() => false) && !(await coverFirst()));
   await page.getByRole('button', { name: 'Undo', exact: true }).last().click(); await settle();
   check('알림의 Undo로 cover가 다시 첫 자리', await coverFirst());
+
+  // 레이아웃 프리셋은 없다: 인스펙터, + 단추, 우클릭 메뉴, 팔레트, 단축키 안내, 숫자 키 어디에도 레이아웃 관련이 없다
+  const SHOTS = '/tmp/slidekit-nolayout'; fs.mkdirSync(SHOTS, { recursive: true });
+  const noLayout = (t) => !/layout/i.test(t);
+  await page.keyboard.press('Escape'); await focusBody(); await page.keyboard.press('Escape'); await settle();
+  check('슬라이드 속성 인스펙터에 Layout 칸과 Steps 입력이 없음', (await page.getByLabel('Layout', { exact: true }).count()) === 0 && (await page.getByText('Layout', { exact: true }).count()) === 0 && (await page.getByLabel('Steps', { exact: true }).count()) === 0 && (await page.getByText('Steps', { exact: true }).count()) === 0);
+  await page.screenshot({ path: SHOTS + '/1-inspector-slide.png' });
+  const nBefore = await layers.count();
+  await page.getByRole('button', { name: 'Add slide' }).click(); await settle();
+  check('+ 단추에 메뉴가 없고(레이아웃 항목 없음) 슬라이드 한 장이 추가됨', (await page.getByRole('menuitem').count()) === 0 && (await layers.count()) === nBefore + 1);
+  await page.screenshot({ path: SHOTS + '/2-add-slide.png' });
+  await focusBody(); await page.keyboard.press('Meta+z'); await settle();
+  const cb = await frameEl.boundingBox();
+  await page.mouse.click(cb.x + cb.width / 2, cb.y + cb.height * 0.94, { button: 'right' }); await settle();
+  check('빈 곳 우클릭 메뉴에 레이아웃 항목이 없음', noLayout((await menuLabels()).join('|')), await menuLabels());
+  await page.keyboard.press('Escape'); await settle();
+  await layers.nth(1).click({ button: 'right' }); await settle();
+  check('필름스트립 타일 우클릭 메뉴에 레이아웃 항목이 없음', noLayout((await menuLabels()).join('|')), await menuLabels());
+  await page.keyboard.press('Escape'); await settle();
+  await focusBody(); await page.keyboard.press('Meta+k'); await settle(); await page.keyboard.type('layout'); await settle();
+  check('팔레트에서 layout을 검색하면 결과가 없음', (await page.getByRole('option').count()) === 0);
+  await page.keyboard.press('Meta+a'); await page.keyboard.type('Add slide:'); await settle();
+  check('팔레트에서 "Add slide:" 레이아웃 항목이 없음', (await page.getByRole('option').count()) === 0);
+  await page.keyboard.press('Meta+a'); await page.keyboard.type('add slide'); await settle();
+  const addOpts = (await page.getByRole('option').allTextContents()).join('|');
+  check('팔레트의 Add slide 항목은 레이아웃 없이 Add slide after this one 등만(검색이 실제로 동작함)', /Add slide after this one/.test(addOpts) && noLayout(addOpts) && !/Quote|Big number|Two columns|Full image/.test(addOpts), addOpts);
+  await page.screenshot({ path: SHOTS + '/3-palette-search.png' });
+  await page.keyboard.press('Escape'); await settle();
+  await focusBody(); await page.keyboard.press('Meta+/'); await settle();
+  check('단축키 안내에 레이아웃 항목이 없음', noLayout(await page.getByRole('dialog').innerText()));
+  await page.keyboard.press('Escape'); await settle();
+  const hdr0 = await page.getByText(/^Slide \d+ \/ \d+$/).first().textContent(), n0 = await layers.count();
+  await focusBody(); for (const k of ['1', '2', '3', '4', '5']) { await page.keyboard.press(k); await settle(); }
+  check('숫자 키 1~5는 슬라이드를 바꾸거나 추가하지 않음', (await layers.count()) === n0 && (await page.getByText(/^Slide \d+ \/ \d+$/).first().textContent()) === hdr0);
 
   await H.finish();
 })();

@@ -1,7 +1,6 @@
 // 우클릭 메뉴와 ... 버튼 메뉴가 같이 쓰는 항목 목록. 맥락마다 순수 함수 하나가 항목을 만든다(spec/INTERACTION.md 2절).
 // 다른 맥락(요소, 레이어 행, 필름스트립, 코멘트)도 이 파일에 자기 함수를 추가한다.
 import type { IconComponent } from "@/lib/icon-context";
-import { LAYOUTS } from "../../../engine/layouts";
 
 export type MenuItem =
   | {
@@ -216,8 +215,6 @@ export function slideMenu(a: SlideMenuActions): MenuItem[] {
 export type TileMenuActions = {
   presentFromHere(): void; addComment(): void;
   addAfter(): void; addBefore(): void;
-  /** 레이아웃(engine/layouts.ts)을 골라 뒤에 추가 */
-  addAfterLayout?(layoutId: string): void;
   moveToStart(): void; moveToEnd(): void;
   /** 처음, 끝에 있으면 해당 이동은 흐리게 */
   first: boolean; last: boolean;
@@ -230,7 +227,6 @@ export function tileMenu(a: TileMenuActions): MenuItem[] {
     item("comment", "Add comment", a.addComment),
     separator,
     item("add-after", "Add slide after", a.addAfter),
-    a.addAfterLayout && { type: "sub", id: "add-layout", label: "Add slide with layout", items: LAYOUTS.map((l) => item(`layout-${l.id}`, l.label, () => a.addAfterLayout!(l.id))) },
     item("add-before", "Add slide before", a.addBefore),
     item("to-start", "Move to start", a.moveToStart, { disabled: a.first }),
     item("to-end", "Move to end", a.moveToEnd, { disabled: a.last }),

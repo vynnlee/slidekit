@@ -176,7 +176,7 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   const stepSaved = fs.readFileSync(FILE, 'utf8');
   check('저장 파일에 data-step, show-steps는 새지 않음', /data-step="3"/.test(stepSaved) && !stepSaved.includes('data-sk-show-steps'));
   await page.keyboard.press('Escape'); await settle();
-  check('슬라이드 상태에 자동 단계 안내', (await page.getByText('Auto from element steps: 3').count()) === 1);
+  check('슬라이드 상태에 자동 단계 안내', (await page.getByText('3 steps (from element steps)').count()) === 1);
   await focusBody(); await page.keyboard.press('Tab'); await settle();
   const st2 = page.getByLabel('Appears at step'); await st2.fill('1'); await st2.press('Enter'); await settle();
   check('1로 되돌리면 속성 삭제', !(await inDoc((s) => !!s.querySelector('[data-step]'))));

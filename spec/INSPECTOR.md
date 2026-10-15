@@ -353,12 +353,11 @@ Figma는 Position이 맨 위지만, 우리는 흐름 레이아웃이 중심이�
 | 행 | 컨트롤 | CSS 또는 속성 | 영어 문구 |
 |---|---|---|---|
 | 종류 | Select (Cover, Chapter, Content, End) | `data-slide` | "Type" |
-| 레이아웃 | Select (content 슬라이드만) | `data-layout` | "Layout" |
-| 장 제목 | Field | `data-title` | "Chapter title" |
+| 장 제목 | Field(종류가 Chapter일 때만) | `data-title` | "Chapter title" |
 | 배경 | Solid / Linear gradient 세그먼트, ColorField 또는 그라디언트 편집기 | 슬라이드 루트 `background-color` 또는 `background-image` | "Background" (별도 섹션) |
-| 스텝 수 | `NumberField`(Frame 아이콘, min 1) | 슬라이드 루트 `data-steps`(1이면 속성 삭제) | "Steps" |
+| 스텝 수 | 입력 칸 없음. 요소의 Appears at step 최댓값에서 자동으로 센다. 2 이상일 때만 읽기 전용 한 줄 | 없음(엔진이 요소의 `data-step`에서 계산) | "N steps (from element steps)" |
 
-스텝 수는 SPEC.md 2절과 6.3절의 `data-steps="N"`을 따른다.
+레이아웃 프리셋은 없다(HTML 구조만 정한다). 새 슬라이드는 종류별 빈 구조(content는 제목과 본문 하나)로 시작하고 `+` 단추는 메뉴 없이 content 슬라이드 한 장을 더한다. 다른 종류는 Type으로 바꾼다.
 
 ## 5. 구현 제약
 

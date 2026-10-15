@@ -50,13 +50,12 @@ const rng = (a) => () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a
     'z-back': () => key('Meta+['), 'z-front': () => key('Meta+]'),
     'copy-style': () => key('Meta+Alt+c'), 'paste-style': () => key('Meta+Alt+v'),
     'slide-add': () => pal('Add slide after this one'), 'slide-dup': () => pal('Duplicate slide'), 'slide-move': () => pal(pick(['Move slide to start', 'Move slide to end'])), 'slide-delete': () => pal('Delete slide'),
-    'slide-layout': () => pal('Add slide: ' + pick(['Quote', 'Big number', 'Two columns', 'Image full'])),
     'theme': () => pal('Theme: ' + pick(['Paper', 'Midnight', 'Forest', 'Sunset'])),
     'slide-go': () => key(pick(['ArrowUp', 'ArrowDown'])),
     'find-replace': async () => { await focusBody(); await page.keyboard.press('Meta+f'); await page.getByLabel('Find', { exact: true }).fill(pick(['a', 'e', '바', 'the'])); await settle(); await page.getByLabel('Replace with', { exact: true }).fill(pick(['Q', 'zz', ''])); const b = page.getByRole('button', { name: 'Replace all' }); if (await b.isEnabled().catch(() => false)) await b.click(); await page.getByLabel('Find', { exact: true }).press('Escape'); },
     'undo': () => key('Meta+z'), 'redo': () => key('Shift+Meta+z'),
   };
-  const weights = { 'select-next': 6, 'select-parent': 2, 'select-child': 3, 'deselect': 1, nudge: 4, drag: 4, resize: 3, text: 3, duplicate: 3, delete: 2, group: 2, ungroup: 1, lock: 1, hide: 1, 'z-back': 1, 'z-front': 1, 'copy-style': 1, 'paste-style': 2, 'slide-add': 1, 'slide-dup': 1, 'slide-move': 1, 'slide-delete': 1, 'slide-layout': 1, theme: 1, 'slide-go': 2, 'find-replace': 1, undo: 3, redo: 1 };
+  const weights = { 'select-next': 6, 'select-parent': 2, 'select-child': 3, 'deselect': 1, nudge: 4, drag: 4, resize: 3, text: 3, duplicate: 3, delete: 2, group: 2, ungroup: 1, lock: 1, hide: 1, 'z-back': 1, 'z-front': 1, 'copy-style': 1, 'paste-style': 2, 'slide-add': 1, 'slide-dup': 1, 'slide-move': 1, 'slide-delete': 1, theme: 1, 'slide-go': 2, 'find-replace': 1, undo: 3, redo: 1 };
   if (EXT) for (const k of Object.keys(weights)) if (/^slide-|find-replace/.test(k)) delete weights[k]; // 구조 조작과 덱 전체 바꾸기는 6번 슬라이드의 밖의 수정과 섞지 않는다
   const bag = Object.entries(weights).flatMap(([k, w]) => Array(w).fill(k));
   const done = [];
@@ -65,7 +64,7 @@ const rng = (a) => () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a
   for (let i = 0; i < N && !bad; i++) {
     let op = pick(bag);
     const slides = slideCount(fs.readFileSync(FILE, 'utf8'));
-    if ((op === 'slide-delete' && slides < 3) || (op === 'slide-add' && slides > 10) || (op === 'slide-dup' && slides > 10) || (op === 'slide-layout' && slides > 10)) op = 'select-next';
+    if ((op === 'slide-delete' && slides < 3) || (op === 'slide-add' && slides > 10) || (op === 'slide-dup' && slides > 10)) op = 'select-next';
     done.push(op);
     if (EXT && i % 6 === 5) {
       const mark = `EXT-${i}`; expected = insertAt(expected, 6, mark); const cur = fs.readFileSync(FILE, 'utf8'); const ends = [...cur.matchAll(/<\/section>/g)].map((m) => m.index);

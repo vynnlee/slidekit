@@ -12,7 +12,7 @@ import { Filmstrip } from "./Filmstrip";
 import { LayerTree } from "./LayerTree";
 import { Inspector } from "./Inspector";
 import { go } from "./App";
-import { byPath, compose, duplicateHtml, freshIds, layoutOf, newKey, newSlideHtml, pathOf, splitDeck, type Unit } from "@/lib/deck-source";
+import { byPath, compose, duplicateHtml, freshIds, newKey, newSlideHtml, pathOf, splitDeck, type Unit } from "@/lib/deck-source";
 import { ExportMenu } from "./ExportMenu";
 import { ChannelBadge } from "./CommentsPanel";
 import { ReplyToasts } from "./ReplyToasts";
@@ -23,7 +23,6 @@ import { holdPref, numbering } from "@/lib/comment-state";
 import { firstChild, isLeaf, isLockedDeep, parentOf, siblings } from "@/lib/selection";
 import { EditorTip } from "./EditorTip";
 import { ShortcutHelp, type KeyGroup } from "./ShortcutHelp";
-import { LAYOUTS } from "../../engine/layouts";
 import { THEMES } from "@/lib/themes";
 import { TEXT_STYLES } from "@/lib/text-styles";
 import { setToken } from "@/lib/deck-tokens";
@@ -45,7 +44,7 @@ const KEY_GROUPS: KeyGroup[] = [
   ["Edit", [["Cmd+S", "Save"], ["Cmd+Z", "Undo"], ["Shift+Cmd+Z", "Redo"], ["Cmd+D", "Duplicate"], ["Cmd+G", "Group"], ["Shift+Cmd+G", "Ungroup"], ["Cmd+[", "Send backward"], ["Cmd+]", "Bring forward"], ["F2", "Rename layer"], ["Cmd+C", "Copy"], ["Cmd+Opt+C", "Copy style"], ["Cmd+Opt+V", "Paste style"], ["Cmd+V", "Paste (an image too)"], ["Delete", "Delete selection"], ["Cmd+B", "Bold"], ["Cmd+I", "Italic"]]],
   ["Select", [["Click", "Select a top-level element"], ["Double-click", "Go one level in, or edit text"], ["Cmd+Click", "Select the innermost element"], ["Enter", "First child, or edit text (while editing: finish, Shift+Enter for a new line)"], ["Shift+Enter", "Select the parent"], ["Shift+Click", "Add to selection"], ["Tab", "Next sibling"], ["Esc", "Finish editing, or deselect"]]],
   ["View", [["Up, Down", "Go to slide (no selection)"], ["Arrows", "Nudge 1px (Shift: 10px)"], ["Drag", "Move (Shift: lock axis)"], ["Cmd+Scroll", "Zoom"], ["Shift+1", "Zoom to fit"], ["Shift+0", "Zoom to 100%"], ["Cmd+0", "Zoom to fit"], ["Cmd+\\", "Toggle panels"], ["Shift+Cmd+\\", "Toggle filmstrip"]]],
-  ["Insert", [["Cmd+V", "Paste an image from the clipboard"], ["Drop", "Drop an image on the canvas, or on an image to replace it"], ["1, 2, 3, 4, 5", "Pick a layout in the Add slide menu"]]],
+  ["Insert", [["Cmd+V", "Paste an image from the clipboard"], ["Drop", "Drop an image on the canvas, or on an image to replace it"]]],
   ["General", [["Cmd+K", "Command palette"], ["Cmd+F", "Find and replace"], ["Cmd+Enter", "Present from this slide"], ["Shift+Cmd+Enter", "Present from the start"], ["Opt+Enter", "Present from this slide"], ["Shift+F10", "Context menu"], ["Cmd+/", "Shortcuts"]]],
 ];
 // 팔레트에 보일 슬라이드 제목: data-title, 없으면 첫 제목 태그, 없으면 첫 글자.
@@ -353,9 +352,9 @@ export function Editor({ id }: { id: string }) {
     a.splice(i + 1, 0, { key: newKey(), gap: u.gap, html: duplicateHtml(u.html) });
     structure(a, i + 1);
   };
-  const addSlide = (i: number, layout?: string) => {
+  const addSlide = (i: number) => {
     const a = [...unitsRef.current];
-    a.splice(i + 1, 0, { key: newKey(), gap: a[i].gap, html: newSlideHtml(layout ?? layoutOf(a[i].html)) }); // 직전 슬라이드와 같은 레이아웃으로
+    a.splice(i + 1, 0, { key: newKey(), gap: a[i].gap, html: newSlideHtml() });
     structure(a, i + 1);
   };
   const delSlide = (i: number) => {
@@ -677,7 +676,7 @@ export function Editor({ id }: { id: string }) {
     pickGroup(els); commit();
   };
   const resetChanges = () => { const els = [sel, ...more].filter((e): e is HTMLElement => !!e && !isLockedDeep(e)); for (const e of els) e.removeAttribute("style"); pickGroup(els); commit(); };
-  const insertSlide = (at: number) => { const a = [...unitsRef.current], ref = a[Math.max(0, at - 1)]; a.splice(at, 0, { key: newKey(), gap: ref.gap, html: newSlideHtml(layoutOf(ref.html)) }); structure(a, at); };
+  const insertSlide = (at: number) => { const a = [...unitsRef.current], ref = a[Math.max(0, at - 1)]; a.splice(at, 0, { key: newKey(), gap: ref.gap, html: newSlideHtml() }); structure(a, at); };
   act.current = {
     comment: () => canvas.current?.compose(), editText: () => sel && canvas.current?.edit(sel),
     up: upSel, child: enterSel, next: () => cycle(1), prev: () => cycle(-1),
@@ -723,7 +722,7 @@ export function Editor({ id }: { id: string }) {
     const open = (items: MenuItem[]) => (changed ? requestAnimationFrame(() => requestAnimationFrame(() => cm.open(at, items))) : cm.open(at, items));
     open(tileMenu({
       presentFromHere: () => present(false), addComment: () => { setIndex(i); setTimeout(() => canvas.current?.compose(), 0); },
-      addAfter: () => addSlide(i), addAfterLayout: (id) => addSlide(i, id), addBefore: () => insertSlide(i), moveToStart: () => moveSlide(i, 0), moveToEnd: () => moveSlide(i, n - 1),
+      addAfter: () => addSlide(i), addBefore: () => insertSlide(i), moveToStart: () => moveSlide(i, 0), moveToEnd: () => moveSlide(i, n - 1),
       first: i === 0, last: i === n - 1, duplicate: () => dupSlide(i), remove: () => delSlide(i), canDelete: n > 1,
     }));
   };
@@ -807,7 +806,6 @@ export function Editor({ id }: { id: string }) {
     { value: "act-paste-style", label: "Paste style", group: "Selection", shortcut: "mod+alt+v", disabled: !sel || !styleClip.current, onSelect: () => pasteStyle() },
     { value: "act-group", label: "Group selection", group: "Selection", shortcut: "mod+g", disabled: !sel, onSelect: () => groupSel() },
     { value: "act-ungroup", label: "Ungroup", group: "Selection", shortcut: "mod+shift+g", disabled: !sel, onSelect: () => ungroupSel() },
-    ...LAYOUTS.map((l, i) => ({ value: `act-layout-${l.id}`, label: `Add slide: ${l.label}`, group: "Slides", keywords: ["layout", "new"], onSelect: () => addSlide(indexRef.current, l.id) })),
     { value: "act-text", label: "Insert text", group: "Slides", keywords: ["text box", "paragraph", "add"], onSelect: () => insertText() },
     { value: "act-list", label: "Insert bulleted list", group: "Slides", keywords: ["bullets", "list", "add"], onSelect: () => insertList("ul") },
     { value: "act-olist", label: "Insert numbered list", group: "Slides", keywords: ["numbers", "list", "add"], onSelect: () => insertList("ol") },

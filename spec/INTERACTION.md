@@ -66,7 +66,6 @@
 - Add comment - 그 슬라이드 전체에 거는 코멘트(단축키 없음)
 - ─
 - Add slide after
-- Add slide with layout ▸ (레이아웃 5종)
 - Add slide before
 - Move to start / Move to end (처음과 끝이면 흐림)
 - ─

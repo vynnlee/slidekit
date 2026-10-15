@@ -256,24 +256,12 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
   // 앞의 포커스 링 검사가 Home으로 첫 슬라이드에 돌려놓는다
   { const nOpt = await layers.count(), nTxt = await page.getByText(`Slide 1 / ${total}`).count(); check('접으면 썸네일 목록이 사라지고 위치 표시만 남음', nOpt === 0 && nTxt === 1, [nOpt, nTxt, total, await page.locator('[data-testid=filmstrip]').innerText()]); }
   await page.getByRole('button', { name: 'Show filmstrip' }).click(); await settle();
-  await page.getByRole('button', { name: 'Add slide' }).click();
-  await page.getByRole('menuitem').first().waitFor({ timeout: 5000 }).catch(() => {});
-  const layoutItems = (await page.getByRole('menuitem').allTextContents()).join('|');
-  check('+ 타일 메뉴에 레이아웃 5종', ['Title and body', 'Two columns', 'Big number', 'Quote', 'Full image'].every((l) => layoutItems.includes(l)), layoutItems);
-  await page.getByRole('menuitem', { name: /^Quote/ }).click(); await settle();
-  check('+ 타일로 Quote 슬라이드 추가', (await layers.count()) === total + 1, [total, await layers.count()]);
-  check('새 슬라이드에 data-layout과 blockquote', await inDoc((s) => !!s.parentElement.querySelector('[data-layout=quote] blockquote')));
+  // + 단추: 메뉴 없이 content 슬라이드 한 장을 맨 뒤에 추가한다(레이아웃 프리셋은 없다). 제목과 본문뿐인 빈 구조
+  await page.getByRole('button', { name: 'Add slide' }).click(); await settle();
+  check('+ 단추는 메뉴 없이 슬라이드 한 장을 추가함', (await layers.count()) === total + 1 && (await page.getByRole('menuitem').count()) === 0, [total, await layers.count()]);
+  check('새 슬라이드는 제목과 본문뿐인 content 구조(data-layout 없음)', await inDoc((s) => s.getAttribute('data-slide') === 'content' && !!s.querySelector(':scope > h2') && !!s.querySelector(':scope > p') && !s.hasAttribute('data-layout')));
   await focusBody(); await page.keyboard.press('Meta+z'); await settle();
   check('추가 실행 취소', (await layers.count()) === total);
-  await page.getByRole('button', { name: 'Add slide' }).click(); await page.keyboard.press('2'); await settle();
-  check('메뉴에서 숫자 키 2로 Two columns 추가', (await layers.count()) === total + 1 && (await fr().locator('[data-layout=two-column] [data-col]').count()) >= 2);
-  // Inspector Layout Select: data-layout만 바꾸고 title-body는 속성 삭제
-  await page.getByLabel('Layout', { exact: true }).click(); await page.getByRole('option', { name: 'Big number' }).click(); await settle();
-  check('Layout Select가 data-layout을 바꿈', await inDoc((s) => s.getAttribute('data-layout') === 'big-number'));
-  await page.getByLabel('Layout', { exact: true }).click(); await page.getByRole('option', { name: 'Title and body' }).click(); await settle();
-  check('Title and body는 data-layout을 지움', await inDoc((s) => !s.hasAttribute('data-layout')));
-  await focusBody(); for (let i = 0; i < 4 && (await layers.count()) !== total; i++) { await page.keyboard.press('Meta+z'); await settle(); } // 추가한 슬라이드가 사라질 때까지만 되돌린다
-  check('레이아웃 추가와 변경 실행 취소', (await layers.count()) === total, [total, await layers.count()]);
   // 코멘트: 선택 요소에서 C 키로 작성창이 열리고 Esc로 닫힌다
   await focusBody(); await page.keyboard.press('Escape'); await page.keyboard.press('Tab'); await settle();
   await focusBody(); await page.keyboard.press('c'); await settle();
@@ -287,7 +275,7 @@ const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
     await focusBody(); await page.keyboard.press('Escape');
     const n0 = await layers.count();
     await page.keyboard.press('Meta+k'); await settle();
-    await page.keyboard.type('Add slide: Title and body'); await settle();
+    await page.keyboard.type('Add slide after this one'); await settle();
     await page.keyboard.press('Enter'); await settle();
     check('키보드: 팔레트로 슬라이드 추가', (await layers.count()) === n0 + 1, [n0, await layers.count()]);
     await page.keyboard.press('Escape'); await page.keyboard.press('Tab'); await settle(); // 첫 요소(제목)를 고른다

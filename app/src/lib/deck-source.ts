@@ -1,4 +1,3 @@
-import { LAYOUTS, layoutById } from "../../../engine/layouts";
 // 덱 원문을 슬라이드 단위로 쪼개고 다시 합친다. SPEC 9절.
 // 손대지 않은 슬라이드는 원문 글자 그대로 돌아온다. split 뒤 compose는 항등이어야 한다.
 // gap: 앞 슬라이드 끝에서 이 슬라이드 시작까지의 원문. undefined면 기본 간격을 쓴다.
@@ -98,10 +97,8 @@ export function serializeSlide(el: Element) {
   return c.outerHTML.replace(/(<aside\b[^>]*\sdata-notes)=""/g, "$1");
 }
 
-// 새 슬라이드 조각. 레이아웃 id(engine/layouts.ts, SPEC 2.1)를 주면 그 예시 조각을, 없거나 모르면 제목과 내용 조각을 쓴다.
-export const newSlideHtml = (layoutId?: string) => layoutById(layoutId ?? "")?.html ?? LAYOUTS[0].html;
-/** 슬라이드 글자의 data-layout 값(없으면 undefined). 새 슬라이드는 직전 슬라이드와 같은 레이아웃으로 시작한다. */
-export const layoutOf = (html: string) => /^<section\b[^>]*\bdata-layout="([^"]*)"/i.exec(html.trimStart())?.[1];
+// 새 슬라이드 조각: 종류별 빈 구조(제목과 본문 하나)만 둔다. 레이아웃 프리셋은 없다(HTML 구조만 정해 둔다).
+export const newSlideHtml = () => `<section data-slide="content">\n    <h2>제목</h2>\n    <p>내용</p>\n  </section>`;
 
 /** 복제한 조각 안의 id를 새 값으로 바꾸고, 그 id를 가리키는 참조(url(#id), href="#id")도 함께 바꾼다(인라인 svg의 마스크와 그라디언트가 원본과 id를 나눠 쓰지 않게). 루트의 id는 호출하는 쪽이 지운다. */
 export function freshIds(root: Element) {

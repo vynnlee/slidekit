@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical,
-  ArrowDown, ArrowRight, Blend, CaseLower, CaseSensitive, CaseUpper, ALargeSmall, Droplets, Expand, EyeOff, Frame, Layers as LayersIcon,
+  ArrowDown, ArrowRight, Blend, CaseLower, CaseSensitive, CaseUpper, ALargeSmall, Droplets, Expand, EyeOff, Layers as LayersIcon,
   Minus, Plus, RotateCw, Shrink, Square, SquareRoundCorner, Strikethrough, TextAlignCenter, TextAlignEnd, TextAlignJustify, TextAlignStart,
   Underline, WrapText, Scan, Spline, Footprints, Ban, MoveHorizontal, ListCollapse, Space, BetweenHorizontalStart, BetweenVerticalStart, Type,
   Play, Link2, Unlink2, Columns3,
@@ -28,7 +28,6 @@ import { TEXT_STYLES, currentTextStyle } from "@/lib/text-styles";
 import { STEP_EFFECTS } from "../../engine/steps"; // 효과 목록의 원천(엔진 CSS와 같은 목록)
 import { parseGradient, serializeGradient, type Gradient } from "@/lib/gradient";
 import { GradientEditor } from "@/components/ui/gradient-editor";
-import { LAYOUTS } from "../../engine/layouts";
 import { TokensPanel } from "./TokensPanel";
 import { CommentsPanel } from "./CommentsPanel";
 import type { Comment } from "@/lib/deck";
@@ -275,7 +274,6 @@ export function Inspector(p: Props) {
 
   const kind = p.slide?.getAttribute("data-slide") ?? "content";
   const openCount = p.comments.filter((c) => !c.resolved && c.status === "open").length;
-  const steps = p.slide?.getAttribute("data-steps") ?? "";
   const bgNone = !p.slide?.style.getPropertyValue("background-color");
   const autoSteps = Math.max(1, ...[...(p.slide?.querySelectorAll("[data-step]") ?? [])].map((e) => parseInt(e.getAttribute("data-step") ?? "1", 10) || 1));
 
@@ -293,22 +291,13 @@ export function Inspector(p: Props) {
                 <span className="text-micro text-muted-foreground">Type</span>
                 <Pick label="Type" value={KINDS.some(([k]) => k === kind) ? kind : "content"} items={KINDS} onChange={(v) => p.onAttr("data-slide", v)} />
               </div>
-              {kind === "content" && (
+              {kind === "chapter" && (
                 <div className="flex flex-col gap-1">
-                  <span className="text-micro text-muted-foreground">Layout</span>
-                  <Pick label="Layout" value={p.slide?.getAttribute("data-layout") ?? "title-body"} items={LAYOUTS.map((l) => [l.id, l.label] as const)} onChange={(v) => p.onAttr("data-layout", v === "title-body" ? null : v)} />
+                  <span className="text-micro text-muted-foreground">Chapter title</span>
+                  <Field aria-label="Chapter title" placeholder="Shown in the table of contents" defaultValue={p.slide?.getAttribute("data-title") ?? ""} onChange={(e) => p.onAttr("data-title", e.target.value || null)} />
                 </div>
               )}
-              <div className="flex flex-col gap-1">
-                <span className="text-micro text-muted-foreground">Chapter title</span>
-                <Field aria-label="Chapter title" placeholder="Shown in the table of contents" defaultValue={p.slide?.getAttribute("data-title") ?? ""} onChange={(e) => p.onAttr("data-title", e.target.value || null)} />
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-micro text-muted-foreground">Steps</span>
-                <NumberField label={<Frame />} aria-label="Steps" unit="" min={1} step={1} value={steps || "1"} muted={!steps}
-                  onChange={(v) => p.onAttr("data-steps", +v > 1 ? String(Math.round(+v)) : null)} />
-                {autoSteps > 1 && <span className="text-micro text-muted-foreground">Auto from element steps: {autoSteps}</span>}
-              </div>
+              {autoSteps > 1 && <span className="text-micro text-muted-foreground">{autoSteps} steps (from element steps)</span>}
             </InspectorSection>
             <InspectorSection id="slide-bg" title="Background">
               <SegmentedControl aria-label="Background type" value={slideGrad ? "linear" : "solid"}

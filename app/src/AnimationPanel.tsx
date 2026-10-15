@@ -1,9 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { Play, Plus, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { clearAll, clearOut, hasAnimation, setIn, setOut, shift, type StepSpec } from "@/lib/animation-model";
 import { readSlide, slideStepCount, type AnimRow } from "@/lib/animation-dom";
+import type { PlayHead } from "@/lib/play-head";
 import { nameOf } from "./LayerTree";
 
 // 하단 Animation 탭(spec/ANIMATION.md 4절): 단계 격자와 요소별 막대(보이는 구간 N부터 M 직전). 막대 끝을 끌면 등장과 퇴장, 몸통을 끌면 둘 다 같은 간격으로 이동한다.
@@ -15,7 +16,7 @@ type Props = {
   slide: HTMLElement | null;
   sel: Element | null;
   rev: unknown; // 슬라이드 내용이 바뀔 때마다 달라져 다시 그린다
-  step: number | null; // 재생 헤드(null이면 마지막 단계)
+  head: PlayHead; // 재생 헤드 저장소(k가 null이면 마지막 단계)
   playing: boolean;
   onStep(k: number | null): void;
   onEdit(el: HTMLElement, next: StepSpec): void;
@@ -38,7 +39,8 @@ export function AnimationPanel(p: Props) {
   const drag = useRef<Drag | null>(null);
   const rows: AnimRow[] = p.slide ? readSlide(p.slide, p.sel) : [];
   const S = p.slide ? slideStepCount(p.slide, rows) : 1;
-  const head = Math.min(p.step ?? S, S);
+  const k0 = useSyncExternalStore(p.head.subscribe, () => p.head.get().k);
+  const head = Math.min(k0 ?? S, S);
   const areaW = Math.max(1, S) * COL;
 
   useEffect(() => () => { drag.current = null; }, []);

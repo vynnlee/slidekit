@@ -8,7 +8,7 @@ const dir = mkdtempSync(join(tmpdir(), "sk-comments-"));
 mkdirSync(join(dir, "d"));
 process.env.SLIDEKIT_DECKS = dir;
 process.env.SLIDEKIT_KEY_FILE = join(dir, "test.key"); // 실제 ~/.config 키를 건드리지 않는다
-const { load, save, remap, sanitize, sign, verify, flagAfterRestore } = await import("../comments");
+const { load, save, remap, sanitize, sign, verify, flagAfterRestore, routes } = await import("../comments");
 const file = join(dir, "d", "comments.json");
 
 test("파일이 없으면 빈 목록, 저장 후 다시 읽힘", () => {
@@ -82,4 +82,21 @@ test("버전 복원 뒤: 발췌문이 그 번호 슬라이드에 없으면 reche
   expect(load("d").map((x) => !!x.recheck)).toEqual([true, false]); // 발췌문이 없는 코멘트는 판단하지 않는다
   flagAfterRestore("d", html("Alpha", "Beta"));
   expect(load("d").map((x) => !!x.recheck)).toEqual([false, false]);
+});
+
+test("큰 입력과 이상한 글자: 본문 2000자 초과는 400, excerpt와 path는 잘리고, 널 문자와 이모지와 RTL은 저장되어도 목록이 죽지 않는다", async () => {
+  const post = (b: Record<string, unknown>) => routes["/api/comments"].POST(new Request("http://x/", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ deck: "d", slide: 1, ...b }) }));
+  expect((await post({ text: "가".repeat(100_000) })).status).toBe(400); // 100KB 본문
+  expect((await post({ text: "a".repeat(2001) })).status).toBe(400);
+  const long = await post({ text: "x", path: "p".repeat(10_000), excerpt: "e".repeat(10_000) });
+  expect(long.status).toBe(200);
+  const odd = String.fromCharCode(0, 0x202e, 0x200b, 0x2028) + "😀".repeat(50) + "\n둘째 줄";
+  expect((await post({ text: odd, excerpt: odd, path: odd })).status).toBe(200);
+  const l = load("d");
+  const a = l.find((c) => c.text === "x" && c.path.length > 0)!;
+  expect(a.path.length).toBe(200);
+  expect(a.excerpt.length).toBe(80);
+  const b = l.find((c) => c.text === odd)!;
+  expect(b.text).toBe(odd); // 본문은 사용자가 쓴 그대로(채널이 알림에서 \\uXXXX로 풀어 쓴다)
+  expect(/[\u0000-\u001f]/.test(b.excerpt + b.path)).toBe(false); // 덱에서 온 값의 제어 문자(널과 줄바꿈 포함)는 공백이 된다
 });

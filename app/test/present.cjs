@@ -21,7 +21,17 @@ fs.writeFileSync(path.join(DIR2, 'index.html'), fs.readFileSync(path.join(DIR, '
 const DECK3 = '_e2e-present-zero', ID3 = 'e2e-present-zero', DIR3 = path.join(__dirname, '..', '..', 'decks', DECK3);
 fs.mkdirSync(DIR3, { recursive: true });
 fs.writeFileSync(path.join(DIR3, 'index.html'), `<!doctype html><html lang="en" data-slidekit="1"><head><meta charset="utf-8"><title>${ID3}</title><script type="application/json" id="deck-meta">{ "title": "${ID3}", "id": "${ID3}" }</script><link rel="stylesheet" href="../../engine/slidekit.css"></head><body><script src="../../engine/slidekit.js"></script></body></html>`);
-process.on('exit', () => { fs.rmSync(DIR, { recursive: true, force: true }); fs.rmSync(DIR2, { recursive: true, force: true }); fs.rmSync(DIR3, { recursive: true, force: true }); });
+// 단계(data-step) 요소와 visibility:visible 자손이 있는 덱: 빠르게 앞뒤로 움직인 뒤 비활성 슬라이드의 요소가 보이지 않는지 본다.
+const DECK4 = '_e2e-present-steps', ID4 = 'e2e-present-steps', DIR4 = path.join(__dirname, '..', '..', 'decks', DECK4);
+fs.mkdirSync(DIR4, { recursive: true });
+fs.writeFileSync(path.join(DIR4, 'index.html'), `<!doctype html><html lang="en" data-slidekit="1"><head><meta charset="utf-8"><title>${ID4}</title><script type="application/json" id="deck-meta">{ "title": "${ID4}", "id": "${ID4}" }</script>
+<link rel="stylesheet" href="../../engine/slidekit.css"></head><body>
+<section data-slide="cover"><h1>Cover</h1><aside data-notes>Notes for cover</aside></section>
+<section data-slide="content"><h2>Steps</h2><figure data-step="2" style="visibility:visible">Photo</figure><p data-step="3" style="visibility:visible;transition:visibility 2s">Third</p><div style="visibility:visible">Always</div></section>
+<section data-slide="content"><h2>Plain</h2><span style="visibility:visible;transition:visibility 2s">Late</span></section>
+<section data-slide="content"><h2>Four</h2></section>
+<script src="../../engine/slidekit.js"></script></body></html>`);
+process.on('exit', () => { fs.rmSync(DIR, { recursive: true, force: true }); fs.rmSync(DIR2, { recursive: true, force: true }); fs.rmSync(DIR3, { recursive: true, force: true }); fs.rmSync(DIR4, { recursive: true, force: true }); });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fail = 0;
 let __last = Date.now(); // TIMING=1이면 직전 검사 이후 1.5초 넘게 걸린 구간을 보여 준다(느린 단계 찾기)
@@ -236,6 +246,41 @@ const MOCKS = {
     // 한글 입력 상태(e.key가 ㅅ)에서도 물리 키 T로 타이머가 켜진다
     await page.evaluate(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ㅅ', code: 'KeyT', bubbles: true })));
     check('한글 입력 상태에서도 T 단축키가 동작한다', await until(async () => (await timer()) !== '00:00:00', 6000), await timer());
+    await ctx.close();
+  }
+  // 빠르게 앞뒤로 움직인 직후에도 비활성 슬라이드의 요소가 발표자 화면의 미리보기와 청중 창에 보이지 않는다
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+    await ctx.addInitScript(MOCKS.unsupported);
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/present/${ID4}`, { waitUntil: 'domcontentloaded' });
+    const counter = () => page.getByText(/^\d+ \/ \d+$/).first().innerText();
+    await until(async () => (await counter()) === '1 / 4');
+    const popupP = ctx.waitForEvent('page', { timeout: 5000 });
+    await page.getByRole('button', { name: 'Present' }).click();
+    const pop = await popupP.catch(() => null);
+    check('[steps] 발표 창이 열린다', !!pop, pop ? '' : await page.evaluate(() => document.body.innerText.slice(0, 300)));
+    if (pop) {
+      const leaks = async () => {
+        const out = [];
+        for (const pg of [page, pop]) for (const fr of pg.frames()) {
+          const n = await fr.evaluate(() => [...document.querySelectorAll('#sk-stage > [data-slide]:not([data-active]):not([data-leaving]) *')].filter((e) => getComputedStyle(e).visibility !== 'hidden').map((e) => e.textContent.slice(0, 12))).catch(() => []);
+          if (n.length) out.push({ url: fr.url().slice(-40), n });
+        }
+        return out;
+      };
+      await page.bringToFront(); await page.mouse.click(640, 780);
+      for (const k of ['ArrowRight', 'ArrowRight', 'ArrowRight', 'ArrowRight', 'ArrowRight', 'ArrowLeft', 'ArrowLeft', 'ArrowLeft', 'ArrowLeft', 'ArrowLeft', 'ArrowLeft']) { await page.keyboard.press(k); await sleep(40); }
+      let l = await leaks();
+      check('빠르게 앞뒤로 움직인 직후 비활성 슬라이드의 요소가 보이지 않는다', l.length === 0, l);
+      await sleep(1500);
+      l = await leaks();
+      check('잠시 뒤에도 보이지 않는다', l.length === 0, l);
+      for (const k of ['ArrowRight', 'ArrowRight', 'ArrowRight']) { await page.keyboard.press(k); await sleep(40); }
+      l = await leaks();
+      check('단계 요소가 있는 슬라이드를 지나쳐도 보이지 않는다', l.length === 0, l);
+    }
     await ctx.close();
   }
   // ?from=N: 그 장에서 시작, 범위 밖은 가장 가까운 장. 발표 시작은 현재 장부터.

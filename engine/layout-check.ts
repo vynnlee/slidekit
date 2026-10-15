@@ -23,7 +23,7 @@ export function parseLayoutResult(dom: string): LayoutResult | null {
 export function injectedScript(findOverflowSource: string): string {
   return `<script>${findOverflowSource}
 window.addEventListener('load', function () { setTimeout(function () {
-  document.documentElement.setAttribute('data-sk-show-steps', '');
+  document.documentElement.setAttribute('data-sk-show-steps', ''); document.documentElement.setAttribute('data-sk-measure', ''); // 비활성 슬라이드의 자손도 보이는 채로 잰다
   var stage = document.getElementById('sk-stage'), out = [];
   var slides = [].filter.call(stage ? stage.children : [], function (e) { return e.hasAttribute && e.hasAttribute('data-slide'); });
   slides.forEach(function (s, i) {

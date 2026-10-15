@@ -282,6 +282,7 @@ const settled = async (...ps) => { await Promise.all(ps.map(settledOne)); if (ps
     '<section data-slide="content"><h2>three</h2></section>';
   page('dstep', dsBody);
   page('dstep-fx', '<section data-slide="content"><h2>fx</h2>' + ['rise', 'fade', 'left', 'scale', 'blur', 'none', 'bogus'].map((e) => '<p id="fx-' + e + '" data-step="2" data-step-effect="' + e + '">' + e + '</p>').join('') + '</section>');
+  page('vis-leak', '<section data-slide="content"><h2>one</h2></section><section data-slide="content"><h2>two</h2><p id="leak" style="visibility:visible">leak</p><p id="st" data-step="2">step</p></section><section data-slide="content"><h2>three</h2></section>');
   page('dstep-more', '<section data-slide="content" data-steps="4"><p id="a" data-step="2">A</p></section><section data-slide="content"><h2>x</h2></section>');
   page('dstep-custom', '<section data-slide="content" id="c"><p id="a" data-step="2">A</p><p id="z" data-step="3">Z</p></section><section data-slide="content"><h2>x</h2></section>',
     `<script>window.log = []; var s = 1; SlideKit.stepper(document.getElementById('c'), { enter: function () { s = 1; }, next: function () { log.push('next'); if (s >= 3) return false; s++; return true; }, prev: function () { if (s <= 1) return false; s--; return true; }, get: function () { return s; }, goto: function (n) { s = n; } });</script>`);
@@ -315,6 +316,32 @@ const settled = async (...ps) => { await Promise.all(ps.map(settledOne)); if (ps
     check('data-step: print shows every step', pv.length === 4 && pv.every((v) => v === 'visible1'), pv);
     await d.emulateMedia({ media: 'screen' });
     await d.close(); }
+  { const v = await ctx.newPage(); const ve = []; v.on('pageerror', (e) => ve.push(String(e)));
+    await v.goto(BASE + '/__t/vis-leak#2'); await v.waitForSelector('#sk-stage'); await settled(v);
+    const leaks = () => v.evaluate(() => [...document.querySelectorAll('#sk-stage > [data-slide]')].filter((s) => !s.hasAttribute('data-active') && !s.hasAttribute('data-leaving'))
+      .flatMap((s) => [s, ...s.querySelectorAll('*')]).filter((e) => getComputedStyle(e).visibility !== 'hidden').map((e) => e.id || e.tagName));
+    const lv = (id) => v.evaluate((id) => getComputedStyle(document.getElementById(id)).visibility, id);
+    check('inactive slides: the active slide still shows its own visibility:visible child', (await lv('leak')) === 'visible');
+    await v.keyboard.press('ArrowRight'); await v.keyboard.press('ArrowRight'); await settled(v); // step 2, then slide 3
+    check('inactive slides: no descendant stays visible after leaving (author visibility:visible and running step transitions)', (await leaks()).length === 0, await leaks());
+    const seq = ['ArrowLeft', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'ArrowRight', 'ArrowLeft'];
+    let bad = [];
+    for (const k of seq) { await v.keyboard.press(k); await sleep(120); /* inside the fade and the step transition */ await settled(v); bad = bad.concat(await leaks()); }
+    await v.evaluate(() => { location.hash = '#2'; }); await settled(v); bad = bad.concat(await leaks());
+    check('inactive slides: random moves, hash jumps and step back/forward leave no visible descendant', bad.length === 0, bad);
+    // un-show transition in flight (visibility transition with a delay) when the slide is left by a jump: a running transition beats !important, so it must be cancelled
+    await v.evaluate(() => { location.hash = '#2'; }); await settled(v);
+    await v.keyboard.press('ArrowRight'); await settled(v); // step 2 shown
+    await v.keyboard.press('ArrowLeft'); await sleep(40); // un-show starts (visibility goes hidden only after --sk-step-ms)
+    const samples = await v.evaluate(() => new Promise((res) => {
+      location.hash = '#1';
+      const out = {}, at = (ms) => setTimeout(() => { const e = document.getElementById('st'); out[ms] = getComputedStyle(e).visibility + '/' + getComputedStyle(document.getElementById('leak')).visibility; if (ms === 300) res(out); }, ms);
+      [10, 100, 300].forEach(at);
+    }));
+    check('inactive slides: a step element mid un-show transition does not stay on top after a jump (10ms, 100ms, 300ms)', Object.values(samples).every((x) => x === 'hidden/hidden'), samples);
+    await v.keyboard.press('ArrowLeft'); // 1 -> leaving slide 2 is still visible while it fades (the crossfade is kept)
+    check('inactive slides: the leaving slide keeps its subtree while fading, then hides it', ve.length === 0, ve);
+    await v.close(); }
   { const f = await ctx.newPage(); await f.goto(BASE + '/__t/dstep-fx#1'); await f.waitForSelector('#sk-stage'); await settled(f);
     const st = await f.evaluate(() => Object.fromEntries([...document.querySelectorAll('#sk-stage [data-step]')].map((e) => { const c = getComputedStyle(e); return [e.id.slice(3), c.transform + '|' + c.filter + '|' + c.opacity]; })));
     check('data-step effects: hidden poses (rise, left, scale, blur; fade and none only opacity; unknown falls back to rise)',

@@ -82,6 +82,7 @@
 - 엔진은 `scale = min(창폭/1920, 창높이/1080)`로 무대를 줄이고 늘려 창 가운데에 둔다(`transform: translate() scale()`). 남는 영역은 `--sk-bg`로 채운다. `resize`와 `fullscreenchange`에서 다시 계산한다. 현재 배율은 `SlideKit.scale`로 읽는다.
 - 활성 슬라이드에 `data-active` 속성을 붙인다. 나머지는 `visibility:hidden`이고 `display:none`을 쓰지 않는다. `url(#id)` 참조와 크기 측정이 비활성 슬라이드에서도 동작해야 하기 때문이다.
 - 슬라이드가 켜질 때 0.34초 페이드인을 쓴다. 방향키 이동(앞뒤, 단계 끝)에서는 떠나는 슬라이드가 0.2초 동안 남아 서로 겹치며 사라지는 크로스페이드가 된다(`data-leaving`, 약 0.36초 뒤 제거). 해시, 숫자 입력, 전체 보기, 동기화로 건너뛸 때와 임베드 모드에서는 크로스페이드 없이 바로 바뀐다(새 슬라이드의 페이드인만 재생된다). `prefers-reduced-motion: reduce`이면 전부 끈다. 페이드인 곡선은 토큰 `--sk-ease`이고 떠나는 슬라이드의 페이드아웃은 `ease-out`이다.
+- 비활성 슬라이드의 모든 자손은 자손이 `visibility: visible`을 지정하거나 숨김 전환(`data-step`)이 진행 중이어도 숨겨진다(`visibility`가 상속이라 자손이 숨김을 뚫으면 다른 슬라이드 위에 남기 때문이다). 예외는 떠나는 슬라이드의 페이드(`data-leaving`), 인쇄, 전체 보기 썸네일, 레이아웃 측정(`<html data-sk-measure>`)이다.
 - 덱 CSS는 활성 여부를 `[data-slide][data-active]`로 선택한다.
 - 슬라이드 기본 배치(엔진 CSS): 무대 전체를 덮고, `flex` 세로 배치, 세로 가운데 정렬, 안쪽 여백과 간격은 토큰을 따른다. 종류별 모양(`cover`, `chapter`)은 덱 CSS가 정한다.
 - 무대 밖으로 넘친 내용은 잘린다(`overflow:hidden`).

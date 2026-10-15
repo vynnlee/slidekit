@@ -55,6 +55,10 @@ p { font-size: var(--sk-fs-body); line-height: 1.65; color: var(--sk-muted); mar
   overflow: hidden; visibility: hidden;
 }
 [data-slide][data-active] { visibility: visible; }
+/* visibility is inherited, so a descendant that sets visibility: visible (an author rule, or a running visibility transition)
+   would show through a hidden slide and stay on top of the active one. Inactive slides force their whole subtree hidden.
+   The leaving slide is exempt while it fades out; print, the overview thumbnails (outside #sk-stage) and the layout check (data-sk-measure) are not affected. */
+@media screen { html:not([data-sk-measure]) #sk-stage > [data-slide]:not([data-active]):not([data-leaving]) * { visibility: hidden !important; transition: none !important; } }
 [data-slide][data-active] { z-index: 1; }
 @media (prefers-reduced-motion: no-preference) {
   /* arrows crossfade: the old slide fades out quickly while the new one fades in on top */

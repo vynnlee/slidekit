@@ -58,15 +58,6 @@ test("앱 코드가 engine/lint를 먼저 import해 둔 프로세스에서도 li
   expect(r.stdout.toString()).toContain("통과");
   expect(r.exitCode).toBe(0);
 });
-test("layouts: 프리셋 목록을 사람 글과 JSON으로 낸다", () => {
-  const t = run("layouts");
-  expect(t.code).toBe(0);
-  for (const id of ["title-body", "two-column", "big-number", "quote", "image-full"]) expect(t.out).toContain(id);
-  const j = JSON.parse(run("layouts", "--json").out);
-  expect(j.map((l: { id: string }) => l.id)).toEqual(["title-body", "two-column", "big-number", "quote", "image-full"]);
-  expect(j.every((l: { html: string }) => l.html.startsWith("<section data-slide=\"content\""))).toBe(true);
-});
-
 test("new --template: 템플릿마다 lint 종료 코드 0과 placeholder 경고, 첫 슬라이드는 표지, 알 수 없는 id는 목록을 보여 준다", async () => {
   const { readFileSync, rmSync } = await import("node:fs");
   const { TEMPLATE_IDS } = await import("../templates");

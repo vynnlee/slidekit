@@ -4,7 +4,7 @@
   고치는 곳: 슬라이드 안의 글자, deck-meta의 title과 author(비어 있어도 된다), 아래 style의 토큰.
   유지할 것: data-slide 값(cover, chapter, content, end), chapter의 data-title은 h1과 같은 글자.
   이동은 방향키만 쓴다. 슬라이드를 늘릴 때는 data-slide="content"가 붙은 section 요소 하나를 통째로 복사한다.
-  모양은 data-layout으로 고른다(목록은 `bun run slidekit layouts`). 예제 문구(...를 여기에 적는다)는 모두 바꾼다.
+  모양이 필요하면 아래 style에 클래스를 만든다(두 열 .two-col, 큰 숫자 .big-number가 들어 있다). 예제 문구(...를 여기에 적는다)는 모두 바꾼다.
 -->
 <html lang="ko" data-slidekit="1">
 <head>
@@ -25,6 +25,13 @@
     [data-slide="chapter"] { counter-increment: ch; gap: 36px; }
     [data-slide="chapter"]::before { content: counter(ch, decimal-leading-zero); font: 500 28px var(--sk-font-mono); color: var(--sk-faint); }
     [data-slide="content"] { justify-content: flex-start; padding-top: 180px; gap: 40px; }
+    /* shapes used by the sample slides; delete what you do not use */
+    [data-slide].two-col { display: grid; grid-template-columns: 1fr 1fr; align-content: start; column-gap: var(--sk-gap); row-gap: var(--sk-gap); }
+    .two-col > :not(.col) { grid-column: 1 / -1; }
+    .two-col > .col { display: flex; flex-direction: column; gap: calc(var(--sk-gap) / 2); min-width: 0; }
+    .two-col > .col h3 { margin: 0; font-size: calc(var(--sk-fs-body) * 1.1); font-weight: 700; line-height: 1.3; color: var(--sk-fg); }
+    [data-slide].big-number { justify-content: center; padding-block: var(--sk-pad-y); }
+    .big-number .big { font-size: 260px; font-weight: 800; line-height: 1; letter-spacing: -.04em; color: var(--sk-accent); max-width: none; }
   </style>
 </head>
 <body>

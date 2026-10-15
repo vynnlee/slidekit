@@ -1,6 +1,5 @@
 /* slidekit lint <덱>: SPEC 위반을 규칙별로 한 줄씩 출력한다. error가 있으면 종료 코드 1. */
 import { join } from "node:path";
-import { LAYOUT_IDS } from "./layouts";
 import { validateMeta } from "./deck-meta";
 import { localImageRefs } from "./publish-record";
 
@@ -50,7 +49,7 @@ export function lint(html: string): Issue[] {
   const bodyM = rest.match(/<body\b[^>]*>([\s\S]*)<\/body>/i);
   const body = bodyM ? bodyM[1] : "";
   if (!bodyM) add("error", "body", "<body>가 없다");
-  type Sl = { kind: string; title: string | null; steps: number; id: string | null; notes: number; text: string; dsteps: string[]; layout: string | null; cols: number; bigs: number; quotes: number; imgs: number };
+  type Sl = { kind: string; title: string | null; steps: number; id: string | null; notes: number; text: string; dsteps: string[]; layout: string | null };
   const slides: Sl[] = [];
   const stack: string[] = [];
   let cur: Sl | null = null;
@@ -66,16 +65,12 @@ export function lint(html: string): Issue[] {
     if (/\b(?:id|class)=["'][^"']*\b(viewport|stage)\b/i.test(attrs)) wrappers.push(tag);
     if (cur) {
       const ds = at("data-step"); if (ds !== null) cur.dsteps.push(ds.trim());
-      if (/\bdata-col\b/.test(attrs)) cur.cols++;
-      if (/\bdata-big\b/.test(attrs)) cur.bigs++;
-      if (tag === "blockquote") cur.quotes++;
-      if (tag === "img") cur.imgs++;
     }
     if (stack.length === 0 && !["section", "script"].includes(tag)) add("error", "wrapper", `<${tag}>가 슬라이드 밖에 있다. 모든 요소를 <section data-slide> 안으로 옮긴다`);
     if (stack.length === 0 && tag === "section") {
       const kind = at("data-slide");
       if (kind === null) add("error", "slide", '<section>에 data-slide="content"를 붙인다(cover, chapter, content, end 중 하나)');
-      cur = { kind: kind ?? "", title: at("data-title"), steps: Number(at("data-steps") ?? 1), id: at("id"), notes: 0, text: "", dsteps: [], layout: at("data-layout"), cols: 0, bigs: 0, quotes: 0, imgs: 0 };
+      cur = { kind: kind ?? "", title: at("data-title"), steps: Number(at("data-steps") ?? 1), id: at("id"), notes: 0, text: "", dsteps: [], layout: at("data-layout") };
       slides.push(cur);
     } else if (cur && tag === "aside" && /\bdata-notes\b/.test(attrs)) {
       if (stack.length !== 1) add("error", "notes", `슬라이드 ${slides.length}: aside[data-notes]는 슬라이드의 직계 자식이어야 한다`);
@@ -89,14 +84,7 @@ export function lint(html: string): Issue[] {
   slides.forEach((s, i) => {
     const n = i + 1;
     if (s.kind && !KINDS.includes(s.kind)) add("warn", "slide", `슬라이드 ${n}: data-slide="${s.kind}"는 알 수 없는 종류라 content로 처리된다. cover, chapter, content, end 중 하나로 바꾼다`);
-    if (s.layout !== null) {
-      if (s.kind !== "content") add("warn", "layout", `슬라이드 ${n}: data-layout은 content 슬라이드에서만 쓴다(지금 ${s.kind || "종류 없음"})`);
-      else if (!LAYOUT_IDS.includes(s.layout)) add("warn", "layout", `슬라이드 ${n}: data-layout="${s.layout}"는 알 수 없는 값이다. ${LAYOUT_IDS.join(", ")} 중 하나로 바꾼다(slidekit layouts)`);
-      else if (s.layout === "two-column" && s.cols < 2) add("warn", "layout", `슬라이드 ${n}: two-column에는 data-col 요소가 둘 필요하다(지금 ${s.cols}개). 없으면 한 줄로 쌓여 보인다`);
-      else if (s.layout === "big-number" && s.bigs !== 1) add("warn", "layout", `슬라이드 ${n}: big-number에는 data-big 요소가 하나 필요하다(지금 ${s.bigs}개)`);
-      else if (s.layout === "quote" && s.quotes < 1) add("warn", "layout", `슬라이드 ${n}: quote에는 <blockquote>가 필요하다`);
-      else if (s.layout === "image-full" && s.imgs < 1) add("warn", "layout", `슬라이드 ${n}: image-full에는 <img>가 필요하다`);
-    }
+    if (s.layout !== null) add("warn", "layout", `슬라이드 ${n}: data-layout은 지원이 끝났다. 속성을 지우고 모양은 덱의 <style>에 클래스로 만든다(엔진은 이 속성을 무시한다)`);
     if (s.kind === "chapter") {
       if (!s.title) add("error", "chapter", `슬라이드 ${n}: chapter에 data-title="장 이름"을 달고 h1에도 같은 글자를 쓴다`);
       else {

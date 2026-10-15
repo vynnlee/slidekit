@@ -415,28 +415,13 @@ const settled = async (...ps) => { await Promise.all(ps.map(settledOne)); if (ps
     check('debug: absent without the query', (await n.evaluate(() => !document.getElementById('sk-debug'))));
     const e = await ctx.newPage(); await e.goto(BASE + '/__t/dup?embed=1&debug=1#1'); await e.waitForSelector('#sk-stage'); await settled(e);
     check('debug: absent in embed mode', (await e.evaluate(() => !document.getElementById('sk-debug')))); await n.close(); await e.close(); }
-  /* layout presets (data-layout, spec 2.1): the CSS gives each preset its shape; broken markup falls back to a stacked slide */
-  page('lay', [
-    '<section data-slide="content" data-layout="two-column"><h2 id="t2">T</h2><div data-col id="c1"><h3>a</h3><p>a</p></div><div data-col id="c2"><h3>b</h3><p>b</p></div></section>',
-    '<section data-slide="content" data-layout="big-number"><p data-big id="big">42%</p><p id="cap">cap</p></section>',
-    '<section data-slide="content" data-layout="quote"><blockquote id="bq"><p id="qp">q</p><footer>f</footer></blockquote></section>',
-    '<section data-slide="content" data-layout="image-full"><img id="im" alt="x" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"><h2 id="cap2">C</h2></section>',
-    '<section data-slide="content" data-layout="two-column"><h2 id="m1">M</h2><p id="m2">no columns</p></section>',
-    '<section data-slide="content"><h2 id="d1">D</h2></section>',
-  ].join(''), '<style>#sk-stage > [data-slide][data-layout="two-column"]:first-child { padding-top: 333px; }</style>');
-  { const l = await ctx.newPage(); await l.goto(BASE + '/__t/lay#1'); await l.waitForSelector('#sk-stage');
-    const g = await l.evaluate(() => {
-      const r = (id) => { const e = document.getElementById(id), s = e.closest('[data-slide]'), a = e.getBoundingClientRect(), b = s.getBoundingClientRect(), k = 1920 / b.width; /* slide units: the stage is scaled to the 1280x720 window */ return [Math.round((a.x - b.x) * k), Math.round((a.y - b.y) * k), Math.round(a.width * k), Math.round(a.height * k)]; };
-      const cs = (id) => getComputedStyle(document.getElementById(id));
-      return { c1: r('c1'), c2: r('c2'), t2: r('t2'), bigFs: cs('big').fontSize, bigColor: cs('big').color, accent: getComputedStyle(document.documentElement).getPropertyValue('--sk-accent').trim(),
-        bqBorder: cs('bq').borderLeftWidth, qpFs: cs('qp').fontSize, im: r('im'), cap2: r('cap2'), m1: r('m1'), m2: r('m2'), deckPadSlide: getComputedStyle(document.getElementById('c1').closest('[data-slide]')).paddingTop, deckDisplay: getComputedStyle(document.getElementById('c1').closest('[data-slide]')).display };
-    });
-    check('layout two-column: two equal columns side by side, title spans both', g.c2[0] > g.c1[0] + 300 && Math.abs(g.c1[2] - g.c2[2]) <= 1 && g.c1[1] === g.c2[1] && g.t2[1] + g.t2[3] <= g.c1[1] && g.t2[0] === g.c1[0], g); /* the title sits above both columns, left-aligned with the first */
-    check('layout big-number: the number is 260px in the accent color', g.bigFs === '260px' && g.bigColor !== '' , [g.bigFs, g.bigColor, g.accent]);
-    check('layout quote: accent rule and 64px text', g.bqBorder === '6px' && g.qpFs === '64px', [g.bqBorder, g.qpFs]);
-    check('layout image-full: the image fills the slide, the title sits below the middle', g.im[2] === 1920 && g.im[3] === 1080 && g.cap2[1] > 700, [g.im, g.cap2]);
-    check('layout two-column without data-col falls back to stacked full-width lines', g.m2[2] > 900 && g.m2[1] > g.m1[1], [g.m1, g.m2]);
-    check('deck CSS adds to a layout (padding) and the layout still applies (grid)', g.deckPadSlide === '333px' && g.deckDisplay === 'grid', [g.deckPadSlide, g.deckDisplay]);
+  /* data-layout is no longer supported: the engine ignores it and the slide stays a plain stacked slide (lint warns) */
+  page('lay', '<section data-slide="content" data-layout="two-column"><h2 id="t2">T</h2><div data-col><p id="c1">a</p></div><div data-col><p id="c2">b</p></div></section>' +
+    '<section data-slide="content" data-layout="big-number"><p data-big id="big">42%</p></section>');
+  { const l = await ctx.newPage(); await l.goto(BASE + '/__t/lay#1'); await l.waitForSelector('#sk-stage'); await settled(l);
+    const g = await l.evaluate(() => { const cs = (id) => getComputedStyle(document.getElementById(id)); const r = (id) => document.getElementById(id).getBoundingClientRect();
+      return { disp: getComputedStyle(document.querySelector('[data-slide]')).display, same: Math.abs(r('c1').left - r('c2').left) < 2, bigFs: cs('big').fontSize }; });
+    check('data-layout is ignored: no grid, columns stack, no preset font size', g.disp === 'flex' && g.same && g.bigFs !== '260px', g);
     await l.close(); }
   /* data-step="1" and invalid values are ignored with the element visible from the start (6.3) */
   page('ds1', '<section data-slide="content"><p id="one" data-step="1">x</p><p id="bad" data-step="abc">y</p><p id="two" data-step="2">z</p></section>');

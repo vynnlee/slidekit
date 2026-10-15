@@ -104,6 +104,12 @@ test("가이드 덱: 장마다 ## 하나, 태그와 스타일이 새지 않고, 
   expect(md).not.toContain("Notes:");
   expect(outline(html, { notes: true })).toContain("> Notes:");
   expect(md).not.toContain("letter-spacing"); // style 안의 CSS가 글로 새지 않는다
-  expect(md).not.toContain("data:image"); // data: 이미지는 자리표시자로 바뀐다
-  expect(md).toContain("](inline-image)");
+  expect(md).not.toContain("data:image"); // data: 이미지는 글에 새지 않는다(자리표시자 변환 자체는 아래 단위 테스트)
+});
+
+test("data: 이미지는 자리표시자(inline-image)로 바뀌고 일반 주소는 그대로 쓴다", () => {
+  const md = outline(deck('<section data-slide="content"><h2>그림</h2><img alt="점" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="><img alt="사진" src="assets/a.png"></section>'));
+  expect(md).toContain("![점](inline-image)");
+  expect(md).toContain("![사진](assets/a.png)");
+  expect(md).not.toContain("data:image");
 });

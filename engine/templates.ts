@@ -1,5 +1,5 @@
 /* 새 덱 템플릿의 목록 원천. 공통 head(토큰, 스타일, 엔진 연결)는 engine/template/shell.html 하나이고 템플릿마다 슬라이드만 다르다.
-   모양의 변화는 레이아웃 프리셋(engine/layouts.ts)이 맡으므로 템플릿은 슬라이드 묶음일 뿐이다.
+   엔진은 슬라이드 모양 프리셋을 제공하지 않는다. 두 열이나 큰 숫자처럼 모양이 필요한 슬라이드는 shell.html의 덱 <style>에 있는 클래스(.two-col, .big-number)를 쓴다.
    모든 템플릿은 표지가 첫 슬라이드이고 h1이 첫 제목이다(앱의 제목 설정이 deck-meta, <title>, 첫 h1에 같은 값을 넣는다).
    예제 문구는 "여기에 적는다" 꼴이라 lint의 placeholder 경고가 배포 전에 잡는다. */
 import { readFileSync } from "node:fs";
@@ -25,13 +25,13 @@ const TALK = `<section data-slide="cover">
   <p data-step="2">방향키를 한 번 더 누르면 나타나는 문장</p>
 </section>
 
-<section data-slide="content" data-layout="two-column">
+<section data-slide="content" class="two-col">
   <h2>둘을 나란히 놓을 때는 두 열을 쓴다</h2>
-  <div data-col>
+  <div class="col">
     <h3>왼쪽 소제목을 여기에 적는다</h3>
     <p>왼쪽 설명을 여기에 적는다</p>
   </div>
-  <div data-col>
+  <div class="col">
     <h3>오른쪽 소제목을 여기에 적는다</h3>
     <p>오른쪽 설명을 여기에 적는다</p>
   </div>
@@ -75,19 +75,19 @@ const WORKSHOP = `<section data-slide="cover">
 예상 질문은 여기에 적는다.</aside>
 </section>
 
-<section data-slide="content" data-layout="big-number">
-  <p data-big>30분</p>
+<section data-slide="content" class="big-number">
+  <p class="big">30분</p>
   <p>실습 시간을 여기에 적는다</p>
   <aside data-notes>숫자 하나로 시간이나 목표를 보여 준다.</aside>
 </section>
 
-<section data-slide="content" data-layout="two-column">
+<section data-slide="content" class="two-col">
   <h2>전과 후를 나란히 보여 준다</h2>
-  <div data-col>
+  <div class="col">
     <h3>실습 전을 여기에 적는다</h3>
     <p>시작할 때의 상태를 여기에 적는다</p>
   </div>
-  <div data-col>
+  <div class="col">
     <h3>실습 후를 여기에 적는다</h3>
     <p>끝났을 때의 상태를 여기에 적는다</p>
   </div>

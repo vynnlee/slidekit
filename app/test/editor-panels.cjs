@@ -42,7 +42,7 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   const tl = page.getByLabel('Top left radius'); await tl.fill('10'); await tl.press('Enter'); await settle();
   check('코너별 radius', /border-top-left-radius:\s*10px/.test(await styleOf()), await styleOf());
   // Grid 열 수: display를 Grid로 바꾸면 Columns 칸이 나타나고 repeat(N, 1fr)로 쓴다
-  await page.getByLabel('Display', { exact: true }).click(); await page.getByRole('option', { name: 'Grid', exact: true }).click(); await settle();
+  await page.getByLabel('Display', { exact: true }).click(); await page.getByRole('option', { name: 'Grid', exact: true }).click(); await page.getByRole('listbox').waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {}); await settle(); // 목록이 닫히며 포커스가 Display로 되돌아가는 것이 끝난 뒤에 Columns에 입력한다(부하에서 입력이 포커스를 잃어 버려지는 경쟁)
   const colIn = page.getByLabel('Columns', { exact: true });
   check('Display를 Grid로 바꾸면 Columns 칸이 나타남', (await colIn.count()) === 1);
   await colIn.fill('3'); await colIn.press('Enter'); await settle();

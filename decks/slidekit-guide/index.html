@@ -259,18 +259,18 @@
     <div class="node"><span class="t">스킬</span><span class="d">저장소의 slidekit 스킬을 읽은 AI가 규격에 맞는 덱을 새로 만든다</span></div>
     <div class="node"><span class="t">lint</span><span class="d">slidekit lint가 규격 위반을 알려 준다</span></div>
   </div>
-  <p>편집기에서는 C 키, 우클릭, 팔레트의 Add comment로 쓰고, 열린 코멘트가 있는 슬라이드는 필름스트립에 점이 보인다. 작성창의 Hold until I send all to Claude를 켜면 코멘트가 보류로 쌓이고, Send all to Claude가 한 번에 10개까지 묶어 보낸다. 코멘트는 파일에도 저장된다(Claude Code Channels).</p>
+  <p>편집기에서는 C 키, 우클릭, 팔레트의 Add comment로 쓰고, Shift+C 코멘트 모드에서는 요소를 누르거나 영역을 끌어 지정한다(영역은 이미지로 전달된다). 작성창에서 Enter는 Add(대기), Cmd+Enter는 Send now(곧바로), Shift+Enter는 줄바꿈이고, 대기 중인 코멘트는 패널의 Send all to Claude가 한 번에 10개까지 묶어 보낸다. 열린 코멘트가 있는 슬라이드는 필름스트립에 점이 보이고 코멘트는 파일에도 저장된다(Claude Code Channels).</p>
   <aside data-notes>AI와의 협업은 **코멘트, 스킬, lint** 세 도구로 이루어진다.
 
 코멘트는 파일에도 남아 놓친 것을 다시 가져올 수 있다.
-시연: 요소에 코멘트를 쓰고 Claude Code 세션이 고치는 과정을 보인다. 코멘트가 여럿이면 Hold로 모아 한 번에 보낸다.</aside>
+시연: 요소에 코멘트를 쓰고 Claude Code 세션이 고치는 과정을 보인다. 코멘트가 여럿이면 Enter(Add)로 모아 Send all to Claude로 한 번에 보낸다.</aside>
 </section>
 <section data-slide="content">
 <h2>코멘트로 Claude에게 고치게 한다</h2>
 <ul class="items">
-<li>남기기: 요소를 고르고 C를 눌러 Tell Claude what to change 칸에 쓰고 Cmd+Enter. 요소가 없으면 슬라이드 전체에 건다.</li>
+<li>남기기: 요소를 고르고 C를 눌러 쓴다(Shift+C 코멘트 모드는 요소를 누르거나 영역을 끈다). Enter는 Add, Cmd+Enter는 Send now, Shift+Enter는 줄바꿈이다. 요소가 없으면 슬라이드 전체에 건다.</li>
 <li>보내기: Claude connected가 보이면 바로 Sent to Claude, 작업이 시작되면 Claude is working으로 바뀐다. Claude not connected이면 안내의 명령으로 Claude Code를 켠다. 그동안은 Waiting으로 저장된다.</li>
-<li>여럿이면: Hold until I send all to Claude로 모은 뒤 Send all to Claude를 누르면 최대 10개씩 간다.</li>
+<li>여럿이면: Enter(Add)로 대기시킨 뒤 패널의 Send all to Claude를 누르면 최대 10개씩 간다. Cmd+Enter(Send now)는 곧바로 보낸다.</li>
 <li>답과 해결: Replied가 뜨면 Resolve(E)하고, 마음에 안 들면 Revert Claude's edit로 그 수정만 되돌린다.</li>
 </ul>
 <aside data-notes>시연 순서: 요소에 코멘트를 쓰고, 연결 표시를 확인하고, 상태가 Sent to Claude에서 Claude is working, Replied로 바뀌는 것을 보인 뒤 Revert를 눌러 본다.

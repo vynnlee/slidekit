@@ -283,6 +283,10 @@ const settled = async (...ps) => { await Promise.all(ps.map(settledOne)); if (ps
   page('dstep', dsBody);
   page('dstep-fx', '<section data-slide="content"><h2>fx</h2>' + ['rise', 'fade', 'left', 'scale', 'blur', 'none', 'bogus'].map((e) => '<p id="fx-' + e + '" data-step="2" data-step-effect="' + e + '">' + e + '</p>').join('') + '</section>');
   page('vis-leak', '<section data-slide="content"><h2>one</h2></section><section data-slide="content"><h2>two</h2><p id="leak" style="visibility:visible">leak</p><p id="st" data-step="2">step</p></section><section data-slide="content"><h2>three</h2></section>');
+  page('anim', '<section data-slide="content"><h2>one</h2></section><section data-slide="content"><h2>two</h2>' +
+    '<p id="a" data-step="2">a</p><p id="b" data-step-out="3">b</p><p id="c" data-step="2" data-step-out="4">c</p><p id="d" data-step="3" style="--sk-step-delay:300ms">d</p>' +
+    '<p id="e" data-step="2" data-step-effect="left">e</p><p id="f" data-step="2" style="--sk-away-x:100px;--sk-away-y:0px;--sk-away-scale:.5">f</p><p id="g" data-step="2" data-step-effect="blur">g</p></section><section data-slide="content"><h2>three</h2></section>');
+  page('anim50', '<section data-slide="content"><h2>x</h2>' + Array.from({ length: 50 }, (_, i) => '<p data-step="2">item ' + i + '</p>').join('') + '</section><section data-slide="content"><h2>y</h2></section>');
   page('dstep-more', '<section data-slide="content" data-steps="4"><p id="a" data-step="2">A</p></section><section data-slide="content"><h2>x</h2></section>');
   page('dstep-custom', '<section data-slide="content" id="c"><p id="a" data-step="2">A</p><p id="z" data-step="3">Z</p></section><section data-slide="content"><h2>x</h2></section>',
     `<script>window.log = []; var s = 1; SlideKit.stepper(document.getElementById('c'), { enter: function () { s = 1; }, next: function () { log.push('next'); if (s >= 3) return false; s++; return true; }, prev: function () { if (s <= 1) return false; s--; return true; }, get: function () { return s; }, goto: function (n) { s = n; } });</script>`);
@@ -342,11 +346,73 @@ const settled = async (...ps) => { await Promise.all(ps.map(settledOne)); if (ps
     await v.keyboard.press('ArrowLeft'); // 1 -> leaving slide 2 is still visible while it fades (the crossfade is kept)
     check('inactive slides: the leaving slide keeps its subtree while fading, then hides it', ve.length === 0, ve);
     await v.close(); }
+  { const m = await ctx.newPage(); const me = []; m.on('pageerror', (e) => me.push(String(e)));
+    await m.goto(BASE + '/__t/anim#2'); await m.waitForSelector('#sk-stage'); await settled(m);
+    const vv = (ids) => m.evaluate((ids) => ids.map((i) => getComputedStyle(document.getElementById(i)).visibility[0]).join(''), ids);
+    const quiet = () => m.waitForFunction(() => document.getAnimations().length === 0, null, { timeout: 8000 }).then(() => sleep(200)); // wait for the transitions to end (360ms + the 300ms delay), not a fixed time
+    const step = async () => { await m.keyboard.press('ArrowRight'); await quiet(); };
+    check('anim step 1: entrance-only hidden, exit-only visible, mixed hidden', (await vv(['a', 'b', 'c', 'd'])) === 'hvhh', await vv(['a', 'b', 'c', 'd']));
+    const away = await m.evaluate(() => { const cs = (i) => getComputedStyle(document.getElementById(i)); return { a: cs('a').transform + '|' + cs('a').opacity + '|' + cs('a').filter, e: cs('e').transform, f: cs('f').transform, g: cs('g').filter }; });
+    check('anim away state: default = 20px down, transparent, no filter; alias left; variables; blur only when asked',
+      away.a === 'matrix(1, 0, 0, 1, 0, 20)|0|none' && away.e === 'matrix(1, 0, 0, 1, -32, 0)' && away.f === 'matrix(0.5, 0, 0, 0.5, 100, 0)' && away.g === 'blur(12px)', away);
+    await m.keyboard.press('ArrowRight'); await sleep(60);
+    const hint = await m.evaluate(() => ({ wc: getComputedStyle(document.getElementById('a')).willChange, run: document.querySelector('#sk-stage > [data-active]').hasAttribute('data-step-run') }));
+    await quiet();
+    const hint2 = await m.evaluate(() => ({ wc: getComputedStyle(document.getElementById('a')).willChange, run: document.querySelector('#sk-stage > [data-active]').hasAttribute('data-step-run') }));
+    check('anim will-change: set only while the transition runs, gone after it (no resident layers)', hint.wc === 'opacity, transform' && hint.run && hint2.wc === 'auto' && !hint2.run, [hint, hint2]);
+    check('anim step 2: entrances shown, exit-only still visible', (await vv(['a', 'b', 'c', 'd'])) === 'vvvh', await vv(['a', 'b', 'c', 'd']));
+    await m.keyboard.press('ArrowRight'); await sleep(100);
+    const dl = await m.evaluate(() => getComputedStyle(document.getElementById('d')).opacity);
+    await quiet();
+    check('anim step 3: exit-only gone, mixed still visible, delayed entrance waits for its delay then shows', (await vv(['a', 'b', 'c', 'd'])) === 'vhvv' && Number(dl) < 0.2 && (await m.evaluate(() => getComputedStyle(document.getElementById('d')).opacity)) === '1', dl);
+    await step();
+    check('anim step 4: the exit of the mixed element happened; the step count is the largest of every N and M', (await vv(['a', 'b', 'c', 'd'])) === 'vhhv' && (await hash(m)) === '#2', await hash(m));
+    await m.keyboard.press('ArrowRight'); await sleep(300);
+    check('anim: one more arrow after the last step leaves the slide', (await hash(m)) === '#3');
+    await m.keyboard.press('ArrowLeft'); await quiet();
+    check('anim: coming back lands on the last step state (entrances shown, exits gone)', (await hash(m)) === '#2' && (await vv(['a', 'b', 'c', 'd'])) === 'vhhv', await vv(['a', 'b', 'c', 'd']));
+    for (let i = 0; i < 3; i++) await m.keyboard.press('ArrowLeft');
+    await quiet();
+    check('anim: back to step 1 restores the exit-only element and hides entrances', (await vv(['a', 'b', 'c', 'd'])) === 'hvhh', await vv(['a', 'b', 'c', 'd']));
+    await m.emulateMedia({ media: 'print' }); await sleep(100);
+    check('anim print: last step state (later steps shown, anything with an exit is gone)', (await vv(['a', 'b', 'c', 'd'])) === 'vhhv', await vv(['a', 'b', 'c', 'd']));
+    await m.emulateMedia({ media: 'screen' });
+    await m.keyboard.press('o'); await sleep(200);
+    const th = await m.evaluate(() => [...document.querySelectorAll('#sk-overview [data-slide]')][1] && ['a', 'b', 'c', 'd'].map((i) => { const e = [...document.querySelectorAll('#sk-overview [data-slide]')][1].querySelector('#' + i); return getComputedStyle(e).visibility[0]; }).join(''));
+    check('anim overview thumbnail shows step 1', th === 'hvhh', th);
+    await m.keyboard.press('Escape');
+    check('anim: no page errors', me.length === 0, me);
+    await m.close(); }
+  { const m = await ctx.newPage(); await m.goto(BASE + '/__t/anim#2'); await m.waitForSelector('#sk-stage'); await settled(m);
+    const quiet = () => m.waitForFunction(() => document.getAnimations().length === 0, null, { timeout: 8000 }).then(() => sleep(200));
+    for (let i = 0; i < 2; i++) { await m.keyboard.press('ArrowRight'); await quiet(); } // step 3: d (delay 300ms) is shown
+    const dv = () => m.evaluate(() => { const c = getComputedStyle(document.getElementById('d')); return c.visibility[0] + (+c.opacity).toFixed(2); });
+    await m.keyboard.press('ArrowLeft'); await sleep(100);
+    const runBack = await m.evaluate(() => document.querySelector('#sk-stage > [data-active]').getAttribute('data-step-run')); // the temporary state while the rewind transition runs
+    await sleep(420); // rewinding: no delay, so the 360ms fade has ended and visibility is already hidden (with the delay it would only flip at 660ms)
+    const back = await dv();
+    await quiet();
+    const settledAttr = await m.evaluate(() => document.querySelector('#sk-stage > [data-active]').hasAttribute('data-step-run'));
+    check('anim rewind: --sk-step-delay applies only going forward; rewinding starts at once and the temporary state is gone after it', back === 'h0.00' && runBack === 'back' && !settledAttr, [back, runBack, settledAttr]);
+    await m.keyboard.press('ArrowRight'); await sleep(100);
+    const fwd = await dv(); // forward: the delay is kept (300ms), so at 100ms the entrance has not started
+    check('anim forward: the delay still staggers the entrance', fwd[0] === 'v' && Number(fwd.slice(1)) < 0.05, fwd);
+    await m.close(); }
+  { const m = await ctx.newPage(); await m.emulateMedia({ reducedMotion: 'reduce' }); await m.goto(BASE + '/__t/anim#2'); await m.waitForSelector('#sk-stage'); await settled(m);
+    await m.keyboard.press('ArrowRight'); await sleep(40);
+    const r = await m.evaluate(() => ({ v: getComputedStyle(document.getElementById('a')).visibility, o: getComputedStyle(document.getElementById('a')).opacity, d: getComputedStyle(document.getElementById('a')).transitionDuration, run: document.querySelector('#sk-stage > [data-active]').hasAttribute('data-step-run') }));
+    check('anim reduced motion: the state is exact right away, no transition, no layer hint', r.v === 'visible' && r.o === '1' && r.d === '0s' && !r.run, r);
+    await m.close(); }
+  { const m = await ctx.newPage(); await m.goto(BASE + '/__t/anim50#1'); await m.waitForSelector('#sk-stage'); await settled(m);
+    const ms = await m.evaluate(() => { const out = []; for (let i = 0; i < 6; i++) { const t0 = performance.now(); document.dispatchEvent(new KeyboardEvent('keydown', { key: i % 2 === 0 ? 'ArrowRight' : 'ArrowLeft', bubbles: true })); out.push(performance.now() - t0); } return out; });
+    const med = ms.slice().sort((x, y) => x - y)[3];
+    check('anim performance: one step change toggling 50 elements costs under 5ms of script (median of 6)', med < 5, ms.map((x) => +x.toFixed(2)));
+    await m.close(); }
   { const f = await ctx.newPage(); await f.goto(BASE + '/__t/dstep-fx#1'); await f.waitForSelector('#sk-stage'); await settled(f);
     const st = await f.evaluate(() => Object.fromEntries([...document.querySelectorAll('#sk-stage [data-step]')].map((e) => { const c = getComputedStyle(e); return [e.id.slice(3), c.transform + '|' + c.filter + '|' + c.opacity]; })));
     check('data-step effects: hidden poses (rise, left, scale, blur; fade and none only opacity; unknown falls back to rise)',
       st.rise === 'matrix(1, 0, 0, 1, 0, 20)|none|0' && st.bogus === st.rise && st.left === 'matrix(1, 0, 0, 1, -32, 0)|none|0' && st.scale === 'matrix(0.92, 0, 0, 0.92, 0, 0)|none|0' &&
-      st.blur === 'none|blur(12px)|0' && st.fade === 'none|none|0' && st.none === 'none|none|0', st);
+      st.blur === 'matrix(1, 0, 0, 1, 0, 0)|blur(12px)|0' && st.fade === 'matrix(1, 0, 0, 1, 0, 0)|none|0' && st.none === 'matrix(1, 0, 0, 1, 0, 0)|none|0', st); // no motion = identity transform (the away state is translate() scale() variables)
     await f.keyboard.press('ArrowRight'); await settled(f);
     const sh = await f.evaluate(() => [...document.querySelectorAll('#sk-stage [data-step]')].map((e) => { const c = getComputedStyle(e); return c.opacity + c.visibility + c.transform + c.filter; }));
     check('data-step effects: every effect ends fully shown', sh.every((v) => v === '1visiblenonenone'), sh);

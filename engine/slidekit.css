@@ -54,19 +54,31 @@ p { font-size: var(--sk-fs-body); line-height: 1.65; color: var(--sk-muted); mar
 
 aside[data-notes] { display: none; }
 
-/* declarative steps: data-step="N" shows the element from step N on (layout is kept while hidden) */
-[data-step] { transition: opacity var(--sk-step-ms) var(--sk-ease), transform var(--sk-step-ms) var(--sk-ease), filter var(--sk-step-ms) var(--sk-ease), visibility 0s; }
-[data-step]:not([data-shown]) { visibility: hidden; opacity: 0; transition-delay: 0s, 0s, 0s, var(--sk-step-ms); }
-/* effects (list: engine/steps.ts): rise is the default, fade is opacity only, none is instant */
-[data-step]:not([data-shown]):not([data-step-effect="fade"]):not([data-step-effect="none"]):not([data-step-effect="left"]):not([data-step-effect="scale"]):not([data-step-effect="blur"]) { transform: translateY(20px); }
-[data-step][data-step-effect="left"]:not([data-shown]) { transform: translateX(-32px); }
-[data-step][data-step-effect="scale"]:not([data-shown]) { transform: scale(.92); }
-[data-step][data-step-effect="blur"]:not([data-shown]) { filter: blur(12px); }
-[data-step][data-step-effect="none"] { transition: none; }
-[data-step-instant] [data-step] { transition: none !important; }
-@media (prefers-reduced-motion: reduce) { [data-step] { transition: none; } }
+/* declarative steps (spec 6.3, ANIMATION.md): data-step="N" appears at step N, data-step-out="M" disappears at step M. The engine only toggles
+   data-shown (visible) and data-away (away state) on the elements; the look is CSS. The away state is set by the --sk-away-* variables
+   (default: transparent and 20px low). The default transition is composite-only (opacity, transform); filter is used only when blur is asked for.
+   Before the engine runs, a data-step element without data-shown is already away (no flash of later steps). */
+[data-step], [data-step-out] { transition: opacity var(--sk-step-ms) var(--sk-ease) var(--sk-step-eff, var(--sk-step-delay, 0ms)), transform var(--sk-step-ms) var(--sk-ease) var(--sk-step-eff, var(--sk-step-delay, 0ms)), filter var(--sk-step-ms) var(--sk-ease) var(--sk-step-eff, var(--sk-step-delay, 0ms)), visibility 0s; }
+[data-away], [data-step]:not([data-shown]) {
+  visibility: hidden; opacity: var(--sk-away-opacity, 0); transform: translate(var(--sk-away-x, 0px), var(--sk-away-y, 20px)) scale(var(--sk-away-scale, 1));
+  /* visibility flips only after the fade ends, so the element stays hit-test and screen reader free once it is gone */
+  transition-delay: var(--sk-step-eff, var(--sk-step-delay, 0ms)), var(--sk-step-eff, var(--sk-step-delay, 0ms)), var(--sk-step-eff, var(--sk-step-delay, 0ms)), calc(var(--sk-step-ms) + var(--sk-step-eff, var(--sk-step-delay, 0ms)));
+}
+[data-away][style*="--sk-away-blur"], [data-step]:not([data-shown])[style*="--sk-away-blur"], [data-step-effect="blur"]:is([data-away], [data-step]:not([data-shown])) { filter: blur(var(--sk-away-blur, 12px)); }
+/* data-step-effect is an alias of the variables above (it stays supported; the editor rewrites it as variables when the element is edited) */
+[data-step-effect="fade"] { --sk-away-y: 0px; }
+[data-step-effect="left"] { --sk-away-x: -32px; --sk-away-y: 0px; }
+[data-step-effect="scale"] { --sk-away-scale: .92; --sk-away-y: 0px; }
+[data-step-effect="blur"] { --sk-away-y: 0px; }
+[data-step-effect="none"] { --sk-step-ms: 0ms; --sk-away-y: 0px; }
+[data-step-instant] [data-step], [data-step-instant] [data-step-out] { transition: none !important; }
+/* the engine sets data-step-run on the slide only while a step transition runs: the layer hint exists only for that time */
+[data-step-run] [data-step], [data-step-run] [data-step-out] { will-change: opacity, transform; }
+/* going back (previous step) starts at once: --sk-step-delay only staggers the forward direction, rewinding applies the duration only */
+[data-step-run="back"] { --sk-step-eff: 0ms; }
+@media (prefers-reduced-motion: reduce) { [data-step], [data-step-out] { transition: none; } }
 /* the editor canvas can show every step while editing */
-html[data-sk-show-steps] [data-step] { visibility: visible !important; opacity: 1 !important; transform: none !important; filter: none !important; }
+html[data-sk-show-steps] [data-step], html[data-sk-show-steps] [data-step-out] { visibility: visible !important; opacity: 1 !important; transform: none !important; filter: none !important; }
 
 /* screen reader live region: not drawn */
 #sk-live { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
@@ -118,5 +130,7 @@ html[data-idle], html[data-idle] body, html[data-idle] [data-slide] { cursor: no
   [data-slide] { position: relative; inset: auto; width: 1920px; height: 1080px; visibility: visible; animation: none; break-after: page; break-inside: avoid; }
   section[data-slide]:last-of-type { break-after: auto; }
   #sk-overview, #sk-num, #sk-page, #sk-progress, #sk-blank, #sk-debug { display: none !important; }
-  [data-step] { visibility: visible !important; opacity: 1 !important; transform: none !important; filter: none !important; transition: none !important; }
+  /* print and PDF show the last step: every later step is shown, and every element that has an exit has already left */
+  [data-step], [data-step-out] { visibility: visible !important; opacity: 1 !important; transform: none !important; filter: none !important; transition: none !important; }
+  [data-step-out] { visibility: hidden !important; }
 }

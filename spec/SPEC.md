@@ -197,14 +197,17 @@ JS 없이 슬라이드 안 요소를 단계마다 나타나게 한다(Keynote의
 </section>
 ```
 
-- `data-step="N"`: N은 2 이상 정수. 이 요소는 N단계부터 보인다. 속성이 없거나 1이면 처음부터 보인다. 정수가 아니거나 0 이하이면 엔진이 경고하고 무시한다. 1은 경고 없이 무시한다.
-- 슬라이드의 단계 수는 `data-steps`와 요소의 `data-step` 최댓값 중 큰 쪽이다(둘 중 하나만 있어도 된다).
-- `data-step="1"`과 정수가 아닌 값은 경고 없이(1) 또는 경고하고(그 밖의 값) 무시하며 요소는 처음부터 보인다. `slidekit lint`는 이를 오류로 막고, `data-steps`를 쓰면 section `id`와 `SlideKit.stepper` 등록이 있어야 한다(`data-step`만 쓰는 슬라이드에는 해당 없다).
+- `data-step="N"`: 등장. N은 2 이상 정수이고 N단계부터 보인다. 속성이 없거나 1이면 처음부터 보인다. `data-step-out="M"`: 퇴장. M은 2 이상 정수이고 등장 단계보다 커야 하며 M단계부터 사라진다(등장 없이 퇴장만도 된다: 처음에 보이다가 M단계에 사라진다). 요소는 `N ≤ 단계 < M`에서 보이고 그 밖에서는 벗어난 상태다. 값이 정수가 아니거나 범위가 틀리면 엔진이 경고하고 그 속성을 무시한다(1은 경고 없이 무시).
+- 슬라이드의 단계 수는 `data-steps`와 모든 `data-step`, `data-step-out` 값 중 가장 큰 수다(둘 중 하나만 있어도 된다). `slidekit lint`는 정수가 아니거나 2 미만인 값을 오류로, 퇴장이 등장보다 앞서거나 같은 것과 빈 단계 번호와 blur 3개 이상을 경고로 알린다. 단계 요소가 없는 슬라이드가 `data-steps`를 쓰면 section `id`와 `SlideKit.stepper` 등록이 있어야 한다(단계 요소가 있으면 `data-steps`는 빈 단계를 더하는 값일 뿐이다).
 - 같은 슬라이드에 `SlideKit.stepper`로 등록한 구현이 있으면 그쪽이 우선이고 `data-step`은 동작하지 않는다(요소는 숨겨진 채로 남는다).
 - 이동 규칙은 위 stepper와 같다. 앞으로는 단계가 먼저이고 끝나면 다음 슬라이드, 뒤로도 같으며 뒤에서 들어오면 마지막 단계다. 동기화, `info`의 `steps`, `state`의 `step`, embed의 `goto(slide, step)`도 같은 숫자를 쓴다. 해시 진입은 1단계다.
-- 숨김 상태는 `visibility:hidden`과 `opacity:0`이고 자리는 그대로 차지한다(레이아웃이 움직이지 않는다). 효과는 `data-step-effect`: `rise`(기본, 투명도와 20px 위로 올라오기), `fade`(투명도만), `left`(왼쪽 32px에서 밀려 들어오기), `scale`(92%에서 커지기), `blur`(흐림에서 선명해지기), `none`(즉시). 목록의 원천은 `engine/steps.ts`다. 모르는 값은 `rise`로 본다. 시간은 `--sk-step-ms`(기본 360ms)이고 `prefers-reduced-motion: reduce`이면 전환이 없다. 이동(`enter`, `goto`, 해시, 동기화)으로 단계가 바뀔 때는 전환 없이 바로 바뀐다.
-- 전체 보기 축소판은 1단계 모습이다. 인쇄(`@media print`)는 모든 단계를 보인다. 편집기 캔버스가 모든 단계를 한 번에 보여 주려면 `<html data-sk-show-steps>`를 붙인다.
-- 편집기 지원: Inspector의 Appearance에 "Appears at step" NumberField(min 1, 1이면 속성 삭제)와 effect Select(`engine/steps.ts`의 목록: Rise, Fade, Slide, Scale, Blur, None)가 있다.
+- 엔진은 요소의 `data-shown`(보임)과 `data-away`(벗어남) 속성 중 하나를 서로 배타로 켜기만 하고 모양은 CSS가 정한다. 이 두 속성과 슬라이드의 임시 속성 `data-step-run`(전환이 도는 동안만, 뒤로 가는 전환이면 값 `back`), `data-step-instant`는 저장 파일에 남지 않는다(편집기가 지운다).
+- 벗어난 상태는 변수로 정한다: `--sk-away-opacity`(기본 0), `--sk-away-x`(0px), `--sk-away-y`(20px), `--sk-away-scale`(1), `--sk-away-blur`(blur는 요소 `style`에 지정했을 때만 `filter`가 켜진다). 전환은 `--sk-step-ms`(기본 360ms)와 곡선 `--sk-ease`이고 기본은 `opacity`와 `transform`만 쓰는 합성 전환이다. 벗어난 상태가 되면 전환이 끝난 뒤 `visibility:hidden`이 되어 렌더, 클릭, 접근성에서 빠지고 자리는 그대로 차지한다(레이아웃이 움직이지 않는다).
+- `--sk-step-delay`(기본 0ms)는 같은 단계 안에서 이 요소만 늦춘다. 앞으로 가는 방향(등장과 퇴장 모두)에만 적용되고, 뒤로 이동하는 전환은 지연 없이 즉시 시작한다(지속 시간만 적용).
+- `data-step-effect`는 변수의 별칭으로 계속 동작한다: `rise`(기본), `fade`(`--sk-away-y: 0`), `left`(`--sk-away-x: -32px`), `scale`(`--sk-away-scale: .92`), `blur`(흐림 12px), `none`(`--sk-step-ms: 0`). 목록의 원천은 `engine/steps.ts`다. 변수가 같이 있으면 변수가 우선이다.
+- 전환 중에 `will-change`를 상시로 두지 않는다: 엔진은 전환이 도는 동안만 슬라이드에 `data-step-run`을 달아 레이어 힌트를 주고 가장 긴 전환이 끝난 뒤 지운다. `prefers-reduced-motion: reduce`이면 전환 없이 상태만 바뀐다. 슬라이드를 떠나는 순간 비활성 슬라이드의 모든 자손은 진행 중인 전환과 관계없이 숨겨진다(위 계약).
+- 전체 보기 축소판은 1단계 모습이다. 인쇄(`@media print`)는 마지막 단계의 모습이다: 등장 요소는 모두 보이고 퇴장이 있는 요소는 이미 사라진 상태다(퇴장이 없는 덱에서는 지금처럼 모든 요소가 보인다). 편집기 캔버스가 모든 단계를 한 번에 보여 주려면 `<html data-sk-show-steps>`를 붙인다.
+- 편집기 지원: 하단 Animation 탭과 Inspector의 Animation 섹션(설계는 `spec/ANIMATION.md`)이 등장과 퇴장 단계, 빠른 선택, 벗어난 상태 값, 지속 시간과 지연을 편집한다.
 
 - 슬라이드 상태 변화(진입과 이탈)를 알아야 하는 덱 코드는 슬라이드 요소의 `sk:enter`, `sk:leave` 이벤트(버블링)를 듣거나 `data-active` 속성을 읽는다.
 

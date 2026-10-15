@@ -79,3 +79,20 @@ test("img에 alt가 없으면 경고, alt=\"\"(장식)는 통과", () => {
   expect(w('<section data-slide="content"><img src="a.png"><img src="b.png" alt="설명"></section>')[0].msg).toContain("1개");
   expect(w('<section data-slide="content"><img src="a.png" alt=""><img src="b.png" alt="설명"></section>')).toEqual([]);
 });
+
+test("data-step-out: 정수가 아니거나 2 미만이면 오류, 등장보다 앞서면 경고, 단계 번호 빈칸 경고, blur 3개 이상 경고, 단계 요소가 있으면 data-steps만으로도 오류 아님", () => {
+  const w = (b: string, rule: string) => lint(ok.replace("</body>", `${b}</body>`)).filter((i) => i.rule === rule);
+  const sec = (inner: string, attrs = "") => `<section data-slide="content"${attrs}><h2>x</h2>${inner}</section>`;
+  expect(w(sec('<p data-step-out="abc">a</p>'), "data-step-out")[0]?.level).toBe("error");
+  expect(w(sec('<p data-step-out="1">a</p>'), "data-step-out")[0]?.level).toBe("error");
+  expect(w(sec('<p data-step-out="2.5">a</p>'), "data-step-out")[0]?.level).toBe("error");
+  expect(w(sec('<p data-step="3" data-step-out="3">a</p>'), "data-step-out")[0]?.level).toBe("warn");
+  expect(w(sec('<p data-step="3" data-step-out="2">a</p>'), "data-step-out")[0]?.level).toBe("warn");
+  expect(w(sec('<p data-step="2" data-step-out="3">a</p>'), "data-step-out")).toEqual([]);
+  expect(w(sec('<p data-step-out="3">a</p>'), "data-step-out")).toEqual([]); // 등장 없이 퇴장만
+  expect(w(sec('<p data-step="2">a</p><p data-step-out="4">b</p>'), "data-step").length).toBe(1); // 단계 3 빈칸(퇴장 번호 4가 3을 건너뜀)
+  expect(w(sec('<p data-step="2" data-step-effect="blur">a</p><p data-step="2" style="--sk-away-blur:8px">b</p><p data-step="3" data-step-effect="blur">c</p>'), "step-blur").length).toBe(1);
+  expect(w(sec('<p data-step="2" data-step-effect="blur">a</p>'), "step-blur")).toEqual([]);
+  expect(lint(ok.replace("</body>", `${sec('<p data-step="2">a</p>', ' data-steps="4"')}</body>`)).filter((i) => i.rule === "steps")).toEqual([]);
+  expect(lint(ok.replace("</body>", `${sec("<p>a</p>", ' data-steps="3"')}</body>`)).filter((i) => i.rule === "steps").length).toBeGreaterThan(0);
+});

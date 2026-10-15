@@ -41,7 +41,7 @@
 - 코멘트 서명 키는 `~/.config/slidekit/`에 두며 동시 생성과 하드링크 미지원 파일시스템을 처리한다.
 
 ## 내보내기와 배포
-- Export 메뉴: Copy as Markdown, Download .md, 번들 HTML, PDF(Slides, With notes, Handout 2/3/4/6), 게시, 게시 기록(Published...).
+- Export 메뉴: Download HTML(번들), Download PDF(Slides, With notes, Handout 2/3/4/6), Copy as Markdown, Download .md, 게시와 게시 기록(Published...).
 - 게시 전 점검은 lint, 큰 이미지, 노트 없는 장, 색 대비를 보여 주고 비밀번호 덱은 8자 이상이다.
 - `slidekit unpublish`와 Export의 Unpublish는 확인을 거쳐 KV에서 지우고, 기록의 이름이 폴더와 다르면 이름을 직접 입력받는다.
 - 번들은 엔진, 이미지, 글꼴 서브셋을 내장해 오프라인에서도 같은 화면이 뜬다. PDF는 제목 책갈피와 링크를 남긴다.

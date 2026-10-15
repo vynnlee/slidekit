@@ -18,6 +18,7 @@ process.on('exit', cleanup);
   await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (x) => x.abort());
   await ctx.addInitScript(() => { try { localStorage.setItem('slidekit.tip.editor', '1'); } catch {} });
   const page = await ctx.newPage();
+  if (process.env.CPU_SLOW) { const cdp = await ctx.newCDPSession(page); await cdp.send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.CPU_SLOW) }); }
   const errs = [], cons = []; page.on('pageerror', (e) => errs.push(String(e))); page.on('console', async (m) => { if (m.type() !== 'error') return; const parts = await Promise.all(m.args().map((a) => a.evaluate((x) => (x && x.stack) || (x && x.message) || String(x)).catch(() => ''))); cons.push(parts.join(' ').slice(0, 700)); });
   await page.addInitScript(() => { window.__c = { click: 0, key: 0 }; addEventListener('click', (e) => e.isTrusted && window.__c.click++, true); addEventListener('keydown', (e) => e.isTrusted && !['Shift', 'Meta', 'Control', 'Alt'].includes(e.key) && window.__c.key++, true); });
   await page.goto(BASE + '/edit/' + NAME);
@@ -77,7 +78,14 @@ process.on('exit', cleanup);
     const f = page.getByLabel('Appears at step'); await f.fill('2'); await f.press('Enter'); await settle();
   }, 8);
   await stepOf('11 발표자 노트 쓰기', async () => { await page.getByPlaceholder('Speaker notes (Markdown)').fill('여기서 목록을 읽는다'); await settle(); }, 3);
-  await stepOf('12 테마 바꾸기', async () => { await palette('Theme: Paper'); }, 6);
+  await stepOf('12 테마 바꾸기', async () => {
+    const themes = ['Paper', 'Dark', 'Light', 'Midnight blue', 'Mono', 'High contrast'];
+    for (let i = 0; i < Number(process.env.THEME_ROUNDS || 1); i++) {
+      if (i % 2) { await tiles.nth(i % 5).click(); const b = await rect('h1, h2, p, li'); if (b) await page.mouse.click(b.x + 10, b.y + b.h / 2); } // 요소를 고른 채로 바꾼다
+      await palette('Theme: ' + themes[i % themes.length]);
+      if (await page.getByText('Something went wrong.').count()) throw new Error('테마 ' + (i + 1) + '번째 변경에서 오류 경계: ' + await page.evaluate(() => (window.__skLastError || '').slice(0, 700)));
+    }
+  }, 6);
   await stepOf('13 슬라이드 순서 바꾸기(끌어서)', async () => {
     const a = await tiles.nth(5).boundingBox(), t = await tiles.nth(1).boundingBox();
     await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2); await page.mouse.down(); await page.mouse.move(t.x + 8, t.y + t.height / 2, { steps: 8 }); await page.mouse.up(); await settle();

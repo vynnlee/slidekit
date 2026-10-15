@@ -69,31 +69,30 @@ const steps: Step[] = [
   browser("inspector-a11y", "app/test/inspector-a11y.cjs", "app", APP, { AXE }),
   browser("editor", "app/test/editor.cjs", "app", APP),
   browser("editor-assets", "app/test/editor-assets.cjs", "app", APP),
-  browser("comments-e2e", "app/test/comments-e2e.cjs", "app", APP),
-  browser("comments-a11y", "app/test/comments-a11y.cjs", "app", APP, { AXE }),
-  browser("editor-panels", "app/test/editor-panels.cjs", "app", APP),
-  browser("editor-external", "app/test/editor-external.cjs", "app", APP), // 밖의 변경(Claude, 다른 탭): 자동 반영, 충돌 안내, 중간 상태, Undo
-  { ...browser("comments-perf", "scripts/comments-perf.cjs", "app", APP), slow: true }, // 코멘트 300개 성능 측정(수치를 출력한다, --only comments-perf)
   browser("editor-multi", "app/test/editor-multi.cjs", "app", APP),
   browser("editor-menus", "app/test/editor-menus.cjs", "app", APP),
+  browser("editor-panels", "app/test/editor-panels.cjs", "app", APP),
+  browser("editor-external", "app/test/editor-external.cjs", "app", APP), // 밖의 변경(Claude, 다른 탭): 자동 반영, 충돌 안내, 중간 상태, Undo
   { ...browser("editor-a11y", "app/test/editor-a11y.cjs", "app", APP, { AXE }), needs: "axe" }, // 필름스트립 axe(기본, 코멘트 표시, 찾기 배지, 넘침 표시)
   browser("comments-e2e", "app/test/comments-e2e.cjs", "app", APP),
   browser("comments-a11y", "app/test/comments-a11y.cjs", "app", APP, { AXE }),
-  browser("editor-panels", "app/test/editor-panels.cjs", "app", APP),
+  { ...browser("comments-perf", "scripts/comments-perf.cjs", "app", APP), slow: true }, // 코멘트 300개 성능 측정(수치를 출력한다, --only comments-perf)
   browser("versions-e2e", "app/test/versions-e2e.cjs", "app", APP),
   browser("tokens", "app/test/tokens.cjs", "dry", DRY),
   browser("export", "app/test/export.cjs", "dry", DRY),
   // 인터넷과 uv가 필요해 --slow 또는 --only로만 돈다.
   // 코멘트 화면 스크린샷(눈으로 보는 용도, 통과 기준 없음). --only ux-shots로 돌리면 /tmp/slidekit-ux-shots/<폭>/에 저장된다.
+  { ...browser("ux-shots-1440", "scripts/ux-shots-comments2.cjs", "app", APP, { VIEWPORT: "1440x900", OUT: "/tmp/slidekit-ux-shots/1440" }), slow: true },
+  { ...browser("ux-shots-390", "scripts/ux-shots-comments2.cjs", "app", APP, { VIEWPORT: "390x844", OUT: "/tmp/slidekit-ux-shots/390" }), slow: true },
   // 큰 덱(80장, Layers 1000행)에서 편집기 응답 시간. 수치를 찍는다. --slow 또는 --only로만 돈다.
   { ...browser("editor-save-shots", "scripts/ux-shots-save-failure.cjs", "app", APP, { OUT: "/tmp/slidekit-ux-shots/save-failure" }), slow: true }, // 저장 실패 화면 캡처(1440, 390)
   // 편집기 조작 퍼즈(시드 1~3, 조작 40개씩, 끝에서 Undo로 원본과 바이트 동일). --slow 또는 --only로만 돈다.
+  { ...browser("editor-fuzz", "app/test/editor-fuzz.cjs", "app", APP), slow: true },
   // 도그푸딩: 빈 덱에서 편집기만으로 발표를 만들며 마찰을 기록한다(FRICTION 줄). --slow 또는 --only로만 돈다.
   { ...browser("editor-dogfood", "scripts/ux-dogfood.cjs", "app", APP, { OUT: "/tmp/slidekit-dogfood" }), slow: true },
-  { ...browser("editor-fuzz", "app/test/editor-fuzz.cjs", "app", APP), slow: true },
+  // 테마 변경 반복(느린 CPU, 밖의 변경 끼움)으로 오류 경계와 콘솔 오류를 센다. --slow 또는 --only로만 돈다.
+  { ...browser("editor-theme-stress", "app/test/editor-theme-stress.cjs", "app", APP, { CPU_SLOW: "4", ROUNDS: "30" }), slow: true },
   { ...browser("editor-perf", "app/test/editor-perf.cjs", "app", APP), slow: true },
-  { ...browser("ux-shots-1440", "scripts/ux-shots-comments2.cjs", "app", APP, { VIEWPORT: "1440x900", OUT: "/tmp/slidekit-ux-shots/1440" }), slow: true },
-  { ...browser("ux-shots-390", "scripts/ux-shots-comments2.cjs", "app", APP, { VIEWPORT: "390x844", OUT: "/tmp/slidekit-ux-shots/390" }), slow: true },
   // 덱 30개 목록의 부하 한도 검사(동시에 올라 있는 썸네일 수와 브라우저 메모리). 측정이 길어 --slow 또는 --only로만 돈다.
   { ...browser("list-load", "app/test/list-load.cjs", "app", APP, { CHECK: "1" }), slow: true },
   // 덱 목록과 발표자 화면의 axe 접근성 검사(serious와 critical 위반). axe-core가 없으면 건너뜀으로 크게 알린다.
@@ -118,8 +117,8 @@ const NOSTEP = /^(package\.json|bun\.lock|\.gitignore|\.githooks\/|tsconfig.*\.j
 const DOCS = /(^|\/)(HANDOFF|README|PLAN|SKILL|INTERACTION|SPEC)\.md$|^(spec|docs)\/|\.md$/;
 const EDITOR_ALL = ["editor", "editor-assets", "editor-multi", "editor-menus", "editor-panels", "editor-a11y", "editor-external"]; // 편집기 브라우저 검증은 영역별 파일로 나뉘어 있다(app/test/editor-*.cjs, 하네스는 app/test/lib/editor-harness.cjs)
 const BROWSER_APP = ["routes", "responsive", "list"]; // 앱 공통 화면 변경 때의 연기 검사
-  [/\.(ts|tsx)$/, ["typecheck"]],
 const MAP: [RegExp, string[]][] = [
+  [/\.(ts|tsx)$/, ["typecheck"]],
   [/^engine\/(slidekit\.(js|css)|test\/(verify|moved|gradient|offline)\.cjs)/, ["engine-verify", "engine-moved", "engine-gradient", "engine-offline", "bundler-bundle"]],
   [/^engine\/(lint\.ts|test\/lint\.test\.ts|doctor\.ts|new\.ts|template\/)/, ["lint", "tokens"]],
   [/^bundler\//, ["bundler-bundle", "bundler-fonts"]],
@@ -327,16 +326,16 @@ function fingerprint() {
 }
 
 const warned: string[] = [];
+const skipped: string[] = []; // 필요한 도구가 없어 건너뛴 단계
 const flaky: string[] = []; // 첫 실행은 실패했고 재실행은 통과한 단계
 const results: [string, boolean, number][] = [];
 try {
-const skipped: string[] = []; // 필요한 도구가 없어 건너뛴 단계
   for (const s of picked) {
     current = s.name;
+    if (s.needs === "axe" && !AXE) { console.log(`\n== ${s.name}\n!! 건너뜀: ${s.name}(axe-core를 찾지 못함). AXE=<axe.min.js>를 주거나 axe-core를 설치해 주세요. 이 단계는 검사하지 않았습니다`); skipped.push(s.name); continue; }
     console.log(`\n== ${s.name}`);
     const t0 = Date.now();
     let before = fingerprint();
-    if (s.needs === "axe" && !AXE) { console.log(`\n== ${s.name}\n!! 건너뜀: ${s.name}(axe-core를 찾지 못함). AXE=<axe.min.js>를 주거나 axe-core를 설치해 주세요. 이 단계는 검사하지 않았습니다`); skipped.push(s.name); continue; }
     let ok = false;
     try {
       if (s.server) await ensure(s.server);
@@ -367,10 +366,10 @@ const total = results.reduce((a, [, , t]) => a + t, 0);
 console.log(`\n합계 ${total.toFixed(0)}초. 오래 걸린 단계: ` + [...results].sort((a, b) => b[2] - a[2]).slice(0, 3).map(([n, , t]) => `${n} ${t.toFixed(0)}초`).join(", "));
 const failed = results.filter(([, ok]) => !ok).map(([n]) => n);
 if (warned.length) console.log(`\nWARN: 실제 덱이 바뀐 단계 ${warned.join(", ")}`);
+if (skipped.length) console.log(`\n!! 건너뜀(도구 없음): ${skipped.join(", ")}. 통과가 아니라 검사하지 않은 것이다`);
 if (flaky.length) console.log(`\nWARN: 불안정(첫 실행 실패, 재실행 통과): ${flaky.join(", ")}. 로그 ${logDir}/<단계>.log는 재실행 기준이다`);
 if (failed.length) {
   console.log(`\nFAIL: ${failed.join(", ")}`);
-if (skipped.length) console.log(`\n!! 건너뜀(도구 없음): ${skipped.join(", ")}. 통과가 아니라 검사하지 않은 것이다`);
   for (const n of failed) {
     const tr = globSync(join(logDir, `${n}-trace-*.zip`)).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs).slice(0, 2);
     for (const f of tr) console.log(`  트레이스: node ${PW}/cli.js show-trace ${f}`);

@@ -96,11 +96,11 @@ Figma 포럼에는 "Position, Auto layout, Appearance가 관련 없는 속성을
 | Fixed | `width: Npx` | |
 | Hug contents | `width: fit-content` (또는 `auto`와 `flex: none`) | 인라인 흐름에서는 `auto`와 동일할 수 있음 |
 | Fill container | 부모가 flex이고 주축이면 `flex: 1 1 0`, 교차축이면 `align-self: stretch`. 그 밖이면 `width: 100%` | 부모 display를 읽어 CSS를 고른다 |
-| min/max | `min-width`, `max-width`, `min-height`, `max-height` | W/H 필드 옆 `...` 메뉴의 "Add min", "Add max" |
-| 비율 잠금 | `aspect-ratio: w / h` | 잠금 on이면 `aspect-ratio` 기록 후 한 축만 고정 |
+| min/max | `min-width`, `max-width`, `min-height`, `max-height` | 미구현(후속). 지금은 W/H 옆 Width mode와 Height mode 세그먼트만 있다 |
+| 비율 잠금 | `aspect-ratio: w / h` | 미구현(후속) |
 | Constraints | 해당 없음 | 숨김(절대 배치 편집기가 아님) |
 | Ignore auto layout | `position: absolute` | 숨김. 필요하면 후속 |
-| z-order | `z-index` (+ `position`이 static이면 효과 없음에 주의) | Position 섹션 하단에 "Z" 필드(후속) |
+| z-order | `z-index` (+ `position`이 static이면 효과 없음에 주의) | Position 섹션의 "Z" 필드(구현됨) |
 
 #### 2.1.1 정렬 바 동작 (제안)
 
@@ -115,10 +115,10 @@ Figma 포럼에는 "Position, Auto layout, Appearance가 관련 없는 속성을
 
 | Figma | CSS | 제안 |
 |---|---|---|
-| Frame / Auto layout 켜기 | `display: flex` | 섹션 이름은 "Layout". 토글 대신 display 4택(Block, Flex, Grid, None)으로 노출 |
+| Frame / Auto layout 켜기 | `display: flex` | 섹션 이름은 "Layout". 토글 대신 display 7택(Block, Flex, Grid, Inline, Inline block, Inline flex, None)으로 노출 |
 | 방향 Horizontal / Vertical | `flex-direction: row / column` | 아이콘 2개 세그먼트 |
 | Wrap | `flex-wrap: wrap` | 아이콘 토글 |
-| Grid | `display: grid` + `grid-template-columns` | 열 수 필드 1개만(`repeat(N, 1fr)`), 나머지는 후속 |
+| Grid | `display: grid` + `grid-template-columns` | 미구현(후속) |
 | Spacing(gap) | `gap`, 필요 시 `row-gap`/`column-gap` | 필드 1개. 확장하면 둘로 분리 |
 | Spacing Auto (Between/Around/Evenly) | `justify-content: space-between / space-around / space-evenly` | gap 필드 대신 "Auto" 선택 시 |
 | Alignment 3x3 박스 | `justify-content` + `align-items` | 3x3 점 격자 하나로 두 속성 동시 설정. 방향에 따라 축이 바뀐다 |
@@ -140,10 +140,10 @@ Figma 포럼에는 "Position, Auto layout, Appearance가 관련 없는 속성을
 | Figma | CSS | 제안 |
 |---|---|---|
 | Opacity | `opacity` (0 ~ 1) | UI는 % (0 ~ 100) |
-| Blend mode | `mix-blend-mode` | 기본 접힘, 드롭다운 |
+| Blend mode | `mix-blend-mode` | 드롭다운(Normal, Multiply, Screen, Overlay, Darken, Lighten, Difference) |
 | Corner radius | `border-radius` 묶음 또는 4모서리 개별(`border-top-left-radius` ...) | 확장 토글로 4개 |
 | Font family | `font-family` | 덱에 쓰인 폰트 목록 Select |
-| Weight | `font-weight` (100 ~ 900) | Select. 가변 폰트가 아니면 있는 굵기만 |
+| Weight | `font-weight` (300 ~ 800) | Select(Light, Regular, Medium, Semibold, Bold, Extra bold) |
 | Size | `font-size` | px |
 | Line height | `line-height` | 값이 숫자(배수)면 `1.4` 형태 유지, px면 px. 단위 토글 |
 | Letter spacing | `letter-spacing` | Figma는 %, 우리는 `em`을 % 로 표기(1% = 0.01em) |
@@ -153,7 +153,7 @@ Figma 포럼에는 "Position, Auto layout, Appearance가 관련 없는 속성을
 | Case | `text-transform` none, uppercase, lowercase, capitalize | 아이콘 4개 세그먼트 (Figma의 Small caps는 `font-variant-caps: small-caps`, 후속) |
 | Truncate | `text-overflow: ellipsis; white-space: nowrap; overflow: hidden`, 줄 수 제한은 `-webkit-line-clamp` | 후속 |
 | Fill (Solid) | `background-color` (텍스트 요소의 글자색은 `color`) | 텍스트 요소에서는 "Text color"가 `color`. Fill은 `background-color` |
-| Fill (Gradient) | `background-image: linear-gradient(...)` | 후속 |
+| Fill (Gradient) | `background-image: linear-gradient(...)` | 구현됨(요소 Fill의 Linear gradient, 슬라이드 Background, 스톱 2~4개) |
 | Fill (Image) | `background-image: url()` + `background-size` | 후속 |
 | Fill opacity | 색의 알파(`rgb(... / a)`) | 별도 `opacity`와 구분. 스와치 옆 % 필드는 알파 |
 | Stroke | `border` (width, style, color) | 위치 Inside는 `box-sizing: border-box`, Outside는 `outline` 또는 `box-shadow 0 0 0 Npx`. 기본은 border만 |
@@ -228,7 +228,7 @@ Figma 포럼에는 "Position, Auto layout, Appearance가 관련 없는 속성을
 | Blur | `droplets` | |
 | 효과 설정 | `sliders-horizontal` | 항목별 팝오버 |
 | 더보기 | `ellipsis` | |
-| 색 뽑기(스포이드) | `pipette` | 후속 |
+| 색 뽑기(스포이드) | `pipette` | 구현됨(색상 선택기의 스포이드) |
 | 크기 모드 Fixed | `square` | W/H 모드 드롭다운 옵션 |
 | 크기 모드 Hug | `shrink` | |
 | 크기 모드 Fill | `expand` | |
@@ -247,10 +247,10 @@ Figma 포럼에는 "Position, Auto layout, Appearance가 관련 없는 속성을
 | 크기 | `SizeProvider` compact(28px 행). 밀도가 필요한 쌍(X/Y, W/H)은 24px 행을 허용하지만 한 패널에서 두 높이를 섞지 않는다. 24px를 쓰려면 섹션 전체를 24px로 통일 |
 | 행 | 라벨 열 없이 필드 자체에 앞 라벨 또는 아이콘을 넣는다(Figma 방식). 현재 `Row`의 56px 라벨 열 구조는 버린다 |
 | 그리드 | `grid-template-columns: 1fr 1fr`, 가로 gap 8px, 세로 gap 8px. 한 필드만 있는 행은 2열 병합 |
-| 섹션 | 헤더 28px: 제목(caption, semibold), 오른쪽에 +/- 또는 보조 컨트롤. 클릭하면 접힘. 섹션 사이 구분선 1px(`bg-border/60`), 섹션 패딩 12px |
+| 섹션 | 헤더 28px: 제목(caption, semibold), 오른쪽에 +/- 또는 보조 컨트롤. 접지 않는다. 섹션 사이 구분선 1px(`bg-border/60`), 섹션 패딩 16px |
 | 호버 | 항목 행의 제거(-) 버튼과 섹션 보조 버튼은 호버 또는 포커스 때만 보인다. 터치 기기는 항상 보인다 |
-| 접기 상태 | 섹션별 접힘 상태를 `localStorage`에 저장(키 `slidekit.inspector.collapsed`) |
-| Mixed | 다중 선택은 현재 편집기에 없다(단일 선택). 도입 전에도 값이 요소 안에서 일관되지 않을 때(예: 모서리 4개가 다름) "Mixed" 플레이스홀더를 쓴다 |
+| 접기 상태 | 접기 기능이 없어 상태를 저장하지 않는다 |
+| Mixed | 다중 선택(같은 부모의 요소 묶음)에서 값이 요소마다 다를 때와, 한 요소 안에서 값이 일관되지 않을 때(예: 모서리 4개가 다름) "Mixed" 플레이스홀더를 쓴다 |
 | 변경 기록 | 한 번의 스크럽 드래그는 편집 기록(undo) 1건. `NumberField`의 `onScrubStart`/`onScrubEnd`로 스크럽 한 번을 undo 1건으로 묶는다(구현됨) |
 
 ### 4.2 섹션 순서 (요소 선택)
@@ -261,8 +261,8 @@ Figma 포럼에는 "Position, Auto layout, Appearance가 관련 없는 속성을
 |---|---|---|---|---|
 | 1 | Align | 노출 | 노출 | 정렬 바 6개 아이콘 |
 | 2 | Layout | 일부 | 전체 | display, W/H, 모드, 방향, 정렬, gap, padding, margin, Clip |
-| 3 | Position | 조건부 | 조건부 | position이 static이 아닐 때만 X/Y/Z, 회전은 항상 |
-| 4 | Appearance | 노출 | 노출 | Opacity, Radius, Blend |
+| 3 | Position | 조건부 | 조건부 | Offset X/Y(`translate`), Position Select, 회전, Z는 항상. X/Y(`left`, `top`)는 position이 static이 아닐 때만 |
+| 4 | Appearance | 노출 | 노출 | Opacity, Radius, Blend, 단계 등장 편집(Appears at step, Step effect 6종: Rise, Fade, Slide, Scale, Blur, None, 미리보기 버튼) |
 | 5 | Typography | 노출 | 숨김 | 4.4 참고 |
 | 6 | Fill | 노출 | 노출 | background-color 목록(최대 1) |
 | 7 | Stroke | 노출 | 노출 | border |
@@ -275,7 +275,7 @@ Figma는 Position이 맨 위지만, 우리는 흐름 레이아웃이 중심이�
 | 섹션 | 행 | 왼쪽 필드 | 오른쪽 필드 |
 |---|---|---|---|
 | Align | 1 | 정렬 6버튼 한 줄 (여섯 칸 균등) | |
-| Layout | 1 | Display Select ("Block", "Flex", "Grid", "None") 전체 폭 | |
+| Layout | 1 | Display Select ("Block", "Flex", "Grid", "Inline", "Inline block", "Inline flex", "None") 전체 폭 | |
 | Layout | 2 | W 필드 + 모드 드롭다운("Fixed", "Hug", "Fill") | H 필드 + 모드 드롭다운 |
 | Layout | 3 (flex) | 방향 세그먼트 (Row, Column 아이콘) + Wrap 토글 | 정렬 3x3 박스 |
 | Layout | 4 (flex, grid) | Gap 필드 (아이콘 `between-*`) | |
@@ -287,7 +287,7 @@ Figma는 Position이 맨 위지만, 우리는 흐름 레이아웃이 중심이�
 | Position | 2 | 회전(`rotate-cw`) | Z |
 | Appearance | 1 | Opacity (`blend`, %) | Radius (`square-round-corner`) |
 | Appearance | 1 확장 | Radius 4개 (TL, TR / BL, BR) | |
-| Appearance | 2 | Blend Select ("Normal", "Multiply", ...) | |
+| Appearance | 2 | Blend Select ("Normal", "Multiply", "Screen", "Overlay", "Darken", "Lighten", "Difference") | |
 | Typography | 1 | Font family Select 전체 폭 | |
 | Typography | 2 | Weight Select | Size 필드 |
 | Typography | 3 | Line height 필드 | Letter spacing 필드 |
@@ -343,7 +343,7 @@ Figma는 Position이 맨 위지만, 우리는 흐름 레이아웃이 중심이�
 |---|---|---|---|
 | 텍스트 요소 (`textual(el)`이 참, 자식이 텍스트뿐) | Align, Layout(W/H, margin, 일부), Appearance, Typography, Fill, Stroke, Effects | Layout의 방향, gap, 정렬 3x3, padding(텍스트면 padding은 유지) | Typography가 맨 위 가까이(Align 다음)로 올라와도 된다. 텍스트 편집이 주 작업이라서(제안) |
 | 컨테이너 (자식 요소가 있음) | Align, Layout 전체, Position, Appearance, Fill, Stroke, Effects | Typography(단, 글자색 상속을 바꾸는 "Text color"만 Fill 안에 별도 행) | 컨테이너의 `color`는 하위 텍스트에 상속되므로 "Text color" 한 행만 둔다 |
-| 이미지, SVG (`img`, `svg`) | Align, Layout(W/H, 비율 잠금, margin), Appearance, Stroke, Effects | Typography, Fill | `object-fit` Select를 Layout 아래에 추가 |
+| 이미지, SVG (`img`, `svg`) | Align, Layout(W/H, 비율 잠금, margin), Appearance, Stroke, Effects | Typography, Fill | Appearance 뒤에 `Image` 섹션(Replace image..., Fit, Position) |
 | 슬라이드 선택 (요소 미선택) | 아래 4.8 | | |
 
 ### 4.8 슬라이드 선택 시 (요소 미선택)
@@ -353,8 +353,9 @@ Figma는 Position이 맨 위지만, 우리는 흐름 레이아웃이 중심이�
 | 행 | 컨트롤 | CSS 또는 속성 | 영어 문구 |
 |---|---|---|---|
 | 종류 | Select (Cover, Chapter, Content, End) | `data-slide` | "Type" |
+| 레이아웃 | Select (content 슬라이드만) | `data-layout` | "Layout" |
 | 장 제목 | Field | `data-title` | "Chapter title" |
-| 배경 | ColorField | 슬라이드 루트 `background-color` | "Background" |
+| 배경 | Solid / Linear gradient 세그먼트, ColorField 또는 그라디언트 편집기 | 슬라이드 루트 `background-color` 또는 `background-image` | "Background" (별도 섹션) |
 | 스텝 수 | `NumberField`(Frame 아이콘, min 1) | 슬라이드 루트 `data-steps`(1이면 속성 삭제) | "Steps" |
 
 스텝 수는 SPEC.md 2절과 6.3절의 `data-steps="N"`을 따른다.
@@ -389,7 +390,7 @@ UI는 Fluid Functionalism 컴포넌트와 `app/src/components/ui/field.tsx` 입�
 | `ColorField` | 스와치 + hex + 알파 | 4.5. 팝오버는 Fluid `Dropdown`/popup 토큰 재사용 |
 | `SegmentedControl` | 아이콘 2 ~ 4개 중 하나 선택(방향, 정렬, 대소문자) | `TabsSubtle` 위에 `role="radiogroup"` 래퍼로 구현하거나 합성. 선택 표면 이동은 `spring.moderate` |
 | `IconToggle` | on/off 아이콘 버튼(밑줄, 취소선, Wrap, 눈, 비율 잠금) | `Button`의 `variant` 하나로 가능하면 새 컴포넌트 없이 `Button` + `aria-pressed`로 처리. 먼저 `Button`으로 시도 |
-| `InspectorSection` | 헤더(제목 + 우측 슬롯) + 접기 | 접힘 애니메이션은 `spring.moderate` |
+| `InspectorSection` | 헤더(제목 + 우측 슬롯) | 접지 않는다 |
 | `AlignBox` | 3x3 점 격자 정렬 박스 | `justify-content` + `align-items` 쌍 |
 | `SidesField` | 4변 확장 필드(padding, margin, radius, border-width 공용) | T/R/B/L 라벨, 접힘 H/V |
 | `ShadowItem` | 효과 한 줄 + 설정 팝오버 | 후속 단계로 미뤄도 된다 |
@@ -425,7 +426,7 @@ UI는 Fluid Functionalism 컴포넌트와 `app/src/components/ui/field.tsx` 입�
 | 빈 코멘트 | "Select an element and leave a comment" |
 | 섹션 | Align, Layout, Position, Appearance, Typography, Fill, Stroke, Effects |
 | 크기 모드 | "Fixed", "Hug", "Fill" |
-| display | "Block", "Flex", "Grid", "None" |
+| display | "Block", "Flex", "Grid", "Inline", "Inline block", "Inline flex", "None" |
 | 방향 툴팁 | "Row", "Column", "Wrap" |
 | 정렬 툴팁 | "Align left", "Align horizontal center", "Align right", "Align top", "Align vertical center", "Align bottom" |
 | padding | "Padding", "Horizontal padding", "Vertical padding", "Top", "Right", "Bottom", "Left" |

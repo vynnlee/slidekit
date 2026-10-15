@@ -7,9 +7,10 @@
 const cp = require('child_process');
 if (!process.env.SEED) {
   let bad = 0;
-  for (const s of (process.env.SEEDS || '1,2,3').split(',')) {
+  for (const s of (process.env.SEEDS || '1,2,3,x4').split(',')) { // x로 시작하는 시드는 밖의 파일 쓰기를 섞는 변형이다
     console.log('== 시드 ' + s);
-    const r = cp.spawnSync(process.execPath, [__filename], { stdio: 'inherit', env: { ...process.env, SEED: s } });
+    const ext = s.startsWith('x');
+    const r = cp.spawnSync(process.execPath, [__filename], { stdio: 'inherit', env: { ...process.env, SEED: ext ? s.slice(1) : s, ...(ext ? { EXT: '1' } : {}) } });
     if (r.status) bad++;
   }
   process.exit(bad ? 1 : 0);
@@ -22,9 +23,13 @@ const rng = (a) => () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a
   const seed = Number(process.env.SEED), N = Number(process.env.OPS || 40);
   const R = rng(seed), pick = (a) => a[Math.floor(R() * a.length)], int = (a, b) => a + Math.floor(R() * (b - a + 1));
   const H = await startEditor({ name: 'editor-fuzz-' + seed, slides: 6 });
-  const { fs, FILE, T, check, page, settle, focusBody, saveDone, errors, finish } = H;
+  const { fs, FILE, T, check, page, settle, focusBody, saveDone, cond, errors, finish } = H;
   page.on('console', (m) => { if (m.type() === 'error' && !/fonts\.g|ERR_FAILED|Failed to load resource|Blocked script execution/.test(m.text() + m.location().url)) errors.push('console: ' + m.text().slice(0, 160)); });
   const original = fs.readFileSync(FILE, 'utf8');
+  // EXT 변형: 내 조작은 첫 슬라이드에만 하고, 가끔 밖에서 6번 슬라이드 끝에 문단을 덧붙인다(Claude의 수정 흉내). Undo를 끝까지 해도 그 수정은 남아 파일이 '원본 + 밖의 수정'과 같아야 한다.
+  const EXT = !!process.env.EXT;
+  const insertAt = (h, n, text) => { const ends = [...h.matchAll(/<\/section>/g)].map((m) => m.index); const at = ends[ends.length - 1]; /* 마지막 슬라이드(6번)의 끝: 내 복제가 안쪽 section을 늘려도 흔들리지 않는다 */ return h.slice(0, at) + `<p>${text}</p>` + h.slice(at); };
+  let expected = original;
   const dupIds = (html) => { const seen = new Map(); for (const m of html.matchAll(/\sid="([^"]+)"/g)) seen.set(m[1], (seen.get(m[1]) || 0) + 1); return new Set([...seen].filter(([, n]) => n > 1).map(([k]) => k)); };
   const baseDup = dupIds(original);
   const slideCount = (html) => (html.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
@@ -52,6 +57,7 @@ const rng = (a) => () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a
     'undo': () => key('Meta+z'), 'redo': () => key('Shift+Meta+z'),
   };
   const weights = { 'select-next': 6, 'select-parent': 2, 'select-child': 3, 'deselect': 1, nudge: 4, drag: 4, resize: 3, text: 3, duplicate: 3, delete: 2, group: 2, ungroup: 1, lock: 1, hide: 1, 'z-back': 1, 'z-front': 1, 'copy-style': 1, 'paste-style': 2, 'slide-add': 1, 'slide-dup': 1, 'slide-move': 1, 'slide-delete': 1, 'slide-layout': 1, theme: 1, 'slide-go': 2, 'find-replace': 1, undo: 3, redo: 1 };
+  if (EXT) for (const k of Object.keys(weights)) if (/^slide-|find-replace/.test(k)) delete weights[k]; // 구조 조작과 덱 전체 바꾸기는 6번 슬라이드의 밖의 수정과 섞지 않는다
   const bag = Object.entries(weights).flatMap(([k, w]) => Array(w).fill(k));
   const done = [];
   const fail = (what, extra) => { check(`시드 ${seed}: ${what}`, false, { ops: done.join(','), ...extra }); };
@@ -61,6 +67,11 @@ const rng = (a) => () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a
     const slides = slideCount(fs.readFileSync(FILE, 'utf8'));
     if ((op === 'slide-delete' && slides < 3) || (op === 'slide-add' && slides > 10) || (op === 'slide-dup' && slides > 10) || (op === 'slide-layout' && slides > 10)) op = 'select-next';
     done.push(op);
+    if (EXT && i % 6 === 5) {
+      const mark = `EXT-${i}`; expected = insertAt(expected, 6, mark); const cur = fs.readFileSync(FILE, 'utf8'); const ends = [...cur.matchAll(/<\/section>/g)].map((m) => m.index);
+      fs.writeFileSync(FILE, insertAt(cur, 6, mark)); done.push('외부:' + mark);
+      await cond((m) => document.querySelector('iframe[title="Canvas"]').contentDocument.body.textContent.includes(m), mark, 20000); // 편집기가 반영할 때까지
+    }
     try { await ops[op](); } catch (e) { fail('조작 ' + op + ' 중 예외', { e: String(e).slice(0, 200) }); bad = true; break; }
     await settle(); await page.keyboard.press('Meta+s'); await saveDone();
     const html = fs.readFileSync(FILE, 'utf8');
@@ -76,7 +87,8 @@ const rng = (a) => () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a
     for (let k = 0; k < N * 3 + 30 && !bad; k++) { if (await undoBtn.isDisabled().catch(() => true)) break; await key('Meta+z'); await settle(); }
     await page.keyboard.press('Meta+s'); await saveDone();
     const back = fs.readFileSync(FILE, 'utf8');
-    if (!bad && back !== original) { const a = original.split('\n'), b = back.split('\n'); let d = 0; while (d < a.length && a[d] === b[d]) d++; fail('Undo를 모두 해도 원본과 다름', { line: d + 1, want: (a[d] || '').slice(0, 120), got: (b[d] || '').slice(0, 120), sizes: [original.length, back.length] }); }
+    const want = EXT ? expected : original;
+    if (!bad && back !== want) { const a = want.split('\n'), b = back.split('\n'); let d = 0; while (d < a.length && a[d] === b[d]) d++; fail(EXT ? 'Undo를 모두 해도 원본과 밖의 수정이 합쳐진 모습과 다름' : 'Undo를 모두 해도 원본과 다름', { line: d + 1, prevWant: (a[d - 1] || '').slice(-120), prevGot: (b[d - 1] || '').slice(-120), want: (a[d] || '').slice(0, 120), got: (b[d] || '').slice(0, 120), sizes: [want.length, back.length] }); }
     else if (!bad) check(`시드 ${seed}: 조작 ${N}개 뒤 Undo로 원본과 바이트 동일, 불변식 유지`, true);
   }
   await finish();

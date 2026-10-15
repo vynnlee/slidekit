@@ -148,7 +148,7 @@ export function Editor({ id }: { id: string }) {
   }, [status, dirty]); // eslint-disable-line
 
   // 불러오기
-  const load = useCallback(async (folder: string, keepIndex = 0, keepSel = false) => {
+  const load = useCallback(async (folder: string, keepIndex = 0, keepSel = false): Promise<boolean> => {
     const res = await fetch(`/api/decks/${folder}/source`);
     if (!res.ok) throw new Error(`Could not load the deck (${res.status})`);
     const r = await res.json();
@@ -156,7 +156,21 @@ export function Editor({ id }: { id: string }) {
     setErr(""); setDraft(null); setStatus("idle"); failToast.current = false; retryOff.current = false; // 새로 불러오면 이전 저장 실패 표시도 푼다(자동 저장이 막혀 있지 않게)
     // 밖의 변경 반영에서 슬라이드 수가 같으면 슬라이드 키를 이어 받아, 캔버스가 바뀐 슬라이드만 제자리에서 갈아 끼우고 나머지(선택, 스크롤)는 그대로 둔다
     if (keepSel && d.units.length === unitsRef.current.length) d.units = d.units.map((u, i) => ({ ...u, key: unitsRef.current[i].key }));
-    past.current = []; future.current = [];
+    // 실행 취소 기록: 밖의 변경 반영에서 슬라이드 수와 덱 head가 같으면 기록을 지우지 않고 재기준한다. 모든 과거와 미래 상태에서 밖에서 바뀐 슬라이드만 새 내용으로 바꿔 두므로,
+    // Undo는 내 편집만 되돌리고 밖의 수정(Claude)은 절대 되돌리지 않는다(바뀐 슬라이드의 이전 편집은 되돌릴 수 없다). 그 밖의 경우(Reload, 슬라이드 수나 head가 달라짐)는 비운다.
+    const old = unitsRef.current, sh = shellRef.current;
+    let rebased = false;
+    if (keepSel && sh && d.units.length === old.length && d.prefix === sh.prefix) {
+      const fresh = new Map(d.units.map((u, i) => [old[i].key, u.html]));
+      const changed = new Set(old.filter((u, i) => u.html !== d.units[i].html).map((u) => u.key));
+      const re = (st: Unit[]) => {
+        const next = st.map((u) => (changed.has(u.key) ? { ...u, html: fresh.get(u.key)! } : u));
+        const pf = prefixOf.current.get(st);
+        if (pf !== undefined) prefixOf.current.set(next, pf);
+        return next;
+      };
+      past.current = past.current.map(re); future.current = future.current.map(re); last.current = null; rebased = true;
+    } else { past.current = []; future.current = []; }
     savedRef.current = r.source; mtime.current = r.mtime;
     // 편집 여부의 기준은 파일 글자가 아니라 편집기가 다시 쓸 글자다: 반쯤 잘린 파일처럼 다시 쓰면 달라지는 파일을 열어도 "저장 안 한 변경"으로 오인해 자동 저장이 파일을 덮어쓰지 않게 한다
     setSaved(compose({ prefix: d.prefix, suffix: d.suffix, units: d.units })); setChanged(false); if (!keepSel) setSel(null); // 밖의 변경 반영(keepSel)은 바뀌지 않은 슬라이드의 선택을 그대로 둔다
@@ -165,6 +179,7 @@ export function Editor({ id }: { id: string }) {
     origin.current = new Map(d.units.map((u, i) => [u.key, i + 1]));
     setShell({ prefix: d.prefix, suffix: d.suffix }); setUnitsState(d.units); setIndexState(i); indexRef.current = i;
     canvas.current?.apply(d.units);
+    return rebased;
   }, []);
 
   useEffect(() => {
@@ -199,7 +214,7 @@ export function Editor({ id }: { id: string }) {
           const cs = canvas.current?.slide(indexRef.current);
           const keepPath = cs && selNow.current ? pathOf(cs, selNow.current) : null; // 밖에서 바뀌어도 같은 요소를 계속 선택해 둔다
           const hadHistory = past.current.length > 0;
-          await load(folder, indexRef.current, true);
+          const rebased = await load(folder, indexRef.current, true);
           setErr("");
           if (keepPath !== null) { // 바뀐 슬라이드의 요소는 새로 만들어졌으니 같은 경로로 다시 고른다. 바뀌지 않은 슬라이드의 선택은 그대로 살아 있다.
             const s = canvas.current?.slide(indexRef.current);
@@ -211,8 +226,8 @@ export function Editor({ id }: { id: string }) {
           if (d.changed.length) { // 밖에서 바뀐 슬라이드를 알린다(예: Claude가 코멘트를 처리했을 때)
             setUpdated(new Set(d.changed));
             clearTimeout(updatedTimer.current); updatedTimer.current = setTimeout(() => setUpdated(new Set()), 4000);
-            toast(`${slidesLabel(d.changed)} updated${hadHistory ? ". Undo history cleared." : ""}`, { action: { label: "View", onClick: () => setIndex(d.changed[0]) } });
-          } else if (hadHistory) toast("The file changed outside the editor. Undo history cleared.");
+            toast(`${slidesLabel(d.changed)} updated${hadHistory ? (rebased ? ". Changed slides can't be undone." : ". Undo history cleared.") : ""}`, { action: { label: "View", onClick: () => setIndex(d.changed[0]) } });
+          } else if (hadHistory && !rebased) toast("The file changed outside the editor. Undo history cleared.");
         }
       } catch (e: any) { setErr(String(e.message ?? e)); }
     };

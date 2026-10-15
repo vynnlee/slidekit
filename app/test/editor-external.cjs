@@ -35,6 +35,18 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   await focusBody(); await page.keyboard.press('Meta+z'); await settle(); await page.keyboard.press('Meta+s'); await settle();
   check('Cmd+Z를 눌러도 밖의 변경(EXT-ONE)이 파일에 남음', read().includes('EXT-ONE'));
 
+  // (4b) 실행 취소 기록 재기준: 내 편집(2번 슬라이드 노트)을 저장한 뒤 밖에서 4번 슬라이드를 고치면, Undo는 내 편집만 되돌리고 밖의 수정은 남는다(Redo 뒤에도)
+  await notes().fill('REB-A'); await saveDone();
+  addTo(4, 'EXT-REB');
+  check('밖의 변경 알림에 바뀐 슬라이드는 되돌릴 수 없다고 안내', await page.getByText("Changed slides can't be undone", { exact: false }).first().waitFor({ timeout: 20000 }).then(() => true).catch(() => false));
+  await settle();
+  check('내 편집 뒤 밖의 변경을 반영해도 Undo 단추가 살아 있음(기록 유지)', !(await page.getByRole('button', { name: 'Undo', exact: true }).isDisabled()));
+  await focusBody(); await page.keyboard.press('Meta+z'); await settle(); await saveDone();
+  check('Undo는 내 편집(REB-A)만 되돌리고 밖의 수정(EXT-REB)은 파일에 남음', !read().includes('REB-A') && read().includes('EXT-REB'));
+  await focusBody(); await page.keyboard.press('Shift+Meta+z'); await settle(); await saveDone();
+  check('Redo 뒤에도 내 편집과 밖의 수정이 함께 있음', read().includes('REB-A') && read().includes('EXT-REB'));
+  await focusBody(); await page.keyboard.press('Meta+z'); await settle(); await saveDone();
+
   // (2) 저장 안 한 변경이 있을 때: 저장이 막힌 상태로 내 변경을 만든 뒤 밖에서 바꾼다
   await failPut(page);
   await notes().fill('MINE-ONE');
@@ -104,7 +116,9 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   await b.getByPlaceholder('Speaker notes (Markdown)').waitFor();
   await b.getByPlaceholder('Speaker notes (Markdown)').fill('FROM-TAB-B');
   await b.keyboard.press('Meta+s');
-  check('탭 B의 저장이 탭 A에 반영됨(Slide 1 updated)', await page.getByText('Slide 1 updated').first().waitFor({ timeout: 20000 }).then(() => true).catch(() => false));
+  const reflected = await page.getByText('Slide 1 updated').first().waitFor({ timeout: 20000 }).then(() => true).catch(() => false);
+  if (!reflected) console.log('INFO 탭 A 화면', JSON.stringify((await page.locator('body').innerText()).replace(/\s+/g, ' ').slice(0, 500)), 'B 파일에 있음', read().includes('FROM-TAB-B'));
+  check('탭 B의 저장이 탭 A에 반영됨(Slide 1 updated)', reflected);
   await failPut(page);
   await notes().fill('A-LOCAL');
   await page.getByRole('button', { name: 'Save failed. Retry' }).waitFor({ timeout: 8000 }).catch(() => {});

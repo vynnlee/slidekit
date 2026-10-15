@@ -36,7 +36,7 @@
 - 슬라이드는 `<body>`의 직계 자식 `<section data-slide>`이다. 문서 순서가 슬라이드 순서다. 엔진이 `#sk-stage`를 만들어 슬라이드를 옮겨 담으므로 덱은 `viewport`나 `stage` 래퍼를 쓰지 않는다.
 - 엔진 스크립트는 덱 스크립트보다 앞에 둔다. 엔진은 `DOMContentLoaded`에서 시작한다.
 - 글꼴은 `<head>`의 `<link>`로 불러도 된다(`slidekit bundle`이 덱이 쓰는 글자만 남긴 woff2로 내장한다).
-- 명령: `slidekit new <이름> [--template <id>]`는 `engine/templates.ts`의 템플릿(`talk` 기본, `blank`, `workshop`, 목록은 `slidekit templates`)으로 새 덱을 만들고, `slidekit lint <덱>`은 이 문서의 형식 위반을 규칙별로 출력하며(오류가 있으면 종료 코드 1), `slidekit bundle <덱>`은 단독 파일 하나로 묶고, `slidekit pdf <덱>`은 슬라이드당 한 페이지의 PDF로 내보내고(`--notes`는 A4 세로 쪽마다 슬라이드 한 장과 마크다운으로 렌더한 노트, `--handout [2|3|4|6]`은 쪽마다 그 수만큼의 슬라이드 격자, 파일은 `dist/<덱>.notes.pdf`와 `dist/<덱>.handout.pdf`), `slidekit deploy <덱>`은 배포하고, `slidekit doctor`는 환경을 점검하고(`doctor <덱>`은 그 덱의 lint, 크기, 이미지, 노트, 대비, 외부 글꼴, `--layout`은 넘침까지), `slidekit unpublish <덱>`은 배포한 덱을 지우되 `--yes`가 있어야 실제로 지우고 없으면 지울 목록만 보인다. `slidekit image`, `slidekit outline`, `slidekit layouts`, `slidekit templates`는 이 문서의 해당 절에 있다.
+- 명령: `slidekit new <이름> [--template <id>]`는 `engine/templates.ts`의 템플릿(`talk` 기본, `blank`, `workshop`, 목록은 `slidekit templates`)으로 새 덱을 만들고, `slidekit lint <덱>`은 이 문서의 형식 위반을 규칙별로 출력하며(오류가 있으면 종료 코드 1), `slidekit bundle <덱>`은 단독 파일 하나로 묶고, `slidekit pdf <덱>`은 슬라이드당 한 페이지의 PDF로 내보내고(`--notes`는 A4 세로 쪽마다 슬라이드 한 장과 마크다운으로 렌더한 노트, `--handout [2|3|4|6]`은 쪽마다 그 수만큼의 슬라이드 격자, 파일은 `dist/<덱>.notes.pdf`와 `dist/<덱>.handout.pdf`), `slidekit deploy <덱>`은 배포하고, `slidekit doctor`는 환경을 점검하고(`doctor <덱>`은 그 덱의 lint, 크기, 이미지, 노트, 대비, 외부 글꼴, `--layout`은 넘침까지), `slidekit unpublish <덱>`은 배포한 덱을 지우되 `--yes`가 있어야 실제로 지우고 없으면 지울 목록만 보인다. `slidekit image`, `slidekit outline`, `slidekit templates`는 이 문서의 해당 절에 있다.
 
 ## 2. 슬라이드
 
@@ -50,27 +50,19 @@
 - 위 네 값 외의 값은 `content`로 처리하고 콘솔에 경고한다.
 - `data-title`: 장 제목. `chapter`는 필수이고, 다른 종류에서는 선택이다(있으면 전체 보기에 표시). 화면에 글자를 그리는 일은 하지 않으므로 같은 글자를 `<h1>`에도 적는다.
 - `data-steps="N"`: 슬라이드 안에서 N단계로 나뉘는 장(6절). 없으면 1. 슬라이드 안 요소의 `data-step`(6.3절)에서 계산한 단계 수보다 작게 선언해도 큰 쪽이 쓰인다.
-- `data-layout`: `content` 슬라이드의 모양을 고르는 선택 속성(2.1). 없으면 기본 모양이다. 슬라이드 종류가 아니므로 네 가지 종류 규칙과 장 번호에 영향을 주지 않는다.
+- `data-layout`은 지원이 끝났다. 엔진은 이 속성을 무시하고 lint가 경고한다(2.1).
 - 장 번호: `chapter` 슬라이드를 위에서부터 1, 2, 3으로 센다. 각 슬라이드는 자신이 속한 장 번호를 가진다. 첫 `chapter` 앞의 슬라이드는 0이다.
 - 목차는 `chapter`의 `data-title`로 엔진이 만든다(전체 보기, 앱의 장 목록). 목차 슬라이드는 규격에 없다.
 - 슬라이드 번호는 1부터 센다. 외부로 나가는 모든 값(URL 해시, 메시지)도 1부터 센다.
 
-### 2.1 레이아웃 프리셋
+### 2.1 슬라이드 모양
 
-`<section data-slide="content" data-layout="<id>">`. 값은 `engine/layouts.ts`의 목록이 원천이고 `slidekit layouts`(`--json`)로 볼 수 있다. 편집기의 슬라이드 추가와 lint, SKILL이 같은 목록을 쓴다.
+엔진은 슬라이드 모양 프리셋을 제공하지 않는다. 규격이 정하는 것은 HTML 구조(슬라이드 종류, 장 제목, 노트, 단계)이고 모양은 덱이 정한다. 두 열이나 큰 숫자처럼 모양이 필요하면 덱의 `<style>`에 클래스를 만들어 `<section>`이나 요소에 붙인다.
 
-| `data-layout` | 쓰임 | 마크업 약속 |
-|---|---|---|
-| (없음), `title-body` | 핵심 문장 하나와 설명 | `h2`, `p` |
-| `two-column` | 둘을 나란히 | `h2`(두 칸에 걸침)와 `data-col` 요소 둘(각각 `h3`과 글) |
-| `big-number` | 숫자 하나로 말하기 | `data-big`이 붙은 `p` 하나(260px, `--sk-accent`)와 설명 `p` |
-| `quote` | 인용과 출처 | `blockquote` 안에 `p`(64px)와 `footer`(출처) |
-| `image-full` | 이미지가 주인공 | `img` 하나(슬라이드를 덮음, `object-fit: cover`)와 선택적 `h2`(아래쪽, 어두운 그라디언트 위) |
-
-- 엔진 CSS가 모양을 준다. 선택자는 `[data-slide][data-layout="..."]`(명시도 0,2,0)라서 엔진 기본 `[data-slide]` 규칙을 이기고, 덱 CSS가 같은 선택자(`data-layout` 포함)로 쓴 규칙에는 진다. 덱 CSS가 `[data-slide="content"]`처럼 속성을 건드리는 일은 레이아웃이 설정하지 않은 속성(여백 등)에서 그대로 통한다.
-- 마크업이 약속과 다르면 오류가 아니라 쌓인 슬라이드로 보인다(예: `two-column`에 `data-col`이 없으면 모든 요소가 가로 한 줄씩 쌓인다). lint가 경고한다: 알 수 없는 값, `content`가 아닌 종류에 붙임, 약속한 요소가 없음.
-- 레이아웃은 `data-step`, 노트, 토큰, 인쇄, 전체 보기에서 다른 content 슬라이드와 같다. 편집기의 Inspector에서 레이아웃을 바꾸면 속성만 바뀌고 마크업은 그대로다.
-- 예제 문구는 모두 "여기에 적는다" 꼴이라 lint의 `placeholder` 경고가 배포 전에 잡는다(`title-body`만 편집기와의 호환으로 "제목", "내용").
+- 새 덱의 `<style>`에는 예가 들어 있다: `.two-col`(두 열: `<div class="col">` 둘과 제목이 두 칸에 걸침)과 `.big-number`(`<p class="big">` 하나, 260px, `--sk-accent`). 이름은 덱마다 정한다. 쓰지 않으면 지운다.
+- 덱 CSS가 `[data-slide].two-col`처럼 쓰면 엔진 기본 `[data-slide]` 규칙(명시도 0,1,0)을 이긴다.
+- 이전 버전의 `data-layout="two-column|big-number|quote|image-full"` 속성은 더 이상 모양을 만들지 않는다. 엔진은 무시하고 `slidekit lint`가 속성을 지우라고 경고한다(오류 아님). 필요한 모양은 덱 CSS로 옮긴다.
+- 예제 문구는 모두 "여기에 적는다" 꼴이라 lint의 `placeholder` 경고가 배포 전에 잡는다.
 
 ### 노트
 

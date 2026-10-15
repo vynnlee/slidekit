@@ -54,14 +54,14 @@ bun run slidekit pdf my-talk --notes       # 백업: 노트가 붙은 PDF
 ## 편집과 발표
 - 편집기: 요소 트리(Layers)와 슬라이드 필름스트립, 캔버스 직접 편집(더블클릭), 속성 패널(Inspector), 덱 토큰 편집, 노트(마크다운), 코멘트, 내보내기(Export 메뉴). 계층 선택은 클릭(최상위), 더블클릭(한 단계 안쪽), Cmd+클릭(가장 안쪽), Enter와 Shift+Enter(자식, 부모), Tab(형제)이다. 줌은 Cmd+휠과 Cmd+=, Cmd+-, Cmd+0이다. Cmd+K는 명령 팔레트, Cmd+/는 단축키 안내, 코멘트는 요소를 고르고 C이다. 편집 뒤 1.5초 동안 입력이 없으면 자동 저장하고 Cmd+S로도 저장한다. 저장하면 `decks/<덱>/index.html`이 바뀐다.
 - 읽기 전용 가드(테스트 서버 전용): `SLIDEKIT_READONLY_DECKS=폴더,폴더`를 주고 띄운 서버는 그 덱의 쓰기를 403으로 거부한다. 사용자가 쓰는 서버에는 설정하지 않는다.
-- 새 슬라이드: 본문 레이아웃(제목과 본문, 두 열, 큰 숫자, 인용, 전체 이미지)을 `data-layout`으로 고른다. 목록은 `bun run slidekit layouts`이고 규칙은 `spec/SPEC.md` 2.1이다. 새 덱은 템플릿(talk, blank, workshop)으로 시작한다(`slidekit new <이름> --template <id>`).
+- 슬라이드 모양: 엔진은 모양 프리셋을 제공하지 않고 덱의 `<style>`에 클래스를 만들어 쓴다(규칙은 `spec/SPEC.md` 2.1, 두 열과 큰 숫자 예가 새 덱에 들어 있다). 새 덱은 템플릿(talk, blank, workshop)으로 시작한다(`slidekit new <이름> --template <id>`).
 - 발표: 방향키로만 넘기고 F가 전체화면, O가 전체 보기, 숫자와 Enter가 장 이동, B와 W가 검은 화면과 흰 화면이다. 발표자 화면은 노트, 타이머와 목표 시간, 장 위치를 각각 켜고 끄며 외장 모니터로 시작할 수 있다. 편집기에서 Cmd+Enter는 현재 슬라이드부터, Shift+Cmd+Enter는 처음부터 발표한다. 발표 중인 청중 화면(`?sync=1` 창과 전체화면)에서는 우클릭 메뉴가 뜨지 않는다. 휴대폰 리모컨(`/remote/<덱>`)은 발표자 화면의 대화상자에서 코드를 받아 이동, 가리기, 타이머를 원격으로 한다(한계는 `HANDOFF.md`).
 - 내보내기: Export 메뉴 항목은 위에서부터 Download HTML, Download PDF, PDF options...(슬라이드, 노트 포함, 쪽당 2/3/4/6장 유인물), Copy as Markdown과 Download .md(발표자 노트 포함, 코멘트와 게시 기록은 담지 않는다), Publish to static.vynnlee.com...(올리기 전 점검과 비밀번호), 게시한 적이 있으면 Copy published link와 Published...(주소, 게시 시각, 게시 뒤 바뀌었는지, 이력, Unpublish...), Version history...이다. 버전 기록은 저장할 때마다 `decks/<덱>/.versions/`에 최근 50개까지 남기고 복원하면 현재를 먼저 남긴다.
 - 덱 목록: 검색, 정렬, 카드 키보드 이동, Cmd+Enter 빠른 발표, 새 덱, 복제, 이름 바꾸기, 휴지통.
 
 ## 명령
 - `bun run slidekit help`: 명령 목록. 알 수 없는 명령은 사용법을 보여 주고 종료 코드 1이다.
-- `bun run slidekit new <이름> [--template talk|blank|workshop]`: `decks/<이름>/`을 템플릿에서 만든다(`slidekit templates`로 목록). `slidekit layouts`는 슬라이드 레이아웃 프리셋 목록.
+- `bun run slidekit new <이름> [--template talk|blank|workshop]`: `decks/<이름>/`을 템플릿에서 만든다(`slidekit templates`로 목록).
 - `bun run slidekit image <덱> <파일> [--max 2400]`: 이미지를 덱의 `assets/`에 안전하게 저장하고 상대 경로를 출력한다(이름 정리, svg 스크립트 거부, GPS 정보 제거, 큰 이미지 축소는 macOS `sips`).
 - `bun run slidekit lint <덱>`: 덱이 SPEC을 지키는지 규칙별로 점검한다(오류가 있으면 종료 코드 1).
 - `bun run slidekit pdf <덱> [--notes | --handout [2|3|4|6]]`: 번들한 덱을 `dist/<덱>.pdf`로 인쇄한다(슬라이드당 한 페이지, 16:9). `--notes`는 A4 세로 쪽마다 슬라이드 한 장과 노트, `--handout`은 쪽마다 슬라이드 여러 장의 유인물이다. PDF는 텍스트를 선택하고 검색할 수 있고, 슬라이드의 `<a>` 링크가 클릭되며, 제목(`h1`, `h2`)이 책갈피(outline)로 들어간다. 글꼴은 Chrome이 Type3로 임베드한다.

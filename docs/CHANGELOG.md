@@ -9,7 +9,7 @@
 - Group(Cmd+G)과 Ungroup(Shift+Cmd+G), 스타일 복사와 붙여넣기(Cmd+Alt+C, Cmd+Alt+V), 텍스트 스타일 프리셋 5종이 있다.
 - Find and replace(Cmd+F)는 덱 전체를 찾고 Replace all은 실행 취소 1건이다.
 - Cmd+K 명령 팔레트는 처음 열면 핵심 동작 5개(Present, Add slide, Find, Add comment, Keyboard shortcuts)로 시작한다.
-- 슬라이드 레이아웃 5종(Title and body, Two columns, Big number, Quote, Full image)을 Add slide 메뉴, 타일 우클릭, Inspector에서 고른다.
+- 슬라이드 모양 프리셋은 제공하지 않는다(레이아웃 프리셋 제거). 두 열과 큰 숫자 같은 모양은 새 덱의 `<style>` 클래스 예(`.two-col`, `.big-number`)를 쓰고, 남은 `data-layout`은 lint가 경고한다.
 - 이미지는 붙여넣기, 끌어 놓기, Replace image...로 넣는다. 덱의 `assets/`에 저장되고 GPS 정보는 지워진다.
 - 요소 Fill과 슬라이드 Background에 Linear gradient(스톱 2~4개, 덱 토큰 `var()` 허용)를 쓴다.
 - 덱 토큰 패널에 Theme 6종(Dark, Light, Paper, Midnight blue, Mono, High contrast)이 있고 한 번에 바뀌며 실행 취소 1건이다.
@@ -50,9 +50,9 @@
 
 ## 엔진과 CLI
 - 단계 등장은 `data-step`과 `data-step-effect`(rise, fade, left, scale, blur, none)로 JS 없이 쓴다.
-- 명령: `new --template`, `templates`, `layouts`, `lint`, `doctor [덱] [--layout]`, `image`, `outline`, `bundle`, `pdf --notes --handout`, `deploy`, `unpublish`.
+- 명령: `new --template`, `templates`, `lint`, `doctor [덱] [--layout]`, `image`, `outline`, `bundle`, `pdf --notes --handout`, `deploy`, `unpublish`.
 - `doctor <덱>`은 lint, 크기, 이미지, 노트, 색 대비(WCAG), 외부 글꼴을 요약하고 `--layout`은 넘침과 잘림을 잰다.
-- 덱 규격은 `deck-meta` 검증, 레이아웃 5종, 템플릿 3종, 버전 기록(`.versions/`, 최대 50개와 30MB)을 포함한다.
+- 덱 규격은 `deck-meta` 검증, 템플릿 3종, 버전 기록(`.versions/`, 최대 50개와 30MB)을 포함한다.
 - 보안: 이미지와 SVG 검사, 1억 픽셀 상한, 번들러 읽기 범위 제한, 입력 정제, 덱 단위 저장 잠금, 읽기 전용 가드를 갖췄다.
 
 ## 접근성과 견고성
@@ -65,5 +65,5 @@
 ## 개발 도구와 테스트
 - `bun run test`는 공정 큐로 잠금을 잡고 단계 42개(느린 8개는 `--slow`나 `--only`)를 돈다. 선택은 `--only <이름>`이 정확 일치이고 글로브와 그룹 별칭을 쓴다.
 - 공용 브라우저 서버와 가짜 시계, 조건 대기로 흔들림을 줄였고 실패한 브라우저 단계는 트레이스를 켜고 한 번 더 돈다.
-- 가이드 덱 `slidekit-guide`는 28장이며 기능 시연용 노트가 있고 `docs/DEVICE-CHECKLIST.md`가 실기기 확인 7가지를 안내한다.
+- 가이드 덱 `slidekit-guide`는 26장이며 기능 시연용 노트가 있고 `docs/DEVICE-CHECKLIST.md`가 실기기 확인 7가지를 안내한다.
 - `HANDOFF.md`가 현재 상태와 한계, 사용자 확인 항목을 한 곳에 모은다.

@@ -63,21 +63,14 @@ description: slidekit 덱(HTML 슬라이드)을 새로 만들거나 고칠 때 �
 - 슬라이드 번호는 1부터 센다. URL 해시 `#N`도 1부터다.
 - 기본 구성은 cover 하나, chapter 여러 개와 각 장의 content, end 하나다.
 
-## 2-1. 레이아웃 프리셋
+## 2-1. 슬라이드 모양
 
-`content` 슬라이드는 `data-layout`으로 모양을 고른다. 종류(`data-slide`)가 아니라 변형이다. 목록과 마크업 조각은 `bun app/server.ts layouts`(`--json`)로 본다.
+엔진은 슬라이드 모양 프리셋을 제공하지 않는다(`data-layout`은 지원이 끝났고 lint가 경고한다). 규격이 정하는 것은 HTML 구조뿐이고, 두 열이나 큰 숫자처럼 모양이 필요하면 덱의 `<style>`에 클래스를 만들어 붙인다.
 
-| `data-layout` | 쓰임 | 마크업 |
-|---|---|---|
-| (없음) | 핵심 문장과 설명 | `h2`, `p` |
-| `two-column` | 비교, 전과 후 | `h2`와 `<div data-col>` 둘 (각각 `h3`과 글) |
-| `big-number` | 숫자 하나 | `<p data-big>42%</p>`와 설명 `p` |
-| `quote` | 인용 | `blockquote` 안에 `p`와 `footer` |
-| `image-full` | 이미지가 주인공 | `img`(alt 필수)와 선택적 `h2` |
-
-- 한 덱에서 같은 목적의 장은 같은 레이아웃을 쓴다. 비교는 `two-column`, 핵심 숫자는 `big-number`.
-- 레이아웃의 모양을 바꾸고 싶으면 덱 CSS에서 `[data-slide][data-layout="quote"] ...`처럼 `data-layout`을 넣은 선택자로 덮는다.
-- 조각의 예제 문구("...를 여기에 적는다")를 모두 바꾼다. 남으면 `slidekit lint`가 `placeholder` 경고를 낸다.
+- 새 덱의 `<style>`에 `.two-col`(비교, 전과 후: `h2`와 `<div class="col">` 둘, 각각 `h3`과 글)과 `.big-number`(`<p class="big">42%</p>`와 설명 `p`)의 예가 있다. 쓰지 않으면 지운다.
+- 한 덱에서 같은 목적의 장은 같은 클래스를 쓴다.
+- 인용이나 전체 화면 이미지 같은 모양이 필요하면 덱 CSS에 그 클래스를 직접 쓴다. 이미지에는 `alt`를 단다.
+- 이전 덱에 `data-layout`이 남아 있으면 속성을 지우고 같은 모양을 덱 CSS 클래스로 옮긴다.
 
 ## 3. 디자인 토큰과 덱 CSS
 
@@ -251,7 +244,7 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
 - 요소 간격은 토큰 배수로 정한다(제목과 본문 40px 이상, 카드 사이 24px에서 32px). 넘치면 글자를 줄이고 여백을 깎아 맞추지 않는다. 아래 3분의 1이 비어도 된다. 빈 곳을 채우려고 요소를 늘리지 않는다.
 
 ### 숫자와 도식과 이미지
-- 핵심 숫자는 한 장에 하나이다. `data-layout="big-number"`의 `data-big`은 엔진이 260px, 굵기 800, `--sk-accent`로 그린다. 프리셋 없이 직접 만들 때는 160px 이상, 굵기 700, `--sk-fg`로 쓰고 단위와 설명은 36px `--sk-muted`로 아래에 둔다. 비교는 큰 숫자 2개까지이고 3개 이상이면 표로 만든다(`font-variant-numeric: tabular-nums`).
+- 핵심 숫자는 한 장에 하나이다. 새 덱의 `.big-number .big`은 260px, 굵기 800, `--sk-accent`다. 직접 만들 때는 160px 이상, 굵기 700, `--sk-fg`로 쓰고 단위와 설명은 36px `--sk-muted`로 아래에 둔다. 비교는 큰 숫자 2개까지이고 3개 이상이면 표로 만든다(`font-variant-numeric: tabular-nums`).
 - 도식은 노드 5개 이하, 화살표 한 방향이 기본이다. 선이 교차하면 다시 그린다. 노드는 `--sk-panel` 배경, `--sk-line` 1px 테두리, 모서리 14px, 글자 32px, 보조 글자 24px이다.
 - 색은 흑백이 기본이다. 역할 구분이 꼭 필요하면 역할색을 3개까지 쓰고, `--sk-accent`는 한 장에 한 요소에만 쓴다. 장식, 그림자, 그라디언트 배경, 아이콘 남발은 하지 않는다.
 - 이미지는 한 장에 하나이다. 화면의 40%에서 50%를 차지하게 두거나 전면에 둔다. 스크린샷은 글자가 28px 이상으로 읽히게 필요한 부분만 잘라 쓴다.
@@ -289,7 +282,7 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
 
 ## 9. 만든 뒤 확인
 
-0. 먼저 `bun app/server.ts lint <이름>`을 실행한다. SPEC 위반(메타, 슬라이드 종류, 레이아웃, 장 제목, stepper, 금지 문자, vw/vh, 래퍼, 이동 핸들러, 외부 리소스, 남은 예제 문구)을 한 줄씩 알려 준다. error가 0이어야 한다. warn은 이유를 확인한다. `placeholder` 경고가 나오면 템플릿이나 레이아웃의 예제 문구가 남아 있다는 뜻이므로 실제 내용으로 바꾼다.
+0. 먼저 `bun app/server.ts lint <이름>`을 실행한다. SPEC 위반(메타, 슬라이드 종류, 지원이 끝난 속성, 장 제목, stepper, 금지 문자, vw/vh, 래퍼, 이동 핸들러, 외부 리소스, 남은 예제 문구)을 한 줄씩 알려 준다. error가 0이어야 한다. warn은 이유를 확인한다. `placeholder` 경고가 나오면 템플릿이나 레이아웃의 예제 문구가 남아 있다는 뜻이므로 실제 내용으로 바꾼다.
 1. 구조 점검은 파일을 읽어서 한다(lint가 잡지 못하는 항목 위주).
    - `data-slide` 값이 네 종류뿐인지, `cover`와 `end`가 각각 최대 1개이고 첫 장과 마지막 장인지.
    - 모든 `chapter`에 `data-title`이 있고 `<h1>` 글자와 같은지.

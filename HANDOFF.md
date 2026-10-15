@@ -4,13 +4,13 @@
 
 ## 목적
 
-HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 도구. 덱은 폴더 하나(`decks/<이름>/index.html`)이고, 엔진이 1920x1080 맞춤, 방향키 이동, F 전체화면, O 전체 보기, 발표 동기화를 맡는다. 예제 덱은 워크숍 덱(53장, `decks/vibe-coding-workshop`)과 기능 안내 덱(27장, `decks/slidekit-guide`).
+HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 도구. 덱은 폴더 하나(`decks/<이름>/index.html`)이고, 엔진이 1920x1080 맞춤, 방향키 이동, F 전체화면, O 전체 보기, 발표 동기화를 맡는다. 예제 덱은 워크숍 덱(53장, `decks/vibe-coding-workshop`)과 기능 안내 덱(26장, `decks/slidekit-guide`).
 
 ## 구성
 
 | 경로 | 내용 |
 |---|---|
-| `engine/` | 런타임 `slidekit.js`와 `slidekit.css`(인쇄 CSS 포함), 단계 효과 목록 `steps.ts`, 레이아웃 `layouts.ts`, 템플릿 `templates.ts`와 `template/`, CLI(`new`, `lint`, `pdf`와 `handout.*`, `doctor`와 `deck-check.ts`와 `layout-check.ts`, `image-cli`와 `assets.ts`, `outline`), `deck-meta.ts`, `publish-record.ts`, `chrome.ts`, 테스트 `test/` |
+| `engine/` | 런타임 `slidekit.js`와 `slidekit.css`(인쇄 CSS 포함), 단계 효과 목록 `steps.ts`, 템플릿 `templates.ts`와 `template/`, CLI(`new`, `lint`, `pdf`와 `handout.*`, `doctor`와 `deck-check.ts`와 `layout-check.ts`, `image-cli`와 `assets.ts`, `outline`), `deck-meta.ts`, `publish-record.ts`, `chrome.ts`, 테스트 `test/` |
 | `app/` | Bun 서버(`server.ts`, `guard.ts`, `deck-lock.ts`, `decks-api.ts`, `editor-api.ts`, `comments.ts`, `versions.ts`, `export-api.ts`, `remote-api.ts`, `search-api.ts`, `folder.ts`, `preview-proxy.ts`), React 앱(`src/`), 테스트(`test/`) |
 | `bundler/` | 덱을 외부 파일 없는 단일 HTML로 묶음(이미지, srcset, 글꼴 서브셋 인라인) |
 | `deploy/` | `deploy.ts`, `unpublish.ts`와 `kv.ts`, Cloudflare Worker(`worker/`: KV, 비밀번호 쿠키, Durable Object 시도 제한) |
@@ -22,13 +22,13 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 
 ## 현재 기능 (코드와 git log 기준, 상세는 SPEC과 README)
 
-- **편집**: Figma식 계층 선택, Layers(숨김, 잠금, 이름, 드래그 순서), 필름스트립, 줌, Cmd+K 팔레트, 찾기와 바꾸기(Cmd+F), 그룹(Cmd+G), 스타일 복사와 붙여넣기, 텍스트 스타일 프리셋, 레이아웃 5종 추가와 변경, 이미지 붙여넣기와 끌어 놓기(`assets/`), 컨텍스트 메뉴(`spec/INTERACTION.md`), 덱 설정(제목, 부제, 작성자, 날짜, 언어, 공개 범위), 덱 토큰과 테마 6종, 채우기와 배경 그라디언트(스톱 2~4개, `var()` 허용), 단계 등장 편집(효과 6종은 `engine/steps.ts`), 넘침 표시, 자동 저장(1.5초)과 충돌 처리.
+- **편집**: Figma식 계층 선택, Layers(숨김, 잠금, 이름, 드래그 순서), 필름스트립, 줌, Cmd+K 팔레트, 찾기와 바꾸기(Cmd+F), 그룹(Cmd+G), 스타일 복사와 붙여넣기, 텍스트 스타일 프리셋, 이미지 붙여넣기와 끌어 놓기(`assets/`), 컨텍스트 메뉴(`spec/INTERACTION.md`), 덱 설정(제목, 부제, 작성자, 날짜, 언어, 공개 범위), 덱 토큰과 테마 6종, 채우기와 배경 그라디언트(스톱 2~4개, `var()` 허용), 단계 등장 편집(효과 6종은 `engine/steps.ts`), 넘침 표시, 자동 저장(1.5초)과 충돌 처리.
 - **발표**: 청중 화면(크로스페이드, 전체 보기, 숫자 이동, B와 W 가리기, `data-step` 단계 등장, 스크린리더 안내), 발표자 화면(노트, 타이머와 목표, 장 위치, 리허설 요약, Cmd+K 팔레트), 외장 모니터 배치, `?debug=1` 진단.
 - **휴대폰 리모컨**: 발표자 화면에서 코드와 QR, 이동과 가리기와 타이머, 세션 2시간, 코드 1회용, SSE는 1회용 티켓.
 - **버전 기록**: 저장 직전과 편집기 밖 수정 직전 스냅샷, 비교, 새 탭 sandbox 미리보기, 복원(현재를 먼저 남기고 Undo). 덱당 50개와 30MB, restore 종류는 10개 상한.
 - **코멘트**: 요소 코멘트를 Claude Code 세션에 전달하고 답과 해결까지 추적(아래 결정 절).
 - **내보내기와 게시**: HTML 번들, PDF(`--notes`, `--handout 2|3|4|6`), `deploy`(공개 또는 비밀번호), `unpublish`(확인 뒤 KV 삭제, 이름이 다르면 이름 입력), 게시 기록 `.publish.json`, `deploy --smoke`.
-- **CLI**: `new --template talk|blank|workshop`, `templates`, `layouts`, `lint`, `doctor [덱] [--layout]`, `image`, `outline`, `bundle`, `pdf`, `deploy`, `unpublish`.
+- **CLI**: `new --template talk|blank|workshop`, `templates`, `lint`, `doctor [덱] [--layout]`, `image`, `outline`, `bundle`, `pdf`, `deploy`, `unpublish`.
 
 ## 실행과 명령
 
@@ -51,7 +51,7 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 `bun test --coverage`는 띄운 서버와 CLI 프로세스를 세지 않아 단위 기준이다. 아래는 단위로도 e2e로도 직접 닿지 않거나 약한 곳이고, 이번에 `preview-proxy`(Host와 Origin 거절), `search-api`(색인 추출과 캐시), `decks-trash`(이름 바꾸기, 휴지통, 복원, 영구 삭제 확인)를 채웠다.
 - `app/launch.ts`: `openApp`의 열지 않는 조건(PORT, SSH, mac-cloud)과 `alreadyUp` 판정은 테스트가 없다(17줄, 낮음).
 - `engine/chrome.ts`: Chrome 경로 찾기(환경 변수, Playwright, 설치된 브라우저 순서)는 단위 25%이고 순서 검증이 없다(낮음, 없으면 doctor와 pdf가 안내).
-- `engine/*-cli.ts`(image, layouts, templates, lint, outline): 얇은 래퍼라 `cli.test.ts`가 일부만 본다.
+- `engine/*-cli.ts`(image, templates, lint, outline): 얇은 래퍼라 `cli.test.ts`가 일부만 본다.
 - `deploy/deploy.ts`: 올리기와 비밀번호 흐름은 dry-run e2e로만 본다(스크립트라 단위 불가, 원격 쓰기는 승인 뒤 `--smoke`). Worker는 `deploy/rehearse.ts`가 로컬로 본다.
 - `engine/pdf.ts`와 `bundler/bundle.ts`: export e2e와 번들러 단위가 프로세스를 띄워 본다(옵션 조합은 일부만).
 - `channel/index.ts`: 단위 34%이고 나머지(재연결, 백필, 도구 호출)는 channel 통합 3단계가 본다.

@@ -12,3 +12,5 @@ decks/.vibe-test-backup.html
 decks/*/.versions/
 decks/*/.publish.json
 .wrangler/
+.claude/scheduled_tasks.lock
+.claude/settings.local.json

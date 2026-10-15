@@ -27,7 +27,7 @@ fs.mkdirSync(DIR4, { recursive: true });
 fs.writeFileSync(path.join(DIR4, 'index.html'), `<!doctype html><html lang="en" data-slidekit="1"><head><meta charset="utf-8"><title>${ID4}</title><script type="application/json" id="deck-meta">{ "title": "${ID4}", "id": "${ID4}" }</script>
 <link rel="stylesheet" href="../../engine/slidekit.css"></head><body>
 <section data-slide="cover"><h1>Cover</h1><aside data-notes>Notes for cover</aside></section>
-<section data-slide="content"><h2>Steps</h2><figure data-step="2" style="visibility:visible">Photo</figure><p data-step="3" style="visibility:visible;transition:visibility 2s">Third</p><div style="visibility:visible">Always</div></section>
+<section data-slide="content"><h2>Steps</h2><figure data-step="2" style="visibility:visible">Photo</figure><div data-step="2" style="--sk-step-delay:200ms">Delayed</div><p data-step="3" data-step-out="4">Third</p><span data-step-out="3">Exiting</span><div style="visibility:visible">Always</div></section>
 <section data-slide="content"><h2>Plain</h2><span style="visibility:visible;transition:visibility 2s">Late</span></section>
 <section data-slide="content"><h2>Four</h2></section>
 <script src="../../engine/slidekit.js"></script></body></html>`);
@@ -280,6 +280,97 @@ const MOCKS = {
       for (const k of ['ArrowRight', 'ArrowRight', 'ArrowRight']) { await page.keyboard.press(k); await sleep(40); }
       l = await leaks();
       check('단계 요소가 있는 슬라이드를 지나쳐도 보이지 않는다', l.length === 0, l);
+
+      // 정지 상태 불변식: 활성 슬라이드의 단계 요소는 data-shown과 data-away 중 정확히 하나이고 모양(보임)이 그와 맞으며, 전환 표시(data-step-run)가 남지 않고, 비활성 슬라이드는 보이지 않는다
+      const probe = (fr) => fr.evaluate(() => {
+        const st = document.querySelector('#sk-stage'); if (!st) return null;
+        const act = st.querySelector(':scope > [data-slide][data-active]');
+        const viol = [], state = [];
+        if (act) for (const e of act.querySelectorAll('[data-step],[data-step-out]')) {
+          const sh = e.hasAttribute('data-shown'), aw = e.hasAttribute('data-away');
+          const vis = e.checkVisibility({ visibilityProperty: true, opacityProperty: true });
+          const t = e.textContent.trim().slice(0, 10);
+          state.push(t + ':' + (sh ? 'S' : '') + (aw ? 'A' : ''));
+          if (sh === aw) viol.push(t + ' shown/away not exclusive');
+          else if (aw && vis) viol.push(t + ' away but visible');
+          else if (sh && !vis) viol.push(t + ' shown but hidden');
+        }
+        if (st.querySelector('[data-step-run]')) viol.push('data-step-run left');
+        for (const e of st.querySelectorAll(':scope > [data-slide]:not([data-active]):not([data-leaving]) *')) if (getComputedStyle(e).visibility !== 'hidden') viol.push('inactive visible ' + e.textContent.slice(0, 8));
+        return { slide: act ? [...st.children].filter((c) => c.hasAttribute('data-slide')).indexOf(act) + 1 : 0, state: state.join(','), viol };
+      });
+      const probes = async () => {
+        const out = [];
+        for (const [who, pg] of [['presenter', page], ['audience', pop]]) for (const fr of pg.frames()) {
+          const pr = await probe(fr).catch(() => null); if (!pr) continue;
+          const title = who === 'presenter' ? await fr.frameElement().then((e) => e.getAttribute('title')).catch(() => '') : 'page';
+          out.push({ who: who + ':' + title, ...pr });
+        }
+        return out;
+      };
+      const settled = async () => {
+        let last = [];
+        const ok = await until(async () => { last = await probes(); const cur = last.find((x) => x.who === 'presenter:Current slide'), aud = last.find((x) => x.who === 'audience:page');
+          return last.length >= 3 && last.every((x) => !x.viol.length) && cur && aud && cur.slide === aud.slide && cur.state === aud.state; }, 9000);
+        return { ok, last };
+      };
+      const pal = page.getByRole('dialog', { name: 'Search' });
+      const key = async (k) => { await page.keyboard.press(k); };
+      // 부하 때 Enter가 필터가 갱신되기 전에 눌려 다른 행을 고를 수 있어, 그 번호의 슬라이드에 닿을 때까지 다시 한다
+      const jump = async (n) => {
+        for (let t = 0; t < 4; t++) {
+          await until(async () => (await page.getByRole('dialog').count()) === 0); await page.keyboard.press('Control+k');
+          await pal.getByRole('combobox').fill(String(n));
+          await until(async () => (await pal.getByRole('option', { name: new RegExp(`^${n}\\. `) }).count()) >= 1);
+          await page.keyboard.press('Enter'); await until(async () => (await page.getByRole('dialog').count()) === 0);
+          if (await until(async () => (await counter()).startsWith(`${n} / `), 3000)) return true;
+        }
+        return false;
+      };
+      await jump(1); // 앞의 빠른 이동이 어디에서 끝났든 표지에서 시작한다
+      let st = await settled();
+      check('[steps] 처음(표지) 정지 상태 불변식과 발표자, 청중 일치', st.ok, st.last);
+      const nxt = st.last.find((x) => x.who === 'presenter:Next slide');
+      check('[steps] 다음 슬라이드 미리보기는 1단계 상태(등장은 숨김, 퇴장 요소는 보임)', !!nxt && nxt.slide === 2 && nxt.state === 'Photo:A,Delayed:A,Third:A,Exiting:S', st.last);
+      // 빠른 앞뒤 이동, 점프, 되감기 뒤 정지 상태(지연 200ms와 퇴장 포함)
+      await page.bringToFront(); await page.mouse.click(640, 780);
+      for (const k of ['ArrowRight', 'ArrowRight', 'ArrowRight', 'ArrowRight', 'ArrowRight', 'ArrowLeft', 'ArrowLeft', 'ArrowLeft', 'ArrowRight', 'ArrowLeft']) { await key(k); await sleep(30); }
+      st = await settled(); check('[steps] 빠른 앞뒤 이동 뒤 정지 상태 불변식과 발표자, 청중 일치', st.ok, st.last);
+      await jump(2); st = await settled(); check('[steps] 팔레트 점프(2번) 뒤 정지 상태', st.ok, st.last);
+      await jump(1); st = await settled(); check('[steps] 팔레트 점프(표지) 뒤 정지 상태와 되감기 표시 정리', st.ok, st.last);
+      await page.mouse.click(640, 780);
+
+      // 스크린 리더 안내(청중 창의 polite 영역): 앞으로 새로 나타난 요소만 읽고 퇴장은 읽지 않으며 되감기는 요소 글자를 읽지 않는다
+      await pop.evaluate(() => { window.__say = []; const el = document.querySelector('#sk-live'); if (el) new MutationObserver(() => { if (el.textContent) window.__say.push(el.textContent); }).observe(el, { childList: true, characterData: true, subtree: true }); });
+      const said = () => pop.evaluate(() => window.__say.slice());
+      const next = async (k) => { const n = (await said()).length; await key(k); await until(async () => (await said()).length > n); return (await said()).slice(n).join(' | '); };
+      const a1 = await next('ArrowRight'); // 슬라이드 2, 단계 1
+      const a2 = await next('ArrowRight'); // 단계 2: Photo, Delayed 등장
+      const a3 = await next('ArrowRight'); // 단계 3: Third 등장, Exiting 퇴장
+      const a4 = await next('ArrowRight'); // 단계 4: Third 퇴장
+      const b3 = await next('ArrowLeft');  // 되감기
+      check('[steps] 등장한 요소의 글자를 읽는다', /Photo/.test(a2) && /Delayed/.test(a2), [a1, a2, a3, a4, b3]);
+      check('[steps] 등장과 퇴장이 같은 단계면 등장만 읽는다(Exiting을 읽지 않음)', /Third/.test(a3) && !/Exiting/.test(a3), [a1, a2, a3, a4, b3]);
+      check('[steps] 퇴장만 있는 단계는 요소 글자를 읽지 않는다', !/Third|Exiting|Photo/.test(a4), a4);
+      check('[steps] 되감기는 요소 글자를 읽지 않는다', !/Third|Exiting|Photo|Delayed/.test(b3), b3);
+      check('[steps] 이동마다 안내는 한 번만(시끄럽지 않음)', [a1, a2, a3, a4, b3].every((t) => !t.includes(' | ')), [a1, a2, a3, a4, b3]);
+      await jump(1); await settled();
+
+      // 무작위 이동 퍼즈(시드 고정): 단계, 퇴장, 지연이 섞인 덱에서 키, 점프, 대기를 섞고 끝에서 정지 상태 불변식과 발표자, 청중 일치를 본다
+      const rng = (seed) => () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+      for (const seed of [1, 2, 3]) {
+        const R = rng(seed); const trace = [];
+        for (let i = 0; i < 45; i++) {
+          const r = R();
+          if (r < 0.42) { trace.push('R'); await key('ArrowRight'); }
+          else if (r < 0.8) { trace.push('L'); await key('ArrowLeft'); }
+          else if (r < 0.9) { const n = 1 + Math.floor(R() * 4); trace.push('J' + n); await jump(n); }
+          else { trace.push('w'); await sleep(Math.floor(R() * 300)); }
+          await sleep(Math.floor(R() * 110));
+        }
+        st = await settled();
+        check(`[steps] 무작위 이동 퍼즈(시드 ${seed}) 뒤 정지 상태 불변식과 발표자, 청중 일치`, st.ok, { trace: trace.join(''), last: st.last });
+      }
     }
     await ctx.close();
   }

@@ -108,7 +108,7 @@ const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.
     check(`[편집기 ${w}px] 문서가 가로로 넘치지 않음`, sw[0] <= sw[2] && sw[1] <= sw[2], sw);
     for (const name of ['Present', 'Export']) check(`[편집기 ${w}px] 헤더 ${name} 버튼이 화면 안`, inside(await page.getByRole('button', { name }).first().boundingBox(), w, h));
     if (w < 640) { // 좁은 폭의 드롭다운 메뉴는 화면 가장자리에서 8px 이상 떨어진다(Fluid 원본 DropdownContent는 collisionPadding이 없어 사용처에서 폭을 줄인다)
-      for (const [label, name] of [['Export', 'Export'], ['Add slide', 'Add slide']]) {
+      for (const [label, name] of [['Export', 'Export']]) { // (Add slide는 레이아웃 프리셋과 함께 메뉴가 없어졌다: + 단추는 슬라이드를 바로 더한다)
         await page.getByRole('button', { name }).first().click({ force: true });
         const menu = page.getByRole('menu');
         await menu.waitFor({ timeout: 3000 }).catch(() => {});

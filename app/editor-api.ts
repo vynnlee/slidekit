@@ -38,9 +38,13 @@ export const routes = {
         const prev = readFileSync(file, "utf8"); // 버전 기록: 덮어쓰기 전 내용
         writeFileSync(tmp, source);
         renameSync(tmp, file);
-        afterSave(folder, prev, source);
+        // 파일은 이미 저장됐다. 버전 기록이나 코멘트 번호 갱신이 실패해도(디스크, 손상된 comments.json) 저장 실패로 답하면
+        // 편집기가 오래된 base로 다시 시도해 409와 Overwrite 안내를 띄우므로, 실패는 기록만 하고 성공으로 답한다.
+        try { afterSave(folder, prev, source); } catch (e) { console.error(`[slidekit] ${folder}: 버전 기록 실패: ${(e as Error).message}`); }
         // 순서 변경과 삭제를 코멘트의 슬라이드 번호에 반영한다(옛 번호 -> 새 번호)
-        if (slideMap && typeof slideMap === "object") remap(folder, slideMap as Record<string, number>);
+        if (slideMap && typeof slideMap === "object") {
+          try { remap(folder, slideMap as Record<string, number>); } catch (e) { console.error(`[slidekit] ${folder}: 코멘트 번호 갱신 실패: ${(e as Error).message}`); }
+        }
         return Response.json({ mtime: statSync(file).mtimeMs });
       });
     },

@@ -22,3 +22,19 @@ test("동시 PUT: 하나는 저장, 하나는 409", async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("저장 뒤 코멘트 번호 갱신이 실패해도(comments.json 손상) PUT은 성공으로 답한다", async () => {
+  const d = join(import.meta.dir, "..", "..", "decks", "_put-corrupt");
+  mkdirSync(d, { recursive: true });
+  try {
+    writeFileSync(join(d, "index.html"), html("start"));
+    writeFileSync(join(d, "comments.json"), "{not json");
+    const base = statSync(join(d, "index.html")).mtimeMs;
+    const req = Object.assign(new Request("http://x/api/decks/_put-corrupt", { method: "PUT", body: JSON.stringify({ source: html("saved"), base, slideMap: { "1": 1 } }) }), { params: { folder: "_put-corrupt" } });
+    const res = await routes["/api/decks/:folder"].PUT(req);
+    expect(res.status).toBe(200);
+    expect(readFileSync(join(d, "index.html"), "utf8")).toContain("saved");
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+});

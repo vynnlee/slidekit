@@ -193,7 +193,7 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   check('선택 헤더를 누르면 Layers 탭', (await page.getByRole('tree', { name: 'Layers' }).count()) === 1);
   await page.keyboard.press('Escape'); await settle();
   await page.screenshot({ path: '/tmp/sk-ux-slide.png' });
-  check('요소 미선택 힌트', (await page.getByText('Select an element to edit its properties').count()) === 1);
+  check('요소를 고르지 않았을 때 안내 문구가 없음(슬라이드 속성만 보임)', (await page.getByText('Select an element to edit its properties').count()) === 0 && (await page.getByText('Slide', { exact: true }).count()) >= 1);
   // 키보드와 되돌리기: 패널의 Tab 이동, 되돌린 뒤 선택 유지, 스크럽 한 번이 별도 undo
   await focusBody(); await page.keyboard.press('Escape'); await page.keyboard.press('Tab'); await settle();
   const o4 = page.getByLabel('Opacity', { exact: true }); await o4.fill('80'); await o4.press('Enter'); await sleep(1000); // 실행 취소 묶음 창(0.8초)이 지나야 아래 스크럽이 별도 한 건이 된다

@@ -3,7 +3,7 @@ import {
   AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignStartHorizontal, AlignStartVertical,
   ArrowDown, ArrowRight, Blend, CaseLower, CaseSensitive, CaseUpper, ALargeSmall, Droplets, Expand, EyeOff, Frame, Layers as LayersIcon,
   Minus, Plus, RotateCw, Shrink, Square, SquareRoundCorner, Strikethrough, TextAlignCenter, TextAlignEnd, TextAlignJustify, TextAlignStart,
-  Underline, WrapText, Scan, Spline, Footprints, Ban, MousePointer2, MoveHorizontal, ListCollapse, Space, BetweenHorizontalStart, BetweenVerticalStart, Type,
+  Underline, WrapText, Scan, Spline, Footprints, Ban, MoveHorizontal, ListCollapse, Space, BetweenHorizontalStart, BetweenVerticalStart, Type,
   Play, Link2, Unlink2, Columns3,
 } from "lucide-react";
 import { Field } from "@/components/ui/field";
@@ -288,10 +288,6 @@ export function Inspector(p: Props) {
       <TabPanel value="props">
         {!el ? (
           <div className="-mx-3 flex flex-col pt-1" key="slide">
-            <p className="flex items-center gap-2 px-4 pb-3 text-caption text-muted-foreground">
-              <MousePointer2 className="size-3.5 shrink-0" aria-hidden="true" />
-              <span>Select an element to edit its properties</span>
-            </p>
             <InspectorSection id="slide" title="Slide">
               <div className="flex flex-col gap-1">
                 <span className="text-micro text-muted-foreground">Type</span>

@@ -1,12 +1,14 @@
 /* 도그푸딩: 에이전트 없이 편집기만으로 발표를 만들어 보며 마찰을 기록한다(클릭 수, 못 찾음, 기대와 다른 결과).
-   빈 템플릿 덱 zz-dogfood를 만들고 끝나면 지운다. 사람이 하는 순서대로 UI를 쓴다. 실행: bun scripts/test.ts --only editor-dogfood (OUT에 스크린샷). */
+   빈 템플릿 덱 zz-e2e-dogfood를 만들고 끝나면 지운다. 사람이 하는 순서대로 UI를 쓴다. 실행: bun scripts/test.ts --only editor-dogfood (OUT에 스크린샷). */
 const fs = require('fs'), path = require('path');
 const { launch } = require('./lib/pw.cjs');
-const BASE = process.env.BASE || 'http://127.0.0.1:3200', OUT = process.env.OUT || '/tmp/slidekit-dogfood', NAME = 'zz-dogfood';
+const BASE = process.env.BASE || 'http://127.0.0.1:3200', OUT = process.env.OUT || '/tmp/slidekit-dogfood', NAME = 'zz-e2e-dogfood'; // decks/zz-e2e*는 gitignore라 실제 덱 목록 외의 변경으로 잡히지 않는다(그래도 끝나면 반드시 지운다)
 fs.mkdirSync(OUT, { recursive: true });
 const dir = path.join(__dirname, '..', 'decks', NAME);
 const cleanup = () => fs.rmSync(dir, { recursive: true, force: true });
 process.on('exit', cleanup);
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => { cleanup(); process.exit(1); }); // 러너가 중단시켜도 덱을 남기지 않는다
+fs.rmSync(path.join(__dirname, '..', 'decks', 'zz-dogfood'), { recursive: true, force: true }); // 예전 이름의 남은 덱
 
 (async () => {
   cleanup();

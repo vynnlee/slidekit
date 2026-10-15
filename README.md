@@ -25,6 +25,17 @@ bun run slidekit pdf my-talk             # dist/my-talk.pdf (--notes, --handout 
 
 게시(선택)는 `bun run slidekit deploy my-talk`이고 준비는 `deploy/README.md`. AI에게 덱을 맡기려면 저장소의 `slidekit` 스킬(`.claude/skills/slidekit/SKILL.md`)을 읽게 한다. 화면이 도는 방식을 눈으로 보려면 덱 목록의 `slidekit-guide`를 연다.
 
+## 발표 전 체크리스트
+```sh
+bun run slidekit doctor my-talk --layout   # 경고 0이 될 때까지 (넘침, 대비, 노트, 외부 글꼴)
+bun run slidekit bundle my-talk            # 오프라인에서도 같은 HTML 한 파일. 외부 글꼴이 있으면 필수
+bun run slidekit pdf my-talk --notes       # 백업: 노트가 붙은 PDF
+```
+1. 위 `doctor`가 경고 없이 끝난다.
+2. `bundle`로 만든 `dist/my-talk.html`을 네트워크를 끊고 한 번 열어 처음부터 끝까지 넘겨 본다. 외부 글꼴 덱은 번들하지 않으면 망이 느릴 때 화면이 늦게 뜬다.
+3. 백업 PDF를 같은 노트북과 휴대폰에 둔다.
+4. 휴대폰 리모컨과 프로젝터는 `docs/DEVICE-CHECKLIST.md`로 실기기에서 확인한다.
+
 ## 설치와 실행
 - `bun install` 후 `bun run slidekit`. 앱은 http://127.0.0.1:3200 에만 열린다(`PORT`로 바꿈).
 

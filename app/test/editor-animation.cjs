@@ -69,5 +69,19 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   await page.getByPlaceholder('Speaker notes (Markdown)').fill('ANIM-NOTE'); await saveDone();
   check('노트 탭은 이전처럼 동작', fs.readFileSync(FILE, 'utf8').includes('ANIM-NOTE'));
   check('재생 헤드와 전환 표시(data-shown, data-away, data-step-run, data-step-instant)는 저장 글자에 새지 않음', !/data-shown|data-away|data-step-run|data-step-instant/.test(fs.readFileSync(FILE, 'utf8')) && /data-step=/.test(fs.readFileSync(FILE, 'utf8')));
+  // 밖에서(Claude 등) data-step을 바꾸면 패널 막대와 캔버스가 따라온다
+  await page.getByRole('tab', { name: 'Animation' }).click(); await settle();
+  const labelsNow = async () => page.getByTestId('anim-bar').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
+  const disk = fs.readFileSync(FILE, 'utf8'), m = /data-step="(\d+)"/.exec(disk);
+  fs.writeFileSync(FILE, disk.replace(m[0], 'data-step="7"'));
+  check('밖에서 data-step을 바꾸면 막대 이름이 따라옴(appears at step 7)', await cond(() => [...document.querySelectorAll('[data-testid=anim-bar]')].some((e) => /appears at step 7/.test(e.getAttribute('aria-label') || '')), null, 15000).then(() => true).catch(() => false), await labelsNow());
+  check('단계 수와 머리글이 따라옴(Step 7 이상)', /of ([7-9]|\d\d)$/.test((await page.getByTestId('anim-step-label').textContent()) || ''));
+  // 접근성: Animation 탭(axe가 있을 때만)
+  const axePath = process.env.AXE;
+  if (axePath && fs.existsSync(axePath)) {
+    await page.evaluate(fs.readFileSync(axePath, 'utf8'));
+    const v = await page.evaluate(async () => { const r = await window.axe.run('#bottom-panel', { resultTypes: ['violations'] }); return r.violations.filter((x) => x.impact === 'serious' || x.impact === 'critical').map((x) => x.id + ':' + x.nodes.length); });
+    check('Animation 탭 axe: serious와 critical 위반 없음', v.length === 0, v);
+  } else console.log('!! axe 건너뜀(AXE=<axe.min.js>)');
   await finish();
 })();

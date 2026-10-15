@@ -23,7 +23,8 @@ import { ReplyToasts } from "./ReplyToasts";
 import { useCommentsLive } from "@/lib/use-comments-live";
 import { canMove, readTranslate, toLocal, writeTranslate } from "@/lib/move";
 import type { CommentActions } from "@/lib/comment-actions";
-import { holdPref, numbering } from "@/lib/comment-state";
+import { numbering } from "@/lib/comment-state";
+import type { CommentTarget } from "@/lib/comment-mode";
 import { firstChild, isLeaf, isLockedDeep, parentOf, siblings } from "@/lib/selection";
 import { EditorTip } from "./EditorTip";
 import { ShortcutHelp, type KeyGroup } from "./ShortcutHelp";
@@ -119,6 +120,7 @@ export function Editor({ id }: { id: string }) {
     if (k === "overflow") setOverflowOn((v) => { localStorage.setItem("slidekit.overflow", v ? "0" : "1"); return !v; });
     else setSafeArea((v) => { localStorage.setItem("slidekit.safearea", v ? "0" : "1"); return !v; });
   };
+  const [commentMode, setCommentMode] = useState(false); // 코멘트 모드(요소를 가리키거나 영역을 끌어 코멘트): spec/COMMENT-MODE.md
   const [settingsOpen, setSettingsOpen] = useState(false);
   const gearBtn = useRef<HTMLButtonElement>(null); // 설정 대화상자를 닫으면 포커스를 이 단추로 돌린다
   const [metaError, setMetaError] = useState("");
@@ -685,16 +687,24 @@ export function Editor({ id }: { id: string }) {
     }
   };
 
-  const postComment = async (t: string) => {
+  const postComment = async (t: string, o: { send: boolean; target?: CommentTarget }) => {
     if (!deck || !t || !(await save())) return; // 번호가 파일과 맞도록 먼저 저장한다
     const s = canvas.current?.slide(indexRef.current);
     if (!s) return;
-    const target = sel ?? s; // 선택이 없으면 슬라이드 전체(path는 빈 글자)
-    const body = { deck: deck.folder, slide: indexRef.current + 1, path: pathOf(s, target), excerpt: (target.textContent ?? "").trim().slice(0, 80), text: t, ...(holdPref() ? { hold: true } : {}) };
+    const tg = o.target;
+    const region = tg && "region" in tg ? tg : null; // 영역 코멘트(코멘트 모드): path는 빈 글자이고 사각형과 겹치는 요소 목록을 보낸다
+    const target = tg && "el" in tg ? tg.el : sel ?? s; // 선택이 없으면 슬라이드 전체(path는 빈 글자)
+    const step = head.get().k ?? slideStepCount(s, readAnimRows(s)); // 남긴 순간의 단계(재생 헤드, 기본은 마지막 단계)
+    const first = region ? (region.overlap.map((pth) => byPath(s, pth)).find(Boolean)?.textContent ?? "") : (target.textContent ?? "");
+    const body = {
+      deck: deck.folder, slide: indexRef.current + 1, path: region ? "" : pathOf(s, target), excerpt: first.trim().slice(0, 80), text: t, step,
+      ...(region ? { region: region.region, overlap: region.overlap } : {}),
+      ...(o.send ? {} : { hold: true }), // Add는 등록만(Held), Send now는 곧바로 보낸다
+    };
     const r = await fetch("/api/comments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!r.ok) throw new Error(`Could not send the comment (${r.status})`); // 작성창이 글을 남기고 다시 시도하게 한다
     const { id } = await r.json();
-    live.upsert({ id, slide: body.slide, path: body.path, excerpt: body.excerpt, text: t, status: "open", createdAt: new Date().toISOString(), ...(body.hold ? { held: true } : {}) });
+    live.upsert({ id, slide: body.slide, path: body.path, excerpt: body.excerpt, text: t, status: "open", createdAt: new Date().toISOString(), step, ...(body.hold ? { held: true } : {}), ...(region ? { region: region.region, overlap: region.overlap, image: "pending" as const } : {}) });
     setTab("comments");
   };
   const slideOf = (n: number) => unitsRef.current.findIndex((u) => origin.current.get(u.key) === n);
@@ -794,6 +804,7 @@ export function Editor({ id }: { id: string }) {
     else if (mod && k === "-") { e.preventDefault(); canvas.current?.zoom(-1); }
     else if (!mod && e.key === "Tab") { if (e.view === window && t !== document.body) return; e.preventDefault(); cycle(e.shiftKey ? -1 : 1); } // 패널 안에서는 브라우저의 Tab 이동을 지킨다
     else if (!mod && !e.shiftKey && k === "c" && sel && (t === document.body || e.view !== window)) { e.preventDefault(); canvas.current?.compose(); }
+    else if (!mod && !e.altKey && k === "c" && (e.shiftKey || !sel) && (t === document.body || e.view !== window)) { e.preventDefault(); setCommentMode((v) => !v); } // 선택이 없으면 C가, 언제나 Shift+C가 코멘트 모드를 켜고 끈다
     else if (e.key === "F2" && sel) { e.preventDefault(); setRenameTick((n) => n + 1); }
     else if (mod && (k === "[" || k === "]") && sel) { e.preventDefault(); reorder(k === "[" ? -1 : 1); }
     else if (mod && k === "z") { e.preventDefault(); e.shiftKey ? restore(future.current, past.current) : restore(past.current, future.current); }
@@ -855,6 +866,7 @@ export function Editor({ id }: { id: string }) {
     { value: "act-undo", label: "Undo", group: "Actions", shortcut: "mod+z", disabled: !past.current.length, onSelect: () => restore(past.current, future.current) },
     { value: "act-redo", label: "Redo", group: "Actions", shortcut: "mod+shift+z", disabled: !future.current.length, onSelect: () => restore(future.current, past.current) },
     { value: "act-comment", label: "Add comment", group: "Actions", shortcut: "c", onSelect: () => canvas.current?.compose() },
+    { value: "act-comment-mode", label: commentMode ? "Exit comment mode" : "Comment mode", group: "Actions", shortcut: "shift+c", onSelect: () => setCommentMode((v) => !v) },
     { value: "act-add-before", label: "Add slide before this one", group: "Actions", onSelect: () => insertSlide(indexRef.current) },
     { value: "act-to-start", label: "Move slide to start", group: "Actions", disabled: index === 0, onSelect: () => moveSlide(indexRef.current, 0) },
     { value: "act-to-end", label: "Move slide to end", group: "Actions", disabled: index === units.length - 1, onSelect: () => moveSlide(indexRef.current, units.length - 1) },
@@ -916,7 +928,7 @@ export function Editor({ id }: { id: string }) {
           </div>
         }
         right={
-          <Inspector sel={sel} slide={canvas.current?.slide(index) ?? null} more={more} onAlignGroup={alignGroup} selId={selId} tab={tab} onTab={setTab}
+          <Inspector folder={folder} sel={sel} slide={canvas.current?.slide(index) ?? null} more={more} onAlignGroup={alignGroup} selId={selId} tab={tab} onTab={setTab}
             comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} onRemove={live.remove} onRevert={live.revert} onSendAll={live.sendAll} onResolveReplied={live.resolveReplied} onStyles={applyStyles} onAnim={animEditMany} onAnimPlay={animPreviewEl} onImageFile={(f) => addImage(f, sel)} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
         }
       >
@@ -936,7 +948,7 @@ export function Editor({ id }: { id: string }) {
         <Canvas ref={canvas} shell={shell} folder={folder} units={units} index={index} sel={sel} more={more} onMulti={toggleSel} onGroup={pickGroup}
           comments={comments.filter((c) => !c.slideDeleted && c.slide === origin.current.get(units[index]?.key ?? ""))}
           commentActions={commentActions} overflowOn={overflowOn} safeArea={safeArea} onToggleGuide={toggleGuide} onOverflow={(l) => { setOverflowEls(l); const k = unitsRef.current[indexRef.current]?.key; if (k) setOverflowByKey((m) => (m[k] === l.length ? m : { ...m, [k]: l.length })); }} onImage={addImage} onStyle={style} onContext={({ el, x, y }) => contextAt({ x, y }, el)} onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
-          numbers={nums} channel={live.channel} head={head} stepBadges={bottomTab === "animation"}
+          numbers={nums} channel={live.channel} head={head} stepBadges={bottomTab === "animation"} commentMode={commentMode} onCommentMode={setCommentMode}
           onComment={postComment} onMarker={(cid) => { setTab("comments"); const c = comments.find((x) => x.id === cid); if (c) jump(c); }} />
         </div>
         <div className="shrink-0 border-t border-border" style={{ height: notesH }}>

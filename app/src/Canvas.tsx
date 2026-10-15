@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
-import { ScanLine, TriangleAlert, AArrowDown, AArrowUp, AlignCenter, AlignLeft, AlignRight, Bold, MessageSquare, Minus, Pencil, Plus, Trash2 } from "lucide-react";
+import { ScanLine, TriangleAlert, AArrowDown, AArrowUp, AlignCenter, AlignLeft, AlignRight, Bold, MessageSquare, MessageSquarePlus, Minus, Pencil, Plus, Trash2 } from "lucide-react";
 import { ColorField } from "@/components/ui/color-field";
 import { Button } from "@/components/ui/button";
 import { TextArea } from "@/components/ui/field";
@@ -13,6 +13,9 @@ import { cursorOf, HANDLE_CURSOR, type CursorName } from "@/lib/cursors";
 import { findOverflow, type Overflow } from "@/lib/overflow";
 import { CommentPin } from "./CommentPin";
 import { CommentComposer } from "./CommentComposer";
+import { CommentModeLayer } from "./CommentModeLayer";
+import { fromRegion, type CommentTarget } from "@/lib/comment-mode";
+import { hoveredComment } from "@/lib/comment-hover";
 import { nameOf } from "./LayerTree";
 import type { Comment } from "@/lib/deck";
 import type { CommentActions } from "@/lib/comment-actions";
@@ -58,7 +61,9 @@ type Props = {
   onCommit(coalesce?: string): void;
   onKey(e: KeyboardEvent): void;
   onDelete(): void;
-  onComment(text: string): Promise<void>;
+  onComment(text: string, o: { send: boolean; target?: CommentTarget }): Promise<void>; // send는 Send now(true)와 Add(false, 등록만)
+  commentMode: boolean; // 코멘트 모드: 요소를 가리키거나 영역을 끌어 코멘트(spec/COMMENT-MODE.md)
+  onCommentMode(on: boolean): void;
   onMarker(id: string): void;
   stepBadges?: boolean; // Animation 탭이 열려 있을 때 요소 모서리에 등장 번호와 out 번호를 단다
   head?: PlayHead; // 재생 헤드: 단계 k의 상태를 그린다(null이면 마지막 단계). animate면 전환을 보인다
@@ -100,6 +105,10 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   const [url, setUrl] = useState("");
   const urlRef = useRef("");
   const [composing, setComposing] = useState(false);
+  const [target, setTarget] = useState<CommentTarget | null>(null); // 코멘트 모드에서 고른 요소나 영역(없으면 선택 요소나 슬라이드 전체)
+  const targetRef = useRef<CommentTarget | null>(null);
+  targetRef.current = target;
+  const regionBox = useRef<HTMLDivElement>(null); // 영역 코멘트에 마우스를 올렸을 때 보이는 사각형 윤곽
   const shown = useRef<{ keys: string[]; html: Map<string, string> }>({ keys: [], html: new Map() });
   const editing = useRef<HTMLElement | null>(null);
   const hover = useRef<Element | null>(null);
@@ -170,7 +179,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       const r = el.getBoundingClientRect();
       return { x: fr.left + r.left, y: fr.top + r.bottom };
     },
-    compose: () => setComposing(true),
+    compose: () => { setTarget(null); setComposing(true); },
     nudge(dx, dy) {
       const els = ([P.current.sel, ...P.current.more].filter(Boolean) as HTMLElement[]).filter((el) => !isLockedDeep(el) && canMove(el));
       if (!els.length) return;
@@ -619,15 +628,31 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       if (!show || !r) bar.current.style.display = "none";
       else { bar.current.style.display = "flex"; bar.current.style.transform = `translate(${Math.max(0, r.left)}px,${r.top > 36 ? r.top - 34 : r.bottom + 6}px)`; }
     }
-    if (pop.current && !r) pop.current.style.transform = "translate(16px,16px)"; // 선택이 없으면 슬라이드 전체에 거는 코멘트
-    else if (pop.current && r) pop.current.style.transform = `translate(${Math.max(0, Math.min(r.left, size.w * zoom - 260))}px,${Math.min(r.bottom + 6, size.h * zoom - 130)}px)`;
     const sl = cur();
+    // 작성창 위치: 코멘트 모드에서 고른 요소나 영역이 있으면 그 옆, 없으면 선택 요소 옆, 선택도 없으면 슬라이드 전체 코멘트라 왼쪽 위
+    const tg = targetRef.current, slr2 = sl?.getBoundingClientRect();
+    const at = tg ? ("el" in tg ? tg.el.getBoundingClientRect() : slr2 ? (() => { const b = fromRegion(tg.region, { x: slr2.left, y: slr2.top, w: slr2.width, h: slr2.height }); return { left: b.x, bottom: b.y + b.h }; })() : null) : r;
+    if (pop.current && !at) pop.current.style.transform = "translate(16px,16px)";
+    else if (pop.current && at) pop.current.style.transform = `translate(${Math.max(0, Math.min(at.left, size.w * zoom - 260))}px,${Math.min(at.bottom + 6, size.h * zoom - 130)}px)`;
+    // 영역 코멘트의 사각형 윤곽: 핀이나 목록에서 가리킨 코멘트가 영역 코멘트일 때
+    if (regionBox.current) {
+      const hid = hoveredComment(), hc = hid ? P.current.comments.find((c) => c.id === hid && c.region) : null;
+      if (hc?.region && slr2) { const b = fromRegion(hc.region, { x: slr2.left, y: slr2.top, w: slr2.width, h: slr2.height }); regionBox.current.style.display = "block"; regionBox.current.style.width = b.w + "px"; regionBox.current.style.height = b.h + "px"; regionBox.current.style.transform = `translate(${b.x}px,${b.y}px)`; }
+      else regionBox.current.style.display = "none";
+    }
     // 코멘트 핀: 위치를 모두 읽은 뒤에 한꺼번에 쓴다. 읽기(getBoundingClientRect)와 쓰기(transform)를 번갈아 하면 핀마다 레이아웃이 다시 계산되어
     // 핀 100개에서 60ms마다 수백 ms가 걸린다. 같은 요소의 핀 개수와 요소 찾기도 경로마다 한 번만 한다.
     const pins = markers.current ? [...markers.current.querySelectorAll<HTMLElement>("[data-path]")] : [];
     const same = new Map<string, number>(), rectOf = new Map<string, DOMRect | null>();
     for (const m of pins) same.set(m.dataset.path!, (same.get(m.dataset.path!) ?? 0) + 1);
-    for (const path of same.keys()) { const t = sl ? byPath(sl, path) : null; rectOf.set(path, t && t.isConnected ? t.getBoundingClientRect() : null); }
+    for (const path of same.keys()) {
+      if (path.startsWith("@region:")) { // 영역 코멘트: 핀은 사각형의 오른쪽 위 모서리에 둔다
+        const rg = pins.find((m) => m.dataset.path === path)?.dataset.region?.split(",").map(Number);
+        rectOf.set(path, rg && rg.length === 4 && slr2 ? (() => { const b = fromRegion({ x: rg[0], y: rg[1], w: rg[2], h: rg[3] }, { x: slr2.left, y: slr2.top, w: slr2.width, h: slr2.height }); return { right: b.x + b.w, top: b.y } as DOMRect; })() : null);
+        continue;
+      }
+      const t = sl ? byPath(sl, path) : null; rectOf.set(path, t && t.isConnected ? t.getBoundingClientRect() : null);
+    }
     for (const m of pins) {
       const mr = rectOf.get(m.dataset.path!);
       if (!mr) { m.style.display = "none"; continue; }
@@ -641,6 +666,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   }, [size.w, size.h, zoom, composing]);
   useEffect(() => { place(); const t = setInterval(place, 60); return () => clearInterval(t); });
 
+  useEffect(() => { if (p.commentMode) { P.current.onSel(null); setComposing(false); setTarget(null); } }, [p.commentMode]); // eslint-disable-line react-hooks/exhaustive-deps
   const here = p.comments;
   const fmt = p.sel && !p.more.length && !composing && textual(p.sel) && !isLockedDeep(p.sel) ? p.sel.ownerDocument.defaultView!.getComputedStyle(p.sel) : null;
 
@@ -667,9 +693,19 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
           </div>
           <svg ref={guideSvg} aria-hidden="true" className="absolute inset-0 size-full overflow-visible" />
           <div ref={sizeTag} aria-hidden="true" className="absolute left-0 top-0 hidden whitespace-nowrap rounded bg-foreground px-1.5 py-0.5 text-micro tabular-nums text-background" />
+          <div ref={regionBox} data-testid="region-outline" aria-hidden="true" className="pointer-events-none absolute left-0 top-0 hidden border-2 border-dashed border-focus-ring bg-focus-ring/10" />
+          {p.commentMode && (
+            <CommentModeLayer
+              doc={() => frame.current?.contentDocument ?? null} slide={cur} slideNumber={p.index + 1}
+              onPick={(t) => { setTarget(t); setComposing(true); }}
+              onSlide={() => { setTarget(null); setComposing(true); }}
+              onExit={() => { setComposing(false); setTarget(null); p.onCommentMode(false); }}
+              onCancelCompose={() => { setComposing(false); setTarget(null); }}
+            />
+          )}
           <div ref={markers}>
             {here.map((c, ci) => (
-              <div key={c.id} data-path={c.path} data-off={here.slice(0, ci).filter((o) => o.path === c.path).length} className="pointer-events-auto absolute left-0 top-0 hidden">
+              <div key={c.id} data-path={c.region ? `@region:${c.id}` : c.path} data-region={c.region ? `${c.region.x},${c.region.y},${c.region.w},${c.region.h}` : undefined} data-off={here.slice(0, ci).filter((o) => !o.region && !c.region && o.path === c.path).length} className="pointer-events-auto absolute left-0 top-0 hidden">
                 <CommentPin comment={c} number={p.numbers.get(c.id) ?? ci + 1}
                   onClick={() => p.onMarker(c.id)} actions={p.commentActions} />
               </div>
@@ -695,8 +731,11 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
           </div>
           {composing && (
             <div ref={pop} className="pointer-events-auto absolute left-0 top-0 w-64">
-              <CommentComposer channel={p.channel} target={p.sel ? nameOf(p.sel) : `Slide ${p.index + 1}`} onCancel={() => setComposing(false)}
-                onSend={async (t) => { await p.onComment(t); setComposing(false); }} />
+              <CommentComposer channel={p.channel}
+                target={target ? ("el" in target ? nameOf(target.el) : "an area") : p.sel ? nameOf(p.sel) : `Slide ${p.index + 1}`}
+                area={target && "region" in target ? { ratio: (target.region.w * 1920) / (target.region.h * 1080), count: target.overlap.length } : undefined}
+                onCancel={() => { setComposing(false); setTarget(null); }}
+                onSend={async (t, send) => { await p.onComment(t, { send, ...(target ? { target } : {}) }); setComposing(false); setTarget(null); }} />
             </div>
           )}
         </div>
@@ -718,6 +757,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     <div role="group" aria-label="Zoom" className="absolute bottom-3 right-3 flex items-center gap-0.5 rounded-lg bg-surface-3 p-0.5 shadow-surface-3">
       <Tooltip content="Zoom out (Cmd+-)" side="top"><Button aria-label="Zoom out" variant="ghost" size="icon-compact" onClick={() => zoomBy(-1)}><Minus /></Button></Tooltip>
       <Tooltip content="Zoom to fit (Cmd+0, Shift+1)" side="top"><Button aria-label={`Zoom to fit, ${pct}%`} variant="ghost" size="compact" className="min-w-12 tabular-nums" onClick={() => zoomBy(0)}>{pct}%</Button></Tooltip>
+      <Tooltip content="Comment mode (Shift+C)" side="top"><Button aria-label="Comment mode" aria-pressed={p.commentMode} variant="ghost" size="icon-compact" onClick={() => p.onCommentMode(!p.commentMode)}><MessageSquarePlus /></Button></Tooltip>
       <Tooltip content="Safe area (80px margin)" side="top"><Button aria-label="Safe area" aria-pressed={p.safeArea} variant="ghost" size="icon-compact" onClick={() => p.onToggleGuide("safe")}><ScanLine /></Button></Tooltip>
       <Tooltip content="Show overflow" side="top"><Button aria-label="Show overflow" aria-pressed={p.overflowOn} variant="ghost" size="icon-compact" onClick={() => p.onToggleGuide("overflow")}><TriangleAlert /></Button></Tooltip>
       <Tooltip content="Zoom in (Cmd+=)" side="top"><Button aria-label="Zoom in" variant="ghost" size="icon-compact" onClick={() => zoomBy(1)}><Plus /></Button></Tooltip>

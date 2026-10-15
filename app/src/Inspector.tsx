@@ -103,6 +103,7 @@ type Props = {
   onRemove?(c: Comment): void;
   onImageFile(file: File): void; // 선택한 이미지의 src를 고른 파일로 바꾼다
   onRevert?(c: Comment, undo?: boolean): void;
+  folder?: string; // 영역 코멘트의 이미지를 불러올 덱 폴더
   onSendAll?(): void;
   onResolveReplied?(): void;
   onStyle(prop: string, value: string): void;
@@ -572,7 +573,7 @@ export function Inspector(p: Props) {
         )}
       </TabPanel>
       <TabPanel value="comments">
-        <CommentsPanel comments={p.comments} channel={p.channel} onJump={p.onJump} onResolve={p.onResolve} onTrust={p.onTrust} onRemove={p.onRemove} onRevert={p.onRevert} onSendAll={p.onSendAll} onResolveReplied={p.onResolveReplied} />
+        <CommentsPanel folder={p.folder} comments={p.comments} channel={p.channel} onJump={p.onJump} onResolve={p.onResolve} onTrust={p.onTrust} onRemove={p.onRemove} onRevert={p.onRevert} onSendAll={p.onSendAll} onResolveReplied={p.onResolveReplied} />
       </TabPanel>
     </Tabs>
   );

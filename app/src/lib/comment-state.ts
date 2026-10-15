@@ -32,7 +32,3 @@ export function ago(iso: string, now = Date.now()): string {
   return `${Math.round(s / 86400)} d ago`;
 }
 
-// 쓸 때 Hold를 켜 두었는지(브라우저에 기억). 켜 두면 새 코멘트는 Send all to Claude를 누를 때까지 보내지 않는다.
-const HOLD_KEY = "slidekit.comments.hold";
-export const holdPref = (): boolean => { try { return localStorage.getItem(HOLD_KEY) === "1"; } catch { return false; } };
-export const setHoldPref = (on: boolean) => { try { localStorage.setItem(HOLD_KEY, on ? "1" : "0"); } catch { /* 저장이 막히면 이번 세션만 */ } };

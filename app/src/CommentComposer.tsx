@@ -1,32 +1,31 @@
 import { useEffect, useRef, useState } from "react";
-import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TextArea } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
-import { holdPref, setHoldPref } from "@/lib/comment-state";
 
 const MAX = 2000; // app/comments.ts의 본문 상한과 같다
 // 글이 비어 있을 때만 보이는 자주 쓰는 요청 문구. 누르면 입력창에 채워 바로 고칠 수 있다.
 const QUICK = ["Make this shorter", "Simplify the wording", "Match the other slides"];
 
 interface CommentComposerProps {
-  /** 전송한다. 실패하면 던지거나 reject해서 글을 남기고 다시 시도하게 한다. */
-  onSend(text: string): Promise<void>;
+  /** 전송한다. send가 true면 곧바로 Claude에게 보내고(Send now), false면 등록만 한다(Add, 보류). 실패하면 던지거나 reject해서 글을 남기고 다시 시도하게 한다. */
+  onSend(text: string, send: boolean): Promise<void>;
   onCancel(): void;
   /** 대상 요소 이름 등. 입력창 위에 작게 보인다. */
   target?: string;
-  /** Claude 채널 연결 여부. false면 "저장만 되고 나중에 전달" 안내를 보인다. */
+  /** 영역 코멘트면 사각형의 가로세로 비율과 겹치는 요소 수(자리표시자 상자). 실제 이미지는 저장 뒤에 서버가 만든다. */
+  area?: { ratio: number; count: number };
+  /** Claude 채널 연결 여부. false면 "Send now는 저장해 두었다가 연결되면 전달" 안내를 보인다. */
   channel?: boolean | null;
   className?: string;
 }
 
-export function CommentComposer({ onSend, onCancel, target, channel, className }: CommentComposerProps) {
+export function CommentComposer({ onSend, onCancel, target, area, channel, className }: CommentComposerProps) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
-  const [hold, setHold] = useState(holdPref); // 켜 두면 Send all to Claude를 누를 때까지 보내지 않는다(브라우저에 기억)
   const ref = useRef<HTMLTextAreaElement>(null);
-  // 열기 직전에 포커스가 있던 곳(캔버스 등)을 기억했다가 닫을 때 돌려준다. 작성창이 사라지면 포커스가 body로 떨어져 키보드 흐름이 끊긴다.
+  // 열기 직전에 포커스가 있던 곳(캔버스나 코멘트 모드 층)을 기억했다가 닫을 때 돌려준다. 작성창이 사라지면 포커스가 body로 떨어져 키보드 흐름이 끊긴다.
   const opener = useRef<Element | null>(typeof document === "undefined" ? null : document.activeElement);
   useEffect(() => {
     ref.current?.focus();
@@ -38,17 +37,23 @@ export function CommentComposer({ onSend, onCancel, target, channel, className }
     };
   }, []);
 
-  const send = async () => {
+  const send = async (now: boolean) => {
     const t = text.trim();
     if (!t || sending) return;
     setSending(true); setErr("");
-    try { await onSend(t); setText(""); } catch { setErr("Could not send. Your text is kept, try again."); } finally { setSending(false); }
+    try { await onSend(t, now); setText(""); } catch { setErr("Could not send. Your text is kept, try again."); } finally { setSending(false); }
   };
   const over = text.length > MAX;
 
   return (
     <div role="group" aria-label="New comment" className={cn("flex flex-col gap-1.5 rounded-lg bg-surface-3 p-1.5 shadow-surface-3", className)}>
       {target && <span className="truncate px-1 text-micro text-muted-foreground">Comment on {target}</span>}
+      {area && (
+        <div className="flex items-center gap-2 px-1" data-testid="area-placeholder">
+          <span aria-hidden="true" className="block h-9 shrink-0 rounded-sm border border-dashed border-focus-ring/70 bg-focus-ring/10" style={{ aspectRatio: String(Math.max(0.2, Math.min(5, area.ratio))) }} />
+          <span className="text-micro text-muted-foreground">Area, {area.count} {area.count === 1 ? "element" : "elements"}. A picture is saved when possible.</span>
+        </div>
+      )}
       <TextArea
         ref={ref}
         rows={3}
@@ -60,7 +65,8 @@ export function CommentComposer({ onSend, onCancel, target, channel, className }
         onKeyDown={(e) => {
           e.stopPropagation(); // 편집기 전역 단축키와 겹치지 않게 한다
           if (e.key === "Escape") onCancel();
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
+          // Enter는 Add, Cmd+Enter는 Send now, Shift+Enter는 줄바꿈(기본 동작). 한글 조합 중의 Enter는 글자를 확정하는 키라 건너뛴다.
+          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); void send(e.metaKey || e.ctrlKey); }
         }}
       />
       {!text && (
@@ -68,18 +74,15 @@ export function CommentComposer({ onSend, onCancel, target, channel, className }
           {QUICK.map((q) => <Button key={q} size="compact" variant="ghost" onClick={() => { setText(q); ref.current?.focus(); }}>{q}</Button>)}
         </div>
       )}
-      {channel === false && <p className="px-1 text-micro text-muted-foreground">Claude is not connected. The comment is saved and sent when a session connects.</p>}
-      <label className="flex cursor-default items-center gap-1.5 px-1 text-micro text-muted-foreground">
-        <input type="checkbox" checked={hold} onChange={(e) => { setHold(e.target.checked); setHoldPref(e.target.checked); }} />
-        Hold until I send all to Claude
-      </label>
+      {channel === false && <p className="px-1 text-micro text-muted-foreground">Claude is not connected. Send now saves it and sends when a session connects. Add keeps it on hold.</p>}
       {err && <p role="alert" className="px-1 text-micro">{err}</p>}
-      <div className="flex items-center gap-2">
-        <span className={`px-1 text-micro tabular-nums ${over ? "text-foreground" : "text-muted-foreground"}`} aria-live="polite">
-          {text.length > MAX - 200 ? `${text.length}/${MAX}` : "Cmd+Enter to send"}
-        </span>
-        <Button size="compact" variant="ghost" className="ml-auto" onClick={onCancel}>Cancel</Button>
-        <Button size="compact" variant="primary" disabled={!text.trim() || over || sending} onClick={send} leadingIcon={Send}>{sending ? "Sending" : "Send"}</Button>
+      <span className={`px-1 text-micro tabular-nums ${over ? "text-foreground" : "text-muted-foreground"}`} aria-live="polite">
+        {text.length > MAX - 200 ? `${text.length}/${MAX}` : "Enter: add. Cmd+Enter: send now. Shift+Enter: new line."}
+      </span>
+      <div className="flex items-center justify-end gap-2">
+        <Button size="compact" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button size="compact" variant="secondary" aria-keyshortcuts="Control+Enter Meta+Enter" disabled={!text.trim() || over || sending} onClick={() => void send(true)}>{sending ? "Sending" : "Send now"}</Button>
+        <Button size="compact" variant="primary" aria-keyshortcuts="Enter" disabled={!text.trim() || over || sending} onClick={() => void send(false)}>Add</Button>
       </div>
     </div>
   );

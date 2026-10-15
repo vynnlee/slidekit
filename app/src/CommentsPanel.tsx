@@ -71,6 +71,8 @@ function NotConnected({ open }: { open: boolean }) {
 
 interface CommentsPanelProps {
   comments: Comment[];
+  /** 영역 코멘트의 이미지(GET /api/comments/:id/image)를 불러올 덱 폴더 */
+  folder?: string;
   /** Claude 채널 MCP 서버가 연결돼 있는지. 모르면 null. */
   channel: boolean | null;
   onJump(c: Comment): void;
@@ -87,7 +89,7 @@ interface CommentsPanelProps {
   onResolveReplied?(): void;
 }
 
-export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, onRemove, onRevert, onSendAll, onResolveReplied }: CommentsPanelProps) {
+export function CommentsPanel({ comments, folder, channel, onJump, onResolve, onTrust, onRemove, onRevert, onSendAll, onResolveReplied }: CommentsPanelProps) {
   const [filter, setFilter] = useState<Filter>("all");
   const [open, setOpen] = useState<Set<string>>(new Set()); // 길어서 펼친 코멘트
   const root = useRef<HTMLDivElement>(null);
@@ -200,6 +202,14 @@ export function CommentsPanel({ comments, channel, onJump, onResolve, onTrust, o
                       <StateBadge state={st} />
                       <span className="ml-auto text-micro text-muted-foreground">{ago(c.createdAt)}</span>
                     </span>
+                    {c.region && (
+                      <span className="flex items-center gap-2 text-micro text-muted-foreground" data-testid="area-info">
+                        <span className="rounded bg-black/30 px-1">Area{c.overlap?.length ? `, ${c.overlap.length} ${c.overlap.length === 1 ? "element" : "elements"}` : ""}</span>
+                        {c.image === "ready" && folder
+                          ? <img src={`/api/comments/${c.id}/image?deck=${encodeURIComponent(folder)}`} alt="" loading="lazy" decoding="async" className="h-16 w-auto max-w-40 rounded border border-border bg-black object-contain" />
+                          : c.image === "pending" ? "Making a picture..." : "No picture. Claude gets the area and the elements under it."}
+                      </span>
+                    )}
                     {c.excerpt && <span className="truncate text-micro text-muted-foreground">on &ldquo;{c.excerpt}&rdquo;</span>}
                     {c.recheck && <span className="text-micro text-muted-foreground">Position needs a check. The text was not found on this slide after a restore.</span>}
                     <span className={cn("whitespace-pre-wrap break-words text-body", c.text.length > 220 && !open.has(c.id) && "line-clamp-5")}>{c.text}</span>

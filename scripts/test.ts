@@ -82,6 +82,7 @@ const steps: Step[] = [
   { ...browser("editor-a11y", "app/test/editor-a11y.cjs", "app", APP, { AXE }), needs: "axe" }, // 필름스트립 axe(기본, 코멘트 표시, 찾기 배지, 넘침 표시)
   browser("comments-e2e", "app/test/comments-e2e.cjs", "app", APP),
   browser("comments-a11y", "app/test/comments-a11y.cjs", "app", APP, { AXE }),
+  browser("comment-mode", "app/test/comment-mode.cjs", "app", APP),
   { ...browser("comments-perf", "scripts/comments-perf.cjs", "app", APP), slow: true }, // 코멘트 300개 성능 측정(수치를 출력한다, --only comments-perf)
   browser("versions-e2e", "app/test/versions-e2e.cjs", "app", APP),
   browser("tokens", "app/test/tokens.cjs", "dry", DRY),
@@ -131,7 +132,7 @@ const MAP: [RegExp, string[]][] = [
   [/^bundler\//, ["bundler-bundle", "bundler-fonts"]],
   [/^deploy\//, ["deploy-worker", "export-api"]],
   [/^channel\//, ["channel"]],
-  [/^app\/(comments\.ts|src\/(Comment|lib\/(comment|use-comments))|test\/comments)/, ["comments", "channel", "comments-e2e", "comments-a11y"]],
+  [/^app\/(comments\.ts|src\/(Comment|lib\/(comment|use-comments))|test\/comments)/, ["comments", "channel", "comments-e2e", "comments-a11y", "comment-mode"]],
   [/^app\/(versions\.ts|src\/(VersionHistory|ExportMenu)|test\/versions)/, ["versions", "versions-e2e"]],
   [/^app\/(export-api\.ts|src\/ExportMenu)/, ["export-api", "export"]],
   [/^app\/(editor-api\.ts|src\/lib\/(deck-source|move|selection|guides))/, ["roundtrip", "deck-source.fuzz", "editor-readonly", "editor", "inspector"]],

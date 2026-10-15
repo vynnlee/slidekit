@@ -8,6 +8,7 @@ macOS와 [Bun](https://bun.sh)이 있으면 된다(요구사항 절 참고).
 ```sh
 git clone git@github.com:vynnlee/slidekit.git && cd slidekit   # 이미 받았다면 그 폴더에서 시작
 bun install                              # 의존성
+(cd channel && bun install)                # 코멘트 채널을 쓰거나 전체 테스트를 돌릴 때만
 bun run slidekit new my-talk             # decks/my-talk/ 를 템플릿(talk)에서 만든다
 bun run slidekit                         # 앱을 연다: http://127.0.0.1:3200
 ```
@@ -42,7 +43,7 @@ bun run slidekit pdf my-talk --notes       # 백업: 노트가 붙은 PDF
 - `bun install` 후 `bun run slidekit`. 앱은 http://127.0.0.1:3200 에만 열린다(`PORT`로 바꿈).
 
 ## 요구사항
-- macOS와 Bun 1.2.3 이상(`bun upgrade`, 1.4.2에서 개발하고 검증했다). `bun install`이 의존성을 받는다.
+- macOS와 Bun 1.2.3 이상(`bun upgrade`, 1.4.2에서 개발하고 검증했다). `bun install`이 의존성을 받는다. 코멘트 채널(`channel/`)은 별도 패키지라 쓰거나 전체 테스트를 돌릴 때 `cd channel && bun install`을 한 번 더 한다.
 - Chrome: `slidekit pdf`와 브라우저 테스트에 필요하다. Playwright의 chromium headless shell(`~/Library/Caches/ms-playwright`)을 먼저 찾고, 없으면 설치된 Google Chrome, Chromium, Edge를 쓴다. 직접 지정하려면 `SLIDEKIT_CHROME`에 실행 파일 경로를 준다. PDF는 headless shell로 검증했고 시스템 Chrome 경로는 아직 검증하지 못했다.
 - uv: 외부 글꼴(Google Fonts 등)을 쓰는 덱을 `bundle`할 때 글꼴 부분집합을 만드는 데 필요하다(`brew install uv`). 첫 번들에는 인터넷도 필요하고 내려받은 글꼴은 `~/.cache/slidekit`에 캐시된다. 글꼴 링크가 없는 덱은 필요 없다. 없으면 번들이 설치 방법을 알려 주고 멈춘다.
 - git: 새 덱의 `author`를 `git config user.name`으로 채운다(없으면 빈 값).

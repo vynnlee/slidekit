@@ -103,11 +103,11 @@
 
 **A의 구체적 방법** (구현 첫 단계의 스파이크로 한 번 확인한다):
 
-1. 서버가 내부 경로 `GET /api/decks/:id/capture-frame?slide=N&step=K`를 둔다(캡처 전용, Host 검사, 읽기 전용). 덱 `index.html`을 그대로 주되 `<base>`와 `?embed=1`에 해당하는 `data-sk-embed` 속성과 아주 작은 스크립트를 붙인다: 로드 뒤 `postMessage({source:"slidekit", v:1, type:"goto", slide:N, step:K}, location.origin)`를 자기 자신에게 보낸다(최상위 문서에서는 `window.parent === window`라 임베드 모드의 출처 검사를 통과한다).
+1. 서버가 내부 경로 `GET /api/decks/:id/capture-frame?slide=N&step=K`를 둔다(캡처 전용, Host 검사, 읽기 전용). 덱 `index.html`을 그대로 주되 `<base href="/decks/<덱>/">`와 작은 스타일(쪽 번호와 진행 표시 숨김, `transition`과 `animation` 끄기)과 작은 스크립트를 붙인다. 스크립트는 로드 뒤 방향키 오른쪽 `keydown`을 K-1번 보내 단계를 맞춘다(한 번 보낼 때마다 해시가 `#N`인지 확인하고, 슬라이드가 넘어갔으면 왼쪽 한 번으로 돌아와 멈춘다. K가 그 슬라이드의 단계 수보다 커도 안전하다). 전환을 꺼 두므로 다음 장면으로 넘어가는 중간 모습이 찍히지 않는다. (임베드 모드의 자기 `postMessage`는 쓰지 않는다: 엔진이 `window.parent === window`인 메시지를 무시한다. 스파이크로 확인했다.)
 2. Chrome을 `taskpolicy -b`로 `--headless --disable-gpu --hide-scrollbars --window-size=1920,1080 --force-device-scale-factor=1 --virtual-time-budget=3000 --screenshot=<임시 파일>`로 띄운다(`SLIDEKIT_CHROME`와 `findChrome()`를 그대로 쓴다. 외부 접속은 없다: 주소는 `http://127.0.0.1`뿐).
 3. 전체 슬라이드 PNG를 `sips`(`--cropOffset`, `-c`)로 사각형만 잘라 `.comments/<id>.png`로 쓰고 임시 파일을 지운다. 사각형은 정수 픽셀로 반올림하고 슬라이드 안으로 자른다.
 4. 한도: 동시 1개의 직렬 큐, 큐 길이 상한 10(넘으면 `failed`), 요청당 제한 시간 15초(넘으면 프로세스 그룹을 죽이고 `failed`), 분당 12개(넘으면 `failed`와 안내), 임시 폴더는 시작과 끝에 정리. 로그에 코멘트 본문을 남기지 않는다.
-5. 스파이크에서 확인할 것: `--virtual-time-budget` 안에서 자기 `postMessage`가 단계를 맞추는지, 글꼴 로딩이 끝난 뒤 찍히는지, `sips` 자르기의 좌표 규칙, 시간(목표 평균 2초 이내). 안 되면 새 의존성 없이 되는 다른 방법이 없으므로 이 절의 추천을 다시 연다(예: 이미지를 만들지 않고 텍스트 앵커만 보내기).
+5. 스파이크 결과(2026-10-15, mac-cloud, `chrome-headless-shell`): 캡처 한 번이 **1.4 에서 1.6초**(목표 2초 이내)이고 `sips` 자르기는 눈에 띄지 않을 만큼 짧다. 단계 3 상태가 전환 도중이 아니라 완성된 모습으로 찍혔고 글꼴(시스템과 덱 CSS)도 맞았다. 시스템 Chrome(`--headless=new`)에서의 같은 플래그 동작은 이 기계에 없어서 mac-local에서 한 번 확인해야 한다(구현 4단계의 확인 항목).
 
 ### 4.4 언제 만드나
 

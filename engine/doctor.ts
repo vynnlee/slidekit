@@ -33,8 +33,8 @@ const row = (ok: boolean, name: string, msg: string) => { if (!ok) warns++; cons
 const [bmaj, bmin, bpat] = Bun.version.split(".").map(Number);
 const bunOk = bmaj > 1 || (bmaj === 1 && (bmin > 2 || (bmin === 2 && bpat >= 3))); // Bun.serve routes는 1.2.3부터
 row(bunOk, "bun", bunOk ? Bun.version : `${Bun.version}. 1.2.3 이상이 필요하다(bun upgrade)`);
-// uv는 외부 글꼴을 쓰는 덱을 번들할 때만 필요하다(글꼴 서브셋)
-row(!!Bun.which(process.env.SLIDEKIT_UV ?? "uv"), "uv", Bun.which(process.env.SLIDEKIT_UV ?? "uv") ? "있음" : "없음. 외부 글꼴을 쓰는 덱을 번들할 때만 필요하다(brew install uv)");
+// uv는 @font-face가 있는 글꼴 CSS(원격이든 로컬 파일이든)를 번들할 때 필요하다(글꼴 서브셋). 시스템 글꼴만 쓰는 덱은 필요 없다
+row(!!Bun.which(process.env.SLIDEKIT_UV ?? "uv"), "uv", Bun.which(process.env.SLIDEKIT_UV ?? "uv") ? "있음" : "없음. @font-face나 글꼴 link가 있는 덱을 번들할 때 필요하다. 시스템 글꼴만 쓰면 필요 없다(brew install uv)");
 
 const envChrome = process.env.SLIDEKIT_CHROME;
 const cache = join(homedir(), "Library", "Caches", "ms-playwright");

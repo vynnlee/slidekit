@@ -45,3 +45,17 @@ test("노트가 하나도 없으면 따로 알린다", () => {
   expect(c.notes.missing).toEqual([1, 2]);
   expect(formatCheck(c).join("\n")).toContain("노트가 하나도 없다");
 });
+
+test("외부 글꼴: link, @import, @font-face url을 찾아 WARN 글꼴로 알리고, 없으면 OK", () => {
+  const body = `<section data-slide="cover"><h1>a</h1><aside data-notes>노트</aside></section>`;
+  const d = mk(`<link rel="preconnect" href="https://fonts.gstatic.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR"><style>@import url("https://cdn.example.test/a.css"); @font-face { font-family: X; src: url(https://cdn.example.test/x.woff2) format("woff2"); }</style>`, body);
+  const c = deckCheck(d, "f");
+  expect(c.externalFonts).toEqual(["https://fonts.googleapis.com/css2?family=Noto+Sans+KR", "https://cdn.example.test/a.css", "https://cdn.example.test/x.woff2"]);
+  const line = formatCheck(c).find((l) => /^(OK|WARN)\s+글꼴/.test(l))!;
+  expect(line.startsWith("WARN")).toBe(true);
+  expect(line).toContain("fonts.googleapis.com");
+  expect(line).toContain("slidekit bundle f");
+  const none = deckCheck(mk(`<link rel="stylesheet" href="../../engine/slidekit.css"><style>@font-face { font-family: L; src: url(font.woff2); }</style>`, body), "g");
+  expect(none.externalFonts).toEqual([]);
+  expect(formatCheck(none).find((l) => /^(OK|WARN)\s+글꼴/.test(l))!.startsWith("OK")).toBe(true);
+});

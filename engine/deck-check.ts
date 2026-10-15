@@ -22,6 +22,7 @@ export type DeckCheck = {
   largeImages: { rel: string; size: number }[];
   notes: { missing: number[]; long: { n: number; chars: number }[] };
   contrast: ContrastRow[];
+  externalFonts: string[]; // 번들하지 않으면 발표장 망에 기대는 외부 글꼴 CSS와 파일(주소)
 };
 
 /** 엔진 CSS의 :root 기본값(토큰 이름 -> 값) */
@@ -41,6 +42,21 @@ function notesOf(html: string) {
     else if (chars > LONG_NOTES) long.push({ n: i + 1, chars });
   });
   return { slides: sections.length, missing, long };
+}
+
+/** 외부 글꼴 참조: <link rel=stylesheet href=https://...>, @import, @font-face의 url(https://...). 번들이 내장하지만 번들하지 않고 열면 망에 기댄다. */
+export function externalFontRefs(html: string): string[] {
+  const out: string[] = [];
+  for (const m of html.matchAll(/<link\b[^>]*>/gi)) {
+    if (!/\brel\s*=\s*["']?(?:stylesheet|preload)/i.test(m[0]) && !/\bas\s*=\s*["']?font/i.test(m[0])) continue;
+    const h = m[0].match(/\bhref\s*=\s*["'](https?:\/\/[^"']+)/i)?.[1];
+    if (h) out.push(h);
+  }
+  for (const s of html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)) {
+    for (const m of s[1].matchAll(/@import\s+(?:url\(\s*)?["']?(https?:\/\/[^)"';\s]+)/gi)) out.push(m[1]);
+    for (const f of s[1].matchAll(/@font-face\s*\{[^}]*\}/gi)) for (const m of f[0].matchAll(/url\(\s*["']?(https?:\/\/[^)"'\s]+)/gi)) out.push(m[1]);
+  }
+  return [...new Set(out)];
 }
 
 export function deckCheck(deckDir: string, deck = deckDir.split("/").pop() ?? ""): DeckCheck {
@@ -74,6 +90,7 @@ export function deckCheck(deckDir: string, deck = deckDir.split("/").pop() ?? ""
     largeImages: imgs.filter((r) => r.size > LARGE_IMAGE),
     notes: { missing: n.missing, long: n.long },
     contrast: rows,
+    externalFonts: externalFontRefs(html),
   };
 }
 
@@ -91,6 +108,8 @@ export function formatCheck(c: DeckCheck): string[] {
   out.push(row(c.largeImages.length === 0, "이미지", c.largeImages.length ? `${kb(LARGE_IMAGE)}를 넘는 이미지 ${c.largeImages.length}개: ${c.largeImages.slice(0, 3).map((r) => `${r.rel} ${kb(r.size)}`).join(", ")}. slidekit image <덱> <파일> --max 1600 으로 다시 저장` : `${kb(LARGE_IMAGE)}를 넘는 이미지 없음`));
   const noNotes = c.notes.missing.length === c.slides && c.slides > 0;
   out.push(row(!noNotes && c.notes.long.length === 0, "노트", noNotes ? "노트가 하나도 없다. 발표자 화면의 노트와 리허설 요약이 비어 있게 된다" : `노트 없는 장 ${c.notes.missing.length}개${c.notes.missing.length ? `(${list(c.notes.missing)})` : ""}${c.notes.long.length ? `, ${LONG_NOTES}자를 넘는 노트 ${c.notes.long.length}개(${c.notes.long.map((x) => `${x.n}번 ${x.chars}자`).join(", ")})` : ""}`));
+  const hosts = [...new Set(c.externalFonts.map((u) => { try { return new URL(u).host; } catch { return u.slice(0, 40); } }))];
+  out.push(row(hosts.length === 0, "글꼴", hosts.length ? `외부 글꼴을 쓴다(${hosts.slice(0, 3).join(", ")}). 발표 전에 slidekit bundle ${c.deck}로 만든 HTML을 쓴다. 번들하지 않고 열면 망이 느릴 때 화면이 늦게 뜨고 오프라인이면 시스템 글꼴로 대체된다` : "외부 글꼴 링크 없음"));
   const bad = c.contrast.filter((r) => r.level === "fail");
   out.push(row(bad.length === 0, "대비", bad.length ? bad.map((r) => `${r.name} ${r.fg} 위 ${r.bg} ${r.ratio!.toFixed(2)}:1(${r.need}:1 필요)`).join("; ") + ". 토큰 패널에서 색을 밝히거나 어둡게 한다" : c.contrast.map((r) => `${r.name.replace("--sk-", "")} ${r.ratio?.toFixed(1) ?? "?"}:1`).join(", ")));
   return out;

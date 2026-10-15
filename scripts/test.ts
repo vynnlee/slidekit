@@ -20,10 +20,12 @@ const last = (pattern: string) => globSync(pattern).sort().at(-1);
 const PW = last(join(homedir(), ".bun/install/cache/playwright-core@*")) ?? last(join(homedir(), ".npm/_npx/*/node_modules/playwright-core"));
 const CHROME = last(join(homedir(), "Library/Caches/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-mac-*/chrome-headless-shell"));
 
-// axe-core(접근성 검사 엔진): AXE=<axe.min.js>가 있으면 그것, 없으면 자주 있는 자리(개발 폴더의 node_modules, bun 캐시, 작업 폴더)를 찾는다.
-// 없으면 axe가 필요한 단계는 조용히 통과하지 않고 "건너뜀"으로 크게 알린다. 근본 해결은 axe-core를 devDependency로 받는 것이다(새 의존성이라 승인 필요).
+// axe-core(접근성 검사 엔진): AXE=<axe.min.js>가 있으면 그것, 없으면 저장소의 node_modules(devDependency), 그다음 자주 있는 자리(개발 폴더의 node_modules, bun 캐시, 작업 폴더)를 찾는다.
+// 없으면 axe가 필요한 단계는 조용히 통과하지 않고 "건너뜀"으로 크게 알린다.
 const AXE = (() => {
   if (process.env.AXE && existsSync(process.env.AXE)) return process.env.AXE;
+  const own = join(import.meta.dir, "..", "node_modules", "axe-core", "axe.min.js");
+  if (existsSync(own)) return own;
   const cands = [...globSync(join(homedir(), "Developer/*/node_modules/axe-core/axe.min.js")), ...globSync(join(homedir(), ".bun/install/cache/axe-core@*/axe.min.js")), ...globSync("/tmp/claude-501/*/*/scratchpad/*/node_modules/axe-core/axe.min.js")];
   return cands.sort().at(-1) ?? "";
 })();

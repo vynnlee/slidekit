@@ -83,6 +83,8 @@ const steps: Step[] = [
   // 코멘트 화면 스크린샷(눈으로 보는 용도, 통과 기준 없음). --only ux-shots로 돌리면 /tmp/slidekit-ux-shots/<폭>/에 저장된다.
   // 큰 덱(80장, Layers 1000행)에서 편집기 응답 시간. 수치를 찍는다. --slow 또는 --only로만 돈다.
   { ...browser("editor-save-shots", "scripts/ux-shots-save-failure.cjs", "app", APP, { OUT: "/tmp/slidekit-ux-shots/save-failure" }), slow: true }, // 저장 실패 화면 캡처(1440, 390)
+  // 편집기 조작 퍼즈(시드 1~3, 조작 40개씩, 끝에서 Undo로 원본과 바이트 동일). --slow 또는 --only로만 돈다.
+  { ...browser("editor-fuzz", "app/test/editor-fuzz.cjs", "app", APP), slow: true },
   { ...browser("editor-perf", "app/test/editor-perf.cjs", "app", APP), slow: true },
   { ...browser("ux-shots-1440", "scripts/ux-shots-comments2.cjs", "app", APP, { VIEWPORT: "1440x900", OUT: "/tmp/slidekit-ux-shots/1440" }), slow: true },
   { ...browser("ux-shots-390", "scripts/ux-shots-comments2.cjs", "app", APP, { VIEWPORT: "390x844", OUT: "/tmp/slidekit-ux-shots/390" }), slow: true },

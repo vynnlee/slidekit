@@ -103,11 +103,28 @@ export const newSlideHtml = (layoutId?: string) => layoutById(layoutId ?? "")?.h
 /** 슬라이드 글자의 data-layout 값(없으면 undefined). 새 슬라이드는 직전 슬라이드와 같은 레이아웃으로 시작한다. */
 export const layoutOf = (html: string) => /^<section\b[^>]*\bdata-layout="([^"]*)"/i.exec(html.trimStart())?.[1];
 
+/** 복제한 조각 안의 id를 새 값으로 바꾸고, 그 id를 가리키는 참조(url(#id), href="#id")도 함께 바꾼다(인라인 svg의 마스크와 그라디언트가 원본과 id를 나눠 쓰지 않게). 루트의 id는 호출하는 쪽이 지운다. */
+export function freshIds(root: Element) {
+  const map = new Map<string, string>(), tag = Math.random().toString(36).slice(2, 6);
+  for (const e of root.querySelectorAll("[id]")) { const old = e.id; map.set(old, `${old}-${tag}`); e.id = `${old}-${tag}`; }
+  if (!map.size) return;
+  const swap = (v: string) => v.replace(/url\(\s*#([^)\s]+)\s*\)/g, (m, id) => (map.has(id) ? `url(#${map.get(id)})` : m));
+  for (const e of [root, ...root.querySelectorAll("*")]) {
+    for (const a of [...e.attributes]) {
+      if (/^(href|xlink:href)$/.test(a.name) && a.value.startsWith("#") && map.has(a.value.slice(1))) e.setAttribute(a.name, "#" + map.get(a.value.slice(1)));
+      else if (a.value.includes("url(")) e.setAttribute(a.name, swap(a.value));
+    }
+    if (e.tagName.toLowerCase() === "style") e.textContent = swap(e.textContent ?? "");
+  }
+}
+
 export function duplicateHtml(html: string) {
   const t = document.createElement("template");
   t.innerHTML = html.trim();
   const s = t.content.firstElementChild!;
   s.removeAttribute("id"); // 같은 id가 둘이 되지 않게
+  freshIds(s);
+  if (s.getAttribute("data-slide") === "cover") s.setAttribute("data-slide", "content"); // cover는 덱에 하나만 둔다(lint 규칙)
   s.removeAttribute("data-steps"); // stepper는 id로 붙으므로 복제본은 일반 슬라이드가 된다
   return s.outerHTML;
 }

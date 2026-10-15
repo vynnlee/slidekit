@@ -12,7 +12,7 @@ import { Filmstrip } from "./Filmstrip";
 import { LayerTree } from "./LayerTree";
 import { Inspector } from "./Inspector";
 import { go } from "./App";
-import { byPath, compose, duplicateHtml, layoutOf, newKey, newSlideHtml, pathOf, splitDeck, type Unit } from "@/lib/deck-source";
+import { byPath, compose, duplicateHtml, freshIds, layoutOf, newKey, newSlideHtml, pathOf, splitDeck, type Unit } from "@/lib/deck-source";
 import { ExportMenu } from "./ExportMenu";
 import { ChannelBadge } from "./CommentsPanel";
 import { ReplyToasts } from "./ReplyToasts";
@@ -302,6 +302,8 @@ export function Editor({ id }: { id: string }) {
     if (from === to) return;
     const a = [...unitsRef.current], [u] = a.splice(from, 1);
     a.splice(to, 0, u);
+    const isCover = (x: Unit) => /^<section\b[^>]*\bdata-slide="cover"/i.test(x.html.trimStart());
+    if (a.some(isCover) && !isCover(a[0])) toast("The cover slide should stay first. Move it back to the start.", { ms: 6000 }); // lint 규칙(cover는 첫 슬라이드)
     structure(a, to);
   };
   const dupSlide = (i: number) => {
@@ -374,7 +376,7 @@ export function Editor({ id }: { id: string }) {
     if (!sel) return dupSlide(indexRef.current);
     const src = [sel, ...more].filter((n) => !isLockedDeep(n));
     if (!src.length) return;
-    const clones = src.map((n) => { const c = n.cloneNode(true) as Element; c.removeAttribute("id"); n.after(c); return c; });
+    const clones = src.map((n) => { const c = n.cloneNode(true) as Element; c.removeAttribute("id"); freshIds(c); n.after(c); return c; });
     pickGroup(clones); commit();
   };
 

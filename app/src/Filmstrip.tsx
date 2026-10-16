@@ -49,6 +49,8 @@ const Thumb = memo(function Thumb({ shell, unit, folder, eager, keep }: { shell:
   );
   return (
     <div ref={ref} className="relative size-full overflow-hidden rounded-md bg-hover">
+      {/* WebKit(cmux 내장 브라우저, Safari)은 pointer-events:none인 iframe 위에서도 우클릭을 iframe 안으로 보내 contextmenu가 타일에 오지 않는다. 투명한 덮개가 먼저 맞게 한다. */}
+      <div aria-hidden="true" className="absolute inset-0 z-[1]" />
       {doc && (
         <iframe
           sandbox="" srcDoc={doc} tabIndex={-1} title=""

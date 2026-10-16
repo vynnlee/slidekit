@@ -41,7 +41,8 @@ const round = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
       await page.evaluate(() => document.fonts && document.fonts.ready);
       // 단계가 둘 이상인 첫 장
       const stepped = await page.evaluate(() => [...document.querySelectorAll('#sk-stage > [data-slide]')].map((s, i) => ({ n: i + 1, steps: Math.max(1, ...[...s.querySelectorAll('[data-step]')].map((e) => Number(e.getAttribute('data-step')) || 1)) })).filter((x) => x.steps >= 2));
-      if (!stepped.length) { check(`[${deck}] 단계 있는 장이 있다`, false); await ctx.close(); continue; }
+      // 덱 내용은 사용자가 바꾼다(커밋된 워크숍 덱에는 선언형 단계 장이 없을 수 있다). 단계 장이 없는 덱은 실패가 아니라 건너뛴다.
+      if (!stepped.length) { if (rate === RATES[0]) console.log(`INFO [${deck}] 단계 있는 장 없음, 이 덱은 건너뜀`); await ctx.close(); continue; }
       const slide = stepped[0];
       await page.goto(`${url}#${slide.n}`, { waitUntil: 'load' });
       await page.reload({ waitUntil: 'load' });
@@ -105,6 +106,7 @@ const round = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
       await ctx.close();
     }
   }
+  check('측정된 덱이 하나 이상 있다', Object.keys(result).length > 0, Object.keys(result));
   if (process.env.ANIM_OUT) fs.writeFileSync(process.env.ANIM_OUT, JSON.stringify(result, null, 1));
   await browser.close();
   console.log(fail ? `${fail} FAILED` : 'ALL PASS');

@@ -1,62 +1,41 @@
-import { Play } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tooltip } from "@/components/ui/tooltip";
-import { NumberField } from "@/components/ui/number-field";
-import { QUICK, DEFAULT_MS, afterPrevious, applyQuick, awayOf, hasAnimation, matchQuick, setAway, setDelay, setIn, setMs, setOut, type Away, type StepSpec } from "@/lib/animation-model";
-import { readSlide, readSpec } from "@/lib/animation-dom";
+import type { StepSpec } from "@/lib/animation-model";
+import { listOf, planAdd, planEdit } from "@/lib/animation-dom";
+import { AnimControls } from "./AnimControls";
 
-// 인스펙터의 Animation 섹션(spec/ANIMATION.md 4.2): 등장과 퇴장 단계, 빠른 선택(Fade 등: 누르면 변수 값이 채워진다), 벗어난 상태 값, 시간, 지연, After previous, Play.
-// 값은 모두 요소의 data-step, data-step-out과 인라인 변수로 저장되고 이름은 저장되지 않는다. 다중 선택이면 각 요소에 같은 연산을 적용한다(실행 취소 한 건).
+// 인스펙터의 Animation 섹션(spec/ANIMATION.md 4.2): + In, + Out 단추, 이미 있으면 효과, 시작 방식, 시간 세 칸만. 하단 Animation 목록과 같은 컨트롤이다.
+// 고급 값(이동 거리, 투명도, 지연 직접 입력)은 하단 목록의 줄 안 Custom에 있다.
 type Props = {
   els: HTMLElement[];
   slide: HTMLElement | null;
   onAnim(edits: [HTMLElement, StepSpec][]): void;
-  onPlay(el: HTMLElement): void;
 };
 
-const AWAY_FIELDS: readonly [keyof Away, string, string][] = [
-  ["opacity", "Away opacity", ""], ["x", "Away X", "px"], ["y", "Away Y", "px"], ["scale", "Away scale", ""], ["blur", "Away blur", "px"],
-];
-
-export function AnimationSection({ els, slide, onAnim, onPlay }: Props) {
+export function AnimationSection({ els, slide, onAnim }: Props) {
   const el = els[0];
-  if (!el) return null;
-  const spec = readSpec(el), has = hasAnimation(spec), quick = matchQuick(spec);
-  const apply = (fn: (s: StepSpec, e: HTMLElement) => StepSpec) => onAnim(els.map((e) => [e, fn(readSpec(e), e)] as [HTMLElement, StepSpec]));
-  const num = (v: string) => (v.trim() === "" ? null : Number(v));
-  const prevOf = (e: HTMLElement, s: StepSpec) => (slide ? readSlide(slide).filter((r) => r.el !== e && r.spec.in === s.in).map((r) => r.spec) : []);
+  if (!el || !slide || !slide.contains(el)) return null;
+  if (els.length > 1) return <p className="text-caption text-muted-foreground">Select one element to edit its animation.</p>;
+  const { rows, list } = listOf(slide, el), id = String(rows.findIndex((r) => r.el === el)), name = el.tagName.toLowerCase();
+  const mine = list.map((r, i) => ({ r, i })).filter(({ r }) => r.id === id), inn = mine.find(({ r }) => r.kind === "in"), out = mine.find(({ r }) => r.kind === "out");
+  const spec = rows[+id].spec;
+  const run = (e: [HTMLElement, StepSpec][] | null) => { if (e) onAnim(e); };
   return (
     <div className="flex flex-col gap-2">
-      <div className="grid grid-cols-2 gap-2 [&>*]:min-w-0">
-        <NumberField label="In" aria-label="Appears at step" unit="" min={1} step={1} value={spec.in === null ? "1" : String(spec.in)} muted={spec.in === null}
-          onChange={(v) => apply((s) => setIn(s, num(v)))} />
-        <NumberField label="Out" aria-label="Disappears at step" unit="" min={2} step={1} placeholder="None" value={spec.out === null ? "" : String(spec.out)} muted={spec.out === null}
-          onChange={(v) => apply((s) => setOut(s, num(v)))} />
+      <div className="flex gap-1">
+        {!inn && <Button variant="secondary" size="compact" className="flex-1" leadingIcon={Plus} onClick={() => run(planAdd(slide, el, "in"))}>In</Button>}
+        {!out && <Button variant="secondary" size="compact" className="flex-1" leadingIcon={Plus} onClick={() => run(planAdd(slide, el, "out"))}>Out</Button>}
       </div>
-      {has && (
-        <>
-          <div className="flex flex-col gap-1">
-            <span className="text-micro text-muted-foreground">Quick</span>
-            <div role="group" aria-label="Quick effect" className="flex flex-wrap gap-1">
-              {QUICK.map(([id, label]) => <Button key={id} aria-label={label} aria-pressed={quick === id} variant={quick === id ? "secondary" : "ghost"} size="compact" onClick={() => apply((s) => applyQuick(s, id))}>{label}</Button>)}
-            </div>
+      {[inn, out].map((m) => m && (
+        <div key={m.r.kind} role="group" aria-label={m.r.kind === "in" ? "In animation" : "Out animation"} className="flex flex-col gap-1">
+          <div className="flex items-center justify-between">
+            <span className="text-micro font-medium text-foreground">{m.r.kind === "in" ? "In" : "Out"}</span>
+            <Button aria-label={`Remove ${m.r.kind === "in" ? "In" : "Out"} animation`} variant="ghost" size="icon-compact" onClick={() => run(planEdit(slide, el, { t: "remove", at: m.i }))}><Trash2 /></Button>
           </div>
-          <div className="grid grid-cols-2 gap-2 [&>*]:min-w-0">
-            {AWAY_FIELDS.map(([k, aria, unit]) => (
-              <NumberField key={k} label={k === "opacity" ? "O" : k === "x" ? "X" : k === "y" ? "Y" : k === "scale" ? "S" : "B"} aria-label={aria} unit={unit} step={k === "opacity" || k === "scale" ? 0.1 : 1}
-                value={awayOf(spec)[k].replace(/px$/, "")} muted={spec.away[k] === undefined} onChange={(v) => apply((s) => setAway(s, k, v.trim() === "" ? "" : `${Number(v)}${unit}`))} />
-            ))}
-          </div>
-          <div className="grid grid-cols-2 gap-2 [&>*]:min-w-0">
-            <NumberField label="ms" aria-label="Duration" unit="" min={0} step={20} value={String(spec.ms ?? DEFAULT_MS)} muted={spec.ms === null} onChange={(v) => apply((s) => setMs(s, num(v)))} />
-            <NumberField label="+" aria-label="Delay" unit="" min={0} step={20} value={String(spec.delay ?? 0)} muted={spec.delay === null} onChange={(v) => apply((s) => setDelay(s, num(v)))} />
-          </div>
-          <div className="flex items-center gap-1">
-            <Button variant="secondary" size="compact" className="min-w-0 flex-1" onClick={() => apply((s, e) => afterPrevious(s, prevOf(e, s)))}>After previous</Button>
-            <Tooltip content="Preview this element" side="top"><Button aria-label="Play animation" variant="ghost" size="icon-compact" onClick={() => onPlay(el)}><Play /></Button></Tooltip>
-          </div>
-        </>
-      )}
+          <AnimControls labels row={m.r} spec={spec} name={name} first={m.i === 0} linked={m.r.kind === "out" && !!inn}
+            onSpec={(s) => onAnim([[el, s]])} onStart={(start) => run(planEdit(slide, el, { t: "start", at: m.i, start }))} />
+        </div>
+      ))}
     </div>
   );
 }

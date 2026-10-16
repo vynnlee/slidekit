@@ -438,12 +438,14 @@ Figma식 계층 선택이다. 구현은 `app/src/lib/selection.ts`(DOM 없이 �
 
 속성과 의미는 6.3과 `spec/ANIMATION.md`가 기준이다. 편집기는 UI 문구를 영어로 쓴다.
 
-- 하단 탭 Notes와 Animation. Animation 탭은 단계 격자와 요소별 막대(보이는 구간 N부터 M 직전)다. 막대 끝을 끌면 등장(`data-step`)과 퇴장(`data-step-out`), 몸통을 끌면 둘 다 같은 간격으로 이동한다. 끄는 동안은 막대 DOM만 바꾸고 놓을 때 한 번 저장한다(실행 취소 한 건).
-- 머리글을 누르면 재생 헤드가 그 단계로 옮겨 가고(기본은 마지막 단계) 캔버스는 요소의 `data-shown`과 `data-away`만 토글한다. 헤드 이동과 끌기는 iframe을 다시 만들지 않는다. 헤드는 React 상태가 아니라 외부 저장소(`lib/play-head.ts`)라 옮겨도 Editor 전체가 다시 그려지지 않는다. `data-shown`, `data-away`, `data-step-run`, `data-step-instant`는 저장 글자에서 제거한다. `data-sk-show-steps`는 편집기가 더 쓰지 않는다.
-- Play는 1단계부터 마지막 단계까지 차례로 재생하고, `+ Step`은 빈 단계를 더한다(`data-steps`). 탭이 열려 있을 때 캔버스 요소 모서리에 등장 번호와 `out N`을 단다(저장되지 않음).
-- 키보드: 막대에서 방향키는 둘 다 이동, Shift+방향키는 등장, Alt+방향키는 퇴장, Delete는 단계 속성 모두 지움, Enter는 요소 선택. 막대의 aria-label이 이름과 등장, 퇴장 단계를 읽고, 헤드 라벨(`Step k of S`)이 `aria-live`로 알린다.
-- 인스펙터 Animation 섹션: Appears at step, Disappears at step, Quick effect(Fade, Rise, Slide, Scale, Blur는 변수 값을 채우는 단추이고 이름은 저장하지 않는다), 벗어난 상태 5값(opacity, x, y, scale, blur), Duration, Delay, After previous, Play animation. 여러 요소를 선택하면 한 번의 커밋으로 각각에 적용한다. 기본값과 같은 변수는 쓰지 않는다. `data-step-effect`는 읽기만 하고 편집하면 변수로 바꿔 쓴다.
-- 검증: `editor-animation`(막대, 헤드, 키보드, 밖의 변경, axe), `editor-anim-perf`(요소 100개와 단계 20개, 느린 단계), `editor-fuzz` 시드 `a5`(단계 속성 불변식과 누수), 단위 `animation-model`.
+- 하단 탭 Notes와 Animation. Animation 탭은 Keynote식 **애니메이션 목록**이다. 한 줄 = 요소 이름, In 또는 Out 배지, Effect(Fade, Rise, Scale, Blur, Slide), Start(On click, With previous, After previous), Duration(0.4s 등), Custom, 삭제. 줄은 실행 순서이고 화면에 단계 숫자는 없다(On click 줄에 `Click 1, 2...` 소제목만). 요소 하나에 In 하나, Out 하나까지(v1).
+- 파일에는 지금처럼 `data-step`, `data-step-out`, `--sk-step-delay` 숫자만 남는다. 편집기가 줄 순서와 시작 방식에서 계산한다: On click은 새 단계 번호, With previous는 앞 줄과 같은 단계와 같은 지연, After previous는 같은 단계에 지연 = 앞 줄의 지연 + 시간(숫자 복사, 앞을 바꿔도 따라가지 않음). 목록은 읽을 때마다 파일에서 다시 만든다(단계, 지연, 문서 순서로 정렬, 단계의 첫 줄은 On click, 지연이 앞 줄 이하면 With, 크면 After). 표현 못 하는 조합은 가장 가까운 줄로 보이되 손대지 않으면 속성이 바이트 그대로다(단계, 시작 방식, 앞 줄이 같은 줄은 다시 쓰지 않음). 단, 빈 단계 번호가 있으면 첫 편집 때 당겨 붙인다. 순수 함수는 `lib/animation-model.ts`의 `buildList`, `layout`, `edit`(단위 테스트로 왕복과 퍼즈 고정).
+- 효과, 시간, 지연은 요소 하나의 값이라 In 줄과 Out 줄이 같다: 둘 다 있는 요소의 Out 줄은 Effect와 Duration을 바꿀 수 없다(Same as In). Out은 항상 자기 In 뒤의 줄이다(어기는 이동은 거절).
+- 순서 바꾸기: 줄 왼쪽 손잡이를 끌거나 줄에 포커스를 두고 Alt+위/아래(네이티브 drag and drop과 키보드). 줄 하나가 옮겨 가고 각 줄의 시작 방식은 따라간다. 줄 포커스에서 Delete는 줄 삭제, Enter는 요소 선택. 한 번 조작 = 실행 취소 한 건이고 바뀐 요소만 다시 쓴다.
+- 줄을 누르면 요소가 선택되고 재생 헤드가 그 줄의 단계로 가서 캔버스가 그 줄까지 실행된 상태를 보인다(기본은 끝). 캔버스는 `data-shown`과 `data-away`만 토글해 iframe을 다시 만들지 않는다. 헤드는 외부 저장소(`lib/play-head.ts`)다. `data-shown`, `data-away`, `data-step-run`, `data-step-instant`는 저장 글자에서 제거한다. 목록 위에 `Play`(끝까지 재생)와 `Add animation`(선택한 요소에 In, 있으면 Out을 선택한 요소의 줄 아래, 없으면 맨 아래에 On click으로)이 있다. 탭이 열려 있을 때 캔버스 요소 모서리에 클릭 순서 배지(`1`, `out 2`)를 단다(저장되지 않음). Layers는 단계 숫자 대신 In, Out 표시만 한다.
+- Custom(줄마다 접힘, 기본 접힘): 벗어난 상태 5값(opacity, x, y, scale, blur)과 Delay 직접 입력. 인스펙터 Animation 섹션: + In, + Out 단추, 이미 있으면 Effect, Start, Duration 세 칸(목록과 같은 컨트롤, 다중 선택이면 안내 문구). `data-step-effect`는 읽기만 하고 편집하면 변수로 바꿔 쓴다.
+- 접근성: 목록은 이름 있는 `list`, 줄은 `listitem`(`<요소>, In`), 칸은 네이티브 select(이름 `Effect of ...`, `Start of ...`, `Duration of ...`), 현재 위치 라벨(`Click k of N`)이 `aria-live`다.
+- 검증: `editor-animation`(시작 방식, 순서, Alt+위아래와 끌기, 효과와 시간, Custom, 줄 누르기, Out, 실행 취소, 밖의 변경, axe), `editor-panels`(인스펙터 섹션), `editor-anim-perf`(요소 100개와 단계 20개, 느린 단계), `editor-fuzz` 시드 `a5`(단계 속성 불변식과 누수), 단위 `animation-model`(왕복, 순서 변경, 실제 덱 둘의 보존).
 
 ## 10. 텍스트 내보내기 (Markdown 개요)
 

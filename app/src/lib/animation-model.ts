@@ -142,3 +142,90 @@ export function parse(attrs: { step?: string | null; stepOut?: string | null; ef
   return normalize({ in: parseInt2(attrs.step), out: parseInt2(attrs.stepOut), ms, delay: parseMs(vars[DELAY_VAR]), away });
 }
 export const specEqual = (a: StepSpec, b: StepSpec) => JSON.stringify(normalize(a)) === JSON.stringify(normalize(b));
+
+// ---- 애니메이션 목록(Keynote 방식): 줄 <-> 속성 ----
+// 화면에는 단계 번호가 없다. 줄은 실행 순서이고 시작 방식(On click, With previous, After previous)이 단계 번호와 지연을 정한다.
+// 파일에는 지금처럼 data-step, data-step-out, --sk-step-delay 숫자만 남고, 줄 목록은 읽을 때마다 그 숫자에서 다시 만든다.
+// 한 요소의 효과, 시간, 지연은 하나다(등장과 퇴장이 같은 값을 쓴다: ANIMATION.md 2.4절).
+export type Kind = "in" | "out";
+export type Start = "click" | "with" | "after";
+export type Entry = { id: string; spec: StepSpec };
+export type RowKey = { id: string; kind: Kind };
+export type ListRow = RowKey & { step: number; start: Start; group: number; pred: string };
+const keyOf = (r: RowKey) => `${r.id}:${r.kind}`;
+
+/** 실행 순서의 줄 목록. 정렬: 단계, 지연, 문서 순서, 등장 먼저. 단계의 첫 줄은 On click이고, 나머지는 지연이 앞 줄 이하면 With, 크면 After(가장 가까운 표현) */
+export function buildList(entries: readonly Entry[]): ListRow[] {
+  const raw = entries.flatMap((e, i) => (["in", "out"] as Kind[]).flatMap((kind) => { const step = kind === "in" ? e.spec.in : e.spec.out; return step === null ? [] : [{ id: e.id, kind, step, delay: e.spec.delay ?? 0, i }]; }));
+  raw.sort((a, b) => a.step - b.step || a.delay - b.delay || a.i - b.i || (a.kind === b.kind ? 0 : a.kind === "in" ? -1 : 1));
+  let group = 0;
+  return raw.map((r, j) => {
+    const p = raw[j - 1], first = !p || p.step !== r.step;
+    if (first) group++;
+    return { id: r.id, kind: r.kind, step: r.step, group, start: first ? "click" : r.delay <= p.delay ? "with" : "after", pred: p ? keyOf(p) : "" };
+  });
+}
+
+/** 줄 순서와 시작 방식으로 단계 번호와 지연을 다시 계산해 바뀐 요소의 사양만 돌려준다. 보임 구간이 뒤집히면(퇴장이 등장 이하) null.
+ *  단계, 시작 방식, 앞 줄이 그대로인 줄은 지연도 그대로 둔다(손대지 않은 줄은 바이트 그대로). */
+export function layout(order: readonly RowKey[], starts: readonly Start[], specs: ReadonlyMap<string, StepSpec>, prev: readonly ListRow[] = [], orig: ReadonlyMap<string, StepSpec> = specs): Map<string, StepSpec> | null {
+  const old = new Map(prev.map((r) => [keyOf(r), r])), cur = new Map<string, StepSpec>();
+  for (const [id, s] of specs) cur.set(id, cloneSpec(s));
+  const hasIn = (id: string) => order.some((r) => r.id === id && r.kind === "in");
+  let step = 1, last: { delay: number; ms: number } | null = null, pred = "";
+  order.forEach((r, i) => {
+    const start: Start = i === 0 || !last ? "click" : starts[i];
+    if (start === "click") step++;
+    const o = old.get(keyOf(r)), s = cur.get(r.id)!;
+    if (r.kind === "in") s.in = step; else s.out = step;
+    const stable = !!o && o.step === step && o.start === start && o.pred === pred;
+    if (!stable && !(r.kind === "out" && hasIn(r.id))) { // 등장 줄이 있으면 지연은 그 줄의 것이다
+      s.delay = start === "click" ? (o?.start === "click" ? s.delay : null) : (last!.delay + (start === "after" ? last!.ms : 0)) || null;
+    }
+    last = { delay: s.delay ?? 0, ms: s.ms ?? DEFAULT_MS };
+    pred = keyOf(r);
+  });
+  const changed = new Map<string, StepSpec>();
+  for (const [id, s] of cur) {
+    if (s.in !== null && s.out !== null && s.out <= s.in) return null; // 보이는 구간이 없다
+    const n = normalize(s);
+    if (!specEqual(n, orig.get(id)!)) changed.set(id, n);
+  }
+  return changed;
+}
+
+export type Op =
+  | { t: "move"; from: number; to: number }
+  | { t: "start"; at: number; start: Start }
+  | { t: "remove"; at: number }
+  | { t: "add"; id: string; kind: Kind; after: number | null }; // after: 이 줄 바로 아래에 넣는다(null이면 맨 아래)
+
+/** 목록 편집 한 번 -> 바뀐 요소의 새 사양(실행 취소 한 건). 할 수 없는 편집이면 null */
+export function edit(entries: readonly Entry[], op: Op): Map<string, StepSpec> | null {
+  const rows = buildList(entries), orig = new Map(entries.map((e) => [e.id, e.spec])), specs = new Map(entries.map((e) => [e.id, cloneSpec(e.spec)]));
+  const order: RowKey[] = rows.map(({ id, kind }) => ({ id, kind })), starts: Start[] = rows.map((r) => r.start);
+  if (op.t === "move") {
+    const { from, to } = op;
+    if (from === to || from < 0 || to < 0 || from >= order.length || to >= order.length) return null;
+    order.splice(to, 0, ...order.splice(from, 1)); starts.splice(to, 0, ...starts.splice(from, 1));
+  } else if (op.t === "start") {
+    if (op.at < 0 || op.at >= order.length || starts[op.at] === op.start) return null;
+    starts[op.at] = op.start;
+  } else if (op.t === "remove") {
+    const r = order[op.at];
+    if (!r) return null;
+    const s = specs.get(r.id)!;
+    if (r.kind === "in") s.in = null; else s.out = null;
+    if (s.in === null && s.out === null) specs.set(r.id, emptySpec());
+    order.splice(op.at, 1); starts.splice(op.at, 1);
+  } else {
+    const s = specs.get(op.id);
+    if (!s || (op.kind === "in" ? s.in : s.out) !== null) return null;
+    const mine = (kind: Kind) => order.findIndex((r) => r.id === op.id && r.kind === kind);
+    let at = op.after === null ? order.length : op.after + 1;
+    if (op.kind === "in") { if (s.out !== null) at = Math.min(at, mine("out")); s.in = 2; } // 등장은 자기 퇴장 앞에
+    else { if (s.in !== null) at = Math.max(at, mine("in") + 1); s.out = 3; } // 퇴장은 자기 등장 뒤에
+    order.splice(at, 0, { id: op.id, kind: op.kind }); starts.splice(at, 0, "click");
+  }
+  return layout(order, starts, specs, rows, orig);
+}

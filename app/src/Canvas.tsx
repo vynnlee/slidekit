@@ -6,6 +6,7 @@ import { TextArea } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
 import { byPath, previewHtml, serializeSlide, type Unit } from "@/lib/deck-source";
 import { applyPlayhead, readSlide, slideStepCount } from "@/lib/animation-dom";
+import { buildList } from "@/lib/animation-model";
 import type { PlayHead } from "@/lib/play-head";import { childToward, isLeaf, isLockedDeep, pick as pickEl, siblings } from "@/lib/selection";
 import { canMove, canResize, fixSize, moveBy, readTranslate, toLocal, writeTranslate } from "@/lib/move";
 import { lockAxis, snapMove, snapResize, toSlide, unionRect, type Gap, type Guide, type Rect } from "@/lib/guides";
@@ -383,7 +384,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
     const sl = cur();
     if (!sl) return;
     const rows = readSlide(sl);
-    badgeList.current = P.current.stepBadges ? rows.flatMap((r) => [...(r.spec.in !== null ? [{ el: r.el, text: String(r.spec.in) }] : []), ...(r.spec.out !== null ? [{ el: r.el, text: `out ${r.spec.out}`, right: true }] : [])]) : [];
+    badgeList.current = P.current.stepBadges ? buildList(rows.map((r, i) => ({ id: String(i), spec: r.spec }))).map((b) => ({ el: rows[+b.id].el, text: b.kind === "in" ? String(b.group) : `out ${b.group}`, right: b.kind === "out" })) : []; // 번호는 On click 순서(Click 1, 2, ...)
     if (!rows.length) return;
     const S = slideStepCount(sl, rows), k = P.current.head?.get().k ?? S;
     applyPlayhead(sl, Math.min(Math.max(1, k), S), rows, instant);

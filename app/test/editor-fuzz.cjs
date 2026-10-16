@@ -66,17 +66,19 @@ const rng = (a) => () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a
     'slide-go': () => key(pick(['ArrowUp', 'ArrowDown'])),
     'find-replace': async () => { await focusBody(); await page.keyboard.press('Meta+f'); await page.getByLabel('Find', { exact: true }).fill(pick(['a', 'e', '바', 'the'])); await settle(); await page.getByLabel('Replace with', { exact: true }).fill(pick(['Q', 'zz', ''])); const b = page.getByRole('button', { name: 'Replace all' }); if (await b.isEnabled().catch(() => false)) await b.click(); await page.getByLabel('Find', { exact: true }).press('Escape'); },
     'undo': () => key('Meta+z'), 'redo': () => key('Shift+Meta+z'),
-    // 애니메이션 연산(ANIM 변형): 인스펙터 칸, 빠른 선택, 막대 끌기와 키보드, 머리글, + Step
-    'anim-in': async () => { const f = page.getByLabel('Appears at step', { exact: true }); if (!(await f.count())) return; await f.fill(String(int(1, 7))); await f.press('Enter'); },
-    'anim-out': async () => { const f = page.getByLabel('Disappears at step', { exact: true }); if (!(await f.count())) return; await f.fill(R() < 0.25 ? '' : String(int(1, 9))); await f.press('Enter'); },
-    'anim-quick': async () => { const b = page.getByRole('group', { name: 'Quick effect' }).getByRole('button', { name: pick(['Fade', 'Rise', 'Slide', 'Scale', 'Blur']), exact: true }); if (await b.count()) await b.click(); },
-    'anim-bar-drag': async () => { const bars = page.getByTestId('anim-bar'), n = await bars.count(); if (!n) return; const bar = bars.nth(int(0, n - 1)), part = pick(['in', 'out', null]); const b = await (part ? bar.locator(`[data-testid=anim-handle-${part}]`) : bar).boundingBox(); if (!b) return; const x = part === 'out' ? b.x + b.width - 2 : part === 'in' ? b.x + 2 : b.x + b.width / 2, y = b.y + b.height / 2; await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + int(-120, 120), y, { steps: 3 }); await page.mouse.up(); },
-    'anim-bar-key': async () => { const bars = page.getByTestId('anim-bar'), n = await bars.count(); if (!n) return; await bars.nth(int(0, n - 1)).focus(); await page.keyboard.press(pick(['ArrowLeft', 'ArrowRight', 'Alt+ArrowLeft', 'Alt+ArrowRight', 'Shift+ArrowLeft', 'Shift+ArrowRight', 'Delete'])); },
-    'anim-head': async () => { const hs = page.locator('[data-testid=anim-scroll] [role=columnheader] button'), n = await hs.count(); if (n) await hs.nth(int(0, n - 1)).click(); },
-    'anim-add-step': async () => { const b = page.getByRole('button', { name: 'Add step' }); if (await b.count()) await b.click(); },
+    // 애니메이션 연산(ANIM 변형): 인스펙터 + In/+ Out과 세 칸, 목록의 시작 방식과 순서(Alt+위아래, 끌기)와 지우기, 줄 누르기(재생 헤드)
+    'anim-in': async () => { const b = page.getByRole('button', { name: 'In', exact: true }); if (await b.count()) await b.click(); },
+    'anim-out': async () => { const b = page.getByRole('button', { name: 'Out', exact: true }); if (await b.count()) await b.click(); },
+    'anim-effect': async () => { const s = page.getByRole('combobox', { name: /^Effect of/ }).first(); if ((await s.count()) && (await s.isEnabled())) await s.selectOption(pick(['fade', 'rise', 'slide', 'scale', 'blur'])); },
+    'anim-time': async () => { const s = page.getByRole('combobox', { name: /^Duration of/ }).first(); if ((await s.count()) && (await s.isEnabled())) await s.selectOption(pick(['0', '200', '500', '1000'])); },
+    'anim-start': async () => { const rows = page.getByTestId('anim-row'), n = await rows.count(); if (!n) return; const s = rows.nth(int(0, n - 1)).getByRole('combobox', { name: /^Start of/ }); if (await s.isEnabled()) await s.selectOption(pick(['click', 'with', 'after'])).catch(() => {}); },
+    'anim-row-key': async () => { const rows = page.getByTestId('anim-row'), n = await rows.count(); if (!n) return; await rows.nth(int(0, n - 1)).focus(); await page.keyboard.press(pick(['Alt+ArrowUp', 'Alt+ArrowDown', 'Alt+ArrowUp', 'Alt+ArrowDown', 'Delete'])); },
+    'anim-row-drag': async () => { const rows = page.getByTestId('anim-row'), n = await rows.count(); if (n < 2) return; const a = int(0, n - 1), b = int(0, n - 1); if (a !== b) await rows.nth(a).getByTestId('anim-grip').dragTo(rows.nth(b), { timeout: 3000 }).catch((e) => { if (!/Timeout/.test(String(e))) throw e; }); },
+    'anim-head': async () => { const rows = page.getByTestId('anim-row'), n = await rows.count(); if (n) await rows.nth(int(0, n - 1)).locator('button').first().click({ timeout: 3000 }).catch((e) => { if (!/Timeout/.test(String(e))) throw e; }); }, // 앞 조작이 연 팝오버가 가리면 건너뛴다
+    'anim-add': async () => { const b = page.getByRole('button', { name: 'Add animation' }); if ((await b.count()) && (await b.isEnabled())) await b.click(); },
   };
   const weights = { 'select-next': 6, 'select-parent': 2, 'select-child': 3, 'deselect': 1, nudge: 4, drag: 4, resize: 3, text: 3, duplicate: 3, delete: 2, group: 2, ungroup: 1, lock: 1, hide: 1, 'z-back': 1, 'z-front': 1, 'copy-style': 1, 'paste-style': 2, 'slide-add': 1, 'slide-dup': 1, 'slide-move': 1, 'slide-delete': 1, theme: 1, 'slide-go': 2, 'find-replace': 1, undo: 3, redo: 1 };
-  if (ANIM) { Object.assign(weights, { 'anim-in': 8, 'anim-out': 5, 'anim-quick': 4, 'anim-bar-drag': 8, 'anim-bar-key': 6, 'anim-head': 4, 'anim-add-step': 1 }); for (const k of Object.keys(weights)) if (/^slide-|find-replace|^group$|^ungroup$|^delete$/.test(k)) delete weights[k]; } // 요소 선택과 단계 연산 위주
+  if (ANIM) { Object.assign(weights, { 'anim-in': 7, 'anim-out': 4, 'anim-effect': 3, 'anim-time': 2, 'anim-start': 6, 'anim-row-key': 6, 'anim-row-drag': 4, 'anim-head': 4, 'anim-add': 3 }); for (const k of Object.keys(weights)) if (/^slide-|find-replace|^group$|^ungroup$|^delete$/.test(k)) delete weights[k]; } // 요소 선택과 단계 연산 위주
   if (EXT) for (const k of Object.keys(weights)) if (/^slide-|find-replace/.test(k)) delete weights[k]; // 구조 조작과 덱 전체 바꾸기는 6번 슬라이드의 밖의 수정과 섞지 않는다
   if (ANIM) { await page.getByRole('tab', { name: 'Animation' }).click(); await settle(); }
   const bag = Object.entries(weights).flatMap(([k, w]) => Array(w).fill(k));
@@ -93,7 +95,7 @@ const rng = (a) => () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a
       fs.writeFileSync(FILE, insertAt(cur, 6, mark)); done.push('외부:' + mark);
       await cond((m) => document.querySelector('iframe[title="Canvas"]').contentDocument.body.textContent.includes(m), mark, 20000); // 편집기가 반영할 때까지
     }
-    try { await ops[op](); } catch (e) { fail('조작 ' + op + ' 중 예외', { e: String(e).slice(0, 200) }); bad = true; break; }
+    try { await ops[op](); } catch (e) { fail('조작 ' + op + ' 중 예외', { e: String(e).slice(0, 700) }); bad = true; break; }
     await settle(); await page.keyboard.press('Meta+s'); await saveDone();
     const html = fs.readFileSync(FILE, 'utf8');
     const dup = [...dupIds(html)].filter((x) => !baseDup.has(x));

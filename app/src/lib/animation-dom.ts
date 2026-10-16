@@ -1,5 +1,5 @@
 // 단계 애니메이션 모델(animation-model.ts)과 살아 있는 DOM을 잇는 얇은 층. 재생 헤드는 data-shown과 data-away 속성만 토글한다(iframe을 다시 만들지 않는다).
-import { AWAY_VAR, DELAY_VAR, MS_VAR, hasAnimation, normalize, parse, serialize, stepCount, visibleAt, type StepSpec } from "./animation-model";
+import { AWAY_VAR, DELAY_VAR, MS_VAR, buildList, edit, hasAnimation, normalize, parse, serialize, stepCount, visibleAt, type Kind, type Op, type StepSpec } from "./animation-model";
 
 const VARS = [...Object.values(AWAY_VAR), MS_VAR, DELAY_VAR];
 export type AnimRow = { el: HTMLElement; spec: StepSpec };
@@ -47,4 +47,23 @@ export function applyPlayhead(slide: Element, k: number, rows: readonly AnimRow[
 /** 편집 표시를 걷어 낸다(저장용 글자에 새지 않게 serializeSlide도 지운다) */
 export function clearPlayhead(slide: Element) {
   for (const e of slide.querySelectorAll("[data-shown],[data-away]")) { e.removeAttribute("data-shown"); e.removeAttribute("data-away"); }
+}
+
+/** 애니메이션 목록: 실행 순서의 줄들. 줄의 id는 rows의 번호다. extra(선택한 요소)는 단계가 없어도 rows에 든다 */
+export function listOf(slide: Element, extra?: Element | null) {
+  const rows = readSlide(slide, extra);
+  return { rows, list: buildList(rows.map((r, i) => ({ id: String(i), spec: r.spec }))) };
+}
+
+/** 목록 편집 한 번 -> 바뀐 요소와 새 사양(Editor가 한 번에 쓰고 실행 취소 한 건). 할 수 없으면 null */
+export function planEdit(slide: Element, extra: Element | null, op: Op): [HTMLElement, StepSpec][] | null {
+  const rows = readSlide(slide, extra), m = edit(rows.map((r, i) => ({ id: String(i), spec: r.spec })), op);
+  return m && m.size ? [...m].map(([id, s]) => [rows[+id].el, s] as [HTMLElement, StepSpec]) : null;
+}
+
+/** el에 등장이나 퇴장을 더한다: 그 요소의 마지막 줄 바로 아래(줄이 없으면 맨 아래)에 On click으로 */
+export function planAdd(slide: Element, el: HTMLElement, kind: Kind) {
+  const { rows, list } = listOf(slide, el), id = String(rows.findIndex((r) => r.el === el));
+  const at = list.map((r) => r.id).lastIndexOf(id);
+  return planEdit(slide, el, { t: "add", id, kind, after: at < 0 ? null : at });
 }

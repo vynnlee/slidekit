@@ -12,7 +12,7 @@ import { Filmstrip } from "./Filmstrip";
 import { LayerTree } from "./LayerTree";
 import { createHead } from "@/lib/play-head";
 import { AnimationPanel } from "./AnimationPanel";
-import { writeSpec, readSpec, readSlide as readAnimRows, slideStepCount } from "@/lib/animation-dom";
+import { writeSpec, readSlide as readAnimRows, slideStepCount } from "@/lib/animation-dom";
 import { DEFAULT_MS, type StepSpec } from "@/lib/animation-model";
 import { Inspector } from "./Inspector";
 import { go } from "./App";
@@ -597,19 +597,7 @@ export function Editor({ id }: { id: string }) {
     commit("attr:" + name);
   };
   // Animation 탭: 요소의 단계 사양을 쓰고(실행 취소 한 건), 재생 헤드를 옮기고, 단계를 재생한다.
-  const animEdit = (el: HTMLElement, spec: StepSpec) => { writeSpec(el, spec); commit(); };
   const animEditMany = (edits: [HTMLElement, StepSpec][]) => { for (const [e, s] of edits) writeSpec(e, s); commit(); };
-  // 한 요소만 미리 본다: 등장(또는 퇴장) 직전 단계에서 시작해 한 단계 전환을 보이고 헤드를 마지막 단계로 되돌린다
-  const animPreviewEl = (el: HTMLElement) => {
-    const sp = readSpec(el), k = sp.in ?? sp.out;
-    if (k === null) return;
-    clearTimeout(playTimer.current); setPlaying(false);
-    head.set({ k: Math.max(1, k - 1), animate: false });
-    playTimer.current = setTimeout(() => {
-      head.set({ k, animate: true });
-      playTimer.current = setTimeout(() => head.set({ k: null, animate: false }), (sp.delay ?? 0) + (sp.ms ?? DEFAULT_MS) + 700);
-    }, 450);
-  };
   const stopPlay = () => { clearTimeout(playTimer.current); setPlaying(false); head.set({ k: null, animate: false }); };
   const animPlay = () => {
     if (playing) { stopPlay(); return; }
@@ -929,7 +917,7 @@ export function Editor({ id }: { id: string }) {
         }
         right={
           <Inspector folder={folder} sel={sel} slide={canvas.current?.slide(index) ?? null} more={more} onAlignGroup={alignGroup} selId={selId} tab={tab} onTab={setTab}
-            comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} onRemove={live.remove} onRevert={live.revert} onSendAll={live.sendAll} onResolveReplied={live.resolveReplied} onStyles={applyStyles} onAnim={animEditMany} onAnimPlay={animPreviewEl} onImageFile={(f) => addImage(f, sel)} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
+            comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} onRemove={live.remove} onRevert={live.revert} onSendAll={live.sendAll} onResolveReplied={live.resolveReplied} onStyles={applyStyles} onAnim={animEditMany} onImageFile={(f) => addImage(f, sel)} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
         }
       >
         <div className="flex h-full flex-col">
@@ -963,7 +951,7 @@ export function Editor({ id }: { id: string }) {
           />
           <div role="tablist" aria-label="Bottom panel" className="flex h-7 items-center gap-3 px-3">
             {(["notes", "animation"] as const).map((t) => (
-              <button key={t} type="button" role="tab" id={`bottom-tab-${t}`} aria-selected={bottomTab === t} aria-controls="bottom-panel" onClick={() => setBottomTab(t)}
+              <button key={t} type="button" role="tab" id={`bottom-tab-${t}`} aria-selected={bottomTab === t} aria-controls="bottom-panel" onClick={() => { setBottomTab(t); if (t === "animation") setNotesH((h) => Math.max(h, 240)); }} // 목록은 줄이 여럿이라 노트 높이(140)로는 좁다
                 className={`rounded text-caption outline-none focus-visible:ring-2 focus-visible:ring-focus-ring ${bottomTab === t ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{t === "notes" ? "Notes" : "Animation"}</button>
             ))}
           </div>
@@ -977,8 +965,8 @@ export function Editor({ id }: { id: string }) {
               />
             ) : (
               <AnimationPanel slide={canvas.current?.slide(index) ?? null} sel={sel} rev={units} head={head} playing={playing}
-                onStep={(k) => { clearTimeout(playTimer.current); setPlaying(false); head.set({ k, animate: false }); }} onEdit={animEdit} onSelect={(el) => pickSel(el)}
-                onAddStep={(total) => attr("data-steps", String(total))} onPlay={animPlay} />
+                onStep={(k) => { clearTimeout(playTimer.current); setPlaying(false); head.set({ k, animate: false }); }} onAnim={animEditMany} onSelect={(el) => pickSel(el)}
+                onPlay={animPlay} />
             )}
           </div>
         </div>

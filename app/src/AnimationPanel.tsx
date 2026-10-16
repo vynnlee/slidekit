@@ -1,17 +1,17 @@
-import { useEffect, useRef, useSyncExternalStore } from "react";
-import { Play, Plus, Square } from "lucide-react";
+import { memo, useRef, useState, useSyncExternalStore } from "react";
+import { GripVertical, Play, Plus, Square, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
-import { clearAll, clearOut, hasAnimation, setIn, setOut, shift, type StepSpec } from "@/lib/animation-model";
-import { readSlide, slideStepCount, type AnimRow } from "@/lib/animation-dom";
+import { NumberField } from "@/components/ui/number-field";
+import { awayOf, setAway, setDelay, type ListRow, type Op, type StepSpec } from "@/lib/animation-model";
+import { listOf, planAdd, planEdit, slideStepCount } from "@/lib/animation-dom";
 import type { PlayHead } from "@/lib/play-head";
 import { nameOf } from "./LayerTree";
+import { AnimControls } from "./AnimControls";
 
-// 하단 Animation 탭(spec/ANIMATION.md 4절): 단계 격자와 요소별 막대(보이는 구간 N부터 M 직전). 막대 끝을 끌면 등장과 퇴장, 몸통을 끌면 둘 다 같은 간격으로 이동한다.
-// 끄는 동안은 React 상태를 쓰지 않고 막대 DOM의 left와 width만 직접 바꾸며, 놓을 때 한 번만 onEdit한다(실행 취소 한 건).
-const COL = 56; // 단계 칸의 최소 너비(px)
-const NAME_W = 148;
-
+// 하단 Animation 탭(spec/ANIMATION.md 4절): Keynote식 애니메이션 목록. 줄 = 요소, In/Out, 효과, 시작 방식, 시간. 단계 번호는 화면에 없고
+// 줄 순서와 시작 방식(On click, With previous, After previous)에서 data-step과 지연이 계산되어 저장된다(animation-model.ts의 edit).
+// 줄을 누르면 캔버스가 그 줄의 단계까지 실행된 상태가 된다(재생 헤드). 한 번의 조작 = 실행 취소 한 건.
 type Props = {
   slide: HTMLElement | null;
   sel: Element | null;
@@ -19,133 +19,103 @@ type Props = {
   head: PlayHead; // 재생 헤드 저장소(k가 null이면 마지막 단계)
   playing: boolean;
   onStep(k: number | null): void;
-  onEdit(el: HTMLElement, next: StepSpec): void;
+  onAnim(edits: [HTMLElement, StepSpec][]): void;
   onSelect(el: HTMLElement): void;
-  onAddStep(total: number): void;
   onPlay(): void;
 };
 
-type Drag = { part: "in" | "out" | "body"; x0: number; colW: number; spec: StepSpec; S: number; moved: boolean; bar: HTMLElement; next: StepSpec; restore: () => void };
+const AWAY_FIELDS = [["opacity", "Opacity", "O", ""], ["x", "X", "X", "px"], ["y", "Y", "Y", "px"], ["scale", "Scale", "S", ""], ["blur", "Blur", "B", "px"]] as const;
 
-const geom = (s: StepSpec, S: number) => {
-  const start = s.in ?? 1, end = s.out ?? S + 1;
-  return { left: `${((start - 1) / S) * 100}%`, width: `${((end - start) / S) * 100}%` };
-};
+const ids = new WeakMap<object, number>();
+let nextId = 0;
+const idOf = (e: object) => ids.get(e) ?? (ids.set(e, ++nextId), nextId);
+type Act = { run(op: Op): void; go(i: number): void; anim(edits: [HTMLElement, StepSpec][]): void; toggle(id: string): void; drag: { current: number | null } };
+type RowProps = { r: ListRow; i: number; el: HTMLElement; spec: StepSpec; name: string; on: boolean; cur: boolean; linked: boolean; isOpen: boolean; sig: string; act: { current: Act } };
 
-const label = (name: string, s: StepSpec) =>
-  `${name}, ${s.in === null ? "visible from the start" : `appears at step ${s.in}`}${s.out === null ? "" : `, disappears at step ${s.out}`}`;
+// 줄 하나. 값이 같으면 다시 그리지 않는다(재생 헤드를 옮길 때 줄이 100개 넘어도 바뀐 줄만 그린다). 콜백은 act ref로 항상 최신을 부른다.
+const Row = memo(function Row({ r, i, el, spec, name, on, cur, linked, isOpen, act }: RowProps) {
+  const A = () => act.current, id = `${r.id}:${r.kind}`;
+  return (
+    <li tabIndex={0} aria-label={`${name}, ${r.kind === "in" ? "In" : "Out"}`} aria-current={on ? "true" : undefined} data-testid="anim-row" data-kind={r.kind} data-group={r.group} data-start={r.start}
+      className={`rounded-md outline-none focus-visible:ring-2 focus-visible:ring-focus-ring ${on ? "bg-hover" : ""} ${cur ? "border-l-2 border-focus-ring" : "border-l-2 border-transparent"}`}
+      onKeyDown={(e) => rowKey(e, i, A())}
+      onDragOver={(e) => { if (A().drag.current !== null) e.preventDefault(); }}
+      onDrop={(e) => { e.preventDefault(); const from = A().drag.current; A().drag.current = null; if (from !== null && from !== i) A().run({ t: "move", from, to: i }); }}>
+      <div className="flex min-h-7 flex-wrap items-center gap-1 px-1">
+        <span aria-hidden="true" className="w-12 shrink-0 text-micro text-muted-foreground">{r.start === "click" ? `Click ${r.group}` : ""}</span>
+        <span draggable aria-hidden="true" title="Drag to reorder" data-testid="anim-grip" className="cursor-grab text-muted-foreground"
+          onDragStart={(e) => { A().drag.current = i; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(i)); }} onDragEnd={() => { A().drag.current = null; }}><GripVertical className="size-3.5" /></span>
+        <button type="button" className={`min-w-0 flex-1 basis-24 truncate rounded text-left text-caption outline-none focus-visible:ring-2 focus-visible:ring-focus-ring ${on ? "text-foreground" : "text-muted-foreground"}`} title={name} onClick={() => A().go(i)}>{name}</button>
+        <span className="w-8 shrink-0 rounded bg-hover px-1 text-center text-micro text-foreground">{r.kind === "in" ? "In" : "Out"}</span>
+        <AnimControls row={r} spec={spec} name={name} first={i === 0} linked={linked} onSpec={(s) => A().anim([[el, s]])} onStart={(start) => A().run({ t: "start", at: i, start })} />
+        {linked ? <span className="w-16 shrink-0" /> : <Button variant="ghost" size="compact" className="w-16 shrink-0" aria-expanded={isOpen} aria-label={`Custom values of ${name}`} onClick={() => A().toggle(id)}>Custom</Button>}
+        <Button aria-label={`Remove ${r.kind === "in" ? "In" : "Out"} animation of ${name}`} variant="ghost" size="icon-compact" onClick={() => A().run({ t: "remove", at: i })}><Trash2 /></Button>
+      </div>
+      {isOpen && !linked && (
+        <div role="group" aria-label={`Custom values of ${name}`} className="grid grid-cols-3 gap-2 px-1 pb-1 pl-[4.5rem] sm:grid-cols-6 [&>*]:min-w-0">
+          {AWAY_FIELDS.map(([f, aria, label, unit]) => (
+            <NumberField key={f} label={label} aria-label={`Away ${aria.toLowerCase()} of ${name}`} unit={unit} step={f === "opacity" || f === "scale" ? 0.1 : 1}
+              value={awayOf(spec)[f].replace(/px$/, "")} muted={spec.away[f] === undefined} onChange={(v) => A().anim([[el, setAway(spec, f, v.trim() === "" ? "" : `${Number(v)}${unit}`)]])} />
+          ))}
+          <NumberField label="+" aria-label={`Delay of ${name} in ms`} unit="" min={0} step={20} value={String(spec.delay ?? 0)} muted={spec.delay === null}
+            onChange={(v) => A().anim([[el, setDelay(spec, v.trim() === "" ? null : Number(v))]])} />
+        </div>
+      )}
+    </li>
+  );
+}, (a, b) => a.sig === b.sig);
+
+// 줄에 포커스가 있을 때의 키: Alt+위/아래는 순서, Delete는 삭제, Enter는 요소 선택과 헤드 이동
+function rowKey(e: React.KeyboardEvent<HTMLElement>, i: number, a: Act) {
+  if (e.target !== e.currentTarget) return; // 칸 안의 키(select 등)는 그대로 둔다
+  if (/^(Arrow(Up|Down)|Delete|Backspace|Enter|Escape)$/.test(e.key)) e.nativeEvent.stopPropagation(); // 편집기의 전역 단축키(요소 삭제 등)로 새지 않게 한다
+  if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) { e.preventDefault(); a.run({ t: "move", from: i, to: i + (e.key === "ArrowUp" ? -1 : 1) }); }
+  else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); a.run({ t: "remove", at: i }); }
+  else if (e.key === "Enter") { e.preventDefault(); a.go(i); }
+}
 
 export function AnimationPanel(p: Props) {
-  const drag = useRef<Drag | null>(null);
-  const rows: AnimRow[] = p.slide ? readSlide(p.slide, p.sel) : [];
+  const [open, setOpen] = useState<Set<string>>(new Set()); // Custom을 연 줄(요소와 종류)
+  const dragFrom = useRef<number | null>(null), act = useRef<Act>(null as unknown as Act);
+  const { rows, list } = p.slide ? listOf(p.slide, p.sel) : { rows: [], list: [] };
   const S = p.slide ? slideStepCount(p.slide, rows) : 1;
-  const k0 = useSyncExternalStore(p.head.subscribe, () => p.head.get().k);
-  const head = Math.min(k0 ?? S, S);
-  const areaW = Math.max(1, S) * COL;
-
-  useEffect(() => () => { drag.current = null; }, []);
-
-  const next = (part: Drag["part"], spec: StepSpec, dcol: number, S0: number): StepSpec => {
-    if (part === "body") return shift(spec, Math.max(-(spec.in ?? spec.out ?? 2), Math.min(dcol, S0 - Math.max(spec.in ?? 1, spec.out === null ? 1 : spec.out - 0) )));
-    if (part === "in") {
-      const base = spec.in ?? 1, n = base + dcol, limit = (spec.out ?? S0 + 1) - 1;
-      return setIn(spec, n <= 1 ? null : Math.min(n, limit));
-    }
-    const base = spec.out ?? S0 + 1, m = base + dcol;
-    return m >= S0 + 1 ? setOut(spec, null) : setOut(spec, Math.max(m, (spec.in ?? 1) + 1));
-  };
-
-  const down = (e: React.PointerEvent<HTMLElement>, row: AnimRow, part: Drag["part"], bar: HTMLElement) => {
-    if (e.button !== 0) return;
-    e.stopPropagation();
-    const area = bar.parentElement!, colW = area.getBoundingClientRect().width / S;
-    const g0 = geom(row.spec, S);
-    drag.current = {
-      part, x0: e.clientX, colW, spec: row.spec, S, moved: false, bar, next: row.spec,
-      restore: () => { bar.style.left = g0.left; bar.style.width = g0.width; },
-    };
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  };
-  const move = (e: React.PointerEvent<HTMLElement>) => {
-    const d = drag.current;
-    if (!d) return;
-    const dcol = Math.round((e.clientX - d.x0) / d.colW);
-    if (!d.moved && Math.abs(e.clientX - d.x0) < 3) return;
-    d.moved = true;
-    d.next = next(d.part, d.spec, dcol, d.S);
-    const g = geom(d.next, d.S);
-    d.bar.style.left = g.left; d.bar.style.width = g.width; // 끄는 동안은 DOM만 바꾼다
-  };
-  const up = (row: AnimRow) => {
-    const d = drag.current;
-    drag.current = null;
-    if (!d) return;
-    if (!d.moved) { p.onSelect(row.el); return; }
-    p.onEdit(row.el, d.next);
-  };
-  const cancel = () => { const d = drag.current; drag.current = null; d?.restore(); };
-
-  const key = (e: React.KeyboardEvent<HTMLElement>, row: AnimRow) => {
-    if (/^(Arrow(Left|Right)|Delete|Backspace|Enter|Escape)$/.test(e.key)) e.nativeEvent.stopPropagation(); // 편집기의 전역 단축키(방향키 이동과 넛지, Delete로 요소 삭제)로 새지 않게 한다
-    const dir = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
-    if (dir) {
-      e.preventDefault();
-      const s = row.spec;
-      p.onEdit(row.el, e.altKey ? (s.out === null ? (dir > 0 ? s : setOut(s, S)) : setOut(s, s.out + dir > S ? null : s.out + dir)) : e.shiftKey ? setIn(s, (s.in ?? 1) + dir) : shift(s, dir));
-    } else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); p.onEdit(row.el, clearAll(row.spec)); }
-    else if (e.key === "Enter") { e.preventDefault(); p.onSelect(row.el); }
-    else if (e.key === "Escape") cancel();
-  };
+  const k0 = useSyncExternalStore(p.head.subscribe, () => p.head.get().k), k = Math.min(k0 ?? S, S);
+  const groups = list.length ? list[list.length - 1].group : 0, shown = list.filter((r) => r.step <= k).at(-1)?.group ?? 0;
 
   if (!p.slide) return <div className="px-3 text-caption text-muted-foreground">Open a slide to edit its animation</div>;
+  const slide = p.slide, sel = p.sel as HTMLElement | null;
+  const selId = sel ? rows.findIndex((r) => r.el === sel) : -1;
+  const run = (op: Op) => { const e = planEdit(slide, p.sel, op); if (e) p.onAnim(e); };
+  const add = () => {
+    if (!sel || selId < 0) return;
+    const hasIn = list.some((r) => r.id === String(selId) && r.kind === "in");
+    const e = planAdd(slide, sel, hasIn ? "out" : "in");
+    if (e) p.onAnim(e);
+  };
+  const canAdd = selId >= 0 && list.filter((r) => r.id === String(selId)).length < 2;
+  const go = (i: number) => { const r = list[i]; p.onSelect(rows[+r.id].el); p.onStep(r.step); };
 
-  const minW = NAME_W + areaW;
-  const lines = `repeating-linear-gradient(to right, transparent 0, transparent calc(100%/${S} - 1px), var(--color-border, #2b2b30) calc(100%/${S} - 1px), var(--color-border, #2b2b30) calc(100%/${S}))`;
+  act.current = { run, go, anim: p.onAnim, toggle: (id) => setOpen((o) => { const n = new Set(o); if (!n.delete(id)) n.add(id); return n; }), drag: dragFrom };
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-7 shrink-0 items-center gap-1 px-2">
-        <Tooltip content={p.playing ? "Stop" : "Play the steps"} side="top">
-          <Button aria-label={p.playing ? "Stop preview" : "Play steps"} variant="ghost" size="icon-compact" onClick={p.onPlay}>{p.playing ? <Square /> : <Play />}</Button>
+        <Tooltip content={p.playing ? "Stop" : "Play the animations"} side="top">
+          <Button aria-label={p.playing ? "Stop preview" : "Play"} variant="ghost" size="compact" leadingIcon={p.playing ? Square : Play} onClick={p.onPlay}>{p.playing ? "Stop" : "Play"}</Button>
         </Tooltip>
-        <span aria-live="polite" className="text-caption tabular-nums text-muted-foreground" data-testid="anim-step-label">{`Step ${head} of ${S}`}</span>
+        <span aria-live="polite" className="text-caption tabular-nums text-muted-foreground" data-testid="anim-step-label">{groups === 0 ? "" : shown === 0 ? "Before first click" : `Click ${shown} of ${groups}`}</span>
         <span className="flex-1" />
-        <Tooltip content="Add an empty step" side="top"><Button aria-label="Add step" variant="ghost" size="compact" leadingIcon={Plus} onClick={() => p.onAddStep(S + 1)}>Step</Button></Tooltip>
+        <Button aria-label="Add animation" variant="ghost" size="compact" leadingIcon={Plus} disabled={!canAdd} onClick={add}>Add animation</Button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto px-2 pb-2" data-testid="anim-scroll">
-        <div role="grid" aria-label="Animation steps" style={{ minWidth: minW }}>
-          <div role="row" className="flex h-6 items-center">
-            <div role="columnheader" className="sticky left-0 z-10 shrink-0 bg-background pr-2 text-micro text-muted-foreground" style={{ width: NAME_W }}>Element</div>
-            <div className="flex" style={{ width: areaW }}>
-              {Array.from({ length: S }, (_, i) => i + 1).map((k) => (
-                <div role="columnheader" key={k} className="flex-1" style={{ minWidth: COL }}>
-                  <button type="button" aria-label={`Step ${k}`} aria-pressed={head === k} onClick={() => p.onStep(k)}
-                    className={`h-5 w-full rounded text-micro tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-focus-ring ${head === k ? "bg-hover text-foreground" : "text-muted-foreground hover:bg-hover"}`}>{k}</button>
-                </div>
-              ))}
-            </div>
-          </div>
-          {rows.length === 0 && <div role="row"><div role="gridcell" className="py-2 text-caption text-muted-foreground">No animated elements. Select an element and set Appears at step in the Inspector.</div></div>}
-          {rows.map((r) => {
-            const name = nameOf(r.el), on = r.el === p.sel, g = geom(r.spec, S), has = hasAnimation(r.spec);
-            return (
-              <div role="row" key={rows.indexOf(r)} aria-selected={on} className="flex h-6 items-center" data-testid="anim-row">
-                <div role="rowheader" title={name} className={`sticky left-0 z-10 shrink-0 truncate bg-background pr-2 text-caption ${on ? "text-foreground" : "text-muted-foreground"}`} style={{ width: NAME_W }}>{name}</div>
-                <div role="gridcell" className="relative h-5 rounded-sm" style={{ width: areaW, backgroundImage: lines }}>
-                  <div style={{ position: "absolute", top: 0, bottom: 0, left: `${((head - 0.5) / S) * 100}%`, width: 1 }} className="pointer-events-none bg-focus-ring/60" aria-hidden="true" />
-                  {has && (
-                    <div role="button" tabIndex={0} aria-label={label(name, r.spec)} data-testid="anim-bar" data-in={r.spec.in ?? ""} data-out={r.spec.out ?? ""}
-                      className={`absolute inset-y-0.5 touch-none select-none rounded-sm outline-none ring-offset-0 focus-visible:ring-2 focus-visible:ring-focus-ring ${on ? "bg-focus-ring" : "bg-muted-foreground/60"}`}
-                      style={{ left: g.left, width: g.width, cursor: "grab" }}
-                      onPointerDown={(e) => down(e, r, "body", e.currentTarget)} onPointerMove={move} onPointerUp={() => up(r)} onPointerCancel={cancel} onKeyDown={(e) => key(e, r)}>
-                      <span aria-hidden="true" data-testid="anim-handle-in" className="absolute inset-y-0 left-0 w-1.5 cursor-ew-resize" onPointerDown={(e) => down(e, r, "in", e.currentTarget.parentElement as HTMLElement)} onPointerMove={move} onPointerUp={() => up(r)} />
-                      <span aria-hidden="true" data-testid="anim-handle-out" className="absolute inset-y-0 right-0 w-1.5 cursor-ew-resize" onPointerDown={(e) => down(e, r, "out", e.currentTarget.parentElement as HTMLElement)} onPointerMove={move} onPointerUp={() => up(r)} />
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
+        {list.length === 0 && <div className="py-2 text-caption text-muted-foreground">No animations. Select an element and choose Add animation.</div>}
+        <ul aria-label="Animations" className="flex flex-col gap-0.5">
+          {list.map((r, i) => {
+            const { el, spec } = rows[+r.id], linked = r.kind === "out" && list.some((o) => o.id === r.id && o.kind === "in");
+            const props = { r, i, el, spec, name: nameOf(el), on: el === p.sel, cur: r.step === k, linked, isOpen: open.has(`${r.id}:${r.kind}`) };
+            return <Row key={`${r.id}:${r.kind}`} {...props} sig={JSON.stringify([r, i, spec, props.name, props.on, props.cur, linked, props.isOpen, idOf(el)])} act={act} />;
           })}
-        </div>
+        </ul>
       </div>
     </div>
   );

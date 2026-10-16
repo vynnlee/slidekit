@@ -74,10 +74,10 @@ fs.rmSync(path.join(__dirname, '..', 'decks', 'zz-dogfood'), { recursive: true, 
     await page.getByRole('radio', { name: /gradient/i }).first().click(); await settle();
     await page.screenshot({ path: path.join(OUT, 'gradient.png') });
   }, 6);
-  await stepOf('10 단계 등장: 요소에 Appears at step 2', async () => {
+  await stepOf('10 단계 등장: 요소에 + In', async () => {
     await tiles.nth(1).click(); await settle();
     const b = await rect('p'); await page.mouse.click(b.x + 10, b.y + b.h / 2); await settle();
-    const f = page.getByLabel('Appears at step'); await f.fill('2'); await f.press('Enter'); await settle();
+    await page.getByRole('button', { name: 'In', exact: true }).click(); await settle();
   }, 8);
   await stepOf('11 발표자 노트 쓰기', async () => { await page.getByPlaceholder('Speaker notes (Markdown)').fill('여기서 목록을 읽는다'); await settle(); }, 3);
   await stepOf('12 테마 바꾸기', async () => {

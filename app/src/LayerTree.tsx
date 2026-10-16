@@ -136,7 +136,7 @@ export function LayerTree(p: Props) {
             />
           ) : <span className="min-w-0 flex-1 truncate">{nameOf(el)}</span>}
           {over && <span role="img" aria-label={over.kind === "outside" ? "Extends past the slide" : "Content is clipped"} title={over.kind === "outside" ? "Extends past the slide" : "Content is clipped"} data-testid="overflow-badge" className="shrink-0 text-destructive"><TriangleAlert className="size-3.5" /></span>}
-          {el.hasAttribute("data-step") && <span title={`Appears at step ${el.getAttribute("data-step")}`} className="shrink-0 rounded bg-surface-2 px-1 text-micro tabular-nums text-muted-foreground">{el.getAttribute("data-step")}</span>}
+          {(el.hasAttribute("data-step") || el.hasAttribute("data-step-out")) && <span title="Has animation" className="shrink-0 rounded bg-surface-2 px-1 text-micro text-muted-foreground">{el.hasAttribute("data-step") && el.hasAttribute("data-step-out") ? "In/Out" : el.hasAttribute("data-step") ? "In" : "Out"}</span>}
           {byParent ? (
             <Tooltip content="Locked by a parent layer" side="left">
               <span role="img" aria-label="Locked by parent" data-testid="parent-lock" className="inline-flex size-7 shrink-0 items-center justify-center text-muted-foreground opacity-60"><Lock className="size-3.5" /></span>

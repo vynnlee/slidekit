@@ -108,7 +108,6 @@ type Props = {
   onResolveReplied?(): void;
   onStyle(prop: string, value: string): void;
   onAnim(edits: [HTMLElement, import("@/lib/animation-model").StepSpec][]): void; // 단계 사양을 쓴다(실행 취소 한 건)
-  onAnimPlay(el: HTMLElement): void; // 이 요소의 등장과 퇴장을 한 번 미리 본다
   onStyles(map: Record<string, string>): void; // 여러 속성을 한 번에(실행 취소 한 건)
   onAttr(name: string, value: string | null): void;
   onElAttr(name: string, value: string | null): void;
@@ -299,7 +298,7 @@ export function Inspector(p: Props) {
                   <Field aria-label="Chapter title" placeholder="Shown in the table of contents" defaultValue={p.slide?.getAttribute("data-title") ?? ""} onChange={(e) => p.onAttr("data-title", e.target.value || null)} />
                 </div>
               )}
-              {autoSteps > 1 && <span className="text-micro text-muted-foreground">{autoSteps} steps (from element steps)</span>}
+              {autoSteps > 1 && <span className="text-micro text-muted-foreground">{autoSteps - 1} {autoSteps > 2 ? "clicks" : "click"} (from animations)</span>}
             </InspectorSection>
             <InspectorSection id="slide-bg" title="Background">
               <SegmentedControl aria-label="Background type" value={slideGrad ? "linear" : "solid"}
@@ -426,7 +425,7 @@ export function Inspector(p: Props) {
             </InspectorSection>
 
             <InspectorSection id="animation" title="Animation">
-              <AnimationSection els={[el, ...p.more] as HTMLElement[]} slide={p.slide as HTMLElement | null} onAnim={p.onAnim} onPlay={p.onAnimPlay} />
+              <AnimationSection els={[el, ...p.more] as HTMLElement[]} slide={p.slide as HTMLElement | null} onAnim={p.onAnim} />
             </InspectorSection>
 
             {el.tagName === "IMG" && (

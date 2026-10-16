@@ -133,6 +133,20 @@ async function pump() {
   void pump();
 }
 
+/** 서버가 캡처 도중 죽으면(SIGTERM, 강제 종료) finally가 못 돌아 임시 폴더가 남는다. 시작할 때 오래된(기본 10분 넘은) sk-capture-*만 지운다. */
+export function sweepStaleTemp(maxAgeMs = 10 * 60_000, now = Date.now()): number {
+  let n = 0;
+  try {
+    for (const f of readdirSync(tmpdir())) {
+      if (!f.startsWith("sk-capture-")) continue;
+      const p = join(tmpdir(), f);
+      try { const st = lstatSync(p); if (st.isDirectory() && now - st.mtimeMs > maxAgeMs) { rmSync(p, { recursive: true, force: true }); n++; } } catch {}
+    }
+  } catch {}
+  return n;
+}
+sweepStaleTemp();
+
 async function doCapture(job: CaptureJob): Promise<CaptureResult> {
   const deckDir = deckFolder(job.deck);
   const chrome = backend.find();

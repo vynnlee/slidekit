@@ -1,6 +1,6 @@
 // 영역 코멘트 이미지: 사각형 검증과 자르기 상자, 경로와 쓰기 안전, 보관 상한, 직렬 큐와 한도(가짜 Chrome), 캡처 전용 페이지. 임시 덱 폴더와 가짜 backend만 쓴다(Chrome 실행 없음).
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -72,8 +72,10 @@ test("큐: 한 번에 하나씩 순서대로 돌고 PNG가 .comments에 생긴�
   expect(log[0]).toBe("http://127.0.0.1:3200/api/decks/q1/capture-frame?slide=3&step=2#3");
   expect(readdirSync(join(dir, "q1", ".comments")).sort()).toEqual(["00000001.png", "00000002.png", "00000003.png"]);
 });
+const leftovers = () => readdirSync(tmpdir()).filter((f) => f.startsWith("sk-capture-")).length;
 test("실패: Chrome이 없거나, 찍기나 자르기가 실패하거나, 결과가 PNG가 아니면 failed이고 파일이 없다", async () => {
   deck("q2");
+  const before = leftovers(); // 다른 실행이 남긴 폴더가 있어도 이 시험이 늘린 개수만 본다
   fake([]);
   C.backend.find = () => null;
   expect(await C.captureImage(job("q2", "00000011"))).toBe("failed");
@@ -84,7 +86,16 @@ test("실패: Chrome이 없거나, 찍기나 자르기가 실패하거나, 결�
   C.backend.crop = (async ({ dst }) => { writeFileSync(dst, "not png"); return true; }) as typeof C.backend.crop;
   expect(await C.captureImage(job("q2", "00000013"))).toBe("failed");
   expect(existsSync(join(dir, "q2", ".comments"))).toBe(false);
-  expect(readdirSync(tmpdir()).filter((f) => f.startsWith("sk-capture-")).length).toBe(0); // 임시 폴더를 남기지 않는다
+  expect(leftovers()).toBe(before); // 임시 폴더를 남기지 않는다
+});
+test("시작 청소: 오래된 sk-capture-* 임시 폴더만 지운다", () => {
+  const old = mkdtempSync(join(tmpdir(), "sk-capture-")), fresh = mkdtempSync(join(tmpdir(), "sk-capture-"));
+  const t = new Date(Date.now() - 30 * 60_000);
+  utimesSync(old, t, t);
+  expect(C.sweepStaleTemp()).toBeGreaterThanOrEqual(1);
+  expect(existsSync(old)).toBe(false);
+  expect(existsSync(fresh)).toBe(true);
+  rmSync(fresh, { recursive: true, force: true });
 });
 test("한도: 큐가 차면(대기 10개) 바로 failed, 취소한 작업은 건너뛴다", async () => {
   deck("q3");

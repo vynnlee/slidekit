@@ -140,6 +140,35 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   const tileL = (await menuLabels()).join('|');
   check('필름스트립 타일 메뉴', /Present from here/.test(tileL) && /Add slide before/.test(tileL) && /Move to start/.test(tileL) && /Move to end/.test(tileL) && /Delete/.test(tileL), tileL);
   await page.keyboard.press('Escape'); await settle();
+  // 필름스트립 타일 우클릭 회귀: 섬네일 한가운데를 실제 마우스로(누르고 있다 뗌) 우클릭해도 메뉴가 뜨고 닫히지 않는다. 여러 상태에서 본다.
+  const tileRight = async (i, hold = 120) => {
+    const b = await page.getByRole('option', { name: `Slide ${i}`, exact: true }).boundingBox();
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2); await page.mouse.down({ button: 'right' }); await sleep(hold); await page.mouse.up({ button: 'right' }); await sleep(400);
+    return page.getByRole('menuitem').allTextContents();
+  };
+  const hasTile = (l) => l.some((x) => /^Delete/.test(x)) && l.some((x) => /^Duplicate/.test(x));
+  const variants = [
+    ['선택 슬라이드가 아닌 타일', async () => {}, 5],
+    ['선택된 슬라이드의 타일', async () => {}, 5],
+    ['요소를 선택한 상태', async () => { await focusBody(); await page.keyboard.press('Tab'); await settle(); }, 3],
+    ['Animation 탭이 열린 상태', async () => { await page.getByRole('tab', { name: 'Animation' }).click(); await settle(); }, 4],
+    ['코멘트 모드', async () => { await focusBody(); await page.keyboard.press('Shift+C'); await settle(); }, 2],
+  ];
+  for (const [name, setup, i] of variants) {
+    await setup();
+    const l = await tileRight(i);
+    check('타일 한가운데 우클릭 메뉴(' + name + ')', hasTile(l), l);
+    await page.keyboard.press('Escape'); await settle();
+  }
+  await focusBody(); await page.keyboard.press('Shift+C'); await settle(); await page.getByRole('tab', { name: 'Notes' }).click(); await settle();
+  // 삭제: 메뉴의 Delete가 동작하고 Undo로 돌아온다
+  const tilesBefore = await page.getByRole('option').count();
+  const l1 = await tileRight(3);
+  check('타일 메뉴에 Duplicate와 Delete(휴지통 표기)가 있음', hasTile(l1), l1);
+  await page.getByRole('menuitem', { name: /^Delete/ }).click(); await settle();
+  check('타일 메뉴 Delete가 슬라이드를 지움', (await page.getByRole('option').count()) === tilesBefore - 1);
+  await focusBody(); await page.keyboard.press('Meta+z'); await settle();
+  check('타일 삭제는 실행 취소로 돌아옴', (await page.getByRole('option').count()) === tilesBefore);
 
   // 글 상자와 목록 넣기: 팔레트에서 넣으면 바로 편집이 시작되고, 항목은 Cmd+D로 늘린다
   const palRun = async (q) => { await focusBody(); await page.keyboard.press('Meta+k'); await settle(); await page.keyboard.type(q); await settle(); await page.keyboard.press('Enter'); await settle(); };

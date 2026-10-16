@@ -308,7 +308,7 @@
           if (m.mode === 'black' || m.mode === 'white') setBlank(m.mode); else if (m.mode === 'off' || m.mode === null) setBlank(null);
         }
         else if (m.type === 'hello') {
-          bc.postMessage({ v: 1, type: 'state', from: me, slide: cur + 1, step: step });
+          bc.postMessage({ v: 1, type: 'state', from: me, slide: cur + 1, step: step, re: m.n });
           if (blankMode) bc.postMessage({ v: 1, type: 'blank', from: me, mode: blankMode });
         }
       };

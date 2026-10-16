@@ -79,7 +79,7 @@ export function Presenter({ id }: { id: string }) {
   // 시간은 밀리초로 쌓고 틱마다 Date.now() 차이를 더한다(백그라운드 탭에서 틱이 늦어도 정확하다).
   const dwell = useRef<Record<number, number>>({});
   // 발표 창 생존 확인: 1초마다 hello를 보내고, 발표 창(role이 presenter가 아닌 쪽)의 답이 3.5초 안에 있으면 열려 있다고 본다.
-  const peerAt = useRef(0), everSeen = useRef(false), hb = useRef<{ key: string; t: number } | null>(null), movedFrom = useRef<{ key: string; t: number } | null>(null), wasOpen = useRef<boolean | null>(null);
+  const peerAt = useRef(0), everSeen = useRef(false), hb = useRef<{ key: string; t: number } | null>(null), moveSeq = useRef(0), helloSeq = useRef(0), helloAt = useRef(new Map<number, number>()), movedFrom = useRef<{ key: string; t: number } | null>(null), wasOpen = useRef<boolean | null>(null);
   const accMs = useRef(0), lastTick = useRef(Date.now()), resetArmed = useRef(0);
   const [blank, setBlank] = useState<"black" | "white" | null>(null); // 발표 창이 B 또는 W로 가려진 상태(엔진이 알려 줄 때만)
   const [screens, setScreens] = useState<string[] | null>(listScreens);
@@ -166,13 +166,15 @@ export function Presenter({ id }: { id: string }) {
   const post = (f: HTMLIFrameElement | null, msg: object) =>
     f?.contentWindow?.postMessage({ source: "slidekit", v: 1, ...msg }, location.origin);
   // 키나 리모컨으로 직접 움직였다: 떠나온 위치를 잠깐 기억해, 발표 창이 그 위치를 뒤늦게 알려 와도(하트비트 답, 새로 열린 창의 첫 상태, 우리가 보낸 상태의 메아리) 되돌아가지 않는다. 부하로 iframe 왕복이 늦어 위치(posRef)가 갱신되기 전에 오는 낡은 보고가 한 칸 되돌리던 경쟁이다.
-  const localMove = () => { movedFrom.current = { key: `${posRef.current.slide}:${posRef.current.step}`, t: Date.now() }; };
+  const localMove = () => { moveSeq.current++; movedFrom.current = { key: `${posRef.current.slide}:${posRef.current.step}`, t: Date.now() }; };
   const send = (msg: object) => chan.current?.postMessage({ v: 1, from: me.current, role: "presenter", ...msg });
   const total = info?.slides.length ?? 0;
   const goto = useCallback((slide: number, step = 1) => {
     if (ready.current) post(curRef.current, { type: "goto", slide, step });
     else pending.current = { slide, step };
   }, []);
+  // 사용자가 직접 고른 이동(목록, 팔레트, 리모컨 goto)도 localMove로 센다.
+  const jump = (n: number) => { localMove(); goto(n); };
 
   // BroadcastChannel: 발표 화면 창과 위치를 맞춘다.
   useEffect(() => {
@@ -186,6 +188,8 @@ export function Presenter({ id }: { id: string }) {
       if (m.type === "blank") { setBlank(m.mode === "black" || m.mode === "white" ? m.mode : null); return; }
       if (startFrom.current && !ready.current) return;
       if (m.type === "state") {
+        // 번호 달린 하트비트 답(re): 그 hello를 보낸 뒤 우리가 움직였으면 낡은 위치이니 시간과 상관없이 따르지 않는다. re가 없는 옛 창은 아래 시간 창이 맡는다.
+        if (typeof m.re === "number" && helloAt.current.get(m.re) !== undefined && helloAt.current.get(m.re) !== moveSeq.current) return;
         const mf = movedFrom.current;
         if (mf && Date.now() - mf.t < 1000 && mf.key === `${m.slide}:${m.step}`) return;
         // 하트비트 hello에 대한 답인데 그 사이 우리가 움직였으면 낡은 위치이니 따르지 않는다.
@@ -194,8 +198,9 @@ export function Presenter({ id }: { id: string }) {
         lastKey.current = `${m.slide}:${m.step}`; goto(m.slide, m.step); }
       else if (m.type === "hello") send({ type: "state", ...posRef.current });
     };
-    send({ type: "hello" });
-    const beat = setInterval(() => { hb.current = { key: `${posRef.current.slide}:${posRef.current.step}`, t: Date.now() }; send({ type: "hello" }); }, HEARTBEAT_MS);
+    const hello = () => { const n = ++helloSeq.current; helloAt.current.set(n, moveSeq.current); helloAt.current.delete(n - 8); send({ type: "hello", n }); };
+    hello();
+    const beat = setInterval(() => { hb.current = { key: `${posRef.current.slide}:${posRef.current.step}`, t: Date.now() }; hello(); }, HEARTBEAT_MS);
     return () => { clearInterval(beat); ch.close(); chan.current = null; };
   }, [deck, goto]);
 
@@ -296,7 +301,7 @@ export function Presenter({ id }: { id: string }) {
   const [remoteOpen, setRemoteOpen] = useState(false);
   const runCmd = (c: Cmd) => {
     if (c.type === "next" || c.type === "prev") { localMove(); post(curRef.current, { type: c.type }); }
-    else if (c.type === "goto") goto(Math.min(Math.max(1, c.n), Math.max(1, total)));
+    else if (c.type === "goto") jump(Math.min(Math.max(1, c.n), Math.max(1, total)));
     else if (c.type === "timer") { if (c.action === "toggle") setRunning((r) => !r); else { setRunning(false); setElapsed(0); accMs.current = 0; dwell.current = {}; } }
     else send({ type: "setblank", mode: c.mode });
   };
@@ -322,8 +327,8 @@ export function Presenter({ id }: { id: string }) {
     send({ type: "setblank", mode });
   };
   const paletteItems: CommandMenuItemData[] = !info ? [] : [
-    ...info.slides.map((s): CommandMenuItemData => ({ value: `slide:${s.n}`, label: `${s.n}. ${s.title ?? s.kind.charAt(0).toUpperCase() + s.kind.slice(1)}`, description: s.chapter > 0 ? info.chapters[s.chapter - 1]?.title : undefined, group: "Slides", keywords: [s.notes.slice(0, 400), String(s.n)], onSelect: () => goto(s.n) })),
-    ...info.chapters.map((c): CommandMenuItemData => ({ value: `chapter:${c.n}`, label: c.title, description: "Chapter", group: "Chapters", onSelect: () => goto(c.n) })),
+    ...info.slides.map((s): CommandMenuItemData => ({ value: `slide:${s.n}`, label: `${s.n}. ${s.title ?? s.kind.charAt(0).toUpperCase() + s.kind.slice(1)}`, description: s.chapter > 0 ? info.chapters[s.chapter - 1]?.title : undefined, group: "Slides", keywords: [s.notes.slice(0, 400), String(s.n)], onSelect: () => jump(s.n) })),
+    ...info.chapters.map((c): CommandMenuItemData => ({ value: `chapter:${c.n}`, label: c.title, description: "Chapter", group: "Chapters", onSelect: () => jump(c.n) })),
     { value: "act-present", label: win ? "Focus presentation window" : "Present", group: "Actions", onSelect: present },
     { value: "act-remote", label: "Phone remote", description: "Use your phone as a remote", group: "Actions", onSelect: () => setRemoteOpen(true) },
     { value: "act-timer", label: running ? "Pause timer" : "Start timer", group: "Timer", shortcut: "t", onSelect: () => setRunning((r) => !r) },
@@ -408,7 +413,7 @@ export function Presenter({ id }: { id: string }) {
               <SidebarMenu>
                 {info.chapters.map((c, i) => (
                   <SidebarMenuItem key={c.n}>
-                    <SidebarMenuButton isActive={i + 1 === chapterNo} aria-current={i + 1 === chapterNo ? "step" : undefined} onClick={() => goto(c.n)}>{c.title}</SidebarMenuButton>
+                    <SidebarMenuButton isActive={i + 1 === chapterNo} aria-current={i + 1 === chapterNo ? "step" : undefined} onClick={() => jump(c.n)}>{c.title}</SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
               </SidebarMenu>
@@ -417,7 +422,7 @@ export function Presenter({ id }: { id: string }) {
               <SidebarMenu>
                 {info.slides.map((s) => (
                   <SidebarMenuItem key={s.n}>
-                    <SidebarMenuButton isActive={s.n === pos.slide} onClick={() => goto(s.n)}>{`${s.n}  ${s.title ?? s.kind}`}</SidebarMenuButton>
+                    <SidebarMenuButton isActive={s.n === pos.slide} onClick={() => jump(s.n)}>{`${s.n}  ${s.title ?? s.kind}`}</SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
               </SidebarMenu>

@@ -125,6 +125,28 @@ const MOCKS = {
       }, { id: ID, c1 });
       await sleep(1500);
       check(`[${name}] 이동 직후 도착한 옛 위치 보고는 따르지 않는다`, (await counter()) === `${c1 + 1} / ${TOTAL}`, await counter());
+      // 결정적(느림에 의존하지 않음): 번호 n짜리 hello를 보낸 뒤 이동했다면, 시간 창이 지난 뒤에 도착한 re:n 답은 옛 위치라 따르지 않는다. 그 뒤의 hello 번호(새 답)는 따른다.
+      const c2 = Number((await counter()).split(' / ')[0]);
+      const helloN = await page.evaluate(({ id }) => new Promise((res) => {
+        const bc = new BroadcastChannel(`slidekit:${id}`);
+        bc.onmessage = (e) => { const m = e.data; if (m && m.type === 'hello' && m.role === 'presenter' && typeof m.n === 'number') { bc.close(); res(m.n); } };
+        setTimeout(() => { bc.close(); res(null); }, 3000);
+      }), { id: ID });
+      check(`[${name}] 하트비트 hello에 번호 n이 붙는다`, typeof helloN === 'number', helloN);
+      // 단계가 있는 장에서는 다음(ArrowRight)이 장 번호를 안 바꾸므로 이전(ArrowLeft)으로 장 번호가 바뀌게 한다
+      await page.evaluate(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })));
+      const movedOk = await until(async () => (await counter()) === `${c2 - 1} / ${TOTAL}`);
+      await sleep(2200); // 이동 후 1초, 하트비트 후 0.8초 창을 모두 넘긴다
+      // 같은 채널을 듣는 실제 발표 창도 이 메시지를 받으므로, 다음 하트비트 직후(발표 창의 다음 답이 1초 뒤)에 넣고 곧바로 본다.
+      await page.evaluate(({ id, c2, n }) => new Promise((res) => {
+        const bc = new BroadcastChannel(`slidekit:${id}`);
+        bc.onmessage = (e) => { const m = e.data; if (m && m.type === 'hello' && m.role === 'presenter') { bc.postMessage({ v: 1, from: 'e2e-late', role: 'audience', type: 'state', slide: c2, step: 1, re: n }); setTimeout(() => { bc.close(); res(); }, 100); } };
+        setTimeout(() => { bc.close(); res(); }, 3000);
+      }), { id: ID, c2, n: helloN });
+      await sleep(300);
+      check(`[${name}] 이동 전 hello(re:n)에 대한 늦은 답은 시간이 지나도 따르지 않는다`, movedOk && (await counter()) === `${c2 - 1} / ${TOTAL}`, [movedOk, await counter()]);
+      await page.evaluate(({ id, c2 }) => { const bc = new BroadcastChannel(`slidekit:${id}`); bc.postMessage({ v: 1, from: 'e2e-plain', role: 'audience', type: 'state', slide: c2 + 3, step: 1 }); setTimeout(() => bc.close(), 500); }, { id: ID, c2 });
+      check(`[${name}] re가 없는 보고는 지금처럼 따른다(옛 창 호환)`, await until(async () => (await counter()) === `${c2 + 3} / ${TOTAL}`), await counter());
     }
     await pop.close();
     check(`[${name}] 발표 창 닫힘 표시`, await until(async () => (await page.getByText('Presentation window closed').count()) === 1, 5000)); // 하트비트 유예(1.6초)를 포함

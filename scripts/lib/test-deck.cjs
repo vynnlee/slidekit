@@ -31,10 +31,15 @@ function makeTestDeck(name, from = 'vibe-coding-workshop', opts = {}) {
   const id = `e2e-${name}`;
   const dir = path.join(decks, folder);
   fs.rmSync(dir, { recursive: true, force: true });
-  fs.cpSync(path.join(decks, from), dir, { recursive: true });
+  if (fs.existsSync(path.join(decks, from))) fs.cpSync(path.join(decks, from), dir, { recursive: true });
+  else { // 작업트리에서 사라진 덱(사용자가 휴지통으로 옮김)은 커밋된 내용에서 꺼낸다
+    const root = path.join(__dirname, '..', '..'), tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'td-'));
+    execFileSync('sh', ['-c', `git archive HEAD decks/${from} | tar -x -C "${tmp}"`], { cwd: root });
+    fs.cpSync(path.join(tmp, 'decks', from), dir, { recursive: true }); fs.rmSync(tmp, { recursive: true, force: true });
+  }
   fs.rmSync(path.join(dir, 'comments.json'), { force: true });
   const file = path.join(dir, 'index.html');
-  const html = committedHtml(from, fs.readFileSync(file, 'utf8'));
+  const html = committedHtml(from, fs.readFileSync(file, 'utf8')); /* 사본 index.html은 커밋된 내용이다 */
   // 원본 id(없으면 폴더 이름)를 사본 id로 바꾼다. 편집기 라우트가 메타 id로 덱을 연다.
   const m = html.match(/"id"\s*:\s*"([^"]+)"/);
   let out = m ? html.replace(m[0], `"id": "${id}"`) : html.replace(/(<script[^>]*id="deck-meta"[^>]*>\s*\{)/, `$1 "id": "${id}",`);

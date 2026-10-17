@@ -1,5 +1,13 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { buildDeck } from "../templates";
+
+// 실제 덱(사용자가 고치거나 옮길 수 있다)이 아니라 템플릿으로 만든 덱 하나를 쓴다.
+const FIX = "_cli-fixture", fixDir = join(import.meta.dir, "..", "..", "decks", FIX);
+mkdirSync(fixDir, { recursive: true });
+writeFileSync(join(fixDir, "index.html"), buildDeck("talk", { title: "샘플", date: "2026-10-15", author: "작성자", id: "cli-fixture" }));
+process.on("exit", () => rmSync(fixDir, { recursive: true, force: true }));
 
 const run = (...args: string[]) => {
   const r = Bun.spawnSync(["bun", join(import.meta.dir, "..", "..", "app", "server.ts"), ...args], { stdout: "pipe", stderr: "pipe" });
@@ -44,7 +52,7 @@ test("new: author는 placeholder 문구 없이 git 사용자 이름이나 빈 �
 });
 
 test("lint는 출력과 종료 코드를 낸다(조용한 종료 회귀 방지)", () => {
-  const ok = run("lint", "slidekit-guide");
+  const ok = run("lint", FIX);
   expect(ok.code).toBe(0);
   expect(ok.out).toContain("통과");
   const missing = run("lint", "no-such-deck-xyz");
@@ -54,7 +62,7 @@ test("lint는 출력과 종료 코드를 낸다(조용한 종료 회귀 방지)"
 test("앱 코드가 engine/lint를 먼저 import해 둔 프로세스에서도 lint 명령이 돈다", () => {
   const root = join(import.meta.dir, "..", "..");
   // 서버 모듈 그래프가 lint.ts를 정적으로 import하는 상황을 흉내 낸다: 먼저 import한 뒤 CLI 진입점을 연다.
-  const r = Bun.spawnSync(["bun", "-e", `await import("./engine/lint.ts"); process.argv[2] = "slidekit-guide"; await import("./engine/lint-cli.ts");`], { cwd: root, stdout: "pipe", stderr: "pipe" });
+  const r = Bun.spawnSync(["bun", "-e", `await import("./engine/lint.ts"); process.argv[2] = "${FIX}"; await import("./engine/lint-cli.ts");`], { cwd: root, stdout: "pipe", stderr: "pipe" });
   expect(r.stdout.toString()).toContain("통과");
   expect(r.exitCode).toBe(0);
 });
@@ -91,10 +99,10 @@ test("templates: 목록을 사람 글과 JSON으로 낸다", () => {
 });
 
 test("pdf 옵션 오류: --notes와 --handout 동시, 쪽당 장 수는 2, 3, 4, 6만(브라우저를 띄우기 전에 거부)", () => {
-  const both = run("pdf", "slidekit-guide", "--notes", "--handout");
+  const both = run("pdf", FIX, "--notes", "--handout");
   expect(both.code).toBe(1);
   expect(both.err).toContain("함께 쓸 수 없다");
-  const bad = run("pdf", "slidekit-guide", "--handout", "5");
+  const bad = run("pdf", FIX, "--handout", "5");
   expect(bad.code).toBe(1);
   expect(bad.err).toContain("2, 3, 4, 6");
   expect(run("pdf").err).toContain("--notes");
@@ -126,9 +134,9 @@ test("image: 덱 assets/에 저장하고 상대 경로를 출력, 잘못된 입�
 });
 
 test("doctor <덱>: 덱 점검 요약과 종료 코드, 없는 덱은 목록과 종료 코드 1", () => {
-  const ok = run("doctor", "slidekit-guide");
+  const ok = run("doctor", FIX);
   expect(ok.code).toBe(0);
-  expect(ok.out).toContain("덱 slidekit-guide");
+  expect(ok.out).toContain(`덱 ${FIX}`);
   for (const k of ["lint", "크기", "이미지", "노트", "대비"]) expect(ok.out).toContain(k);
   const no = run("doctor", "no-such-deck-xyz");
   expect(no.code).toBe(1);
@@ -136,11 +144,11 @@ test("doctor <덱>: 덱 점검 요약과 종료 코드, 없는 덱은 목록과 
 });
 
 test("outline: 덱을 Markdown으로 출력하고 노트는 --notes일 때만, 없는 덱과 인자 없음은 안내", () => {
-  const plain = run("outline", "slidekit-guide");
+  const plain = run("outline", FIX);
   expect(plain.code).toBe(0);
   expect(plain.out.startsWith("# ")).toBe(true);
   expect(plain.out).not.toContain("Notes:");
-  expect(run("outline", "slidekit-guide", "--notes").out).toContain("> Notes:");
+  expect(run("outline", FIX, "--notes").out).toContain("> Notes:");
   expect(run("outline", "no-such-deck-xyz").err).toContain("없는 덱: decks/no-such-deck-xyz");
   expect(run("outline").err).toContain("사용법: slidekit outline");
 });

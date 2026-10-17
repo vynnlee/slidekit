@@ -17,19 +17,22 @@ let fail = 0; const check = (n, ok, x) => { if (!ok) fail++; console.log((ok ? '
 const rng = (seed) => () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /* 짧은 시간 토큰으로 시험을 빠르게 한다(전환 로직은 같다). 요소는 다양하게: 등장만, 퇴장만, 둘 다, 지연, 별칭, 변수 */
-const mk = (n) => {
+const SPARSE = { 2: 5, 3: 9, 4: 12, 5: 40 }; /* 번호가 건너뛰는 변형: 쓰인 번호의 순위가 클릭이다(ANIMATION.md 3.7) */
+const mk = (n, sparse) => {
   const els = [
     '<p data-step="2" class="e">in2</p>', '<p data-step-out="3" class="e">out3</p>', '<p data-step="2" data-step-out="4" class="e">in2out4</p>',
     '<p data-step="3" style="--sk-step-delay:60ms" class="e">in3delay</p>', '<p data-step="2" data-step-effect="left" class="e">left</p>',
     '<p data-step="3" data-step-out="5" style="--sk-away-x:80px;--sk-away-scale:.6" class="e">vars</p>', '<p data-step="2" data-step-effect="none" class="e">none</p>',
     '<p data-step="4" data-step-effect="blur" class="e">blur</p>', '<div data-step="2" class="e"><span style="visibility:visible">inner visible</span></div>',
   ];
-  return `<section data-slide="content"><h2>s${n}</h2>${els.slice(0, 3 + (n % 7)).join('')}</section>`;
+  const body = els.slice(0, 3 + (n % 7)).join('');
+  return `<section data-slide="content"><h2>s${n}</h2>${sparse ? body.replace(/data-step(-out)?="(\d+)"/g, (m, o, v) => `data-step${o || ''}="${SPARSE[v]}"`) : body}</section>`;
 };
-const html = `<!doctype html><html lang="en" data-slidekit="1"><head><meta charset="utf-8"><title>as</title>
+const page = (sparse) => `<!doctype html><html lang="en" data-slidekit="1"><head><meta charset="utf-8"><title>as</title>
 <script type="application/json" id="deck-meta">{ "title": "as", "id": "anim-stress" }</script><link rel="stylesheet" href="../../engine/slidekit.css">
-<style>:root { --sk-step-ms: 50ms; }</style></head><body>${Array.from({ length: 12 }, (_, i) => (i === 0 ? '<section data-slide="cover"><h1>c</h1></section>' : mk(i))).join('')}
+<style>:root { --sk-step-ms: 50ms; }</style></head><body>${Array.from({ length: 12 }, (_, i) => (i === 0 ? '<section data-slide="cover"><h1>c</h1></section>' : mk(i, sparse))).join('')}
 <script src="../../engine/slidekit.js"></script></body></html>`;
+const html = page(false), htmlGappy = page(true);
 
 const invariants = (p) => p.evaluate(() => {
   const bad = [], stage = document.getElementById('sk-stage');
@@ -43,8 +46,11 @@ const invariants = (p) => p.evaluate(() => {
   }
   const live = (document.getElementById('sk-live') || {}).textContent || '', m = live.match(/(?:단계|step) (\d+) \/ (\d+)/);
   const k = m ? Number(m[1]) : 1;
+  const used = new Set();
+  if (act) for (const e of act.querySelectorAll('[data-step],[data-step-out]')) { for (const a of ['data-step', 'data-step-out']) { const v = Number(e.getAttribute(a)); if (v >= 2) used.add(v); } }
+  const order = [...used].sort((x, y) => x - y), rank = (v) => (v >= 2 ? order.indexOf(v) + 2 : 1); /* 쓰인 번호의 순위가 단계 */
   if (act) for (const e of act.querySelectorAll('[data-step],[data-step-out]')) {
-    const n = Number(e.getAttribute('data-step') || 1), o = e.hasAttribute('data-step-out') ? Number(e.getAttribute('data-step-out')) : Infinity;
+    const n = rank(Number(e.getAttribute('data-step') || 1)), o = e.hasAttribute('data-step-out') ? rank(Number(e.getAttribute('data-step-out'))) : Infinity;
     const want = k >= n && k < o, got = shown(e) && Number(getComputedStyle(e).opacity) > 0.99;
     if (want !== got) bad.push(`step ${k}: "${e.textContent.slice(0, 12)}" want ${want} got ${got}`);
   }
@@ -60,11 +66,11 @@ const settle = (p) => p.waitForFunction(() => document.getAnimations().length ==
   const b = await launch();
   try {
     fs.rmSync(DIR, { recursive: true, force: true }); fs.mkdirSync(DIR, { recursive: true });
-    fs.writeFileSync(path.join(DIR, 'index.html'), html);
-    const file = 'file://' + path.join(DIR, 'index.html');
+    fs.writeFileSync(path.join(DIR, 'index.html'), html); fs.writeFileSync(path.join(DIR, 'gappy.html'), htmlGappy);
+    const VARIANTS = [['', 'file://' + path.join(DIR, 'index.html')], ['gappy ', 'file://' + path.join(DIR, 'gappy.html')]];
     const RATES = (process.env.ANIM_RATES || '1,4,8').split(',').map(Number), SEEDS = (process.env.ANIM_SEEDS || '1,2,3').split(',').map(Number), REPEAT = Number(process.env.ANIM_REPEAT || 1);
     if (!process.env.ANIM_ONLY_COMPAT) for (const rate of RATES) {
-      for (const seed of (rate === 1 ? SEEDS : [SEEDS[0]]).flatMap((x) => Array(REPEAT).fill(x))) {
+      for (const [variant, file] of VARIANTS) for (const seed of (variant ? (rate === 8 ? [] : [SEEDS[0]]) : rate === 1 ? SEEDS : [SEEDS[0]]).flatMap((x) => Array(REPEAT).fill(x))) {
         const ctx = await b.newContext({ viewport: { width: 1280, height: 720 } });
         const a = await ctx.newPage(), v = await ctx.newPage(), errs = [];
         a.on('pageerror', (e) => errs.push(String(e))); v.on('pageerror', (e) => errs.push(String(e)));
@@ -99,12 +105,12 @@ const settle = (p) => p.waitForFunction(() => document.getAnimations().length ==
           }
           if (!runs.length) console.log(`INFO 트레이스 rate=${rate} seed=${seed}: 50ms 넘는 작업 없음(긴 작업 ${long.length}건 보고)`);
         }
-        check(`퍼즈 rate=${rate} seed=${seed} (${n}회 이동, 연타와 청중 동기화 포함): 불변식 위반 0`, bad.length === 0 && errs.length === 0, { bad, errs, seed, rate, moves: log.length, last12: log.slice(-12), all: bad.length || errs.length ? log.join(',') : undefined });
+        check(`${variant}퍼즈 rate=${rate} seed=${seed} (${n}회 이동, 연타와 청중 동기화 포함): 불변식 위반 0`, bad.length === 0 && errs.length === 0, { bad, errs, seed, rate, moves: log.length, last12: log.slice(-12), all: bad.length || errs.length ? log.join(',') : undefined });
         if (rate === 1) console.log(`INFO 긴 작업(>50ms) rate=1 seed=${seed}: ${long.length}건${long.length ? ' ' + JSON.stringify(long.slice(0, 8)) : ''} (정보만: 환경 잡음과 섞이는 값이라 단언하지 않는다. 같은 시드를 ANIM_REPEAT로 되풀이하고 ANIM_TRACE로 원인을 가른다)`);
         /* 누수: 처음 상태로 돌아가 정리한 뒤 노드와 리스너 수 */
         await a.evaluate(() => { location.hash = '#1'; }); await settle(a); await settle(v);
         const after = await counters();
-        if (seed === 1) check(`누수 없음 rate=${rate}: DOM 노드 ${before.nodes}->${after.nodes}, 리스너 ${before.jsEventListeners}->${after.jsEventListeners}`, after.nodes === before.nodes && after.jsEventListeners <= before.jsEventListeners, { before, after });
+        if (seed === 1) check(`${variant}누수 없음 rate=${rate}: DOM 노드 ${before.nodes}->${after.nodes}, 리스너 ${before.jsEventListeners}->${after.jsEventListeners}`, after.nodes === before.nodes && after.jsEventListeners <= before.jsEventListeners, { before, after });
         await ctx.close();
       }
     }
@@ -134,8 +140,13 @@ const settle = (p) => p.waitForFunction(() => document.getAnimations().length ==
       if (!okOld) console.log('SKIP 호환 비교(기준 엔진 ' + BASE_REV + '을 git에서 못 읽음)');
       else for (const name of ['vibe-coding-workshop', 'slidekit-guide']) {
         const src = path.join(ROOT, 'decks', name, 'index.html');
-        if (!fs.existsSync(src)) continue;
-        fs.mkdirSync(path.join(OLD, 'decks', name), { recursive: true }); fs.copyFileSync(src, path.join(OLD, 'decks', name, 'index.html'));
+        fs.mkdirSync(path.join(OLD, 'decks', name), { recursive: true });
+        /* 시험은 사용자의 커밋 안 된 편집에 기대지 않는다: 두 엔진 모두 커밋된 내용(HEAD)을 읽는다. git에서 못 읽을 때만 작업트리 파일을 쓴다 */
+        let from = src;
+        const g = cp.spawnSync('git', ['show', `HEAD:decks/${name}/index.html`], { cwd: ROOT, encoding: 'utf8', maxBuffer: 1 << 28 });
+        if (g.status === 0) { from = path.join(DECKROOT, 'decks', '_anim-compat-' + name, 'index.html'); fs.mkdirSync(path.dirname(from), { recursive: true }); fs.writeFileSync(from, g.stdout); } /* 엔진은 상대 경로로 새 엔진을 읽는다 */
+        else if (!fs.existsSync(src)) continue;
+        fs.copyFileSync(from, path.join(OLD, 'decks', name, 'index.html'));
         const walk = async (url) => {
           const ctx = await b.newContext({ viewport: { width: 1600, height: 900 } }); await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
           const p = await ctx.newPage();
@@ -176,7 +187,7 @@ const settle = (p) => p.waitForFunction(() => document.getAnimations().length ==
           await ctx.close(); return { out, total, withSteps, declarative, custom, points };
         };
         const oldW = await walk('file://' + path.join(OLD, 'decks', name, 'index.html'));
-        const newW = await walk('file://' + src);
+        const newW = await walk('file://' + from);
         const diff = oldW.out.findIndex((x, i) => x !== newW.out[i]);
         console.log(`INFO 호환 표 ${name}: 슬라이드 ${oldW.total}장, 단계 있는 장 ${oldW.withSteps}(선언형 ${oldW.declarative}, 직접 만든 stepper ${oldW.custom}), 비교 지점 ${oldW.out.length}개(이동 ${oldW.points}회)`);
         check(`호환: ${name}의 모든 슬라이드에서 점프, 앞으로, 뒤로, 다시 점프 뒤 해시, 안내 문장(단계 수와 활성 단계), 선언형 상태, 직접 만든 stepper 호출 로그가 이전 엔진(${BASE_REV})과 같다`,
@@ -185,6 +196,7 @@ const settle = (p) => p.waitForFunction(() => document.getAnimations().length ==
     }
   } finally {
     await b.close(); fs.rmSync(DIR, { recursive: true, force: true }); fs.rmSync(OLD, { recursive: true, force: true });
+    for (const n of ['vibe-coding-workshop', 'slidekit-guide']) fs.rmSync(path.join(DECKROOT, 'decks', '_anim-compat-' + n), { recursive: true, force: true });
   }
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); fs.rmSync(DIR, { recursive: true, force: true }); process.exit(2); });

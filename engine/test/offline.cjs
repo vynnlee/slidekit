@@ -37,7 +37,8 @@ const external = (h) => [...h.matchAll(/\b(?:src|href|poster)=["'](https?:\/\/[^
     fs.mkdirSync(D1, { recursive: true }); fs.mkdirSync(D2, { recursive: true }); fs.mkdirSync(D3, { recursive: true });
     fs.writeFileSync(path.join(D3, 'index.html'), html3);
     fs.writeFileSync(path.join(D1, 'pic.png'), PNG); fs.writeFileSync(path.join(D1, 'index.html'), html1); fs.writeFileSync(path.join(D2, 'index.html'), html2);
-    const guideHtml = path.join(ROOT, 'dist', 'slidekit-guide.html'), hadGuide = fs.existsSync(guideHtml);
+    const TG = require('../../scripts/lib/test-deck.cjs').makeTestDeck('offline-guide', 'slidekit-guide'); /* 커밋된 안내 덱의 사본 */
+    const guideHtml = path.join(ROOT, 'dist', TG.folder + '.html');
     check('번들 생성(외부 참조 없는 덱)', sh('bun app/server.ts bundle _off-test').status === 0);
     const out1 = path.join(ROOT, 'dist', '_off-test.html'), t1 = fs.readFileSync(out1, 'utf8');
     check('번들 결과에 http(s) 참조가 없다(src, href, poster, url())', external(t1).length === 0, external(t1));
@@ -45,7 +46,7 @@ const external = (h) => [...h.matchAll(/\b(?:src|href|poster)=["'](https?:\/\/[^
       const r = await open(out1, off);
       check(`번들을 ${name} 상태로: 외부 요청 0건, 화면이 뜨고 이미지가 그려짐, 페이지 오류 없음`, r.reqs.length === 0 && r.errors.length === 0 && r.info.slides === 2 && r.info.img === 1, r);
     }
-    check('번들 생성(slidekit-guide)', sh('bun app/server.ts bundle slidekit-guide').status === 0);
+    check('번들 생성(slidekit-guide)', sh('bun app/server.ts bundle ' + TG.folder).status === 0);
     const tg = fs.readFileSync(guideHtml, 'utf8');
     check('slidekit-guide 번들에 http(s) 참조가 없다', external(tg).length === 0, external(tg));
     const g = await open(guideHtml, true);
@@ -70,7 +71,7 @@ const external = (h) => [...h.matchAll(/\b(?:src|href|poster)=["'](https?:\/\/[^
     const slow = await timed(path.join(D3, 'index.html'));
     console.log(`INFO 번들하지 않은 외부 글꼴 덱: 외부 요청 ${slow.asked}건, 화면이 뜨기까지 ${slow.ms}ms${slow.ms > 4000 ? ' (head의 외부 stylesheet가 렌더를 막는다. 발표 전에 번들한다)' : ''}`);
     const pdf = sh('bun app/server.ts pdf _off-test'); check('PDF 생성(2페이지, 호스트 해석을 막은 Chrome)', pdf.status === 0 && /2페이지/.test(pdf.stdout), pdf.stdout + pdf.stderr);
-    if (!hadGuide) fs.rmSync(guideHtml, { force: true });
+    fs.rmSync(path.join(ROOT, 'dist', TG.folder + '.html'), { force: true }); TG.cleanup();
   } finally {
     await b.close();
     for (const d of [D1, D2, D3]) fs.rmSync(d, { recursive: true, force: true });

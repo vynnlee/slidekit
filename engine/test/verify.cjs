@@ -2,7 +2,9 @@
    Usage: PW=<path to playwright-core> CHROME=<headless shell> BASE=http://127.0.0.1:3150 node verify.cjs */
 const { launch, clock, tick } = require('../../scripts/lib/pw.cjs');
 const BASE = process.env.BASE || 'http://127.0.0.1:3150';
-const DECK = BASE + '/decks/vibe-coding-workshop/index.html';
+const { makeTestDeck } = require('../../scripts/lib/test-deck.cjs');
+const TD = makeTestDeck('engine-verify'); /* 커밋된 워크숍 덱의 사본: 사용자의 커밋 안 된 편집에 기대지 않는다 */
+const DECK = BASE + '/decks/' + TD.folder + '/index.html';
 const results = [];
 const check = (name, ok, extra) => { results.push([ok, name, extra]); console.log((ok ? 'PASS ' : 'FAIL ') + name + (ok || extra === undefined ? '' : '  ' + JSON.stringify(extra))); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -166,7 +168,7 @@ const settled = async (...ps) => { await Promise.all(ps.map(settledOne)); if (ps
   if (fs) await p.keyboard.press('f');
 
   /* embed */
-  await ctx.route('**/__host', (r) => r.fulfill({ contentType: 'text/html', body: '<iframe id="f" src="/decks/vibe-coding-workshop/index.html?embed=1" style="width:800px;height:450px"></iframe><script>window.log=[];addEventListener("message",e=>{if(e.source===document.getElementById("f").contentWindow)log.push(e.data)})</script>' }));
+  await ctx.route('**/__host', (r) => r.fulfill({ contentType: 'text/html', body: '<iframe id="f" src="/decks/' + TD.folder + '/index.html?embed=1" style="width:800px;height:450px"></iframe><script>window.log=[];addEventListener("message",e=>{if(e.source===document.getElementById("f").contentWindow)log.push(e.data)})</script>' }));
   const h = await ctx.newPage();
   await h.goto(BASE + '/__host'); await h.waitForFunction(() => log.some((m) => m.type === 'ready'), null, { timeout: 5000 }).catch(() => {});
   const send = (m) => h.evaluate((m) => document.getElementById('f').contentWindow.postMessage(Object.assign({ source: 'slidekit', v: 1 }, m), location.origin), m);
@@ -174,7 +176,7 @@ const settled = async (...ps) => { await Promise.all(ps.map(settledOne)); if (ps
   /* send, then wait for the next message of that type instead of a fixed sleep */
   const sendWait = async (m, type = 'state') => { const n = (await logOf(type)).length; await send(m); await h.waitForFunction(([t, k]) => log.filter((x) => x.type === t).length > k, [type, n], { timeout: 3000 }).catch(() => {}); };
   const ready = (await logOf('ready'))[0];
-  check('embed ready with info', !!ready && ready.info.slides.length === 53 && ready.info.chapters.length === 7 && ready.info.meta.id === 'vibe-coding-workshop' && ready.info.slides[2].chapter === 1 && ready.info.slides[0].title === null && ready.info.slides[tokIdx - 1].steps === 4, ready && ready.info.slides.slice(0, 3));
+  check('embed ready with info', !!ready && ready.info.slides.length === 53 && ready.info.chapters.length === 7 && ready.info.meta.id === TD.id && ready.info.slides[2].chapter === 1 && ready.info.slides[0].title === null && ready.info.slides[tokIdx - 1].steps === 4, ready && ready.info.slides.slice(0, 3));
   await sendWait({ type: 'goto', slide: 12, step: 1 });
   let st = (await logOf('state')).pop();
   check('embed goto -> state 12/1', st && st.slide === 12 && st.step === 1, st);
@@ -287,6 +289,11 @@ const settled = async (...ps) => { await Promise.all(ps.map(settledOne)); if (ps
     '<p id="a" data-step="2">a</p><p id="b" data-step-out="3">b</p><p id="c" data-step="2" data-step-out="4">c</p><p id="d" data-step="3" style="--sk-step-delay:300ms">d</p>' +
     '<p id="e" data-step="2" data-step-effect="left">e</p><p id="f" data-step="2" style="--sk-away-x:100px;--sk-away-y:0px;--sk-away-scale:.5">f</p><p id="g" data-step="2" data-step-effect="blur">g</p></section><section data-slide="content"><h2>three</h2></section>');
   page('anim50', '<section data-slide="content"><h2>x</h2>' + Array.from({ length: 50 }, (_, i) => '<p data-step="2">item ' + i + '</p>').join('') + '</section><section data-slide="content"><h2>y</h2></section>');
+  page('compress', '<section data-slide="content"><h2>one</h2></section><section data-slide="content"><h2>two</h2>' +
+    '<p id="p1" data-step="3">1</p><p id="p2" data-step="7">2</p><p id="p3" data-step="3" data-step-out="5">3</p><p id="p4" data-step-out="7">4</p></section><section data-slide="content"><h2>three</h2></section>');
+  page('outvars', '<section data-slide="content"><h2>one</h2></section><section data-slide="content"><h2>two</h2>' +
+    '<p id="x" data-step="2" data-step-out="3" style="--sk-step-ms:200ms;--sk-step-delay:50ms;--sk-out-ms:700ms;--sk-out-delay:120ms;--sk-out-x:80px;--sk-out-opacity:.3">x</p>' +
+    '<p id="y" data-step-out="3" style="--sk-step-ms:250ms">y</p><p id="z" data-step="2" style="--sk-step-ms:.6s">z</p><p id="w" data-step="2" style="--sk-step-ms:99s">w</p></section><section data-slide="content"><h2>three</h2></section>');
   page('dstep-more', '<section data-slide="content" data-steps="4"><p id="a" data-step="2">A</p></section><section data-slide="content"><h2>x</h2></section>');
   page('dstep-custom', '<section data-slide="content" id="c"><p id="a" data-step="2">A</p><p id="z" data-step="3">Z</p></section><section data-slide="content"><h2>x</h2></section>',
     `<script>window.log = []; var s = 1; SlideKit.stepper(document.getElementById('c'), { enter: function () { s = 1; }, next: function () { log.push('next'); if (s >= 3) return false; s++; return true; }, prev: function () { if (s <= 1) return false; s--; return true; }, get: function () { return s; }, goto: function (n) { s = n; } });</script>`);
@@ -495,9 +502,58 @@ const settled = async (...ps) => { await Promise.all(ps.map(settledOne)); if (ps
     const v = await q.evaluate(() => ['one', 'bad', 'two'].map((i) => getComputedStyle(document.getElementById(i)).visibility));
     check('data-step: 1 and invalid values are visible from the start, 2 waits', JSON.stringify(v) === '["visible","visible","hidden"]', v);
     await q.close(); }
+  /* v2: empty steps are compressed (the used numbers, in order, are the clicks), ANIMATION.md 3.7 */
+  { const e0 = errors.length; const m = await open(BASE + '/__t/compress?debug=1#2'); await settled(m);
+    const st = () => m.evaluate(() => ['p1', 'p2', 'p3', 'p4'].map((i) => getComputedStyle(document.getElementById(i)).visibility[0]).join('') + '|' + ['p1', 'p2', 'p3', 'p4'].map((i) => { const e = document.getElementById(i); return e.hasAttribute('data-shown') ? 's' : e.getAttribute('data-away') === 'out' ? 'o' : e.hasAttribute('data-away') ? 'a' : '-'; }).join('') + '|' + (document.getElementById('sk-debug') || {}).textContent.match(/step (\d+\/\d+)/)[1]);
+    const seen = [await st()];
+    let n = 0; while ((await hash(m)) === '#2' && n < 10) { await m.keyboard.press('ArrowRight'); await settled(m); n++; if ((await hash(m)) === '#2') seen.push(await st()); }
+    check('compress: numbers 3, 5, 7 are three clicks (4 steps) and then the next slide', n === 4, n);
+    check('compress: each click changes what is visible (no empty click), data-away is "" before the entrance and "out" after the exit',
+      JSON.stringify(seen) === JSON.stringify(['hhhv|aaas|1/4', 'vhvv|sass|2/4', 'vhhv|saos|3/4', 'vvhh|ssoo|4/4']), seen);
+    await m.keyboard.press('ArrowLeft'); await settled(m);
+    const back = await st();
+    check('compress: coming back from the next slide lands on the last click', back === 'vvhh|ssoo|4/4', back);
+    const ce = errors.slice(e0).filter((x) => !/deck-meta/.test(x));
+    check('compress: no page errors or warnings', ce.length === 0, ce);
+    await m.close(); }
+  /* v2: exit values, timing by event (2.4), and every step transition is a CSSTransition (3.10) */
+  { const m = await open(BASE + '/__t/outvars#2'); await settled(m);
+    const tm = (id) => m.evaluate((id) => { const e = document.getElementById(id); const all = e.getAnimations();
+      return { cls: all.every((a) => a instanceof CSSTransition), op: all.filter((a) => a.transitionProperty === 'opacity').map((a) => { const t = a.effect.getComputedTiming(); return [Math.round(t.duration), t.delay]; }), tf: all.filter((a) => a.transitionProperty === 'transform').length }; }, id);
+    const quiet = () => m.waitForFunction(() => document.getAnimations().length === 0, null, { timeout: 20000 }).then(() => sleep(100));
+    await m.keyboard.press('ArrowRight'); await sleep(40);
+    const enter = await tm('x');
+    const zRun = await m.evaluate(() => document.querySelector('#sk-stage > [data-active]').hasAttribute('data-step-run'));
+    await sleep(400);
+    const zRun2 = await m.evaluate(() => document.querySelector('#sk-stage > [data-active]').hasAttribute('data-step-run')); // z takes 600ms (".6s"): the layer hint is still on
+    await quiet();
+    check('outvars: forward entrance uses the In time and delay, and is a CSSTransition on opacity and transform', enter.cls && JSON.stringify(enter.op) === '[[200,50]]' && enter.tf === 1, enter);
+    check('outvars: a time in s units is read for the layer hint (".6s" keeps data-step-run past 400ms)', zRun && zRun2, [zRun, zRun2]);
+    await m.keyboard.press('ArrowRight'); await sleep(40);
+    const exit = await tm('x'), exitY = await tm('y');
+    await quiet();
+    const away = await m.evaluate(() => { const cs = (i) => getComputedStyle(document.getElementById(i)); return { x: cs('x').transform + '|' + cs('x').opacity + '|' + cs('x').visibility + '|' + document.getElementById('x').getAttribute('data-away'), y: cs('y').transform + '|' + cs('y').opacity + '|' + document.getElementById('y').getAttribute('data-away') }; });
+    check('outvars: forward exit uses the Out time and delay; without Out values it falls back to the In time (y: 250ms)', JSON.stringify(exit.op) === '[[700,120]]' && JSON.stringify(exitY.op) === '[[250,0]]' && exit.cls && exitY.cls, [exit, exitY]);
+    check('outvars: after the exit the Out look is used (x: 80px right, .3 opacity; y: default away look); data-away is "out"',
+      away.x === 'matrix(1, 0, 0, 1, 80, 20)|0.3|hidden|out' && away.y === 'matrix(1, 0, 0, 1, 0, 20)|0|out', away);
+    await m.keyboard.press('ArrowLeft'); await sleep(40);
+    const undoExit = await tm('x'); const run1 = await m.evaluate(() => document.querySelector('#sk-stage > [data-active]').getAttribute('data-step-run'));
+    await quiet();
+    await m.keyboard.press('ArrowLeft'); await sleep(40);
+    const undoIn = await tm('x');
+    await quiet();
+    check('outvars: undoing an exit takes the Out time without delay; undoing an entrance takes the In time without delay (data-step-run is "back")',
+      JSON.stringify(undoExit.op) === '[[700,0]]' && JSON.stringify(undoIn.op) === '[[200,0]]' && run1 === 'back', [undoExit, undoIn, run1]);
+    const clampd = await m.evaluate(() => getComputedStyle(document.getElementById('w')).transitionDuration);
+    check('outvars: a time over 10000ms is clamped to 10s', clampd.split(',')[0].trim() === '10s', clampd);
+    await m.close(); }
+  /* v2: a registered stepper marks the slide (the editor shows it read-only) */
+  { const c = await open(BASE + '/__t/dstep-custom#1'); await settled(c);
+    check('stepper: a registered slide gets data-stepper', await c.evaluate(() => document.getElementById('c').hasAttribute('data-stepper')) && !(await c.evaluate(() => document.querySelector('#sk-stage > section:not(#c)').hasAttribute('data-stepper'))));
+    await c.close(); }
   { const m = await ctx.newPage(); await m.goto(BASE + '/__t/dstep-more#1'); await m.waitForSelector('#sk-stage');
     let n = 0; while ((await hash(m)) === '#1' && n < 10) { await m.keyboard.press('ArrowRight'); await settled(m); n++; }
-    check('data-step: data-steps larger than the max N wins (4 steps)', n === 4, n); await m.close(); }
+    check('data-step: data-steps is ignored on a slide with data-step elements (one click, then the next slide)', n === 2, n); await m.close(); }
   { const c = await ctx.newPage(); await c.goto(BASE + '/__t/dstep-custom#1'); await c.waitForSelector('#sk-stage'); await settled(c);
     await c.keyboard.press('ArrowRight'); await settled(c);
     check('data-step: a registered custom stepper wins', (await c.evaluate(() => log.includes('next'))) && (await hash(c)) === '#1', await c.evaluate(() => log)); await c.close(); }

@@ -19,6 +19,7 @@
       return;
     }
     steppers.set(el, impl);
+    el.setAttribute('data-stepper', ''); /* marks a slide whose steps are not declarative (the editor shows it read-only) */
   };
 
   function make(tag, id, cls) {
@@ -28,21 +29,28 @@
     return e;
   }
 
+  /* step number (ANIMATION.md 3.8): trimmed digits only. 4e0, 0x4, 2.5, -1, '' and text are invalid. */
+  function stepNo(v) { v = v.trim(); return /^[0-9]+$/.test(v) && Number(v) <= 9007199254740991 ? Number(v) : NaN; }
   /* step range of an element: visible for n <= step < m. data-step="N" (integer >= 2) is the entrance, data-step-out="M" (integer > n) the exit.
      Invalid values are ignored with a warning (loud: warn = true), an element without a valid range stays visible from the start (returns null). */
   function rangeOf(x, warn) {
     var n = 1, m = Infinity, a = x.getAttribute('data-step'), b = x.getAttribute('data-step-out');
     if (a !== null) {
-      var na = Number(a);
-      if (na >= 2 && Math.floor(na) === na) n = na;
+      var na = stepNo(a);
+      if (na >= 2) n = na;
       else if (na !== 1 && warn) console.warn('[slidekit] invalid data-step "' + a + '"', x);
     }
     if (b !== null) {
-      var nb = Number(b);
-      if (nb >= 2 && Math.floor(nb) === nb && nb > n) m = nb;
+      var nb = stepNo(b);
+      if (nb >= 2 && nb > n) m = nb;
       else if (warn) console.warn('[slidekit] invalid data-step-out "' + b + '" (an integer after the entrance step)', x);
     }
     return n === 1 && m === Infinity ? null : { el: x, n: n, m: m };
+  }
+  /* time variable in ms: '360ms' or '0.4s', clamped to 0..10000 like the CSS; NaN when it is not a time */
+  function msOf(v) {
+    var t = /^\s*([+-]?(?:\d+\.?\d*|\.\d+))\s*(ms|s)\s*$/i.exec(v || '');
+    return t ? Math.max(0, Math.min(10000, Number(t[1]) * (t[2].toLowerCase() === 's' ? 1000 : 1))) : NaN;
   }
   var reduceMq = window.matchMedia ? matchMedia('(prefers-reduced-motion: reduce)') : null;
 
@@ -50,34 +58,43 @@
      One step change is a batch of attribute writes on the elements whose visibility changed (no layout reads). The only forced style flush is the instant mode. */
   function autoStepper(s, els) {
     var cur = 1, vis = [], timer = 0;
-    var rootMs = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sk-step-ms')) || 360;
+    var rootMs = msOf(getComputedStyle(document.documentElement).getPropertyValue('--sk-step-ms'));
+    if (isNaN(rootMs)) rootMs = 360;
     function settle() { /* drop the compositing hint: nothing stays promoted to its own layer when no transition is running */
       if (timer) { clearTimeout(timer); timer = 0; }
       s.el.removeAttribute('data-step-run');
     }
+    /* 0 = before the entrance, 1 = shown, 2 = after the exit */
+    function stateOf(o, k) { return k < o.n ? 0 : k < o.m ? 1 : 2; }
     function apply(k, instant) {
       var back = k < cur;
       cur = k;
-      var changed = [], i, o, v;
+      var changed = [], prev = [], i, o, v;
       for (i = 0; i < els.length; i++) {
-        o = els[i]; v = k >= o.n && k < o.m;
-        if (v !== vis[i]) { vis[i] = v; changed.push(o); }
+        o = els[i]; v = stateOf(o, k);
+        if (v !== vis[i]) { prev.push(vis[i]); vis[i] = v; changed.push(i); }
       }
       if (!changed.length) return;
       if (instant) s.el.setAttribute('data-step-instant', '');
-      for (i = 0; i < changed.length; i++) { o = changed[i].el; v = k >= changed[i].n && k < changed[i].m; o.toggleAttribute('data-shown', v); o.toggleAttribute('data-away', !v); }
+      for (i = 0; i < changed.length; i++) {
+        o = els[changed[i]].el; v = vis[changed[i]];
+        if (v === 1) { o.setAttribute('data-shown', ''); o.removeAttribute('data-away'); }
+        else { o.removeAttribute('data-shown'); o.setAttribute('data-away', v === 2 ? 'out' : ''); } /* data-away="out" after the exit, "" before the entrance */
+      }
       if (instant) { settle(); void s.el.offsetWidth; s.el.removeAttribute('data-step-instant'); return; }
       if (reduceMq && reduceMq.matches) return;
       /* will-change only while a transition runs: the hint is removed after the longest changed transition (plus a margin) */
-      var longest = 0, ms, dl;
+      var longest = 0, ms, dl, out, st;
       for (i = 0; i < changed.length; i++) {
-        var st = changed[i].el.style;
-        ms = parseFloat(st.getPropertyValue('--sk-step-ms')); dl = back ? 0 : parseFloat(st.getPropertyValue('--sk-step-delay'));
+        st = els[changed[i]].el.style;
+        out = vis[changed[i]] === 2 || prev[i] === 2; /* an exit or the undo of one takes the Out time */
+        ms = out ? msOf(st.getPropertyValue('--sk-out-ms')) : NaN; if (isNaN(ms)) ms = msOf(st.getPropertyValue('--sk-step-ms'));
+        dl = back ? 0 : out ? msOf(st.getPropertyValue('--sk-out-delay')) : NaN; if (!back && isNaN(dl)) dl = msOf(st.getPropertyValue('--sk-step-delay'));
         longest = Math.max(longest, (isNaN(ms) ? rootMs : ms) + (isNaN(dl) ? 0 : dl));
       }
-      s.el.setAttribute('data-step-run', back ? 'back' : ''); /* 'back': rewinding ignores --sk-step-delay (CSS) */
+      s.el.setAttribute('data-step-run', back ? 'back' : ''); /* 'back': rewinding ignores the delays (CSS) */
       if (timer) clearTimeout(timer);
-      timer = setTimeout(settle, Math.min(longest, 5000) + 150);
+      timer = setTimeout(settle, Math.min(longest, 10000) + 150);
     }
     return {
       enter: function (forward) { apply(forward ? 1 : s.steps, true); },
@@ -134,8 +151,18 @@
         var r = rangeOf(x, true);
         if (r) stepEls.push(r); else x.setAttribute('data-shown', ''); /* no valid range: the element stays visible from the start */
       });
-      stepEls.forEach(function (o) { steps = Math.max(steps, o.n, o.m === Infinity ? 1 : o.m); });
-      var s = { el: e, n: i + 1, kind: kind, title: title || null, chapter: chapterNo, steps: steps,
+      /* the used numbers, in order, are the clicks (ANIMATION.md 3.7): 1, 3, 7 is three clicks. A slide with a registered stepper keeps the old rule (data-steps or the largest number). */
+      var numbers = null;
+      if (stepEls.length && !steppers.has(e)) {
+        var set = {};
+        stepEls.forEach(function (o) { if (o.n >= 2) set[o.n] = 1; if (o.m !== Infinity) set[o.m] = 1; });
+        numbers = Object.keys(set).map(Number).sort(function (a, b) { return a - b; });
+        var rank = {}; numbers.forEach(function (v, k) { rank[v] = k + 2; });
+        stepEls.forEach(function (o) { o.n = o.n >= 2 ? rank[o.n] : 1; o.m = o.m === Infinity ? Infinity : rank[o.m]; });
+        if (raw !== null && steps > 1) console.warn('[slidekit] data-steps is ignored on a slide with data-step elements (the steps come from the element numbers)', e);
+        steps = numbers.length + 1;
+      } else stepEls.forEach(function (o) { steps = Math.max(steps, o.n, o.m === Infinity ? 1 : o.m); });
+      var s = { el: e, n: i + 1, kind: kind, title: title || null, chapter: chapterNo, steps: steps, numbers: numbers,
                 notes: note ? note.textContent.trim() : '', auto: null };
       if (stepEls.length) s.auto = autoStepper(s, stepEls);
       return s;
@@ -216,7 +243,7 @@
         /* stepping forward inside a slide also reads what just appeared (data-step elements of this step) */
         var shown = '';
         if (s.n === lastSlide && step > lastStep) {
-          shown = [].map.call(s.el.querySelectorAll('[data-step="' + step + '"]'), function (x) { return x.textContent.replace(/\s+/g, ' ').trim(); }).filter(Boolean).join('. ').slice(0, 160);
+          shown = [].map.call(s.el.querySelectorAll('[data-step="' + (s.numbers ? s.numbers[step - 2] : step) + '"]'), function (x) { return x.textContent.replace(/\s+/g, ' ').trim(); }).filter(Boolean).join('. ').slice(0, 160);
         }
         say((en ? 'Slide ' : '슬라이드 ') + s.n + ' / ' + slides.length + (nm ? ', ' + nm : '') + (s.steps > 1 ? (en ? ', step ' : ', 단계 ') + step + ' / ' + s.steps : '') + (shown ? ': ' + shown : ''));
         lastSlide = s.n; lastStep = step;
@@ -333,7 +360,7 @@
       var cell = make('div', '', 'sk-thumb'), box = make('div', '', 'sk-thumb-box'),
           inner = make('div', '', 'sk-thumb-in'), copy = s.el.cloneNode(true), lab = make('div', '', 'sk-thumb-n');
       copy.removeAttribute('data-active');
-      [].forEach.call(copy.querySelectorAll('[data-step],[data-step-out]'), function (x) { var r = rangeOf(x, false), v = !r || r.n <= 1; x.toggleAttribute('data-shown', v); x.toggleAttribute('data-away', !v); }); /* thumbnails show step 1 */
+      [].forEach.call(copy.querySelectorAll('[data-step],[data-step-out]'), function (x) { var r = rangeOf(x, false), v = !r || r.n <= 1; x.toggleAttribute('data-shown', v); if (v) x.removeAttribute('data-away'); else x.setAttribute('data-away', ''); }); /* thumbnails show step 1 */
       copy.setAttribute('inert', '');
       /* thumbnails load and decode images lazily: only the thumbnails on screen when the overview opens (a 30-photo deck would otherwise decode every full-size image) */
       [].forEach.call(copy.querySelectorAll('img'), function (im) { im.loading = 'lazy'; im.decoding = 'async'; });

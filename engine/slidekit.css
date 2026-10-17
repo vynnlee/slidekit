@@ -58,13 +58,30 @@ aside[data-notes] { display: none; }
    data-shown (visible) and data-away (away state) on the elements; the look is CSS. The away state is set by the --sk-away-* variables
    (default: transparent and 20px low). The default transition is composite-only (opacity, transform); filter is used only when blur is asked for.
    Before the engine runs, a data-step element without data-shown is already away (no flash of later steps). */
-[data-step], [data-step-out] { transition: opacity var(--sk-step-ms) var(--sk-ease) var(--sk-step-eff, var(--sk-step-delay, 0ms)), transform var(--sk-step-ms) var(--sk-ease) var(--sk-step-eff, var(--sk-step-delay, 0ms)), filter var(--sk-step-ms) var(--sk-ease) var(--sk-step-eff, var(--sk-step-delay, 0ms)), visibility 0s; }
-[data-away], [data-step]:not([data-shown]) {
+/* Time and delay by event (ANIMATION.md 2.4): forward entrance = In (--sk-step-ms, --sk-step-delay), forward exit = Out (--sk-out-ms, --sk-out-delay, fall back to In),
+   rewinding an entrance = In time, rewinding an exit = Out time, rewinding never delays. Every value is clamped to 0..10000ms. */
+[data-step], [data-step-out] {
+  --sk-d-in: clamp(0ms, var(--sk-step-ms), 10000ms); --sk-l-in: clamp(0ms, var(--sk-step-delay, 0ms), 10000ms);
+  --sk-d-out: clamp(0ms, var(--sk-out-ms, var(--sk-step-ms)), 10000ms); --sk-l-out: clamp(0ms, var(--sk-out-delay, var(--sk-step-delay, 0ms)), 10000ms);
+  --sk-d: var(--sk-d-in); --sk-l: var(--sk-step-eff, var(--sk-l-in));
+  transition: opacity var(--sk-d) var(--sk-ease) var(--sk-l), transform var(--sk-d) var(--sk-ease) var(--sk-l), filter var(--sk-d) var(--sk-ease) var(--sk-l), visibility 0s;
+}
+[data-step-run="back"] [data-shown] { --sk-d: var(--sk-d-out); } /* undoing an exit takes the exit time */
+/* away before the entrance (data-away="" or no data-shown yet): the --sk-away-* look */
+[data-away]:not([data-away="out"]), [data-step]:not([data-shown]):not([data-away="out"]) {
   visibility: hidden; opacity: var(--sk-away-opacity, 0); transform: translate(var(--sk-away-x, 0px), var(--sk-away-y, 20px)) scale(var(--sk-away-scale, 1));
   /* visibility flips only after the fade ends, so the element stays hit-test and screen reader free once it is gone */
-  transition-delay: var(--sk-step-eff, var(--sk-step-delay, 0ms)), var(--sk-step-eff, var(--sk-step-delay, 0ms)), var(--sk-step-eff, var(--sk-step-delay, 0ms)), calc(var(--sk-step-ms) + var(--sk-step-eff, var(--sk-step-delay, 0ms)));
+  transition-delay: var(--sk-l), var(--sk-l), var(--sk-l), calc(var(--sk-d) + var(--sk-l));
 }
-[data-away][style*="--sk-away-blur"], [data-step]:not([data-shown])[style*="--sk-away-blur"], [data-step-effect="blur"]:is([data-away], [data-step]:not([data-shown])) { filter: blur(var(--sk-away-blur, 12px)); }
+/* away after the exit (data-away="out"): the --sk-out-* look, each falling back to the --sk-away-* value */
+[data-away="out"] {
+  --sk-d: var(--sk-d-out); --sk-l: var(--sk-step-eff, var(--sk-l-out));
+  visibility: hidden; opacity: var(--sk-out-opacity, var(--sk-away-opacity, 0));
+  transform: translate(var(--sk-out-x, var(--sk-away-x, 0px)), var(--sk-out-y, var(--sk-away-y, 20px))) scale(var(--sk-out-scale, var(--sk-away-scale, 1)));
+  transition-delay: var(--sk-l), var(--sk-l), var(--sk-l), calc(var(--sk-d) + var(--sk-l));
+}
+[data-away]:not([data-away="out"])[style*="--sk-away-blur"], [data-step]:not([data-shown]):not([data-away="out"])[style*="--sk-away-blur"], [data-step-effect="blur"]:is([data-away]:not([data-away="out"]), [data-step]:not([data-shown]):not([data-away="out"])) { filter: blur(var(--sk-away-blur, 12px)); }
+[data-away="out"]:is([style*="--sk-out-blur"], [style*="--sk-away-blur"], [data-step-effect="blur"]) { filter: blur(var(--sk-out-blur, var(--sk-away-blur, 12px))); }
 /* data-step-effect is an alias of the variables above (it stays supported; the editor rewrites it as variables when the element is edited) */
 [data-step-effect="fade"] { --sk-away-y: 0px; }
 [data-step-effect="left"] { --sk-away-x: -32px; --sk-away-y: 0px; }

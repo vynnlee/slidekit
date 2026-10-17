@@ -263,7 +263,7 @@ Figma 포럼에는 "Position, Auto layout, Appearance가 관련 없는 속성을
 | 2 | Layout | 일부 | 전체 | display, W/H, 모드, 방향, 정렬, gap, padding, margin, Clip |
 | 3 | Position | 조건부 | 조건부 | Offset X/Y(`translate`), Position Select, 회전, Z는 항상. X/Y(`left`, `top`)는 position이 static이 아닐 때만 |
 | 4 | Appearance | 노출 | 노출 | Opacity, Radius, Blend |
-| 5 | Animation | 노출 | 노출 | `+ In`, `+ Out` 단추. 이미 있으면 In, Out마다 Effect(Fade, Rise, Slide, Scale, Blur), Start(On click, With previous, After previous), Duration 세 칸과 삭제. 단계 숫자 칸은 없다. 고급 값(이동 거리, 투명도, 흐림, 지연 직접 입력)은 하단 Animation 목록의 줄 안 Custom에 있다(SPEC 9.7). 한 요소만 편집한다 |
+| 5 | Animation | 노출 | 노출 | `+ In`, `+ Out` 단추. 이미 있으면 In, Out마다 Effect(Fade, Rise, Slide, Scale, Blur), Delay(초), Duration(초), Click(구역 선택과 New click), With previous와 After previous 단추(숫자만 채움, 저장 안 함), 삭제. 고급 값은 없고 타임라인 막대 끌기가 같은 값을 바꾼다(SPEC 9.7). 한 요소만 편집한다 |
 | 6 | Typography | 노출 | 숨김 | 4.4 참고 |
 | 7 | Fill | 노출 | 노출 | background-color 목록(최대 1) |
 | 8 | Stroke | 노출 | 노출 | border |

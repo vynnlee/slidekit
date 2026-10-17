@@ -1,4 +1,5 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Minus, Play, Plus, Square, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -30,7 +31,8 @@ type Props = {
 
 type Drag = {
   mode: "move" | "l" | "r"; bar: Bar; node: HTMLElement; x0: number; y0: number; start0: number; len0: number; origLeft: string; origWidth: string;
-  moved: boolean; target: Target | null; res: Res | null; start: number; len: number; sections: { click: number; top: number; bottom: number }[]; gaps: { gap: number; top: number; bottom: number }[];
+  moved: boolean; target: Target | null; res: Res | null; start: number; len: number; sections: { click: number; top: number; bottom: number }[] | null; gaps: { gap: number; top: number; bottom: number }[] | null; // 구역 위치는 세로로 움직이기 시작할 때 한 번만 잰다(가로 끌기에서는 레이아웃을 읽지 않는다)
+ 
   targets: ReturnType<typeof snapTargets>; lane: HTMLElement; pps: number;
 };
 
@@ -46,8 +48,9 @@ const barLabel = (name: string, b: Bar, spec: StepSpec, rel: string, delayText: 
 };
 
 export function Timeline(p: Props) {
-  const rows: AnimRow[] = p.slide ? readSlide(p.slide, p.sel) : [];
-  const specs = rows.map((r) => r.spec), tl = timelineOf(specs), stepper = !!p.slide && isStepper(p.slide);
+  // 읽기(요소마다 속성과 computed style)는 슬라이드 내용(rev)이나 선택이 바뀔 때만 한다: 줌, 접기, 막대 강조 같은 지역 상태 변화에서는 다시 읽지 않는다
+  const rows: AnimRow[] = useMemo(() => (p.slide ? readSlide(p.slide, p.sel) : []), [p.slide, p.rev, p.sel]);
+  const specs = useMemo(() => rows.map((r) => r.spec), [rows]), tl = useMemo(() => timelineOf(specs), [specs]), stepper = !!p.slide && isStepper(p.slide);
   const scroll = useRef<HTMLDivElement>(null), chip = useRef<HTMLDivElement>(null), guide = useRef<HTMLDivElement>(null), live = useRef<HTMLSpanElement>(null), timeLabel = useRef<HTMLSpanElement>(null);
   const drag = useRef<Drag | null>(null);
   const [width, setWidth] = useState(900), [zoom, setZoom] = useState<number | null>(null), [selBar, setSelBar] = useState<string | null>(null);
@@ -143,9 +146,7 @@ export function Timeline(p: Props) {
     if (e.button !== 0 || stepper) return;
     e.stopPropagation();
     const lane = node.parentElement as HTMLElement, root = scroll.current!;
-    const sections = [...root.querySelectorAll<HTMLElement>("[data-testid=tl-click]")].map((s) => { const r = s.getBoundingClientRect(); return { click: Number(s.dataset.click), top: r.top, bottom: r.bottom }; });
-    const gaps = [...root.querySelectorAll<HTMLElement>("[data-gap]")].map((s) => { const r = s.getBoundingClientRect(); return { gap: Number(s.dataset.gap), top: r.top, bottom: r.bottom }; });
-    drag.current = { mode, bar, node, x0: e.clientX, y0: e.clientY, start0: bar.start, len0: bar.len, origLeft: node.style.left, origWidth: node.style.width, moved: false, target: null, res: null, start: bar.start, len: bar.len, sections, gaps, targets: snapTargets(tl.clicks[bar.click - 1], bar), lane, pps: ppsRef.current };
+    drag.current = { mode, bar, node, x0: e.clientX, y0: e.clientY, start0: bar.start, len0: bar.len, origLeft: node.style.left, origWidth: node.style.width, moved: false, target: null, res: null, start: bar.start, len: bar.len, sections: null, gaps: null, targets: snapTargets(tl.clicks[bar.click - 1], bar), lane, pps: ppsRef.current };
     node.setPointerCapture(e.pointerId);
   };
   const move = (e: React.PointerEvent<HTMLElement>) => {
@@ -166,8 +167,13 @@ export function Timeline(p: Props) {
     d.node.style.left = `${(d.start / 1000) * d.pps}px`; d.node.style.width = `${Math.max(HANDLE, (d.len / 1000) * d.pps)}px`;
     // 위아래: 다른 구역 또는 새 구역
     let target: Target | null = null;
-    if (d.mode === "move") {
-      const y = e.clientY, secHit = d.sections.find((s) => y >= s.top && y < s.bottom), gapHit = d.gaps.find((g) => y >= g.top && y < g.bottom);
+    if (d.mode === "move" && (d.sections || Math.abs(e.clientY - d.y0) > 8)) {
+      if (!d.sections) {
+        const root0 = scroll.current!;
+        d.sections = [...root0.querySelectorAll<HTMLElement>("[data-testid=tl-click]")].map((s) => { const r = s.getBoundingClientRect(); return { click: Number(s.dataset.click), top: r.top, bottom: r.bottom }; });
+        d.gaps = [...root0.querySelectorAll<HTMLElement>("[data-gap]")].map((s) => { const r = s.getBoundingClientRect(); return { gap: Number(s.dataset.gap), top: r.top, bottom: r.bottom }; });
+      }
+      const y = e.clientY, secHit = d.sections.find((s) => y >= s.top && y < s.bottom), gapHit = (d.gaps as NonNullable<Drag["gaps"]>).find((g) => y >= g.top && y < g.bottom);
       target = secHit ? (secHit.click === d.bar.click ? null : { click: secHit.click }) : gapHit ? { gap: gapHit.gap } : null;
       d.node.style.transform = `translateY(${Math.round(e.clientY - d.y0)}px)`;
       d.node.style.zIndex = "5";
@@ -191,7 +197,7 @@ export function Timeline(p: Props) {
     mark("data-drop", null); scroll.current?.querySelectorAll("[data-invalid]").forEach((x) => x.removeAttribute("data-invalid"));
     showChip("", 0, 0); showGuide(null, d.lane);
     if (cancel) return;
-    if (!d.moved) { setSelBar(d.bar.id); p.onSelect(elOf(d.bar)); return; }
+    if (!d.moved) { flushSync(() => setSelBar(d.bar.id)); const el0 = elOf(d.bar); requestAnimationFrame(() => p.onSelect(el0)); return; } // 막대 강조는 바로(타임라인만 다시 그림), 캔버스 선택(편집기 전체)은 다음 프레임
     const b = d.bar, s = act.current.specs;
     const steps: ((x: StepSpec[]) => Res)[] = [];
     if (d.target) steps.push((x) => moveToClick(x, b, d.target as Target));
@@ -355,7 +361,7 @@ const TrackRow = memo(function TrackRow(s: RowProps) {
       </div>
       <div className="relative" style={{ width: s.areaW, backgroundImage: s.gridBg }} data-testid="tl-lane">
         <div role="button" tabIndex={s.activeId === b.id ? 0 : -1} aria-roledescription="animation bar" aria-label={barLabel(name, b, spec, rel, delayText, w > 56 ? `${label} ${sec(b.len)}` : null)} title={tip}
-          data-testid="tl-bar" data-id={b.id} data-el={b.el} data-kind={b.kind} data-click={b.click} data-start={b.start} data-len={b.len} data-sel={on ? "1" : undefined}
+          data-testid="tl-bar" data-id={b.id} data-el={b.el} data-kind={b.kind} data-click={b.click} data-start={b.start} data-len={b.len} data-sel={on ? "1" : undefined} data-picked={strong ? "1" : undefined}
           className={`absolute inset-y-1 touch-none select-none overflow-hidden whitespace-nowrap px-1.5 text-micro leading-[18px] text-black outline-none focus-visible:ring-2 focus-visible:ring-focus-ring ${strong ? "ring-2 ring-foreground" : ""} ${b.kind === "in" ? "rounded-sm bg-focus-ring" : "bg-amber-400 [clip-path:polygon(0_0,100%_0,calc(100%-6px)_100%,0_100%)]"} ${on ? "" : "opacity-80"}`}
           style={{ left, width: w, cursor: s.stepper ? "default" : "grab" }}
           onPointerDown={(e) => s.down(e, b, "move", e.currentTarget)} onPointerMove={s.move} onPointerUp={(e) => s.end(e)} onPointerCancel={(e) => s.end(e, true)} onKeyDown={(e) => s.key2(e, b)}>
@@ -366,4 +372,5 @@ const TrackRow = memo(function TrackRow(s: RowProps) {
       </div>
     </li>
   );
-}, (a, b) => a.b === b.b || (JSON.stringify([a.b, a.above, a.pps, a.areaW, a.sel === a.b.el, a.selBar === a.b.id, a.activeId === a.b.id, a.stepper, a.gridBg, a.rows[a.b.el]?.spec, a.nameFor(a.b.el)]) === JSON.stringify([b.b, b.above, b.pps, b.areaW, b.sel === b.b.el, b.selBar === b.b.id, b.activeId === b.b.id, b.stepper, b.gridBg, b.rows[b.b.el]?.spec, b.nameFor(b.b.el)])));
+}, (a, b) => a.b.start === b.b.start && a.b.len === b.b.len && a.b.click === b.b.click && a.b.id === b.b.id && a.pps === b.pps && a.areaW === b.areaW && (a.above?.start ?? -1) === (b.above?.start ?? -1) && (a.above?.end ?? -1) === (b.above?.end ?? -1)
+  && (a.sel === a.b.el) === (b.sel === b.b.el) && (a.selBar === a.b.id) === (b.selBar === b.b.id) && (a.activeId === a.b.id) === (b.activeId === b.b.id) && a.stepper === b.stepper && a.gridBg === b.gridBg && a.rows[a.b.el]?.spec === b.rows[b.b.el]?.spec && a.nameFor(a.b.el) === b.nameFor(b.b.el));

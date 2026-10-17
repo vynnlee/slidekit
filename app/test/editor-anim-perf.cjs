@@ -42,11 +42,11 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   const selMs = await page.evaluate(() => new Promise((done) => {
     const b = document.querySelectorAll('[data-testid=tl-bar]')[40], t0 = performance.now();
     for (const t of ['pointerdown', 'pointerup']) b.dispatchEvent(new PointerEvent(t, { bubbles: true, button: 0, pointerId: 1, clientX: 5, clientY: 5 }));
-    const wait = () => { if (document.querySelector('[data-testid=tl-bar][data-sel]')) requestAnimationFrame(() => requestAnimationFrame(() => done(Math.round(performance.now() - t0)))); else requestAnimationFrame(wait); };
+    const wait = () => { if (document.querySelector('[data-testid=tl-bar][data-picked]')) requestAnimationFrame(() => requestAnimationFrame(() => done(Math.round(performance.now() - t0)))); else requestAnimationFrame(wait); };
     wait();
   }));
-  console.log('INFO 막대 누르기부터 선택 표시와 두 프레임까지 ' + selMs + 'ms');
-  check('막대 누르기 반응 2500ms 이내(요소 선택 포함)', selMs < 2500, selMs);
+  console.log('INFO 막대 누르기부터 막대 강조와 두 프레임까지 ' + selMs + 'ms');
+  check('막대 누르기: 막대 강조 반응 300ms 이내(CPU 4배, 캔버스 선택은 이어서)', selMs < 300, selMs);
   await settle();
 
   // 3. 막대 끌기: 끄는 40걸음의 프레임 간격과 긴 작업, 놓은 뒤 저장 반영(한 번)은 따로 잰다

@@ -1,5 +1,18 @@
-import { expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
 import { makeRoutes } from "../export-api";
+import { execFileSync } from "node:child_process";
+import { cpSync as cp, existsSync, mkdirSync as mk, readFileSync as rd, rmSync as rm, writeFileSync as wr } from "node:fs";
+import { join as pj } from "node:path";
+
+// 사용자의 커밋 안 된 덱 편집에 기대지 않도록, 커밋된 워크숍 덱(HEAD)의 index.html로 임시 덱 폴더를 만든다(export-api의 id 규칙이 _로 시작하는 폴더를 거절하므로 qa- 이름을 쓴다).
+const WORK = "qa-export-work";
+const workDir = pj(import.meta.dir, "..", "..", "decks", WORK);
+const committed = (() => { try { return execFileSync("git", ["show", "HEAD:decks/vibe-coding-workshop/index.html"], { cwd: pj(import.meta.dir, "..", ".."), encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] }); } catch { return rd(pj(import.meta.dir, "..", "..", "decks", "vibe-coding-workshop", "index.html"), "utf8"); } })();
+rm(workDir, { recursive: true, force: true });
+const srcDir = pj(import.meta.dir, "..", "..", "decks", "vibe-coding-workshop");
+if (existsSync(srcDir)) cp(srcDir, workDir, { recursive: true }); else mk(workDir, { recursive: true }); // 이미지는 작업트리 것을 쓰고 본문만 커밋된 내용으로 바꾼다
+wr(pj(workDir, "index.html"), committed.replace(/"id"\s*:\s*"[^"]*"/, `"id": "${WORK}"`)); // 같은 id의 덱이 목록에 둘 생기지 않게 id를 바꾼다
+afterAll(() => rm(workDir, { recursive: true, force: true })); // bun test는 exit 이벤트를 안 불러 사본이 남는다
 
 const req = (id: string, body?: unknown, url = "http://x/") => Object.assign(new Request(url, { method: body === undefined ? "GET" : "POST", body: body === undefined ? undefined : JSON.stringify(body), headers: { "content-type": "application/json" } }), { params: { id } });
 const ok = (code = 0, lines: string[] = []) => async () => ({ code, lines });
@@ -15,8 +28,8 @@ test("덱 id 검증: 형식이 틀리거나 없는 덱은 404", async () => {
 test("confirm 없이는 deploy 400, 실행도 하지 않는다", async () => {
   let ran = 0;
   const r = makeRoutes(async () => { ran++; return { code: 0, lines: [] }; });
-  for (const b of [{}, { confirm: false }, { confirm: "true" }]) expect((await r["/api/decks/:id/deploy"].POST(req("vibe-coding-workshop", b))).status).toBe(400);
-  expect((await r["/api/decks/:id/deploy"].POST(Object.assign(new Request("http://x/", { method: "POST", body: "{", headers: { "content-type": "application/json" } }), { params: { id: "vibe-coding-workshop" } }))).status).toBe(400);
+  for (const b of [{}, { confirm: false }, { confirm: "true" }]) expect((await r["/api/decks/:id/deploy"].POST(req(WORK, b))).status).toBe(400);
+  expect((await r["/api/decks/:id/deploy"].POST(Object.assign(new Request("http://x/", { method: "POST", body: "{", headers: { "content-type": "application/json" } }), { params: { id: WORK } }))).status).toBe(400);
   expect(ran).toBe(0);
 });
 
@@ -24,18 +37,18 @@ test("동시 실행은 409, 끝나면 다시 가능", async () => {
   let release!: () => void;
   const gate = new Promise<void>((r) => (release = r));
   const r = makeRoutes(async () => { await gate; return { code: 1, lines: ["boom"] }; });
-  const first = r["/api/decks/:id/bundle"].POST(req("vibe-coding-workshop"));
+  const first = r["/api/decks/:id/bundle"].POST(req(WORK));
   await Bun.sleep(5);
-  expect((await r["/api/decks/:id/pdf"].POST(req("vibe-coding-workshop"))).status).toBe(409);
-  expect((await r["/api/decks/:id/deploy"].POST(req("vibe-coding-workshop", { confirm: true }))).status).toBe(409);
+  expect((await r["/api/decks/:id/pdf"].POST(req(WORK))).status).toBe(409);
+  expect((await r["/api/decks/:id/deploy"].POST(req(WORK, { confirm: true }))).status).toBe(409);
   release();
   expect((await first).status).toBe(500);
-  expect((await r["/api/decks/:id/bundle"].POST(req("vibe-coding-workshop"))).status).toBe(500); // 잠금이 풀렸다
+  expect((await r["/api/decks/:id/bundle"].POST(req(WORK))).status).toBe(500); // 잠금이 풀렸다
 });
 
 test("download: kind 검증과 산출물이 없으면 404", () => {
   const r = makeRoutes(ok());
-  expect(r["/api/decks/:id/download"].GET(req("vibe-coding-workshop", undefined, "http://x/?kind=exe")).status).toBe(400);
+  expect(r["/api/decks/:id/download"].GET(req(WORK, undefined, "http://x/?kind=exe")).status).toBe(400);
   expect(r["/api/decks/:id/download"].GET(req("no-such", undefined, "http://x/?kind=html")).status).toBe(404);
 });
 
@@ -55,10 +68,10 @@ test("비밀번호 덱: 6자 미만이나 없는 비밀번호는 400, 공개 범
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("배포 전 점검: 잘못된 id는 404, 실제 덱은 lint 개수, 공개 범위, 크기 추정을 준다(읽기만 한다)", async () => {
+test("배포 전 점검: 잘못된 id는 404, 커밋된 워크숍 덱 사본은 lint 개수, 공개 범위, 크기 추정을 준다(읽기만 한다)", async () => {
   const r = makeRoutes(ok());
   expect((await r["/api/decks/:id/check"].GET(req("../x"))).status).toBe(404);
-  const res = await r["/api/decks/:id/check"].GET(req("vibe-coding-workshop"));
+  const res = await r["/api/decks/:id/check"].GET(req(WORK));
   expect(res.status).toBe(200);
   const j = (await res.json()) as any;
   expect(j.errors).toBe(0);
@@ -74,7 +87,7 @@ test("오류는 사람이 읽는 문장과 code를 주고, 엔진 출력은 deta
   const nf = (await (await r["/api/decks/:id/bundle"].POST(req("../x"))).json()) as any;
   expect(nf.code).toBe("deck");
   expect(nf.error).toMatch(/not found|cannot be exported/);
-  const fail = await r["/api/decks/:id/bundle"].POST(req("vibe-coding-workshop"));
+  const fail = await r["/api/decks/:id/bundle"].POST(req(WORK));
   expect(fail.status).toBe(500);
   const j = (await fail.json()) as any;
   expect(j.code).toBe("bundle-failed");
@@ -82,9 +95,9 @@ test("오류는 사람이 읽는 문장과 code를 주고, 엔진 출력은 deta
   expect(j.details).toContain("번들 실패: boom"); // 엔진 한국어 출력은 details에만 있다
   expect(j.error).not.toContain("번들");
   const busy = makeRoutes(async () => { await Bun.sleep(30); return { code: 0, lines: [] }; });
-  const first = busy["/api/decks/:id/bundle"].POST(req("vibe-coding-workshop"));
+  const first = busy["/api/decks/:id/bundle"].POST(req(WORK));
   await Bun.sleep(5);
-  expect(((await (await busy["/api/decks/:id/pdf"].POST(req("vibe-coding-workshop"))).json()) as any).code).toBe("busy");
+  expect(((await (await busy["/api/decks/:id/pdf"].POST(req(WORK))).json()) as any).code).toBe("busy");
   await first;
 });
 
@@ -98,18 +111,18 @@ test("pdf 옵션: 잘못된 mode나 per는 실행 없이 400, 올바른 값은 e
   const calls: string[][] = [];
   const r = makeRoutes(async (_s, _i, _e, _l, args) => { calls.push(args ?? []); return { code: 0, lines: [] }; });
   for (const b of [{ mode: "x" }, { mode: "handout", per: 5 }, { mode: "handout", per: "3" }, { mode: 7 }]) {
-    const res = await r["/api/decks/:id/pdf"].POST(req("vibe-coding-workshop", b));
+    const res = await r["/api/decks/:id/pdf"].POST(req(WORK, b));
     expect(res.status, JSON.stringify(b)).toBe(400);
     expect(((await res.json()) as any).code).toBe("pdf-options");
   }
   expect(calls.length).toBe(0);
-  await r["/api/decks/:id/pdf"].POST(req("vibe-coding-workshop", {}));
-  await r["/api/decks/:id/pdf"].POST(req("vibe-coding-workshop", { mode: "notes" }));
-  await r["/api/decks/:id/pdf"].POST(req("vibe-coding-workshop", { mode: "handout", per: 4 }));
-  await r["/api/decks/:id/pdf"].POST(req("vibe-coding-workshop", { mode: "handout" }));
+  await r["/api/decks/:id/pdf"].POST(req(WORK, {}));
+  await r["/api/decks/:id/pdf"].POST(req(WORK, { mode: "notes" }));
+  await r["/api/decks/:id/pdf"].POST(req(WORK, { mode: "handout", per: 4 }));
+  await r["/api/decks/:id/pdf"].POST(req(WORK, { mode: "handout" }));
   expect(calls).toEqual([[], ["--notes"], ["--handout", "4"], ["--handout", "3"]]);
   const dl = r["/api/decks/:id/download"].GET;
-  expect((await dl(req("vibe-coding-workshop", undefined, "http://x/?kind=zip"))).status).toBe(400);
+  expect((await dl(req(WORK, undefined, "http://x/?kind=zip"))).status).toBe(400);
 });
 
 // ---- 게시 기록과 게시 취소(.publish.json). 실제 덱은 건드리지 않고 임시 덱 폴더를 만들었다 지운다. ----
@@ -122,7 +135,7 @@ const pubDir = pjoin(import.meta.dir, "..", "..", "decks", PUB_DECK);
 const withPubDeck = async (fn: () => Promise<void>) => {
   rmSync(pubDir, { recursive: true, force: true });
   mkdirSync(pubDir, { recursive: true });
-  cpSync(pjoin(pubDir, "..", "vibe-coding-workshop", "index.html"), pjoin(pubDir, "index.html"));
+  cpSync(pjoin(workDir, "index.html"), pjoin(pubDir, "index.html"));
   try { await fn(); } finally { rmSync(pubDir, { recursive: true, force: true }); }
 };
 const entry = () => ({ name: PUB_DECK, url: `https://static.vynnlee.com/${PUB_DECK}`, at: new Date().toISOString(), visibility: "public" as const, bytes: 1234, sha: deckFingerprint(pubDir) });

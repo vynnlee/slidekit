@@ -3,6 +3,8 @@
    외부 글꼴을 쓰는 덱(예: vibe-coding-workshop)은 그 덱의 요청이므로 여기서 보지 않고, 외부 참조가 없는 slidekit-guide로 본다.
    Usage: PW=<playwright-core> CHROME=<headless shell> BASE=http://127.0.0.1:3200 node app/test/offline-app.cjs */
 const { launch } = require('../../scripts/lib/pw.cjs');
+const { makeTestDeck } = require('../../scripts/lib/test-deck.cjs');
+const T = makeTestDeck('offline-app', 'slidekit-guide'); // 커밋된 안내 덱의 사본(작업트리의 덱이 바뀌거나 없어도 같다)
 const BASE = process.env.BASE || 'http://127.0.0.1:3200';
 let fail = 0;
 const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + name + (ok || extra === undefined ? '' : '  ' + JSON.stringify(extra))); };
@@ -12,19 +14,19 @@ const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' 
   const foreign = [], deckOwn = [], errors = [];
   const own = new URL(BASE).host;
   await ctx.route((u) => !/^(data|blob|about):/.test(u.href) && new URL(u.href).host !== own, (r) => {
-    // 덱 안의 요청(목록 썸네일 iframe 등)은 그 덱이 정한 것이다. 앱 화면 자신과 slidekit-guide의 요청만 실패로 센다.
+    // 덱 안의 요청(목록 썸네일 iframe 등)은 그 덱이 정한 것이다. 앱 화면 자신과 이 사본 덱의 요청만 실패로 센다.
     const f = r.request().frame(), fu = f ? f.url() : '', m = fu.match(/\/decks\/([^/?#]+)/);
     const line = r.request().url().slice(0, 100);
-    if (m && m[1] !== 'slidekit-guide') deckOwn.push(m[1] + ': ' + line); else foreign.push(line);
+    if (m && m[1] !== T.folder) deckOwn.push(m[1] + ': ' + line); else foreign.push(line);
     r.abort();
   });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => errors.push(String(e)));
   const routes = [
     ['덱 목록', '/', () => page.getByRole('button', { name: 'New deck' }).waitFor()],
-    ['발표자 화면', '/present/slidekit-guide', () => page.getByRole('button', { name: 'Present' }).waitFor()],
-    ['편집기', '/edit/slidekit-guide', () => page.locator('iframe').first().waitFor()],
-    ['리모컨', '/remote/slidekit-guide', () => page.locator('body').waitFor()],
+    ['발표자 화면', `/present/${T.id}`, () => page.getByRole('button', { name: 'Present' }).waitFor()],
+    ['편집기', `/edit/${T.id}`, () => page.locator('iframe').first().waitFor()],
+    ['리모컨', `/remote/${T.id}`, () => page.locator('body').waitFor()],
   ];
   for (const [name, url, ready] of routes) {
     const before = foreign.length;

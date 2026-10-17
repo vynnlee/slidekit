@@ -1,6 +1,7 @@
 /* 덱 목록 브라우저 검증: Cmd/Ctrl+K, 새 덱 오류 표시, 목록 요청 실패와 재시도, 보기 전환 기억.
    Usage: PW=<playwright-core> CHROME=<headless shell> BASE=http://127.0.0.1:3200 node list.cjs */
 const { launch, clock, tick } = require('../../scripts/lib/pw.cjs');
+const { makeTestDeck } = require('../../scripts/lib/test-deck.cjs');
 const BASE = process.env.BASE || 'http://127.0.0.1:3200';
 const fs = require('fs'), path = require('path');
 const DECKS = path.join(__dirname, '..', '..', 'decks');
@@ -19,6 +20,8 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   const page = await ctx.newPage();
   if (process.env.TIMING) page.on('load', () => console.log('LOAD ' + page.url().slice(-30) + ' @' + Date.now() % 100000));
   const errors = []; page.on('pageerror', (e) => errors.push(String(e)));
+  // 중복 이름 검사용 덱은 사용자의 덱이 아니라 이 시험이 만든다(끝의 cleanup이 지운다)
+  await ctx.request.post(BASE + '/api/decks', { data: { name: 'zz-e2e-dup', title: 'zz-e2e-dup' } });
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'New deck' }).waitFor();
   for (const combo of ['Control+k', 'Meta+k']) {
@@ -30,9 +33,9 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   }
   await page.getByRole('button', { name: 'New deck' }).click();
   const nd = page.getByRole('dialog');
-  await nd.getByLabel('Title').fill('vibe-coding-workshop');
-  check('제목에서 폴더 이름을 제안한다', (await nd.getByLabel('Folder').inputValue()) === 'vibe-coding-workshop');
-  check('중복 폴더 이름은 입력하는 동안 오류', await until(async () => (await page.getByText(/A deck named vibe-coding-workshop already exists/).count()) === 1));
+  await nd.getByLabel('Title').fill('zz-e2e-dup');
+  check('제목에서 폴더 이름을 제안한다', (await nd.getByLabel('Folder').inputValue()) === 'zz-e2e-dup');
+  check('중복 폴더 이름은 입력하는 동안 오류', await until(async () => (await page.getByText(/A deck named zz-e2e-dup already exists/).count()) === 1));
   check('오류가 있으면 Create 비활성', await nd.getByRole('button', { name: 'Create' }).isDisabled());
   await nd.getByLabel('Folder').fill('Bad Name');
   check('잘못된 이름 오류 표시', await until(async () => (await page.getByText(/Use lowercase letters/).count()) >= 1));
@@ -270,8 +273,14 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   await page.getByRole('dialog').getByRole('combobox').fill('zz-e2e-k1');
   check('칩 필터가 켜져 있어도 팔레트는 필터 밖 덱을 찾는다', await until(async () => (await page.getByRole('dialog').getByRole('option', { name: /zz-e2e-k1/ }).count()) >= 1));
   // 흔한 낱말은 덱마다 3장까지만 보이고 더 있음을 알린다
+  // 이 검사는 사용자의 덱 본문에 기대지 않는다: 같은 낱말이 여러 슬라이드에 있는 덱을 만들어 쓴다(검사 뒤 바로 지운다)
+  await post('/api/decks', { name: 'zz-e2e-many', title: 'zz-e2e-many' });
+  const manyFile = path.join(DECKS, 'zz-e2e-many', 'index.html'), manyHtml = fs.readFileSync(manyFile, 'utf8'), sec = manyHtml.match(/<section\b[^>]*data-slide[\s\S]*?<\/section>/)[0];
+  fs.writeFileSync(manyFile, manyHtml.replace(sec, sec.replace('</section>', '<p>슬라이드 예시</p></section>').repeat(5)));
+  await page.keyboard.press('Escape'); await sleep(400); await page.keyboard.press('Control+k'); // 팔레트는 열 때 색인을 읽으므로 새 덱을 넣은 뒤 다시 연다
   await page.getByRole('dialog').getByRole('combobox').fill('슬라이드');
   check('결과가 잘리면 더 있음을 알린다', await until(async () => (await page.getByRole('dialog').getByText('More slides not shown').count()) === 1), await page.getByRole('dialog').innerText());
+  fs.rmSync(path.join(DECKS, 'zz-e2e-many'), { recursive: true, force: true });
   await page.keyboard.press('Escape'); await sleep(400);
   await page.getByRole('button', { name: 'Password', exact: true }).click();
   check('결과가 없으면 안내', await until(async () => (await page.getByText('No password decks.').count()) === 1));
@@ -318,6 +327,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   // 닫는 조건: 휠(줌 포함), 줌 키. 드래그 중(왼쪽 버튼을 누른 채)에는 열리지 않는다
   await cardBtn('zz-e2e-k1').click({ button: 'right', position: { x: 40, y: 40 } });
   await page.getByRole('menu').waitFor();
+  await page.mouse.move(2, 2); // 메뉴는 포인터 자리에서 열리므로 휠이 메뉴 위로 가지 않게 포인터를 메뉴 밖으로 옮긴다(카드 위치에 따라 포인터가 메뉴 안에 남아 닫히지 않던 문제)
   await page.mouse.wheel(0, 120);
   check('휠을 돌리면 닫힌다', await until(async () => (await page.getByRole('menu').count()) === 0));
   await cardBtn('zz-e2e-k1').click({ button: 'right', position: { x: 40, y: 40 } });
@@ -422,8 +432,9 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   // 편집기 첫 열기 안내 카드: 보이고, 아래 요소(필름스트립)의 클릭을 막지 않으며, 첫 상호작용에 사라지고, 다시 안 뜬다
   const ctx5 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx5.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+  const tipDeck = makeTestDeck('list-tip', 'slidekit-guide'); // 커밋된 안내 덱 사본(26장)
   const p5 = await ctx5.newPage();
-  await p5.goto(BASE + '/edit/slidekit-guide', { waitUntil: 'domcontentloaded' });
+  await p5.goto(BASE + `/edit/${tipDeck.id}`, { waitUntil: 'domcontentloaded' });
   const tip = p5.getByRole('region', { name: 'Editor tips' });
   check('편집기 첫 열기에는 안내 카드가 보인다', await until(async () => (await tip.count()) === 1));
   await p5.locator('section[data-testid="filmstrip"] [role=option]').nth(2).click({ timeout: 10000 });
@@ -435,7 +446,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   const ctx6 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx6.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
   const p6 = await ctx6.newPage();
-  await p6.goto(BASE + '/edit/slidekit-guide', { waitUntil: 'domcontentloaded' });
+  await p6.goto(BASE + `/edit/${tipDeck.id}`, { waitUntil: 'domcontentloaded' });
   const tip6 = p6.getByRole('region', { name: 'Editor tips' });
   await until(async () => (await tip6.count()) === 1);
   await p6.keyboard.press('Shift'); await p6.keyboard.press('Tab'); await p6.keyboard.press('Meta'); await sleep(500);

@@ -1,6 +1,8 @@
 /* 세 라우트(목록, 발표자 화면, 편집기)가 뜨고 콘솔과 페이지 오류가 0인지 확인한다. production 실행에서도 쓴다.
    Usage: PW=<playwright-core> CHROME=<headless shell> BASE=http://127.0.0.1:3200 node routes.cjs */
 const { launch } = require('../../scripts/lib/pw.cjs');
+const { makeTestDeck } = require('../../scripts/lib/test-deck.cjs');
+const T = makeTestDeck('routes'); // 사용자의 덱이 아니라 커밋된 워크숍 덱 사본으로 본다
 const BASE = process.env.BASE || 'http://127.0.0.1:3200';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fail = 0;
@@ -18,8 +20,8 @@ const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' 
   page.on('response', (r) => /\.js(\?|$)/.test(r.url()) && scripts.add(new URL(r.url()).pathname));
   const routes = [
     ['/', () => page.getByRole('button', { name: 'New deck' }).waitFor()],
-    ['/present/vibe-coding-workshop', () => page.getByRole('button', { name: 'Present' }).waitFor()],
-    ['/edit/vibe-coding-workshop', () => page.locator('iframe').first().waitFor()],
+    [`/present/${T.id}`, () => page.getByRole('button', { name: 'Present' }).waitFor()],
+    [`/edit/${T.id}`, () => page.locator('iframe').first().waitFor()],
   ];
   for (const [url, ready] of routes) {
     const before = errors.length;

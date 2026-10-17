@@ -5,12 +5,13 @@ const { chromium } = require(process.env.PW || 'playwright-core');
 const fs = require('fs'), path = require('path'), { execSync } = require('child_process');
 const BASE = process.env.BASE || 'http://127.0.0.1:3200';
 const DECKS = path.join(__dirname, '..', '..', 'decks');
-const SRC = path.join(DECKS, 'vibe-coding-workshop');
+// 사용자의 커밋 안 된 편집이 아니라 커밋된 내용(HEAD)의 워크숍 덱을 쓴다. git이 없으면 작업트리 파일로 폴백.
+const SRC_HTML = (() => { try { return execSync('git show HEAD:decks/vibe-coding-workshop/index.html', { cwd: path.join(__dirname, '..', '..'), maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] }).toString(); } catch { return fs.readFileSync(path.join(DECKS, 'vibe-coding-workshop', 'index.html'), 'utf8'); } })();
 const N = 30;
 const names = Array.from({ length: N }, (_, i) => `_e2e-load-${String(i).padStart(2, '0')}`);
 for (const n of names) {
   fs.mkdirSync(path.join(DECKS, n), { recursive: true });
-  const html = fs.readFileSync(path.join(SRC, 'index.html'), 'utf8').replace(/"id":\s*"[^"]*"/, `"id": "${n.slice(1)}"`).replace(/("title":\s*")[^"]*"/, `$1Load deck ${n.slice(-2)}"`);
+  const html = SRC_HTML.replace(/"id":\s*"[^"]*"/, `"id": "${n.slice(1)}"`).replace(/("title":\s*")[^"]*"/, `$1Load deck ${n.slice(-2)}"`);
   fs.writeFileSync(path.join(DECKS, n, 'index.html'), html);
 }
 process.on('exit', () => { for (const n of names) fs.rmSync(path.join(DECKS, n), { recursive: true, force: true }); });

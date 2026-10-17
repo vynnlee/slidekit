@@ -253,6 +253,7 @@ export function Timeline(p: Props) {
         <Button aria-label="Next click" variant="ghost" size="icon-compact" disabled={N === 0 || toolbarClick >= N} onClick={() => goClick(toolbarClick + 1)}><ChevronRight /></Button>
         <span ref={timeLabel} aria-live="polite" data-testid="tl-time" className="min-w-24 text-caption tabular-nums text-muted-foreground" />
         <span className="flex-1" />
+        {N > 10 && (() => { const allOpen = tl.clicks.every((c) => !folded0(c.click)); return <Button aria-label={allOpen ? "Collapse all clicks" : "Expand all clicks"} variant="ghost" size="compact" onClick={() => setFolded(Object.fromEntries(tl.clicks.map((c) => [c.click, allOpen])))}>{allOpen ? "Collapse all" : "Expand all"}</Button>; })()}
         <Button aria-label="Zoom out" variant="ghost" size="icon-compact" onClick={() => setZoom(Math.max(30, pps / 1.25))}><Minus /></Button>
         <Button aria-label="Fit" variant="ghost" size="compact" onClick={() => setZoom(null)}>Fit</Button>
         <Button aria-label="Zoom in" variant="ghost" size="icon-compact" onClick={() => setZoom(Math.min(800, pps * 1.25))}><Plus /></Button>

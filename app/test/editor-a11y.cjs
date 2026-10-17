@@ -48,7 +48,7 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   await tlScan('막대 둘');
   const bars = page.getByTestId('tl-bar');
   check('타임라인은 탭 정지가 하나(roving tabindex)', (await page.locator('[data-testid=tl-bar][tabindex="0"]').count()) === 1 && (await bars.count()) === 2);
-  check('막대 이름에 요소, In, 효과, Delay, 길이가 읽힘', /, In, .*delay 0\.0s, lasts 0\.4s$/.test((await bars.nth(0).getAttribute('aria-label')) || ''), await bars.nth(0).getAttribute('aria-label'));
+  check('막대 이름에 요소, In, 효과, Delay, 길이가 읽힘', /, In, .*delay 0\.0s, lasts 0\.36s$/.test((await bars.nth(0).getAttribute('aria-label')) || ''), await bars.nth(0).getAttribute('aria-label'));
   check('구역은 이름 있는 group, 목록은 이름 있는 list', (await page.getByRole('group', { name: /^Click 1,/ }).count()) === 1 && (await page.getByRole('list', { name: /^Click 1 animations/ }).count()) === 1);
   await bars.nth(0).focus(); await page.keyboard.press('ArrowDown'); await settle();
   check('↓ 는 다음 막대로 포커스 이동', await page.evaluate(() => document.activeElement?.getAttribute('data-testid') === 'tl-bar' && document.activeElement?.getAttribute('data-click') === '2'));

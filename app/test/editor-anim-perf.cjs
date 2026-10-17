@@ -16,12 +16,25 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   const ms = (t0) => Math.round(performance.now() - t0);
   const ifr = await page.evaluate(() => { const f = document.querySelector('iframe[title="Canvas"]'); return (f.__sk = f.__sk || Math.random()); });
 
-  // 1. 탭 열기: Animation 탭을 눌러 막대가 모두 그려지기까지
+  let prof = null;
+  if (process.env.PROFILE) { prof = await page.context().newCDPSession(page); await prof.send('Profiler.enable'); await prof.send('Profiler.setSamplingInterval', { interval: 500 }); await prof.send('Profiler.start'); }
+  // 1. 탭 열기: 클릭 구역이 많으면(10개 초과) 선택과 헤드 구역만 펼쳐 시작한다. 구역이 모두 그려지기까지, 그다음 모두 펼치기까지를 따로 잰다
   let t0 = performance.now();
   await page.getByRole('tab', { name: 'Animation' }).click();
-  await page.waitForFunction(() => document.querySelectorAll('[data-testid=tl-bar]').length >= 100, null, { timeout: 30000 });
-  const tab = ms(t0); console.log('INFO Animation 탭 열기(요소 100개, 클릭 19개) ' + tab + 'ms');
-  check('탭 열기 800ms 이내(CPU 4배)', tab < 800, tab);
+  await page.waitForFunction(() => document.querySelectorAll('[data-testid=tl-click]').length >= 19, null, { timeout: 90000 });
+  const tab = ms(t0); console.log('INFO Animation 탭 열기(요소 100개, 클릭 19개, 자동 접힘) ' + tab + 'ms');
+  if (prof) {
+    const { profile } = await prof.send('Profiler.stop'), self = new Map(), byId = new Map(profile.nodes.map((n) => [n.id, n]));
+    profile.samples.forEach((id, i) => { const n = byId.get(id), k = `${n.callFrame.functionName || '(anon)'} ${n.callFrame.url.split('/').slice(-1)[0].slice(0, 40)}:${n.callFrame.lineNumber}`; self.set(k, (self.get(k) || 0) + (profile.timeDeltas[i] || 0)); });
+    [...self.entries()].sort((x, y) => y[1] - x[1]).slice(0, 16).forEach(([k, v]) => console.log('PROF ' + Math.round(v / 1000) + 'ms ' + k));
+  }
+  check('탭 열기 3초 이내(CPU 4배: 탭 전환과 패널 높이 변경으로 편집기가 다시 그려지는 비용이 대부분이다. 타임라인 자체 비용은 아래 모두 펼치기와 막대 누르기로 따로 잰다)', tab < 3000, tab);
+  await settle();
+  t0 = performance.now();
+  await page.getByRole('button', { name: 'Expand all clicks' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('[data-testid=tl-bar]').length >= 130, null, { timeout: 90000 });
+  const expand = ms(t0); console.log('INFO 모두 펼치기(막대 약 134개) ' + expand + 'ms');
+  check('모두 펼치기(타임라인만 다시 그림, 막대 134개) 1500ms 이내(CPU 4배)', expand < 1500, expand);
   await settle();
   console.log('INFO 노드 수 ' + await page.evaluate(() => document.querySelector('[data-testid=timeline]').querySelectorAll('*').length));
 

@@ -2,6 +2,7 @@
 import { join } from "node:path";
 import { validateMeta } from "./deck-meta";
 import { localImageRefs } from "./publish-record";
+import { readTime } from "./anim-core";
 
 export type Issue = { level: "error" | "warn"; rule: string; msg: string };
 
@@ -49,7 +50,7 @@ export function lint(html: string): Issue[] {
   const bodyM = rest.match(/<body\b[^>]*>([\s\S]*)<\/body>/i);
   const body = bodyM ? bodyM[1] : "";
   if (!bodyM) add("error", "body", "<body>가 없다");
-  type Sl = { kind: string; title: string | null; steps: number; id: string | null; notes: number; text: string; dsteps: string[]; douts: string[]; pairs: [string | null, string][]; blurs: number; layout: string | null };
+  type Sl = { kind: string; title: string | null; steps: number; id: string | null; notes: number; text: string; dsteps: string[]; douts: string[]; pairs: [string | null, string][]; blurs: number; layout: string | null; times: [string, string][]; outVars: number; };
   const slides: Sl[] = [];
   const stack: string[] = [];
   let cur: Sl | null = null;
@@ -67,12 +68,15 @@ export function lint(html: string): Issue[] {
       const ds = at("data-step"); if (ds !== null) cur.dsteps.push(ds.trim());
       const dout = at("data-step-out"); if (dout !== null) { cur.douts.push(dout.trim()); cur.pairs.push([ds === null ? null : ds.trim(), dout.trim()]); }
       if (/--sk-away-blur/.test(attrs) || at("data-step-effect") === "blur") cur.blurs++;
+      const st = at("style");
+      if (st) for (const v of st.matchAll(/(--sk-(?:step-ms|step-delay|out-ms|out-delay))\s*:\s*([^;]*)/g)) cur.times.push([v[1], v[2].trim()]);
+      if (st && /--sk-out-/.test(st) && dout === null) cur.outVars++;
     }
     if (stack.length === 0 && !["section", "script"].includes(tag)) add("error", "wrapper", `<${tag}>가 슬라이드 밖에 있다. 모든 요소를 <section data-slide> 안으로 옮긴다`);
     if (stack.length === 0 && tag === "section") {
       const kind = at("data-slide");
       if (kind === null) add("error", "slide", '<section>에 data-slide="content"를 붙인다(cover, chapter, content, end 중 하나)');
-      cur = { kind: kind ?? "", title: at("data-title"), steps: Number(at("data-steps") ?? 1), id: at("id"), notes: 0, text: "", dsteps: [], douts: [], pairs: [], blurs: 0, layout: at("data-layout") };
+      cur = { kind: kind ?? "", title: at("data-title"), steps: Number(at("data-steps") ?? 1), id: at("id"), notes: 0, text: "", dsteps: [], douts: [], pairs: [], blurs: 0, layout: at("data-layout"), times: [], outVars: 0 };
       slides.push(cur);
     } else if (cur && tag === "aside" && /\bdata-notes\b/.test(attrs)) {
       if (stack.length !== 1) add("error", "notes", `슬라이드 ${slides.length}: aside[data-notes]는 슬라이드의 직계 자식이어야 한다`);
@@ -99,12 +103,18 @@ export function lint(html: string): Issue[] {
     if (bad.length) add("error", "data-step", `슬라이드 ${n}: data-step은 2 이상의 정수여야 한다(잘못된 값: ${[...new Set(bad)].join(", ")}). 처음부터 보이는 요소에는 속성을 달지 않는다`);
     const badOut = s.douts.filter((v) => !/^\d+$/.test(v) || Number(v) < 2);
     if (badOut.length) add("error", "data-step-out", `슬라이드 ${n}: data-step-out은 2 이상의 정수여야 한다(잘못된 값: ${[...new Set(badOut)].join(", ")}). 사라지지 않는 요소에는 속성을 달지 않는다`);
-    for (const [en, ex] of s.pairs) if (/^\d+$/.test(ex) && Number(ex) >= 2 && Number(ex) <= (en !== null && /^\d+$/.test(en) ? Number(en) : 1)) add("warn", "data-step-out", `슬라이드 ${n}: data-step-out="${ex}"이 등장 단계(${en ?? 1})보다 앞서거나 같아 보이는 구간이 없다. 엔진은 이 퇴장을 무시한다`);
+    for (const [en, ex] of s.pairs) if (/^\d+$/.test(ex) && Number(ex) >= 2 && Number(ex) <= (en !== null && /^\d+$/.test(en) ? Number(en) : 1)) add("error", "data-step-out", `슬라이드 ${n}: data-step-out="${ex}"이 등장 단계(${en ?? 1})보다 앞서거나 같아 보이는 구간이 없다. 엔진은 이 퇴장을 무시하니 등장보다 큰 번호로 고친다`);
     if (s.blurs > 2) add("warn", "step-blur", `슬라이드 ${n}: blur(--sk-away-blur 또는 data-step-effect="blur")가 ${s.blurs}개다. blur는 필터라 비싸니 슬라이드당 2개 이하로, 큰 요소에는 쓰지 않는다`);
-    const have = new Set([...s.dsteps, ...s.douts].filter((v) => /^\d+$/.test(v)).map(Number));
-    for (const k of [...have].sort((a, b) => a - b)) if (k >= 3 && !have.has(k - 1)) add("warn", "data-step", `슬라이드 ${n}: 단계 ${k}가 있는데 단계 ${k - 1}에 요소가 없다. data-step을 2부터 빠짐없이 차례로 쓴다`);
-    if (s.steps > 1 && s.dsteps.length + s.douts.length === 0) { // 단계 요소가 있으면 data-steps는 빈 단계를 더하는 값일 뿐이다
+    for (const [name, value] of s.times) { // 시간과 지연(3.8절): ms나 s 단위, 0~10000ms
+      const t = readTime(value);
+      if (t?.issue === "time-invalid") add("error", "step-time", `슬라이드 ${n}: ${name}: ${value}는 시간이 아니다. 360ms나 0.4s처럼 단위를 붙인다`);
+      else if (t?.issue === "time-negative") add("error", "step-time", `슬라이드 ${n}: ${name}: ${value}는 음수다. 0 이상으로 쓴다`);
+      else if (t?.issue === "time-range") add("error", "step-time", `슬라이드 ${n}: ${name}: ${value}는 10000ms를 넘는다. 엔진은 10000ms로 맞춘다`);
+    }
+    if (s.outVars > 0) add("warn", "step-out-vars", `슬라이드 ${n}: --sk-out-* 값이 있는 요소 ${s.outVars}개에 data-step-out이 없어 쓰이지 않는다`);
+    if (s.steps > 1) { // 단계 요소가 있고 stepper 등록이 없으면 data-steps는 무시된다(단계 수는 요소 번호에서 나온다)
       const reg = scripts.some((c) => /SlideKit\.stepper\s*\(/.test(c.body) && (!s.id || c.body.includes(s.id)));
+      if (s.dsteps.length + s.douts.length > 0) { if (!reg) add("warn", "steps", `슬라이드 ${n}: data-steps="${s.steps}"는 data-step 요소가 있는 슬라이드에서 무시된다. 단계 수는 요소의 번호에서 나오니 속성을 지운다`); return; }
       if (!s.id) add("error", "steps", `슬라이드 ${n}: data-steps를 쓰려면 section에 id를 달고 SlideKit.stepper로 등록한다. 요소만 단계별로 나타내려면 data-step을 쓴다`);
       if (!reg) add("error", "steps", `슬라이드 ${n}: data-steps="${s.steps}"인데 SlideKit.stepper 등록이 없다. 요소만 나타내려면 data-steps 대신 요소에 data-step을 쓴다`);
     }

@@ -33,7 +33,7 @@ type Drag = {
   mode: "move" | "l" | "r"; bar: Bar; node: HTMLElement; x0: number; y0: number; start0: number; len0: number; origLeft: string; origWidth: string;
   moved: boolean; target: Target | null; res: Res | null; start: number; len: number; sections: { click: number; top: number; bottom: number }[] | null; gaps: { gap: number; top: number; bottom: number }[] | null; // 구역 위치는 세로로 움직이기 시작할 때 한 번만 잰다(가로 끌기에서는 레이아웃을 읽지 않는다)
  
-  targets: ReturnType<typeof snapTargets>; lane: HTMLElement; pps: number;
+  targets: ReturnType<typeof snapTargets>; lane: HTMLElement; pps: number; laneRect?: DOMRect; secRect?: DOMRect | null;
 };
 
 const issueText = (code: string, value: string) => ({
@@ -135,11 +135,12 @@ export function Timeline(p: Props) {
     const c = chip.current; if (!c) return;
     c.textContent = text; c.style.display = text ? "block" : "none"; c.style.left = `${x + 12}px`; c.style.top = `${y - 30}px`; c.dataset.bad = bad ? "1" : "";
   };
-  const showGuide = (ms: number | null, lane: HTMLElement) => {
+  const showGuide = (ms: number | null, d: Drag | null) => {
     const g = guide.current; if (!g) return;
-    if (ms === null) { g.style.display = "none"; return; }
-    const r = lane.getBoundingClientRect(), sec0 = lane.closest("[data-testid=tl-click]")?.getBoundingClientRect();
-    g.style.display = "block"; g.style.left = `${r.left + (ms / 1000) * ppsRef.current}px`; g.style.top = `${sec0?.top ?? r.top}px`; g.style.height = `${sec0?.height ?? r.height}px`;
+    if (ms === null || !d) { g.style.display = "none"; return; }
+    if (!d.laneRect) { d.laneRect = d.lane.getBoundingClientRect(); d.secRect = d.lane.closest("[data-testid=tl-click]")?.getBoundingClientRect() ?? null; } // 끄는 동안 레이아웃을 읽지 않게 첫 한 번만 잰다
+    const r = d.laneRect, sec0 = d.secRect;
+    g.style.display = "block"; g.style.left = `${r.left + (ms / 1000) * d.pps}px`; g.style.top = `${sec0?.top ?? r.top}px`; g.style.height = `${sec0?.height ?? r.height}px`;
   };
   const mark = (attr: string, el: Element | null) => { scroll.current?.querySelectorAll(`[${attr}]`).forEach((e) => e.removeAttribute(attr)); el?.setAttribute(attr, "1"); };
   const down = (e: React.PointerEvent<HTMLElement>, bar: Bar, mode: Drag["mode"], node: HTMLElement) => {
@@ -187,7 +188,7 @@ export function Timeline(p: Props) {
     else if (hit && hit.kind !== "click") text = `${hit.kind === "with" ? "With previous" : "After previous"} · ${nameFor(hit.ref!.el)}`;
     else if (hit?.kind === "click") text = "On click";
     showChip(text, e.clientX, e.clientY, bad);
-    showGuide(hit ? hit.t : null, d.lane);
+    showGuide(hit ? hit.t : null, d);
   };
   const end = (e: React.PointerEvent<HTMLElement>, cancel = false) => {
     const d = drag.current; drag.current = null;
@@ -195,7 +196,7 @@ export function Timeline(p: Props) {
     if (d.node.hasPointerCapture(e.pointerId)) d.node.releasePointerCapture(e.pointerId);
     d.node.style.left = d.origLeft; d.node.style.width = d.origWidth; d.node.style.transform = ""; d.node.style.zIndex = "";
     mark("data-drop", null); scroll.current?.querySelectorAll("[data-invalid]").forEach((x) => x.removeAttribute("data-invalid"));
-    showChip("", 0, 0); showGuide(null, d.lane);
+    showChip("", 0, 0); showGuide(null, null);
     if (cancel) return;
     if (!d.moved) { flushSync(() => setSelBar(d.bar.id)); const el0 = elOf(d.bar); requestAnimationFrame(() => p.onSelect(el0)); return; } // 막대 강조는 바로(타임라인만 다시 그림), 캔버스 선택(편집기 전체)은 다음 프레임
     const b = d.bar, s = act.current.specs;
@@ -354,7 +355,7 @@ const TrackRow = memo(function TrackRow(s: RowProps) {
   const delayText = `delay ${sec(b.start)}`;
   const tip = `${label} · ${rel === "delay" ? `Starts ${sec(b.start)} after the click` : REL_TEXT[rel]} · delay ${sec(b.start)} · lasts ${sec(b.len)}`;
   return (
-    <li role="listitem" data-testid="tl-track" data-el={b.el} data-kind={b.kind} className={`flex ${on ? "bg-hover" : ""}`} style={{ height: ROW_H }}>
+    <li role="listitem" data-testid="tl-track" data-el={b.el} data-kind={b.kind} className={`flex ${on ? "bg-hover" : ""}`} style={{ height: ROW_H, contain: "layout style" }}>
       <div title={name} className={`sticky left-0 z-10 flex shrink-0 items-center gap-1 truncate pr-2 text-caption ${on ? "bg-hover text-foreground" : "bg-background text-muted-foreground"}`} style={{ width: LABEL_W }}>
         <span aria-hidden="true" className="shrink-0 rounded px-1 text-micro text-foreground" style={{ background: b.kind === "in" ? "color-mix(in srgb, var(--color-focus-ring, #a78bfa) 35%, transparent)" : "rgba(245,158,11,.35)" }}>{b.kind === "in" ? "In" : "Out"}</span>
         <span className="min-w-0 truncate">{name}</span>

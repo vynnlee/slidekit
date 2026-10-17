@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button";
 import { TextArea } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
 import { byPath, previewHtml, serializeSlide, type Unit } from "@/lib/deck-source";
-import { applyPlayhead, readSlide, slideStepCount } from "@/lib/animation-dom";
-import { buildList } from "@/lib/animation-model";
+import { applyPlayhead, readSlide, scrubEnd, scrubSet, scrubStart, slideStepCount, stepsOf, type Scrub } from "@/lib/animation-dom";
 import type { PlayHead } from "@/lib/play-head";import { childToward, isLeaf, isLockedDeep, pick as pickEl, siblings } from "@/lib/selection";
 import { canMove, canResize, fixSize, moveBy, readTranslate, toLocal, writeTranslate } from "@/lib/move";
 import { lockAxis, snapMove, snapResize, toSlide, unionRect, type Gap, type Guide, type Rect } from "@/lib/guides";
@@ -380,14 +379,26 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
   };
 
   // 재생 헤드(단계 k)를 현재 슬라이드에 그린다. 속성만 토글하므로 가볍다(막대 끌기와 재생 중에 iframe을 다시 만들지 않는다).
+  // 스크럽 중에는 속성을 건드리지 않고 멈춘 CSSTransition의 currentTime만 바꾼다(전환 프레임 정확). 끝나면 전환을 걷어 내고 정상 단계 상태로 돌아온다.
+  const scrub = useRef<Scrub | null>(null);
   const applyStep = (instant: boolean) => {
     const sl = cur();
     if (!sl) return;
-    const rows = readSlide(sl);
-    badgeList.current = P.current.stepBadges ? buildList(rows.map((r, i) => ({ id: String(i), spec: r.spec }))).map((b) => ({ el: rows[+b.id].el, text: b.kind === "in" ? String(b.group) : `out ${b.group}`, right: b.kind === "out" })) : []; // 번호는 On click 순서(Click 1, 2, ...)
+    const h = P.current.head?.get();
+    if (h?.scrub) {
+      if (!scrub.current || scrub.current.click !== h.scrub.click || scrub.current.slide !== sl) {
+        if (scrub.current) for (const a of scrub.current.anims) a.cancel();
+        scrub.current = scrubStart(sl, h.scrub.click, readSlide(sl, null, false));
+      }
+      scrubSet(scrub.current, h.scrub.t);
+      return;
+    }
+    const rows = readSlide(sl, null, false), { numbers, stepOf } = stepsOf(rows);
+    badgeList.current = P.current.stepBadges ? rows.flatMap((r) => [...(r.range.n >= 2 ? [{ el: r.el, text: String(stepOf(r.range.n) - 1) }] : []), ...(r.range.m !== null ? [{ el: r.el, text: `out ${stepOf(r.range.m) - 1}`, right: true }] : [])]) : []; // 번호는 클릭 순위(Click 1, 2, ...)
+    const S = 1 + numbers.length, k = Math.min(Math.max(1, h?.k ?? S), S);
+    if (scrub.current) { scrubEnd(scrub.current, k, rows); scrub.current = null; return; }
     if (!rows.length) return;
-    const S = slideStepCount(sl, rows), k = P.current.head?.get().k ?? S;
-    applyPlayhead(sl, Math.min(Math.max(1, k), S), rows, instant);
+    applyPlayhead(sl, k, rows, instant);
   };
   useEffect(() => { applyStep(true); }, [p.index, p.units, url, p.stepBadges]); // eslint-disable-line
   useEffect(() => p.head?.subscribe(() => applyStep(!p.head!.get().animate)), [p.head]); // eslint-disable-line

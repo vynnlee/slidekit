@@ -107,7 +107,7 @@ type Props = {
   onSendAll?(): void;
   onResolveReplied?(): void;
   onStyle(prop: string, value: string): void;
-  onAnim(edits: [HTMLElement, import("@/lib/animation-model").StepSpec][]): void; // 단계 사양을 쓴다(실행 취소 한 건)
+  onAnim(edits: [HTMLElement, import("@/lib/animation-model").StepSpec][], key?: string): void; // 단계 사양을 쓴다(실행 취소 한 건)
   onStyles(map: Record<string, string>): void; // 여러 속성을 한 번에(실행 취소 한 건)
   onAttr(name: string, value: string | null): void;
   onElAttr(name: string, value: string | null): void;

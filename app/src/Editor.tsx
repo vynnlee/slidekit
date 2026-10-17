@@ -11,9 +11,10 @@ import { Canvas, textual, type CanvasApi } from "./Canvas";
 import { Filmstrip } from "./Filmstrip";
 import { LayerTree } from "./LayerTree";
 import { createHead } from "@/lib/play-head";
-import { AnimationPanel } from "./AnimationPanel";
+import { Timeline } from "./Timeline";
 import { writeSpec, readSlide as readAnimRows, slideStepCount } from "@/lib/animation-dom";
-import { DEFAULT_MS, type StepSpec } from "@/lib/animation-model";
+import { timelineOf } from "@/lib/timeline";
+import type { StepSpec } from "@/lib/animation-model";
 import { Inspector } from "./Inspector";
 import { go } from "./App";
 import { byPath, compose, duplicateHtml, freshIds, newKey, newSlideHtml, pathOf, splitDeck, type Unit } from "@/lib/deck-source";
@@ -597,22 +598,21 @@ export function Editor({ id }: { id: string }) {
     commit("attr:" + name);
   };
   // Animation 탭: 요소의 단계 사양을 쓰고(실행 취소 한 건), 재생 헤드를 옮기고, 단계를 재생한다.
-  const animEditMany = (edits: [HTMLElement, StepSpec][]) => { for (const [e, s] of edits) writeSpec(e, s); commit(); };
+  const animEditMany = (edits: [HTMLElement, StepSpec][], key?: string) => { for (const [e, s] of edits) writeSpec(e, s); commit(key); }; // key가 같은 연속 조작(방향키 미세 이동)은 실행 취소 한 건으로 합친다
   const stopPlay = () => { clearTimeout(playTimer.current); setPlaying(false); head.set({ k: null, animate: false }); };
   const animPlay = () => {
     if (playing) { stopPlay(); return; }
     const sl = canvas.current?.slide(indexRef.current);
     if (!sl) return;
-    const rows = readAnimRows(sl), S = slideStepCount(sl, rows);
-    if (S < 2) return;
+    const tl = timelineOf(readAnimRows(sl).map((r) => r.spec)), N = tl.clicks.length;
+    if (N < 1) return;
     setPlaying(true); head.set({ k: 1, animate: false });
-    const next = (k: number) => {
-      if (k > S) { stopPlay(); return; }
-      head.set({ k, animate: true });
-      const ends = rows.filter((r) => r.spec.in === k || r.spec.out === k).map((r) => (r.spec.delay ?? 0) + (r.spec.ms ?? DEFAULT_MS));
-      playTimer.current = setTimeout(() => next(k + 1), Math.max(Math.max(0, ...ends) + 500, 600));
+    const next = (c: number) => { // 클릭 c: 단계 c + 1로 전환을 일으키고, 그 클릭의 길이 + 0.5초 뒤 다음 클릭
+      if (c > N) { stopPlay(); return; }
+      head.set({ k: c + 1, animate: true });
+      playTimer.current = setTimeout(() => next(c + 1), Math.max(tl.clicks[c - 1].length + 500, 600));
     };
-    playTimer.current = setTimeout(() => next(2), 500);
+    playTimer.current = setTimeout(() => next(1), 500);
   };
   useEffect(() => { stopPlay(); }, [index]); // eslint-disable-line
   useEffect(() => () => clearTimeout(playTimer.current), []);
@@ -964,9 +964,8 @@ export function Editor({ id }: { id: string }) {
                 onChange={(e) => { setDraft({ key: units[index].key, text: e.target.value }); notes(e.target.value); }}
               />
             ) : (
-              <AnimationPanel slide={canvas.current?.slide(index) ?? null} sel={sel} rev={units} head={head} playing={playing}
-                onStep={(k) => { clearTimeout(playTimer.current); setPlaying(false); head.set({ k, animate: false }); }} onAnim={animEditMany} onSelect={(el) => pickSel(el)}
-                onPlay={animPlay} />
+              <Timeline slide={canvas.current?.slide(index) ?? null} sel={sel} rev={units} head={head} playing={playing}
+                onAnim={animEditMany} onSelect={(el) => pickSel(el)} onPlay={animPlay} />
             )}
           </div>
         </div>

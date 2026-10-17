@@ -127,6 +127,7 @@ const EDITOR_ALL = ["editor", "editor-assets", "editor-multi", "editor-menus", "
 const BROWSER_APP = ["routes", "responsive", "list"]; // 앱 공통 화면 변경 때의 연기 검사
 const MAP: [RegExp, string[]][] = [
   [/\.(ts|tsx)$/, ["typecheck"]],
+  [/^engine\/(anim-core\.ts|test\/anim-core)/, ["unit-other", "unit-isolated", "typecheck"]], // 단계 규칙 참조 구현(편집기 모델, lint, 시험이 같이 쓴다)
   [/^engine\/(slidekit\.(js|css)|test\/(verify|moved|gradient|offline|anim-stress)\.cjs)/, ["engine-verify", "engine-moved", "engine-gradient", "engine-offline", "engine-anim", "bundler-bundle"]],
   [/^engine\/(lint\.ts|test\/lint\.test\.ts|doctor\.ts|new\.ts|template\/)/, ["lint", "tokens"]],
   [/^bundler\//, ["bundler-bundle", "bundler-fonts"]],

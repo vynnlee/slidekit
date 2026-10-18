@@ -9,23 +9,29 @@ const MAX = 2000; // app/comments.ts의 본문 상한과 같다
 const QUICK = ["Make this shorter", "Simplify the wording", "Match the other slides"];
 
 interface CommentComposerProps {
-  /** 전송한다. send가 true면 곧바로 Claude에게 보내고(Send now), false면 등록만 한다(Add, 보류). 실패하면 던지거나 reject해서 글을 남기고 다시 시도하게 한다. */
+  /** 전송한다. send가 true면 곧바로 Claude에게 보내고(연결 전이면 저장해 두었다가 연결 때), false면 보류로만 저장한다(Save). 실패하면 던지거나 reject해서 글을 남기고 다시 시도하게 한다. */
   onSend(text: string, send: boolean): Promise<void>;
   onCancel(): void;
   /** 대상 요소 이름 등. 입력창 위에 작게 보인다. */
   target?: string;
   /** 영역 코멘트면 사각형의 가로세로 비율과 겹치는 요소 수(자리표시자 상자). 실제 이미지는 저장 뒤에 서버가 만든다. */
   area?: { ratio: number; count: number };
-  /** Claude 채널 연결 여부. false면 "Send now는 저장해 두었다가 연결되면 전달" 안내를 보인다. */
+  /** Claude 채널 연결 여부. true면 Enter가 곧바로 보내고, 아니면 Enter는 저장만 한다(Send는 저장해 두었다가 연결되면 전달). */
   channel?: boolean | null;
   className?: string;
 }
+
+const ENTER_KEY = "slidekit.comment.enter"; // "save"면 Enter가 항상 저장만 한다(예전 동작). 그 밖에는 연결되어 있을 때만 바로 보낸다.
+const readSaveFirst = () => { try { return localStorage.getItem(ENTER_KEY) === "save"; } catch { return false; } };
 
 export function CommentComposer({ onSend, onCancel, target, area, channel, className }: CommentComposerProps) {
   const flow = useFlow();
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
+  const [saveFirst, setSaveFirst] = useState(readSaveFirst);
+  const enterSends = channel === true && !saveFirst; // Enter의 동작: 보낸다 / 저장한다
+  const toggleEnter = () => setSaveFirst((v) => { try { localStorage.setItem(ENTER_KEY, v ? "send" : "save"); } catch { /* 저장 불가: 이 창에서만 */ } return !v; });
   const ref = useRef<HTMLTextAreaElement>(null);
   // 열기 직전에 포커스가 있던 곳(캔버스나 코멘트 모드 층)을 기억했다가 닫을 때 돌려준다. 작성창이 사라지면 포커스가 body로 떨어져 키보드 흐름이 끊긴다.
   const opener = useRef<Element | null>(typeof document === "undefined" ? null : document.activeElement);
@@ -67,8 +73,8 @@ export function CommentComposer({ onSend, onCancel, target, area, channel, class
         onKeyDown={(e) => {
           e.stopPropagation(); // 편집기 전역 단축키와 겹치지 않게 한다
           if (e.key === "Escape") onCancel();
-          // Enter는 Add, Cmd+Enter는 Send now, Shift+Enter는 줄바꿈(기본 동작). 한글 조합 중의 Enter는 글자를 확정하는 키라 건너뛴다.
-          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); void send(e.metaKey || e.ctrlKey); }
+          // Enter는 연결되어 있으면 Send, 아니면 Save. Cmd+Enter는 언제나 Send, Shift+Enter는 줄바꿈(기본 동작). 한글 조합 중의 Enter는 글자를 확정하는 키라 건너뛴다.
+          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); void send(e.metaKey || e.ctrlKey || enterSends); }
         }}
       />
       {!text && (
@@ -76,15 +82,18 @@ export function CommentComposer({ onSend, onCancel, target, area, channel, class
           {QUICK.map((q) => <Button key={q} size="compact" variant="ghost" onClick={() => { setText(q); ref.current?.focus(); }}>{q}</Button>)}
         </div>
       )}
-      {flowNote(flow) ? <p role="status" className="px-1 text-micro text-muted-foreground">{flow?.paused ? "Claude is paused. Send now saves it and sends when you resume." : `${flowNote(flow)} Send now saves it and sends when it resumes.`}</p> : channel === false && <p className="px-1 text-micro text-muted-foreground">Claude is not connected. Send now saves it and sends when a session connects. Add keeps it on hold.</p>}
+      {flowNote(flow) ? <p role="status" className="px-1 text-micro text-muted-foreground">{flow?.paused ? "Claude is paused. Send saves it and sends when you resume." : `${flowNote(flow)} Send saves it and sends when it resumes.`}</p> : channel === false && <p className="px-1 text-micro text-muted-foreground">Claude is not connected. Send saves it and sends when a session connects. Save keeps it on hold.</p>}
       {err && <p role="alert" className="px-1 text-micro">{err}</p>}
-      <span className={`px-1 text-micro tabular-nums ${over ? "text-foreground" : "text-muted-foreground"}`} aria-live="polite">
-        {text.length > MAX - 200 ? `${text.length}/${MAX}` : "Enter: add. Cmd+Enter: send now. Shift+Enter: new line."}
-      </span>
+      <div className="flex items-center gap-1 px-1 text-micro text-muted-foreground" aria-live="polite">
+        {text.length > MAX - 200
+          ? <span className={`tabular-nums ${over ? "text-foreground" : ""}`}>{text.length}/{MAX}</span>
+          : <span>{enterSends ? "Enter sends." : "Enter saves."} Shift+Enter: new line.</span>}
+        {(channel === true || saveFirst) && <button type="button" className="ml-auto cursor-default rounded px-1 underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus-ring" onClick={toggleEnter}>{saveFirst ? "Enter sends when connected" : "Enter saves instead"}</button>}
+      </div>
       <div className="flex items-center justify-end gap-2">
         <Button size="compact" variant="ghost" onClick={onCancel}>Cancel</Button>
-        <Button size="compact" variant="secondary" aria-keyshortcuts="Control+Enter Meta+Enter" disabled={!text.trim() || over || sending} onClick={() => void send(true)}>{sending ? "Sending" : "Send now"}</Button>
-        <Button size="compact" variant="primary" aria-keyshortcuts="Enter" disabled={!text.trim() || over || sending} onClick={() => void send(false)}>Add</Button>
+        <Button size="compact" variant={enterSends ? "secondary" : "primary"} aria-keyshortcuts={enterSends ? undefined : "Enter"} disabled={!text.trim() || over || sending} onClick={() => void send(false)}>{enterSends ? "Send later" : "Save"}</Button>
+        <Button size="compact" variant={enterSends ? "primary" : "secondary"} aria-keyshortcuts={enterSends ? "Enter Control+Enter Meta+Enter" : "Control+Enter Meta+Enter"} disabled={!text.trim() || over || sending} onClick={() => void send(true)}>{sending ? "Sending" : "Send"}</Button>
       </div>
     </div>
   );

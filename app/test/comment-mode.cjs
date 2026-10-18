@@ -1,5 +1,5 @@
 /* 코멘트 모드 브라우저 검증(spec/COMMENT-MODE.md): 켜고 끄기, 호버 윤곽, 클릭으로 요소 코멘트, 드래그로 영역 코멘트(이미지 생성), 8px 미만은 클릭, Esc 순서,
-   모드 중 편집 차단, 키보드 영역 지정(A, 방향키, Enter), 작성창의 Add(Enter)와 Send now(Cmd+Enter)와 Shift+Enter 줄바꿈과 한글 조합, 체크 상자 삭제.
+   모드 중 편집 차단, 키보드 영역 지정(A, 방향키, Enter), 작성창의 Save(Enter, 채널 없음)와 Send(Cmd+Enter)와 Shift+Enter 줄바꿈과 한글 조합, 체크 상자 삭제.
    덱은 decks/_e2e-comment-mode 사본이고 끝에 지운다.
    Usage: PW=<playwright-core> CHROME=<headless shell> BASE=http://127.0.0.1:3245 node comment-mode.cjs */
 const { launch } = require('../../scripts/lib/pw.cjs');
@@ -69,7 +69,7 @@ const hasChrome = !!process.env.CHROME || fs.existsSync('/Applications/Google Ch
     check('호버하면 요소 윤곽과 이름 칩이 보인다', await page.waitForFunction(() => { const b = document.querySelector('[data-testid=comment-hover]'); return b && getComputedStyle(b).display !== 'none' && b.textContent.trim().length > 0; }, null, { timeout: 3000 }).then(() => true, () => false));
     await page.mouse.click(hb.x + hb.w / 2, hb.y + hb.h / 2);
     check('클릭하면 그 요소에 작성창이 열린다', await composer.waitFor({ timeout: 3000 }).then(() => true, () => false));
-    check('작성창에 Add와 Send now 단추와 힌트가 있고 체크 상자는 없다', (await page.getByRole('button', { name: 'Add', exact: true }).count()) === 1 && (await page.getByRole('button', { name: 'Send now', exact: true }).count()) === 1 && /Enter: add\. Cmd\+Enter: send now\. Shift\+Enter: new line\./.test(await composer.textContent()) && (await page.getByLabel(/Hold until I send all/).count()) === 0 && (await composer.getByRole('checkbox').count()) === 0);
+    check('작성창에 Save와 Send 단추와 힌트가 있고 체크 상자는 없다', (await page.getByRole('button', { name: 'Save', exact: true }).count()) === 1 && (await page.getByRole('button', { name: 'Send', exact: true }).count()) === 1 && /Enter saves\. Shift\+Enter: new line\./.test(await composer.textContent()) && (await page.getByLabel(/Hold until I send all/).count()) === 0 && (await composer.getByRole('checkbox').count()) === 0);
     const box = page.getByRole('textbox', { name: 'Comment' });
     await box.fill('첫째 줄');
     await page.keyboard.press('Shift+Enter');
@@ -80,18 +80,18 @@ const hasChrome = !!process.env.CHROME || fs.existsSync('/Applications/Google Ch
     check('한글 조합 중 Enter는 보내지 않는다', posts.length === 0 && (await composer.count()) === 1);
     await page.keyboard.press('Enter');
     await composer.waitFor({ state: 'detached', timeout: 5000 });
-    check('Enter는 Add: 보류(hold)로 저장되고 본문의 줄바꿈이 간다', posts.length === 1 && posts[0].hold === true && posts[0].text === '첫째 줄\n둘째 줄' && !!posts[0].path && !posts[0].region && posts[0].step >= 1, posts[0]);
-    check('Add 뒤에도 모드가 유지된다', (await layer.count()) === 1);
+    check('채널이 없으면 Enter는 Save: 보류(hold)로 저장되고 본문의 줄바꿈이 간다', posts.length === 1 && posts[0].hold === true && posts[0].text === '첫째 줄\n둘째 줄' && !!posts[0].path && !posts[0].region && posts[0].step >= 1, posts[0]);
+    check('Save 뒤에도 모드가 유지된다', (await layer.count()) === 1);
     check('목록에 Held로 나타난다', await page.waitForFunction(() => document.querySelectorAll('[data-testid=comments-panel] li[data-state="held"]').length === 1, null, { timeout: 5000 }).then(() => true, () => false));
 
-    // 4) Send now: Cmd+Enter(보류 아님)
+    // 4) Send: Cmd+Enter(보류 아님)
     await page.mouse.click(hb.x + hb.w / 2, hb.y + hb.h / 2);
     await composer.waitFor();
     await page.getByRole('textbox', { name: 'Comment' }).fill('바로 보내기');
     await page.keyboard.press('Meta+Enter');
     await composer.waitFor({ state: 'detached', timeout: 5000 });
-    check('Cmd+Enter는 Send now: 보류가 아니다', posts.length === 2 && !posts[1].hold && posts[1].text === '바로 보내기', posts[1]);
-    check('Send now는 Waiting(채널 없음)', await page.waitForFunction(() => document.querySelectorAll('[data-testid=comments-panel] li[data-state="waiting"]').length >= 1, null, { timeout: 5000 }).then(() => true, () => false));
+    check('Cmd+Enter는 Send: 보류가 아니다', posts.length === 2 && !posts[1].hold && posts[1].text === '바로 보내기', posts[1]);
+    check('Send는 Waiting(채널 없음)', await page.waitForFunction(() => document.querySelectorAll('[data-testid=comments-panel] li[data-state="waiting"]').length >= 1, null, { timeout: 5000 }).then(() => true, () => false));
 
     // 5) 8px 미만은 클릭, 이상은 드래그(영역), Esc로 드래그 취소
     await page.mouse.move(hb.x + 20, hb.y + 5); await page.mouse.down(); await page.mouse.move(hb.x + 23, hb.y + 7); await page.mouse.up();

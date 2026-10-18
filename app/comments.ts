@@ -291,7 +291,7 @@ try {
   });
 } catch {}
 
-export const routes = {
+const rawRoutes = {
   "/api/comments": {
     GET: (req: Request) => {
       const deck = new URL(req.url).searchParams.get("deck");
@@ -636,6 +636,15 @@ export const routes = {
     return new Response(stream, { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } });
   },
 };
+
+/** 읽기 전용 덱(SLIDEKIT_READONLY_DECKS, 시험 서버와 러너 전용)에는 어떤 코멘트 변경도 하지 않는다. 시험이 사용자 덱의 comments.json을 오염시키는 사고를 구조적으로 막는다. */
+const readOnlyGuard = <T extends Record<string, unknown>>(r: T): T =>
+  Object.fromEntries(Object.entries(r).map(([k, v]) => [k, typeof v === "function" || !v ? v : Object.fromEntries(Object.entries(v as object).map(([m, h]) => [m, m !== "POST" || typeof h !== "function" ? h : async (req: Request, ...a: unknown[]) => {
+    const b = (await req.clone().json().catch(() => null)) as { deck?: unknown } | null;
+    if (b && typeof b.deck === "string" && readOnlyDeck(b.deck)) return bad("read-only deck", 403);
+    return (h as (r: Request, ...a: unknown[]) => unknown)(req, ...a);
+  }]))])) as T;
+export const routes = readOnlyGuard(rawRoutes);
 
 // 코멘트 앵커 재계산(spec/COMMENT-UX.md 4.4). 덱이 바뀔 때마다(편집기 저장, Claude 수정, 직접 수정, 버전 복원, 되돌리기) 호출한다.
 // 슬라이드 번호를 새 덱에 맞추고, 슬라이드를 잃은 코멘트는 slideDeleted(앵커 lost)로, 슬라이드는 있는데 요소 글자가 없으면 recheck(앵커 check)로 표시한다.

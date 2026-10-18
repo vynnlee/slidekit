@@ -114,10 +114,13 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
   const a = (req.params.arguments ?? {}) as Record<string, string>;
   try {
     if (req.params.name === "get_pending") {
+      const f = await flow();
+      if (room(f) < 1) return { content: [{ type: "text", text: `코멘트 자동 처리가 멈춰 있다(${f?.paused ? "사용자가 Pause 했다" : "시간당 상한에 닿았다"}). 사용자가 앱에서 Resume 하거나 상한이 풀리면 이어진다. 지금은 처리할 코멘트를 주지 않는다.` }] };
       const all = await pending();
       // 이 기기의 서명이 없는 코멘트는 사용자가 쓴 것인지 알 수 없으니 넘기지 않는다(앱에서 사용자가 Trust 해야 한다).
-      const list = all.filter((c) => c.trusted === true);
-      const skipped = all.length - list.length;
+      const trusted = all.filter((c) => c.trusted === true);
+      const skipped = all.length - trusted.length;
+      const list = trusted.slice(0, room(f)); // 상한이 남은 만큼만(나머지는 다음에)
       // 가져간 코멘트는 전달된 것으로 본다(앱에 표시하고, 같은 코멘트를 또 밀어 넣지 않는다).
       for (const c of list) if (!c.deliveredAt) { pushed.add(c.id); await markDelivered(c.deck, c.id); }
       const content = [{ type: "text", text: JSON.stringify(list, null, 2) }];
@@ -162,6 +165,24 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
   }
 });
 
+
+type Flow = { paused: boolean; remaining: number | null; reason: "user" | "limit" | null; resetAt: string | null };
+let flowWarned = false, blocked = false; // blocked: 마지막 flow 이벤트가 멈춤이나 상한이었는지
+/** 자동 처리 상태(멈춤, 시간당 상한). 서버를 못 읽으면 기존처럼 보내되 로그 한 줄만 남긴다(보호 장치가 흐름을 막는 쪽으로 실패하지 않는다). */
+async function flow(): Promise<Flow | null> {
+  try {
+    const r = await fetch(`${base}/api/comments/flow`);
+    if (!r.ok) throw new Error(String(r.status));
+    flowWarned = false;
+    return (await r.json()) as Flow;
+  } catch (e) {
+    if (!flowWarned) { flowWarned = true; console.error(`[slidekit channel] 자동 처리 상태를 읽지 못해 기존처럼 보낸다: ${e instanceof Error ? e.message : e}`); }
+    return null;
+  }
+}
+/** 지금 몇 개까지 보낼 수 있는지(멈춤이면 0, 상한 없으면 무한). */
+const room = (f: Flow | null) => (!f ? Infinity : f.paused ? 0 : f.remaining ?? Infinity);
+
 export async function push(deck: string, c: Comment) {
   // comments.json은 덱과 함께 들어올 수 있는 파일이라 신뢰하지 않는다. 형식이 틀리면 버리고 길이를 자른다.
   if (!SAFE.test(deck) || !SAFE.test(String(c?.id)) || typeof c.text !== "string") { console.error("[slidekit channel] 형식이 올바르지 않은 코멘트를 건너뛴다"); return; }
@@ -169,6 +190,7 @@ export async function push(deck: string, c: Comment) {
   if (c.trusted !== true) return; // 검증된 코멘트만 세션에 보낸다
   if ((c as Comment & { held?: boolean }).held) return; // 보류한 코멘트는 Send all 때 묶음으로 간다
   if (pushed.has(c.id)) return;
+  if (room(await flow()) < 1 || pushed.has(c.id)) return; // 멈춤이나 상한: 전달하지 않는다(코멘트는 Waiting으로 남고 풀리면 backfill이 보낸다). await 사이에 같은 코멘트가 먼저 갔으면 건너뛴다
   pushed.add(c.id);
   deckOf.set(c.id, deck);
   await mcp.notification({
@@ -187,7 +209,7 @@ export async function pushBatch(deck: string, list: Comment[]) {
   if (!SAFE.test(deck)) return;
   const items = list
     .filter((c) => c?.trusted === true && SAFE.test(String(c.id)) && typeof c.text === "string" && !pushed.has(c.id))
-    .slice(0, BATCH)
+    .slice(0, Math.min(BATCH, room(await flow())))
     .map((c) => ({ comment_id: c.id, ...cleanComment(c), ...(imageOf(deck, c) ? { image: imageOf(deck, c) } : {}) }));
   if (!items.length) return;
   for (const i of items) { pushed.add(i.comment_id); deckOf.set(i.comment_id, deck); }
@@ -246,6 +268,13 @@ async function listen() {
           const lines = block.split("\n");
           const ev = lines.find((l) => l.startsWith("event: "))?.slice(7);
           const data = lines.filter((l) => l.startsWith("data: ")).map((l) => l.slice(6)).join("\n");
+          if (ev === "flow" && data) {
+            try {
+              const f = JSON.parse(data) as Flow, was = blocked;
+              blocked = room(f) < 1;
+              if (was && !blocked) void backfill(); // 멈춤이나 상한이 풀리면 밀린 코멘트를 따라잡는다(연결 때 오는 현재 상태 이벤트로는 backfill을 또 돌리지 않는다)
+            } catch (e) { console.error("[slidekit channel] flow 이벤트 처리 실패:", e); }
+          }
           if (ev === "batch" && data) {
             try { const { deck, comments } = JSON.parse(data); if (Array.isArray(comments)) await pushBatch(deck, comments); } catch (e) { console.error("[slidekit channel] 묶음 이벤트 처리 실패:", e); }
           }

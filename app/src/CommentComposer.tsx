@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { TextArea } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
+import { flowNote, useFlow } from "@/lib/comment-flow";
 
 const MAX = 2000; // app/comments.ts의 본문 상한과 같다
 // 글이 비어 있을 때만 보이는 자주 쓰는 요청 문구. 누르면 입력창에 채워 바로 고칠 수 있다.
@@ -21,6 +22,7 @@ interface CommentComposerProps {
 }
 
 export function CommentComposer({ onSend, onCancel, target, area, channel, className }: CommentComposerProps) {
+  const flow = useFlow();
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
@@ -74,7 +76,7 @@ export function CommentComposer({ onSend, onCancel, target, area, channel, class
           {QUICK.map((q) => <Button key={q} size="compact" variant="ghost" onClick={() => { setText(q); ref.current?.focus(); }}>{q}</Button>)}
         </div>
       )}
-      {channel === false && <p className="px-1 text-micro text-muted-foreground">Claude is not connected. Send now saves it and sends when a session connects. Add keeps it on hold.</p>}
+      {flowNote(flow) ? <p role="status" className="px-1 text-micro text-muted-foreground">{flow?.paused ? "Claude is paused. Send now saves it and sends when you resume." : `${flowNote(flow)} Send now saves it and sends when it resumes.`}</p> : channel === false && <p className="px-1 text-micro text-muted-foreground">Claude is not connected. Send now saves it and sends when a session connects. Add keeps it on hold.</p>}
       {err && <p role="alert" className="px-1 text-micro">{err}</p>}
       <span className={`px-1 text-micro tabular-nums ${over ? "text-foreground" : "text-muted-foreground"}`} aria-live="polite">
         {text.length > MAX - 200 ? `${text.length}/${MAX}` : "Enter: add. Cmd+Enter: send now. Shift+Enter: new line."}

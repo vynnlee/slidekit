@@ -1,11 +1,12 @@
 import { deckFolder } from "./folder";
 import { join } from "node:path";
-import { chmodSync, closeSync, copyFileSync, existsSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, watch, writeFileSync, writeSync } from "node:fs";
+import { chmodSync, closeSync, copyFileSync, existsSync, linkSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, watch, writeFileSync, writeSync } from "node:fs";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
 import { editsBetween, hash, noteFileChanged, read as readVersion, restore, type Version } from "./versions";
 import { changedSlides, revisionOf } from "./slide-edit";
+import { flowOf, readPaused, writePaused, type Flow } from "./comment-flow";
 import { readOnlyDeck, withDeckLock } from "./deck-lock";
 
 import { cancelCapture, captureImage, imagePath, parseRegion, removeImage, type Region } from "./capture";
@@ -241,6 +242,27 @@ async function settleImages(deck: string, ids: string[], ms: number) {
 }
 /** 저장된 이미지가 실제로 있는지(파일이 지워졌다면 failed로 보인다). */
 const withImageState = (deck: string, list: Comment[]) => list.map((c) => (c.image === "ready" && !(imagePath(deckDirOf(deck), c.id) && existsSync(imagePath(deckDirOf(deck), c.id)!)) ? { ...c, image: "failed" as const } : c));
+// 자동 처리 상한과 Pause(spec/COMMENT-FLOOD.md). 사용량은 모든 덱의 deliveredAt(최근 60분)에서 계산한다. Pause는 키 파일 옆 flow.json에 둔다.
+const flowFile = join(dirname(keyFile), "flow.json");
+let paused = readPaused(flowFile);
+export function currentFlow(): Flow {
+  const at: (string | undefined)[] = [];
+  try {
+    for (const d of readdirSync(decksDir, { withFileTypes: true })) {
+      if (!d.isDirectory() || !validDeck(d.name)) continue;
+      try { for (const c of load(d.name)) at.push(c.deliveredAt); } catch { /* 손상된 comments.json은 건너뛴다 */ }
+    }
+  } catch { /* decks/가 없으면 비어 있다 */ }
+  return flowOf(at, paused);
+}
+let lastFlow = "", resetTimer: Timer | undefined;
+/** 멈춤 상태(Pause, 상한)가 바뀌었을 때만 flow 이벤트를 보낸다. 상한이면 풀리는 시각에 한 번 더 확인한다. */
+export function publishFlow(force = false) {
+  const f = currentFlow(), sig = `${f.paused}|${f.reason}|${f.limit}`;
+  clearTimeout(resetTimer);
+  if (f.reason === "limit" && f.resetAt) resetTimer = setTimeout(() => publishFlow(), Math.max(1000, Date.parse(f.resetAt) - Date.now() + 100));
+  if (force || sig !== lastFlow) { lastFlow = sig; emit("flow", f); }
+}
 const body = async (req: Request) => (await req.json().catch(() => null)) as Record<string, unknown> | null;
 
 // decks/ 변경 감지. comments.json 변경은 무시하고 덱별로 디바운스한다.
@@ -459,6 +481,18 @@ export const routes = {
     },
   },
   "/api/channel": { GET: () => Response.json({ connected: channelClients.size > 0 }) },
+  // 자동 처리 상태: 채널이 전달 전에 보고, 앱이 패널 머리 줄에 보인다. POST는 사용자의 Pause와 Resume(에이전트용 도구는 없다).
+  "/api/comments/flow": {
+    GET: () => Response.json(currentFlow()),
+    POST: async (req: Request) => {
+      const b = await body(req);
+      if (!b || typeof b.paused !== "boolean") return bad("paused");
+      try { writePaused(flowFile, b.paused); } catch (e) { return bad(`Could not save the pause state: ${(e as Error).message}`, 500); }
+      paused = b.paused;
+      publishFlow(true);
+      return Response.json(currentFlow());
+    },
+  },
   // 채널이 세션에 코멘트를 전달했다고 표시한다(전달 전에는 "대기", 후에는 "Claude에게 전달됨").
   "/api/comments/:id/delivered": {
     POST: async (req: Request & { params: { id: string } }) => {
@@ -471,6 +505,7 @@ export const routes = {
         comment.deliveredAt = new Date().toISOString();
         save(b.deck, list);
         emit("reply", { deck: b.deck, comment });
+        publishFlow();
       }
       return Response.json({ ok: true });
     },
@@ -509,6 +544,7 @@ export const routes = {
           if (!was) emit("channel", { connected: true });
         }
         c.enqueue(`event: channel\ndata: ${JSON.stringify({ connected: channelClients.size > 0 })}\n\n`); // 새 연결에 현재 상태를 알린다
+        c.enqueue(`event: flow\ndata: ${JSON.stringify(currentFlow())}\n\n`);
         ping = setInterval(() => { try { c.enqueue(": ping\n\n"); } catch {} }, 15000);
       },
       cancel() {

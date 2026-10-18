@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Check, CheckCheck, Clock, Copy, Loader2, MessageSquare, Pause, RotateCcw, Send, ShieldAlert, Undo2 } from "lucide-react";
+import { Check, CheckCheck, Clock, Copy, Loader2, MessageSquare, Pause, Play, RotateCcw, Send, ShieldAlert, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ContextMenu, useContextMenu } from "@/components/ui/context-menu";
 import { commentMenu } from "@/lib/comment-actions";
 import { cn } from "@/lib/utils";
+import { flowNote, setPaused, useFlow } from "@/lib/comment-flow";
 import type { Comment } from "@/lib/deck";
 import { STATE_LABEL, ago, numbering, stateOf, type CommentState } from "@/lib/comment-state";
 import { hoveredComment, setHoveredComment, subscribeHover } from "@/lib/comment-hover";
@@ -48,6 +49,19 @@ export function ChannelBadge({ connected, className }: { connected: boolean | nu
       <span aria-hidden="true" className={cn("h-1.5 w-1.5 rounded-full", connected ? "bg-emerald-400" : "bg-muted-foreground/60")} />
       {connected ? "Claude connected" : "Claude not connected"}
     </span>
+  );
+}
+
+/** 자동 처리 상태 한 줄과 Pause, Resume. 멈춤이나 상한이면 이유와 풀리는 때를 보인다(role=status라 바뀌면 읽어 준다). */
+function FlowBar() {
+  const flow = useFlow();
+  if (!flow) return null;
+  const note = flowNote(flow), paused = flow.paused;
+  return (
+    <div className="flex items-center gap-2 px-1" data-testid="comment-flow">
+      <span role="status" className={cn("text-micro", note ? "text-amber-300" : "text-muted-foreground")}>{note ?? "Auto-processing on"}</span>
+      <Button size="compact" variant="ghost" className="ml-auto" leadingIcon={paused ? Play : Pause} onClick={() => { void setPaused(!paused); }}>{paused ? "Resume" : "Pause"}</Button>
+    </div>
   );
 }
 
@@ -152,6 +166,7 @@ export function CommentsPanel({ comments, folder, channel, onJump, onResolve, on
   return (
     <div ref={root} onKeyDown={onKeys} className="flex flex-col gap-3 pt-3" data-testid="comments-panel">
       {channel === false ? <NotConnected open={comments.length === 0} /> : <ChannelBadge connected={channel} />}
+      <FlowBar />
       {(showSend || showResolve) && (
         <div role="group" aria-label="Batch actions" className="flex flex-wrap gap-1">
           {showSend && <Button size="compact" variant="secondary" leadingIcon={Send} onClick={onSendAll}>{`Send all to Claude (${sendable.length > 10 ? "10+" : sendable.length})`}</Button>}

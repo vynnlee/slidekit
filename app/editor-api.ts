@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { readOnlyDeck, withDeckLock } from "./deck-lock";
-import { remap } from "./comments";
+import { reanchorDeck } from "./comments";
 import { afterSave } from "./versions";
 import { deckFolder } from "./folder";
 import { revisionOf } from "./slide-edit";
@@ -50,9 +50,8 @@ export const routes = {
         // 편집기가 오래된 base로 다시 시도해 409와 Overwrite 안내를 띄우므로, 실패는 기록만 하고 성공으로 답한다.
         try { afterSave(folder, prev, source); } catch (e) { console.error(`[slidekit] ${folder}: 버전 기록 실패: ${(e as Error).message}`); }
         // 순서 변경과 삭제를 코멘트의 슬라이드 번호에 반영한다(옛 번호 -> 새 번호)
-        if (slideMap && typeof slideMap === "object") {
-          try { remap(folder, slideMap as Record<string, number>); } catch (e) { console.error(`[slidekit] ${folder}: 코멘트 번호 갱신 실패: ${(e as Error).message}`); }
-        }
+        // 편집기가 보낸 정확한 대응(slideMap)이 있으면 그것으로, 없으면 앞뒤 슬라이드를 맞춰 앵커를 다시 계산한다(spec/COMMENT-UX.md 4.4).
+        try { reanchorDeck(folder, prev, source, slideMap && typeof slideMap === "object" ? (slideMap as Record<string, number>) : undefined); } catch (e) { console.error(`[slidekit] ${folder}: 코멘트 번호 갱신 실패: ${(e as Error).message}`); }
         return Response.json({ mtime: statSync(file).mtimeMs });
       });
     },

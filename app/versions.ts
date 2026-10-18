@@ -129,7 +129,7 @@ export function editsBetween(deck: string, from: string, until: string): { base:
 }
 
 /** 현재 내용을 restore 스냅샷으로 남기고 version 내용으로 덮어쓴다. 되돌릴 때 쓰는 공용 함수. */
-export function restore(deck: string, id: string): { ok: true; undo: string | null } | { ok: false; status: number; error: string } {
+export function restore(deck: string, id: string): { ok: true; undo: string | null; before: string } | { ok: false; status: number; error: string } {
   const src = read(deck, id);
   if (src === null) return { ok: false, status: 404, error: "no such version" };
   const file = fileOf(deck);
@@ -140,7 +140,7 @@ export function restore(deck: string, id: string): { ok: true; undo: string | nu
   writeFileSync(tmp, src);
   renameSync(tmp, file);
   lastSeen.set(deck, src);
-  return { ok: true, undo };
+  return { ok: true, undo, before: cur };
 }
 
 type Req = Request & { params: { folder: string; vid?: string } };
@@ -190,7 +190,7 @@ export const routes = {
       if (!deck) return bad("deck", 404);
       if (readOnlyDeck(deck)) return bad("read-only deck", 403);
       const r = await withDeckLock(deck, async () => restore(deck, req.params.vid!)); // 편집기 저장(PUT)과 같은 잠금
-      if (r.ok) void import("./comments").then((m) => m.flagAfterRestore(deck, readFileSync(fileOf(deck), "utf8"))).catch(() => {}); // 순환 import를 피해 늦게 불러온다
+      if (r.ok) void import("./comments").then((m) => m.reanchorDeck(deck, r.before, readFileSync(fileOf(deck), "utf8"))).catch(() => {}); // 순환 import를 피해 늦게 불러온다
       return r.ok ? Response.json({ ok: true, undo: r.undo }) : bad(r.error, r.status);
     },
   },

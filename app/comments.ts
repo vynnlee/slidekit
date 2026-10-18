@@ -5,7 +5,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
 import { editsBetween, hash, noteFileChanged, read as readVersion, restore, type Version } from "./versions";
-import { changedSlides, revisionOf } from "./slide-edit";
+import { changedSlides, matchSlides, revisionOf, slideBodies, slideHasText, slideWithText } from "./slide-edit";
 import { flowOf, readPaused, writePaused, type Flow } from "./comment-flow";
 import { readOnlyDeck, withDeckLock } from "./deck-lock";
 
@@ -29,7 +29,10 @@ export type Comment = {
   image?: "pending" | "ready" | "failed"; // 영역 코멘트의 이미지 상태(파일은 .comments/<id>.png)
   held?: boolean; // 쓸 때 "Hold"를 켠 코멘트. Send all to Claude를 누를 때까지 채널로 보내지 않는다
   recheck?: boolean; // 버전 복원 뒤 그 슬라이드에서 발췌문을 찾지 못한 코멘트. 위치 확인이 필요하다고 표시만 한다
-  slideDeleted?: boolean; // 저장 때 슬라이드가 지워진 코멘트. 지우지 않고 표시만 한다
+  slideDeleted?: boolean; // 앵커를 잃은 코멘트(슬라이드가 없어졌다). 지우지 않고 표시만 하며 덱이 되돌아오면 풀린다(reanchorDeck)
+  lostKey?: string; // 앵커를 잃을 때 그 슬라이드 본문의 해시. 같은 슬라이드가 돌아오면 찾는 데 쓴다
+  cancelledAt?: string; // 사용자가 요청을 취소한 시각(Saved로 돌아간다). 그 뒤 Claude의 reply는 withdrawn으로 거절된다
+  anchor?: "ok" | "check" | "lost"; // 읽을 때 계산한다(저장하지 않는다): lost=slideDeleted, check=recheck
   deliveredAt?: string; // 채널이 Claude 세션에 전달한 시각
   ackAt?: string; // Claude가 작업을 시작했다고 알린 시각
   editBase?: string; // 답이 달릴 때 찾은, Claude 수정 직전 버전 id(되돌릴 지점)
@@ -149,8 +152,9 @@ function commentPresence(deck: string, c: Comment, phase: "start" | "done") {
 /** 앱 밖(도구 없는) 직접 수정: 직전 external 스냅샷과 비교해 바뀐 슬라이드만 done으로 알린다(start 없음). */
 function watchPresence(deck: string, v: Version) {
   try {
-    const now = readFileSync(join(decksDir, deck, "index.html"), "utf8");
-    presence("agent.edit.done", { id: `w-${crypto.randomUUID().slice(0, 8)}`, deck, via: "watch", changed: changedSlides(readVersion(deck, v.id) ?? "", now), revision: revisionOf(now) });
+    const now = readFileSync(join(decksDir, deck, "index.html"), "utf8"), was = readVersion(deck, v.id) ?? "";
+    reanchorDeck(deck, was, now); // 직접 수정으로 슬라이드가 옮겨지거나 사라져도 코멘트가 따라간다
+    presence("agent.edit.done", { id: `w-${crypto.randomUUID().slice(0, 8)}`, deck, via: "watch", changed: changedSlides(was, now), revision: revisionOf(now) });
   } catch {}
 }
 
@@ -178,10 +182,11 @@ export function sanitize(list: unknown[]): Comment[] {
     if (typeof c.sig === "string" && /^[0-9a-f]{64}$/.test(c.sig)) s.sig = c.sig;
     for (const k of ["editBase", "revertUndo"] as const) if (typeof c[k] === "string" && ID.test(c[k] as string)) s[k] = c[k] as string;
     if (typeof c.editHash === "string" && /^[0-9a-f]{40}$/.test(c.editHash)) s.editHash = c.editHash;
-    for (const k of ["repliedAt", "deliveredAt", "resolvedAt", "ackAt", "revertedAt"] as const) { const v = str(c[k], 40); if (v && !Number.isNaN(Date.parse(v))) s[k] = v; }
+    for (const k of ["repliedAt", "deliveredAt", "resolvedAt", "ackAt", "revertedAt", "cancelledAt"] as const) { const v = str(c[k], 40); if (v && !Number.isNaN(Date.parse(v))) s[k] = v; }
     if (c.resolved === true) s.resolved = true;
     if (c.slideDeleted === true) s.slideDeleted = true;
     if (c.recheck === true) s.recheck = true;
+    if (typeof c.lostKey === "string" && /^[0-9a-f]{40}$/.test(c.lostKey)) s.lostKey = c.lostKey;
     if (c.held === true) s.held = true;
     const region = parseRegion(c.region); if (region) s.region = region;
     if (Array.isArray(c.overlap)) { const o = c.overlap.filter((p): p is string => typeof p === "string").slice(0, 8).map((p) => clip(p, 200)); if (o.length) s.overlap = o; }
@@ -202,7 +207,7 @@ export const load = (deck: string): Comment[] => {
   try {
     const list = JSON.parse(text);
     if (!Array.isArray(list)) throw new Error("not an array");
-    return sanitize(list).map((c) => ({ ...c, trusted: verify(deck, c) }));
+    return sanitize(list).map((c) => ({ ...c, trusted: verify(deck, c), anchor: c.slideDeleted ? ("lost" as const) : c.recheck ? ("check" as const) : ("ok" as const) }));
   } catch {
     const keep = join(decksDir, deck, `.comments.json.corrupt-${Math.floor(statSync(file(deck)).mtimeMs)}`);
     copyFileSync(file(deck), keep);
@@ -212,7 +217,7 @@ export const load = (deck: string): Comment[] => {
 // 임시 파일에 쓴 뒤 rename한다. 쓰다 끊겨도 기존 파일은 온전하다.
 export const save = (deck: string, list: Comment[]) => {
   const tmp = join(decksDir, deck, `.comments.json.tmp-${process.pid}`);
-  writeFileSync(tmp, JSON.stringify(list.map(({ trusted: _t, ...c }) => c), null, 2) + "\n"); // trusted는 읽을 때 계산하는 값이라 저장하지 않는다
+  writeFileSync(tmp, JSON.stringify(list.map(({ trusted: _t, anchor: _a, ...c }) => c), null, 2) + "\n"); // trusted는 읽을 때 계산하는 값이라 저장하지 않는다
   renameSync(tmp, file(deck));
 };
 
@@ -262,6 +267,15 @@ export function publishFlow(force = false) {
   clearTimeout(resetTimer);
   if (f.reason === "limit" && f.resetAt) resetTimer = setTimeout(() => publishFlow(), Math.max(1000, Date.parse(f.resetAt) - Date.now() + 100));
   if (force || sig !== lastFlow) { lastFlow = sig; emit("flow", f); }
+}
+/** n개를 지금 채널로 보낼 수 있는지: 멈춤이나 채널 미연결이면 0, 상한이면 남은 만큼(spec/COMMENT-UX.md 4.5). */
+function deliverable(n: number): { sent: number; reason: null | "paused" | "disconnected" | "limit"; resetAt?: string } {
+  const f = currentFlow();
+  if (f.paused) return { sent: 0, reason: "paused" };
+  if (!channelClients.size) return { sent: 0, reason: "disconnected" };
+  const room = f.remaining ?? n;
+  if (room >= n) return { sent: n, reason: null };
+  return { sent: Math.max(0, room), reason: "limit", ...(f.resetAt ? { resetAt: f.resetAt } : {}) };
 }
 const body = async (req: Request) => (await req.json().catch(() => null)) as Record<string, unknown> | null;
 
@@ -337,6 +351,7 @@ export const routes = {
       const comment = list.find((c) => c.id === req.params.id);
       if (!comment) return bad("not found", 404);
       if (comment.status !== "open") return bad("already replied", 409); // 이미 답한 코멘트를 덮어쓰지 못하게 한다
+      if (comment.cancelledAt && !comment.deliveredAt) return bad("withdrawn", 409); // 사용자가 취소했다. 이미 적용한 수정은 그대로 두고 사용자에게 알린다
       const repliedAt = new Date().toISOString();
       Object.assign(comment, { status: "done", reply: b.reply, repliedAt });
       // Claude가 그 사이에 덱을 고쳤다면 되돌릴 지점과 수정 뒤 해시를 코멘트에 연결한다(Revert Claude's edit).
@@ -373,6 +388,7 @@ export const routes = {
       if (readOnlyDeck(b.deck)) return bad("read-only deck", 403);
       const deck = b.deck;
       const undo = b.undo === true;
+      let pendingReanchor: [string, string] | null = null;
       return withDeckLock(deck, async () => { // 편집기 저장(PUT)과 같은 잠금: 해시 확인부터 복원까지 한 번에
       const list = load(deck);
       const comment = list.find((c) => c.id === req.params.id);
@@ -380,18 +396,23 @@ export const routes = {
       const file = join(decksDir, deck, "index.html");
       if (undo) {
         if (!comment.revertedAt || !comment.revertUndo) return bad("nothing to undo", 409);
+        const prev = readFileSync(file, "utf8");
         const r = restore(deck, comment.revertUndo);
         if (!r.ok) return bad(r.error, r.status);
         delete comment.revertedAt; delete comment.revertUndo;
+        pendingReanchor = [prev, readFileSync(file, "utf8")];
       } else {
         if (!comment.editBase || comment.revertedAt) return bad("nothing to revert", 409);
-        if (hash(readFileSync(file, "utf8")) !== comment.editHash) return Response.json({ error: "changed" }, { status: 409 });
+        const prev = readFileSync(file, "utf8");
+        if (hash(prev) !== comment.editHash) return Response.json({ error: "changed" }, { status: 409 });
         const r = restore(deck, comment.editBase);
         if (!r.ok) return bad(r.error, r.status);
         comment.revertedAt = new Date().toISOString();
         if (r.undo) comment.revertUndo = r.undo;
+        pendingReanchor = [prev, readFileSync(file, "utf8")];
       }
       save(deck, list);
+      if (pendingReanchor) reanchorDeck(deck, pendingReanchor[0], pendingReanchor[1]); // 되돌린 덱에 맞춰 코멘트 앵커를 다시 계산
       emit("reply", { deck: deck, comment });
       return Response.json({ ok: true });
       });
@@ -415,6 +436,7 @@ export const routes = {
       const list = load(b.deck);
       const comment = list.find((c) => c.id === req.params.id);
       if (!comment) return bad("not found", 404);
+      if (comment.cancelledAt && !comment.deliveredAt) return bad("withdrawn", 409);
       if (comment.status === "open" && !comment.ackAt) {
         comment.ackAt = new Date().toISOString();
         save(b.deck, list);
@@ -468,16 +490,75 @@ export const routes = {
       const all = list.filter((c) => c.status === "open" && !c.resolved && !c.slideDeleted && !c.deliveredAt && c.trusted === true).sort((a, c) => a.createdAt.localeCompare(c.createdAt));
       // 한 번에 SEND_BATCH개까지만 보낸다(토큰 폭증과 한꺼번에 쏟아지는 알림을 막는다). 나머지는 그대로 두고 다시 누르면 다음 묶음이 간다.
       const todo = all.slice(0, SEND_BATCH);
-      if (!todo.length) return Response.json({ count: 0, remaining: 0 });
+      if (!todo.length) return Response.json({ count: 0, remaining: 0, sent: 0, waiting: 0, reason: null });
       for (const c of todo) delete c.held;
       save(b.deck, list);
       emit("comments", { deck: b.deck, comments: load(b.deck) });
-      if (channelClients.size) {
-        await settleImages(b.deck, todo.map((c) => c.id), IMAGE_WAIT_MS); // 이미지가 아직 만들어지는 중이면 최대 5초 기다린 뒤 이미지 없이 보낸다
+      // 실제로 갈 수 있는 개수: 멈춤이나 채널 미연결이면 0, 상한이면 남은 만큼. 거짓으로 "보냈다"고 하지 않게 이유와 함께 돌려준다.
+      const { sent, reason, resetAt } = deliverable(todo.length);
+      if (sent > 0) {
+        const go = todo.slice(0, sent);
+        await settleImages(b.deck, go.map((c) => c.id), IMAGE_WAIT_MS); // 이미지가 아직 만들어지는 중이면 최대 5초 기다린 뒤 이미지 없이 보낸다
         const fresh = load(b.deck);
-        emit("batch", { deck: b.deck, comments: todo.map((c) => ({ ...(fresh.find((x) => x.id === c.id) ?? c), trusted: true })) });
+        emit("batch", { deck: b.deck, comments: go.map((c) => ({ ...(fresh.find((x) => x.id === c.id) ?? c), trusted: true })) });
       }
-      return Response.json({ count: todo.length, remaining: all.length - todo.length });
+      return Response.json({ count: todo.length, remaining: all.length - todo.length, sent, waiting: todo.length - sent, reason, ...(resetAt ? { resetAt } : {}) });
+    },
+  },
+  // 개별 전송(Send): 보류를 풀고 채널로 보낸다. 멈춤, 상한, 미연결이면 저장만 되고 이유를 돌려준다.
+  "/api/comments/:id/send": {
+    POST: async (req: Request & { params: { id: string } }) => {
+      const b = await body(req);
+      if (!b || !validDeck(b.deck)) return bad("deck");
+      const list = load(b.deck);
+      const comment = list.find((c) => c.id === req.params.id);
+      if (!comment) return bad("not found", 404);
+      if (comment.status !== "open" || comment.resolved) return bad("not sendable", 409);
+      if (comment.trusted !== true) return bad("untrusted", 409);
+      if (comment.slideDeleted) return bad("detached", 409);
+      delete comment.held;
+      save(b.deck, list);
+      if (comment.deliveredAt) { emit("reply", { deck: b.deck, comment }); return Response.json({ sent: false, reason: null, already: true }); }
+      emit("reply", { deck: b.deck, comment });
+      const { sent, reason, resetAt } = deliverable(1);
+      if (sent) {
+        await settleImages(b.deck, [comment.id], IMAGE_WAIT_MS);
+        emit("comment", { deck: b.deck, comment: { ...(load(b.deck).find((x) => x.id === comment.id) ?? comment), trusted: true } });
+      }
+      return Response.json({ sent: sent > 0, reason, ...(resetAt ? { resetAt } : {}) });
+    },
+  },
+  // 멈춘 요청 다시 보내기: 전달과 시작 기록을 지우고 같은 코멘트를 다시 밀어 넣는다(force). 채널이 이미 보낸 코멘트도 다시 간다.
+  "/api/comments/:id/resend": {
+    POST: async (req: Request & { params: { id: string } }) => {
+      const b = await body(req);
+      if (!b || !validDeck(b.deck)) return bad("deck");
+      const list = load(b.deck);
+      const comment = list.find((c) => c.id === req.params.id);
+      if (!comment) return bad("not found", 404);
+      if (comment.status !== "open" || comment.resolved || comment.trusted !== true || comment.slideDeleted) return bad("not sendable", 409);
+      delete comment.deliveredAt; delete comment.ackAt; delete comment.held; delete comment.cancelledAt;
+      save(b.deck, list);
+      emit("reply", { deck: b.deck, comment });
+      const { sent, reason, resetAt } = deliverable(1);
+      if (sent) emit("comment", { deck: b.deck, comment: { ...comment, trusted: true }, force: true });
+      return Response.json({ sent: sent > 0, reason, ...(resetAt ? { resetAt } : {}) });
+    },
+  },
+  // 요청 취소: Saved(보류)로 되돌린다. Claude가 이미 일하고 있었다면 막을 수 없고, 그 뒤 reply는 withdrawn으로 거절된다.
+  "/api/comments/:id/cancel": {
+    POST: async (req: Request & { params: { id: string } }) => {
+      const b = await body(req);
+      if (!b || !validDeck(b.deck)) return bad("deck");
+      const list = load(b.deck);
+      const comment = list.find((c) => c.id === req.params.id);
+      if (!comment) return bad("not found", 404);
+      if (comment.status !== "open") return bad("already replied", 409);
+      delete comment.deliveredAt; delete comment.ackAt;
+      comment.held = true; comment.cancelledAt = new Date().toISOString();
+      save(b.deck, list);
+      emit("reply", { deck: b.deck, comment });
+      return Response.json({ ok: true });
     },
   },
   "/api/channel": { GET: () => Response.json({ connected: channelClients.size > 0 }) },
@@ -556,7 +637,38 @@ export const routes = {
   },
 };
 
-// 저장 때 슬라이드 번호가 바뀐 것을 코멘트에 반영한다. map은 옛 번호 -> 새 번호이고, 없는 번호는 삭제된 슬라이드다.
+// 코멘트 앵커 재계산(spec/COMMENT-UX.md 4.4). 덱이 바뀔 때마다(편집기 저장, Claude 수정, 직접 수정, 버전 복원, 되돌리기) 호출한다.
+// 슬라이드 번호를 새 덱에 맞추고, 슬라이드를 잃은 코멘트는 slideDeleted(앵커 lost)로, 슬라이드는 있는데 요소 글자가 없으면 recheck(앵커 check)로 표시한다.
+// 둘 다 계산 결과일 뿐이라 덱이 되돌아오면(실행 취소, 복원) 풀린다. 코멘트는 지우지 않는다.
+export function reanchorDeck(deck: string, before: string, after: string, slideMap?: Record<string, number>) {
+  if (!validDeck(deck)) return;
+  const list = load(deck);
+  if (!list.length) return;
+  const map = slideMap ? null : matchSlides(before, after), was = slideBodies(before), now = slideBodies(after);
+  let changed = false;
+  const keyOf = (n: number) => (was[n - 1] ? hash(was[n - 1]) : undefined);
+  for (const c of list) {
+    const asNum = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v >= 1 ? v : null); // 정수가 아닌 값은 슬라이드 번호로 받지 않는다
+    let to: number | null = c.slideDeleted ? null : slideMap ? asNum(slideMap[c.slide]) : (map!.get(c.slide) ?? null);
+    if (to === null && c.lostKey) { const k = now.findIndex((b) => hash(b) === c.lostKey); if (k >= 0) to = k + 1; } // 잃었던 슬라이드가 그대로 돌아왔다
+    if (to === null && (c.slideDeleted || !slideMap)) to = slideWithText(after, c.excerpt, c.slide); // 글자로 다시 찾는다(추정으로 맞춘 이동, 복원). 편집기가 보낸 정확한 대응(slideMap)에서 지워진 슬라이드는 추측하지 않는다
+    const lostNow = to === null;
+    const check = !lostNow && c.excerpt.trim() !== "" && !slideHasText(after, to!, c.excerpt);
+    if (lostNow) {
+      if (!c.slideDeleted) { c.slideDeleted = true; const k = keyOf(c.slide); if (k) c.lostKey = k; changed = true; }
+      if (c.recheck) { delete c.recheck; changed = true; }
+      continue;
+    }
+    if (c.slideDeleted) { delete c.slideDeleted; delete c.lostKey; changed = true; }
+    if (to !== c.slide) { c.slide = to!; changed = true; }
+    if (check !== !!c.recheck) { if (check) c.recheck = true; else delete c.recheck; changed = true; }
+  }
+  if (!changed) return;
+  save(deck, list);
+  emit("comments", { deck, comments: load(deck) });
+}
+
+/** 저장 때 슬라이드 번호가 바뀐 것을 코멘트에 반영한다. map은 옛 번호 -> 새 번호이고, 없는 번호는 삭제된 슬라이드다(호환용: 새 덱 본문이 없을 때). */
 export function remap(deck: string, map: Record<string, number>) {
   if (!validDeck(deck)) return;
   const list = load(deck);
@@ -573,15 +685,14 @@ export function remap(deck: string, map: Record<string, number>) {
   emit("comments", { deck, comments: list });
 }
 
-/** 버전 복원 뒤에 부른다. 열린 코멘트의 발췌문이 복원된 덱의 그 번호 슬라이드에 없으면 recheck로 표시한다(코멘트는 지우지 않는다). */
+/** 버전 복원 뒤에 부른다(호환용: 복원 전 본문이 없을 때). 요소 글자가 그 번호 슬라이드에 없으면 recheck, 있으면 해제한다. */
 export function flagAfterRestore(deck: string, html: string) {
   if (!validDeck(deck)) return;
-  const slides = [...html.matchAll(/<section\b[^>]*\bdata-slide\b[^>]*>[\s\S]*?<\/section>/gi)].map((m) => m[0].replace(/<[^>]+>/g, " ").replace(/\s+/g, " "));
   const list = load(deck);
   let changed = false;
   for (const c of list) {
-    if (c.status !== "open" || c.slideDeleted) continue;
-    const lost = c.excerpt.trim() !== "" && !(slides[c.slide - 1] ?? "").includes(c.excerpt.trim().replace(/\s+/g, " "));
+    if (c.slideDeleted) continue;
+    const lost = c.excerpt.trim() !== "" && !slideHasText(html, c.slide, c.excerpt);
     if (lost !== !!c.recheck) { if (lost) c.recheck = true; else delete c.recheck; changed = true; }
   }
   if (!changed) return;

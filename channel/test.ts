@@ -4,14 +4,16 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { existsSync, readFileSync, readdirSync, rmSync, utimesSync } from "node:fs";
 import { findChrome } from "../engine/chrome";
 import { join } from "node:path";
+import { createRequire } from "node:module";
 
 const assert = (c: unknown, m = "assert") => { if (!c) throw new Error(m); };
 const root = join(import.meta.dir, "..");
 const port = process.env.TEST_PORT ?? "3210";
 const url = `http://127.0.0.1:${port}`;
-const deck = readdirSync(join(root, "decks")).find((d) => existsSync(join(root, "decks", d, "index.html")))!;
-const commentsFile = join(root, "decks", deck, "comments.json");
-const had = existsSync(commentsFile);
+// 사용자의 실제 덱(과 그 comments.json)을 건드리지 않도록 시험이 만든 덱 사본을 쓴다
+const { makeTestDeck } = createRequire(import.meta.url)("../scripts/lib/test-deck.cjs");
+const t = makeTestDeck("chan-main");
+const deck = t.folder;
 
 let client: Client | undefined; // 실패해도 finally에서 닫는다(채널 자식 프로세스가 남아 러너가 멈추지 않게)
 const app = Bun.spawn(["bun", "run", join(root, "app/server.ts")], { env: { ...process.env, PORT: port, SLIDEKIT_KEY_FILE: "/tmp/slidekit-chan-test.key" }, stdout: "ignore", stderr: "inherit" });
@@ -110,7 +112,7 @@ try {
 
   const sse = await fetch(`${url}/api/events`);
   const reader = sse.body!.pipeThrough(new TextDecoderStream()).getReader();
-  utimesSync(join(root, "decks", deck, "index.html"), new Date(), new Date());
+  utimesSync(t.file, new Date(), new Date());
   // 연결 때 오는 이벤트(connected, channel, flow)의 청크 수와 묶임은 Bun 버전과 시점에 따라 다르므로 deck-changed가 올 때까지(최대 5초) 이어 읽는다
   let text = "";
   for (const end = Date.now() + 5000; !text.includes("deck-changed") && Date.now() < end;) text += (await Promise.race([reader.read(), Bun.sleep(end - Date.now()).then(() => ({ value: "" }))])).value ?? "";
@@ -122,5 +124,5 @@ try {
 } finally {
   await client?.close().catch(() => {});
   app.kill();
-  if (!had) rmSync(commentsFile, { force: true });
+  t.cleanup();
 }

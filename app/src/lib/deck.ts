@@ -16,7 +16,7 @@ export type Region = { x: number; y: number; w: number; h: number };
 export type Comment = {
   id: string; slide: number; path: string; excerpt: string; text: string;
   status: "open" | "done"; reply?: string; createdAt: string; repliedAt?: string;
-  slideDeleted?: boolean; recheck?: boolean; held?: boolean;
+  slideDeleted?: boolean; recheck?: boolean; held?: boolean; anchor?: "ok" | "check" | "lost"; cancelledAt?: string; // anchor는 서버가 계산한다(lost=slideDeleted, check=recheck)
   region?: Region; overlap?: string[]; step?: number; image?: "pending" | "ready" | "failed"; // 영역 코멘트(코멘트 모드)
   deliveredAt?: string; ackAt?: string; resolved?: boolean; resolvedAt?: string; trusted?: boolean;
   editBase?: string; editHash?: string; revertedAt?: string; revertUndo?: string; // Claude의 수정 되돌리기(서버가 답이 달릴 때 연결)

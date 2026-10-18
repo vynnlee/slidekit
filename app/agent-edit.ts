@@ -6,7 +6,7 @@ import { lint } from "../engine/lint";
 import { readOnlyDeck, withDeckLock } from "./deck-lock";
 import { deckFolder } from "./folder";
 import { noteFileChanged } from "./versions";
-import { presence } from "./comments";
+import { presence, reanchorDeck } from "./comments";
 import { MAX_EDITS, MAX_STR, applyEdits, changedSlides, revisionOf, type Edit } from "./slide-edit";
 
 const bad = (error: string, message: string, status = 400) => Response.json({ ok: false, error, message }, { status });
@@ -44,6 +44,7 @@ export const routes = {
         renameSync(tmp, file);
         // 직전 내용을 external 스냅샷으로 남기고 수정 기록도 쓴다(코멘트 reply의 Revert와 Version history가 이 수정을 되돌릴 수 있다). watcher는 lastSeen이 맞아 이벤트를 또 만들지 않는다.
         try { noteFileChanged(deck); } catch (e) { console.error(`[slidekit] ${deck}: 버전 기록 실패: ${(e as Error).message}`); }
+        reanchorDeck(deck, src, r.out); // Claude가 슬라이드를 옮기거나 지워도 코멘트 번호가 따라간다
         const next = revisionOf(r.out), changed = changedSlides(src, r.out);
         presence("agent.edit.done", { id, deck, agent, via: "tool", changed, revision: next });
         return Response.json({ ok: true, revision: next, changed, lint: lint(r.out).slice(0, 30) });

@@ -133,8 +133,10 @@
     document.body.insertBefore(stage, els[0]);
     els.forEach(function (e) { stage.appendChild(e); });
 
-    var chapterNo = 0;
-    var slides = els.map(function (e, i) {
+    var chapterNo = 0, slides;
+    function makeSlides(els) {
+    chapterNo = 0;
+    var out = els.map(function (e, i) {
       var kind = e.getAttribute('data-slide');
       if (KINDS.indexOf(kind) < 0) { console.warn('[slidekit] unknown data-slide "' + kind + '", treated as content', e); kind = 'content'; }
       var title = e.getAttribute('data-title');
@@ -167,7 +169,10 @@
       if (stepEls.length) s.auto = autoStepper(s, stepEls);
       return s;
     });
-    slides.forEach(function (s) { if (s.auto) s.auto.enter(true); }); /* every slide starts at step 1 (overview copies show this) */
+    out.forEach(function (s) { if (s.auto) s.auto.enter(true); }); /* every slide starts at step 1 (overview copies show this) */
+    return out;
+    }
+    slides = makeSlides(els);
     var chapters = slides.filter(function (s) { return s.kind === 'chapter'; });
     /* a stepper registered with SlideKit.stepper wins over the declarative one */
     var stepperOf = function (i) { return slides[i].steps > 1 ? steppers.get(slides[i].el) || slides[i].auto : null; };
@@ -296,6 +301,58 @@
       catch (err) { /* opaque origin, e.g. file: */ }
     }
 
+    /* live update (spec/LIVE-UPDATE.md): the presenter app diffs the new file and sends every slide of it ({fp, html}, fp = fingerprint of the section source),
+       the deck styles and the position to keep. Nothing is fetched here. A section whose fingerprint we already hold keeps its DOM node (no flicker, deck-script
+       decorations stay); the others are parsed with DOMParser (scripting disabled) and their <script> elements are removed. The input is the deck file the presenter app read, so it is trusted
+       exactly as much as the deck when it first loaded: inline on* handlers and the like behave as they did then (nothing is rewritten). Returns null when applied, else the reason it was refused (nothing changed). */
+    var fps = null; /* fingerprints of the sections we hold, as last told (the first message's `base` is trusted for a window that never got one) */
+    function refresh(m) {
+      var list = m && m.slides, i, total = 0;
+      if (!Array.isArray(list) || !list.length || list.length > 2000) return 'bad-list';
+      for (i = 0; i < list.length; i++) {
+        var it = list[i];
+        if (!it || typeof it.fp !== 'string' || !it.fp || it.fp.length > 64 || typeof it.html !== 'string' || it.html.length > 2000000) return 'bad-slide';
+        total += it.html.length;
+        if (total > 16000000) return 'too-large';
+      }
+      var styles = m.styles;
+      if (styles !== undefined && !(Array.isArray(styles) && styles.length <= 50 && styles.every(function (t) { return typeof t === 'string' && t.length <= 2000000; }))) return 'bad-styles';
+      var pos = m.pos || {};
+      if (!fps) fps = Array.isArray(m.base) && m.base.length === slides.length ? m.base.map(String) : [];
+      var pool = {}, next = [];
+      slides.forEach(function (s, k) { var f = fps[k]; if (f) (pool[f] = pool[f] || []).push(s.el); });
+      for (i = 0; i < list.length; i++) {
+        var hit = pool[list[i].fp] && pool[list[i].fp].shift(), el = hit;
+        if (!el) {
+          var doc = new DOMParser().parseFromString('<!doctype html><body>' + list[i].html, 'text/html'), b = doc.body;
+          el = b.children.length === 1 ? b.firstElementChild : null;
+          if (!el || el.tagName !== 'SECTION' || !el.hasAttribute('data-slide')) return 'bad-html';
+          [].forEach.call(el.querySelectorAll('script'), function (x) { x.remove(); });
+          el = document.adoptNode(el);
+        }
+        next.push(el);
+      }
+      /* validated: from here on the swap happens */
+      slides.forEach(function (s) { if (s.auto) s.auto.settle(); clearTimeout(s.el._skLeave); s.el.removeAttribute('data-leaving'); s.el.removeAttribute('data-active'); });
+      slides.forEach(function (s) { if (next.indexOf(s.el) < 0) s.el.remove(); });
+      var ref = stage.firstChild;
+      next.forEach(function (e) { if (ref === e) ref = ref.nextSibling; else stage.insertBefore(e, ref); });
+      if (styles && styles.length) {
+        var decks = document.head.querySelectorAll('style'); /* only when the count matches the file's (a bundle inlines more) */
+        if (decks.length === styles.length) decks.forEach(function (x, k) { if (x.textContent !== styles[k]) x.textContent = styles[k]; });
+      }
+      fps = list.map(function (x) { return x.fp; });
+      cur = -1;
+      slides = makeSlides(next);
+      chapters = slides.filter(function (s) { return s.kind === 'chapter'; });
+      var ti = Math.max(0, Math.min(slides.length - 1, (Number(pos.slide) || 1) - 1)), ts = Math.max(1, Math.min(slides[ti].steps, Number(pos.step) || 1));
+      lastSlide = ti + 1; lastStep = ts; /* the screen reader does not re-read a slide that is only being refreshed */
+      show(ti, 'jump', ts, true);
+      if (!embed && typeof ov !== 'undefined') { if (isOpen()) { buildThumbs(); sel = Math.min(sel, thumbs.length - 1); thumbs.forEach(function (t, k) { t.toggleAttribute('data-cur', k === cur); t.toggleAttribute('data-sel', k === sel); }); } else ovDirty = true; }
+      if (embed) toParent('refreshed', { info: info() });
+      return null;
+    }
+
     /* print shows every slide; the active stepper slide prints in its first step */
     window.addEventListener('beforeprint', function () { var st = stepperOf(cur); if (st) st.goto(1); });
     window.addEventListener('afterprint', function () { var st = stepperOf(cur); if (st) st.goto(step); });
@@ -313,6 +370,7 @@
         else if (m.type === 'next') move(1);
         else if (m.type === 'prev') move(-1);
         else if (m.type === 'get-info') toParent('info', { info: info() });
+        else if (m.type === 'refresh') { var why = refresh(m); if (why) toParent('refresh-rejected', { reason: why }); }
       });
       started = true;
       toParent('ready', { info: info() });
@@ -334,6 +392,7 @@
         else if (m.type === 'setblank' && m.role === 'presenter') { /* remote control: only the presenter screen may blank this window */
           if (m.mode === 'black' || m.mode === 'white') setBlank(m.mode); else if (m.mode === 'off' || m.mode === null) setBlank(null);
         }
+        else if (m.type === 'refresh' && m.role === 'presenter') refresh(m); /* only the presenter screen may push a new file */
         else if (m.type === 'hello') {
           bc.postMessage({ v: 1, type: 'state', from: me, slide: cur + 1, step: step, re: m.n });
           if (blankMode) bc.postMessage({ v: 1, type: 'blank', from: me, mode: blankMode });
@@ -347,8 +406,10 @@
     var fitThumbs = window.ResizeObserver ? new ResizeObserver(function (es) {
       es.forEach(function (e) { var w = e.contentRect.width; if (w) e.target.firstChild.style.transform = 'scale(' + (w / W) + ')'; });
     }) : null;
-    var ov = make('div', 'sk-overview'), thumbs = [], sel = 0, group, grid;
+    var ov = make('div', 'sk-overview'), thumbs = [], sel = 0, group, grid, ovDirty = false;
     ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Slide overview'); ov.tabIndex = 0;
+    function buildThumbs() {
+    ovDirty = false; group = null; grid = null; thumbs.length = 0; ov.textContent = ''; if (fitThumbs) fitThumbs.disconnect();
     slides.forEach(function (s, i) {
       if (!group || s.kind === 'chapter') {
         group = make('div', '', 'sk-ov-group');
@@ -373,6 +434,8 @@
       grid.appendChild(cell);
       thumbs.push(cell);
     });
+    }
+    buildThumbs();
     document.body.insertBefore(ov, stage.nextSibling);
 
     function isOpen() { return ov.hasAttribute('data-open'); }
@@ -381,7 +444,7 @@
       say((en ? 'Overview, ' : '전체 보기, ') + thumbs[sel]._skName);
       thumbs[sel].scrollIntoView({ block: 'nearest' });
     }
-    function openOv() { root.removeAttribute('data-idle'); sel = cur; thumbs.forEach(function (t, i) { t.toggleAttribute('data-cur', i === cur); }); ov.setAttribute('data-open', ''); ov.focus({ preventScroll: true }); mark(); }
+    function openOv() { root.removeAttribute('data-idle'); if (ovDirty) buildThumbs(); sel = cur; thumbs.forEach(function (t, i) { t.toggleAttribute('data-cur', i === cur); }); ov.setAttribute('data-open', ''); ov.focus({ preventScroll: true }); mark(); }
     function closeOv() { ov.removeAttribute('data-open'); }
     function ovMove(key) {
       if (key === 'ArrowLeft' || key === 'ArrowRight') {

@@ -21,11 +21,14 @@ import { cn } from "@/lib/utils";
 import { Field } from "@/components/ui/field";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { StatusPage } from "./StatusPage";
+import { useLiveUpdate } from "@/lib/use-live-update";
+import type { LiveDeck, LiveMode, Plan } from "@/lib/live-update";
 
 const VIEW_KEY = "slidekit:view";
 const NOTES_KEY = "slidekit:notes-size";
 const TARGET_KEY = "slidekit:target-min";
 const AUTO_KEY = "slidekit:notes-auto";
+const LIVE_KEY = "slidekit:live-update";
 const NOTES_MIN = 14, NOTES_MAX = 56;
 const VIEW_ITEMS = { current: "Current slide", next: "Next slide", notes: "Notes", timer: "Timer", clock: "Clock", chapters: "Chapters" } as const;
 type View = Record<keyof typeof VIEW_ITEMS, boolean>;
@@ -33,7 +36,7 @@ const defaultView = Object.fromEntries(Object.keys(VIEW_ITEMS).map((k) => [k, tr
 
 // 단축키 안내('?')의 내용. 이 화면의 키만 담는다.
 const KEY_GROUPS: KeyGroup[] = [
-  ["Slides", [["Left, Right", "Previous or next slide"], ["Cmd+K", "Search slides, chapters, and actions"], ["?", "Show this list"]]],
+  ["Slides", [["Left, Right", "Previous or next slide"], ["Cmd+K", "Search slides, chapters, and actions"], ["U", "Apply a deck update when offered"], ["?", "Show this list"]]],
   ["Notes", [["+, -", "Notes size"], ["PgUp, PgDn", "Scroll notes"]]],
   ["Timer", [["T", "Start or pause"], ["R", "Reset (press twice)"]]],
   ["Presentation window", [["F", "Full screen"], ["B, W", "Black or white screen (in its window)"]]],
@@ -87,6 +90,8 @@ export function Presenter({ id }: { id: string }) {
   const [summary, setSummary] = useState(false);
   const [prevRun, setPrevRun] = useState<Run | undefined>();
   const [auto, setAuto] = useState(() => localStorage.getItem(AUTO_KEY) === "1");
+  const [liveMode, setLiveMode] = useState<LiveMode>(() => { const v = localStorage.getItem(LIVE_KEY); return v === "ask" || v === "off" ? v : "auto"; });
+  useEffect(() => { localStorage.setItem(LIVE_KEY, liveMode); }, [liveMode]);
   const [full, setFull] = useState(() => !!document.fullscreenElement);
   const [win, setWin] = useState<boolean | null>(presentationOpen);
   const [check, setCheck] = useState<string[] | null>(null);
@@ -96,6 +101,7 @@ export function Presenter({ id }: { id: string }) {
   const [notesSize, setNotesSize] = useState(() => Math.min(NOTES_MAX, Math.max(NOTES_MIN, Number(localStorage.getItem(NOTES_KEY)) || 20)));
   const notesRef = useRef<HTMLDivElement>(null);
 
+  const liveApply = useRef<(() => void) | undefined>(undefined);
   const curRef = useRef<HTMLIFrameElement>(null);
   const nextRef = useRef<HTMLIFrameElement>(null);
   const chan = useRef<BroadcastChannel | null>(null);
@@ -222,7 +228,7 @@ export function Presenter({ id }: { id: string }) {
         pending.current = null;
         if (q) { setPos(q); post(curRef.current, { type: "goto", slide: q.slide, step: q.step }); }
         else setPos({ slide: m.info.slide, step: m.info.step });
-      } else if (m.type === "info") { setInfo(m.info); setPos({ slide: m.info.slide, step: m.info.step }); }
+      } else if (m.type === "info" || m.type === "refreshed") { setInfo(m.info); setPos({ slide: m.info.slide, step: m.info.step }); }
       else if (m.type === "state") {
         setPos({ slide: m.slide, step: m.step });
         const key = `${m.slide}:${m.step}`;
@@ -268,6 +274,7 @@ export function Presenter({ id }: { id: string }) {
       else if (e.key === "-" || e.key === "_") setNotesSize((n) => Math.max(NOTES_MIN, n - 2));
       else if (k === "t") setRunning((r) => !r);
       else if (k === "r") requestReset("key");
+      else if (k === "u") liveApply.current?.();
       else if (e.key === "?") setHelp(true);
       else if (e.key === "PageDown" || e.key === "PageUp") {
         e.preventDefault();
@@ -308,6 +315,20 @@ export function Presenter({ id }: { id: string }) {
   const curSlide = info?.slides[pos.slide - 1];
   const remote = useRemoteHost(deck?.folder, info ? { slide: pos.slide, total, title: curSlide?.title ?? curSlide?.kind ?? `Slide ${pos.slide}`, notes: curSlide?.notes ?? "", elapsed, running, blank, target } : null, runCmd);
   const [remoteErr, setRemoteErr] = useState("");
+  // 덱 파일이 바뀌면 위치를 유지한 채 갱신한다(spec/LIVE-UPDATE.md). 엔진에는 새 슬라이드 목록을 보내기만 하고, 청중 창에는 BroadcastChannel로 같은 메시지를 보낸다.
+  const live = useLiveUpdate({
+    folder: deck?.folder, mode: liveMode, pos: () => posRef.current, audience: () => win === true || !!remote.session,
+    perform: (base: LiveDeck, next: LiveDeck, p: Plan) => {
+      const was = posRef.current;
+      const msg = { type: "refresh", slides: next.slides.map(({ fp, html }) => ({ fp, html })), styles: next.styles, base: base.slides.map((x) => x.fp), pos: { slide: p.index + 1, step: p.kept ? was.step : 1 } };
+      localMove(); // 이 갱신 앞에 보낸 하트비트의 낡은 답이 위치를 되돌리지 않게 이동으로 센다
+      send(msg); // 청중 창: 발표자 화면의 iframe이 보내는 state보다 먼저 가도록 먼저 보낸다
+      post(curRef.current, msg);
+      post(nextRef.current, { ...msg, pos: { slide: Math.min(p.index + 2, msg.slides.length), step: 1 } });
+      if (!p.kept) toast(`Slide ${was.slide} was removed. Moved to slide ${p.index + 1}.`, { ms: TOAST.long });
+    },
+  });
+  liveApply.current = live.chip ? live.apply : undefined;
   const prev = useRef({ running: false, elapsed: 0, blank: null as "black" | "white" | null });
   useEffect(() => {
     const p = prev.current;
@@ -339,6 +360,7 @@ export function Presenter({ id }: { id: string }) {
     { value: "act-white", label: "White screen", group: "Presentation window", shortcut: "w", onSelect: () => setBlankMode("white") },
     { value: "act-unblank", label: "Show the slide again", group: "Presentation window", onSelect: () => setBlankMode("off") },
     ...(Object.keys(VIEW_ITEMS) as (keyof View)[]).map((k): CommandMenuItemData => ({ value: `view:${k}`, label: `${view[k] ? "Hide" : "Show"} ${VIEW_ITEMS[k].toLowerCase()}`, group: "View", onSelect: () => setView((v) => ({ ...v, [k]: !v[k] })) })),
+    ...(["auto", "ask", "off"] as const).map((m): CommandMenuItemData => ({ value: `live:${m}`, label: `Live updates: ${m === "auto" ? "Auto" : m === "ask" ? "Ask" : "Off"}${liveMode === m ? " (current)" : ""}`, description: m === "auto" ? "Apply edits that do not touch the current or next slide" : m === "ask" ? "Always ask before applying edits" : "Never change the slides while presenting", group: "Live updates", onSelect: () => setLiveMode(m) })),
     { value: "act-keys", label: "Keyboard shortcuts", group: "Help", shortcut: "?", onSelect: () => setHelp(true) },
     { value: "act-decks", label: "All decks", group: "Help", onSelect: () => go("/") },
   ];
@@ -386,6 +408,14 @@ export function Presenter({ id }: { id: string }) {
           <span className="mr-auto truncate text-subtitle font-medium">{deck.title}</span>
           <span role="status" aria-live="polite" className="sr-only">{announce}</span>
           {err && <span role="status" className="truncate text-caption text-muted-foreground">{err}</span>}
+          <span role="status" aria-live="polite" className="contents">
+            {live.chip && (
+              <span className="flex items-center gap-1.5 rounded bg-hover py-0.5 pl-2 pr-0.5 text-caption text-foreground">
+                <span className="truncate" title={live.chip.reload ? "The deck script or settings changed. Reload here and in the presentation window." : undefined}>{live.chip.reload ? "Deck code changed" : `Deck updated · ${live.chip.text}`}</span>
+                <Button variant="secondary" size="compact" onClick={live.apply}>{live.chip.reload ? "Reload" : "Apply (U)"}</Button>
+              </span>
+            )}
+          </span>
           {blank && win && <span role="status" className="rounded bg-hover px-1.5 text-caption text-foreground">Blanked ({blank})</span>}
           {win !== null && <span className="flex items-center gap-1.5 text-caption text-muted-foreground"><span className={`size-1.5 rounded-full ${win ? "bg-green-500" : "bg-red-500"}`} /><span className="max-[640px]:sr-only">{win ? "Presentation window open" : "Presentation window closed"}</span></span>}
           {screens && screens.length >= 2 && (

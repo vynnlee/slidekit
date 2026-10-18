@@ -5,7 +5,8 @@ const { startEditor } = require('./lib/editor-harness.cjs');
 
 (async () => {
   const H = await startEditor({ name: 'editor-anim-perf', slides: 2 });
-  const { fs, FILE, T, BASE, check, page, settle, finish } = H;
+  const { fs, FILE, T, BASE, check, page, ctx, settle, finish } = H;
+  await ctx.addInitScript(() => { try { localStorage.setItem('slidekit.e2e', '1'); } catch {} }); // 에이전트 존재 효과 시험 훅(window.__skAgent)
   const html = fs.readFileSync(FILE, 'utf8');
   const first = html.search(/<section\b[^>]*\bdata-slide\b/), tail = html.lastIndexOf('</section>') + '</section>'.length;
   const el = (k) => `<div data-step="${2 + (k % 19)}"${k % 3 === 0 ? ` data-step-out="${Math.min(21, 4 + (k % 19))}"` : ''} style="position:absolute;left:${(k % 10) * 180}px;top:${120 + Math.floor(k / 10) * 80}px;width:160px;height:60px"><p>Item ${k}</p></div>`;
@@ -87,6 +88,22 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   check('스크럽 이동 중 DOM 속성 변경 없음(currentTime만 바꿈)', muts === 0, muts);
   check('스크럽 이동 중 프레임 간격 p95가 400ms 이내', scr.p95 < 400, scr);
   check('스크럽 이동 중 긴 작업(50ms 초과)은 2건 이하, 최장 250ms 이내', scr.long <= 2 && scr.longest <= 250, scr);
+  // 5. 에이전트 존재 효과(커서, 광채, 격자 펄스)가 켜진 3초: 긴 작업과 프레임 간격, 끝난 뒤 정리
+  await page.getByRole('tab', { name: 'Notes' }).click(); await settle();
+  await stats();
+  await page.evaluate((d) => window.__skAgent.ingest({ type: 'agent.edit.start', id: 'p1', deck: d, agent: 'claude', kind: 'edit', slide: 1, anchor: { path: '', excerpt: 'Item 5' }, ttl: 60000 }), T.folder);
+  await page.waitForFunction(() => document.querySelector('[data-testid=agent-cursor]'), null, { timeout: 15000 });
+  await page.waitForTimeout(300); await stats();
+  await page.waitForTimeout(3000);
+  const fxs = await stats();
+  console.log(`INFO 에이전트 효과 3초(요소 100개): 긴 작업 ${fxs.long}건(최장 ${fxs.longest}ms), 프레임 간격 p95 ${fxs.p95}ms, 최대 ${fxs.max}ms`);
+  check('에이전트 효과 중 긴 작업(50ms 초과)은 2건 이하, 최장 250ms 이내(CPU 4배)', fxs.long <= 2 && fxs.longest <= 250, fxs);
+  const typing = await page.evaluate(() => new Promise((done) => { const el = document.querySelector('textarea'); const t0 = performance.now(); let n = 0; const tick = () => { el.value += 'x'; el.dispatchEvent(new Event('input', { bubbles: true })); if (++n < 30) requestAnimationFrame(tick); else done(Math.round((performance.now() - t0) / 30)); }; tick(); }));
+  console.log('INFO 효과 중 입력(노트 30자) 한 글자당 ' + typing + 'ms');
+  check('효과 중 입력 지연: 글자당 100ms 이내(CPU 4배)', typing < 100, typing);
+  await page.evaluate((d) => window.__skAgent.ingest({ type: 'agent.edit.done', id: 'p1', deck: d, agent: 'claude', changed: [{ slide: 1, excerpt: 'Item 5' }], revision: 'r', via: 'tool' }), T.folder);
+  await page.waitForFunction(() => document.querySelectorAll('[data-testid=agent-layer] *').length === 0, null, { timeout: 15000 }).catch(() => {});
+  check('효과가 끝나면 오버레이 노드와 will-change가 남지 않음', (await page.locator('[data-testid=agent-layer] *').count()) === 0);
   const ifr2 = await page.evaluate(() => document.querySelector('iframe[title="Canvas"]').__sk);
   check('탭 열기, 선택, 끌기, 스크럽 동안 캔버스 iframe을 다시 만들지 않음', ifr2 === ifr, [ifr, ifr2]);
   await finish();

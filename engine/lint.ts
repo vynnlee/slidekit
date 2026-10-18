@@ -155,6 +155,12 @@ export function lint(html: string): Issue[] {
 }
 
 /** CLI 본체. 앱 서버가 이 파일을 정적으로 import해도(공개 API 검사 등) 하위 명령 실행에 영향이 없도록 engine/lint-cli.ts에서 부른다. */
+/** --allow-host a.com,b.com (artifact 검사의 허용 호스트를 늘린다) */
+export function allowHostsArg(argv = process.argv): string[] {
+  const i = argv.indexOf("--allow-host");
+  return i >= 0 && argv[i + 1] ? argv[i + 1].split(",").map((h) => h.trim()).filter(Boolean) : [];
+}
+
 export async function runCli(name: string | undefined) {
     if (!name) { console.error("사용법: slidekit lint <덱>  (예: slidekit lint my-talk)"); process.exit(1); }
   const file = join(import.meta.dir, "..", "decks", name, "index.html");
@@ -167,6 +173,7 @@ export async function runCli(name: string | undefined) {
   const issues = lint(text);
   // 파일 크기가 필요한 검사는 파일을 읽는 CLI에서만 한다(lint 함수는 순수하게 둔다): 400KB를 넘는 로컬 이미지
   for (const r of localImageRefs(text, join(import.meta.dir, "..", "decks", name))) if (r.size > 400 * 1024) issues.push({ level: "warn", rule: "image-size", msg: `이미지 ${r.rel}가 ${(r.size / 1024).toFixed(0)} KB다. 줄이면 번들이 가벼워진다(slidekit image <덱> <파일> --max 1600 으로 다시 저장)` });
+  if (process.argv.includes("--artifact")) issues.push(...(await import("./artifact-check")).artifactIssues(join(import.meta.dir, "..", "decks", name), { allowHosts: allowHostsArg() })); // 발행 호환 검사(spec/ARTIFACT-CHECK.md), 평소 lint에는 들어가지 않는다
   for (const i of issues) console.log(`${i.level} ${i.rule}: ${i.msg}`);
   const errs = issues.filter((i) => i.level === "error").length;
   console.log(errs ? `실패: 오류 ${errs}개` : `통과 (경고 ${issues.length}개)`);

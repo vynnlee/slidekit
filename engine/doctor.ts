@@ -14,6 +14,13 @@ if (deckArg) {
     console.error(`없는 덱: ${deckArg}. 있는 덱: ${have.join(", ") || "(없음)"}. 환경 점검은 slidekit doctor`);
     process.exit(1);
   }
+  if (process.argv.includes("--artifact")) { // 발행 호환 검사(spec/ARTIFACT-CHECK.md): 올릴 수 있음/없음과 이유
+    const { artifactCheck, formatArtifact } = await import("./artifact-check");
+    const { allowHostsArg } = await import("./lint");
+    const r = artifactCheck(dir, { allowHosts: allowHostsArg(), build: process.argv.includes("--build") });
+    console.log(process.argv.includes("--json") ? JSON.stringify(r, null, 2) : [`덱 ${deckArg}`, "", ...formatArtifact(r)].join("\n"));
+    process.exit(r.ok ? 0 : 1);
+  }
   const { deckCheck, formatCheck } = await import("./deck-check");
   const c = deckCheck(dir, deckArg);
   const lines = formatCheck(c);

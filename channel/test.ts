@@ -111,9 +111,9 @@ try {
   const sse = await fetch(`${url}/api/events`);
   const reader = sse.body!.pipeThrough(new TextDecoderStream()).getReader();
   utimesSync(join(root, "decks", deck, "index.html"), new Date(), new Date());
-  const { value } = await Promise.race([reader.read(), Bun.sleep(3000).then(() => ({ value: "timeout" }))]);
-  let text = value as string;
-  if (!text.includes("deck-changed")) text += (await Promise.race([reader.read(), Bun.sleep(3000).then(() => ({ value: "" }))])).value;
+  // 연결 때 오는 이벤트(connected, channel, flow)의 청크 수와 묶임은 Bun 버전과 시점에 따라 다르므로 deck-changed가 올 때까지(최대 5초) 이어 읽는다
+  let text = "";
+  for (const end = Date.now() + 5000; !text.includes("deck-changed") && Date.now() < end;) text += (await Promise.race([reader.read(), Bun.sleep(end - Date.now()).then(() => ({ value: "" }))])).value ?? "";
   assert(text.includes("deck-changed"), `sse: ${text}`);
   await client.close();
   await Bun.sleep(800);

@@ -11,7 +11,7 @@ const require = createRequire(import.meta.url);
 const { makeTestDeck } = require("../scripts/lib/test-deck.cjs");
 const assert = (c: unknown, m = "assert") => { if (!c) throw new Error(m); };
 const root = join(import.meta.dir, "..");
-const port = process.env.TEST_PORT ?? "3251";
+const port = process.env.TEST_PORT ?? "3262";
 const url = `http://127.0.0.1:${port}`;
 const json = { "Content-Type": "application/json" };
 const keyDir = mkdtempSync(join(tmpdir(), "sk-flood-")); // flow.json이 키 파일 옆에 생기므로 이 시험만의 폴더에 둔다

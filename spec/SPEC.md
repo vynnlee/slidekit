@@ -469,7 +469,7 @@ Figma식 계층 선택이다. 구현은 `app/src/lib/selection.ts`(DOM 없이 �
 
 ## 10. 텍스트 내보내기 (Markdown 개요)
 
-덱 내용을 Claude나 다른 도구에 붙여 넣거나 문서로 쓰려고 Markdown으로 바꾼다. 본체는 `engine/outline.ts`의 순수 함수 `outline(html, { notes })`이고 CLI는 `slidekit outline <덱> [--notes]`, 앱은 Export 메뉴의 Copy as Markdown과 Download .md다(앱은 노트를 넣는다).
+덱 내용을 Claude나 다른 도구에 붙여 넣거나 문서로 쓰려고 Markdown으로 바꾼다. 본체는 `engine/outline.ts`의 순수 함수 `outline(html, { notes })`이고 CLI는 `slidekit outline <덱> [--notes]`, 앱은 Export 메뉴의 Copy as Markdown과 Download .md다(앱은 노트를 넣는다). 배포용 `deck.md`는 `engine/deck-md.ts`의 `deckMarkdown(html)`(outline의 deck 모드: 로컬 이미지는 `inline-image`, svg와 video와 audio는 `[figure: ...]` 같은 자리표시자, 부제와 언어 머리말)이고 **노트를 넣지 않는다**. `slidekit bundle <덱>`이 `dist/<덱>.md`를 함께 만들고 `--alternate <파일>`을 주면 번들 `<head>`에 `<link rel="alternate" type="text/markdown">`를 넣는다. 설계: `spec/DECK-MD.md`.
 
 - 머리말: `# 제목`, 이어서 `- Author:`와 `- Date:`(`#deck-meta` 값, 없으면 생략). 공개 범위, 비밀번호, 코멘트, 게시 기록은 HTML 밖의 정보이거나 내보낼 내용이 아니라서 넣지 않는다.
 - 슬라이드마다 `## N. 제목`. 제목은 `data-title`, 없으면 슬라이드의 첫 제목, 없으면 `Slide N`이다. 제목과 같은 첫 제목은 본문에서 다시 쓰지 않는다. 본문 제목은 `###`부터이고 h1과 h2는 `###`, h3은 `####`이다.

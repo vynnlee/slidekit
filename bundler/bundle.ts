@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { fetchCached, processFaces, usedChars } from "./fonts";
+import { deckMarkdown } from "../engine/deck-md";
 
 const root = join(import.meta.dir, "..");
 const name = process.argv[2];
@@ -51,6 +52,10 @@ const inlineCssUrls = (css: string, base: string) =>
 
 if (!(await Bun.file(join(deckDir, "index.html")).exists())) fail(`없는 덱: decks/${name}. 새 덱은 slidekit new ${name}`);
 let html = await Bun.file(join(deckDir, "index.html")).text();
+const sourceHtml = html; // dist/<덱>.md는 원본에서 만든다(노트 없음, spec/DECK-MD.md)
+const altAt = process.argv.indexOf("--alternate"); // 번들 <head>에 deck.md로 가는 alternate 링크를 넣는다(배포가 파일 이름을 정한다). 없으면 넣지 않는다
+const alternate = altAt > 2 ? process.argv[altAt + 1] : undefined;
+if (altAt > 2 && !/^[\w][\w./-]{0,100}$/.test(alternate ?? "")) fail("--alternate에는 deck.md 같은 상대 파일 이름을 준다");
 
 /* 1. fonts: only the characters this deck uses. Remote font CSS (Google Fonts, jsdelivr, any CDN), local @font-face files,
       and nothing at all for decks that use system fonts. Downloads are cached in ~/.cache/slidekit/fonts, never in the repo. */
@@ -123,12 +128,14 @@ if (dm.title && !/property=["']og:title["']/i.test(html)) heads.push(`<meta prop
 if (dm.subtitle && !/name=["']description["']/i.test(html)) heads.push(`<meta name="description" content="${esc(dm.subtitle)}">`, `<meta property="og:description" content="${esc(dm.subtitle)}">`);
 if (dm.visibility === "password" && !/name=["']robots["']/i.test(html)) heads.push('<meta name="robots" content="noindex">');
 if (heads.length) html = html.replace(/<head[^>]*>/i, (h) => `${h}\n  ${heads.join("\n  ")}`);
+if (alternate && !/rel=["']alternate["'][^>]*text\/markdown/i.test(html)) html = html.replace(/<head[^>]*>/i, (h) => `${h}\n  <link rel="alternate" type="text/markdown" href="${alternate}">`);
 if (!/<title>[^<]+<\/title>/i.test(html) && dm.title) html = html.replace(/<\/head>/i, () => `  <title>${esc(dm.title!)}</title>\n</head>`);
 if (!/<html[^>]*\blang=/i.test(html)) html = html.replace(/<html\b/i, `<html lang="${dm.lang === "en" ? "en" : "ko"}"`);
 
 await mkdir(join(root, "dist"), { recursive: true });
 const outFile = join(root, "dist", `${name}.html`);
 await Bun.write(outFile, html);
+await Bun.write(join(root, "dist", `${name}.md`), deckMarkdown(sourceHtml)); // 노트 없는 deck.md(번들은 공개용이라 노트를 넣는 길이 없다)
 if (fontFaces) console.log(`fonts: ${fontFaces} faces, ${(fontBytes / 1024).toFixed(0)} KB`);
 const imgBytes = [...assetBytes.values()].reduce((a, b) => a + b, 0);
 if (assetBytes.size) console.log(`images: ${assetBytes.size} files, ${(imgBytes / 1024).toFixed(0)} KB`);

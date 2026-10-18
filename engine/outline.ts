@@ -56,8 +56,20 @@ function parse(html: string): Node {
 }
 
 const isEl = (n: Node | string): n is Node => typeof n !== "string";
-const hidden = (n: Node) => "hidden" in n.attrs || n.attrs["aria-hidden"] === "true" || /display\s*:\s*none/i.test(n.attrs.style ?? "") || SKIP.has(n.tag) || "data-notes" in n.attrs;
-const plain = (n: Node | string): string => (typeof n === "string" ? n : hidden(n) ? "" : n.kids.map(plain).join(""));
+// deck 모드(배포용 deck.md, engine/deck-md.ts): 로컬 이미지는 inline-image, svg와 video와 audio는 자리표시자 한 줄, 머리말에 부제와 언어. 기본 출력은 바뀌지 않는다.
+let DECK = false;
+const FIG = new Set(["svg", "video", "audio"]);
+const SEP = new Set(["span", "small", "label", "mark", "u", "s", "cite", "abbr", "time", "data", "q", "var", "samp", "bdi", "bdo", "output"]); // deck 모드에서 앞뒤 글과 단어가 붙지 않게 띄우는 인라인 요소(sub, sup은 단어 안이라 제외)
+const attrHidden = (n: Node) => "hidden" in n.attrs || n.attrs["aria-hidden"] === "true" || /display\s*:\s*none/i.test(n.attrs.style ?? "") || "data-notes" in n.attrs;
+const hidden = (n: Node) => attrHidden(n) || (SKIP.has(n.tag) && !(DECK && FIG.has(n.tag)));
+const plain = (n: Node | string): string => (typeof n === "string" ? n : hidden(n) || FIG.has(n.tag) ? "" : DECK && n.tag === "br" ? " " : n.kids.map(plain).join(""));
+const figure = (n: Node): string => {
+  const clip = (t: string) => squash(t).slice(0, 200);
+  if (n.tag === "svg") { const label = clip(plain(find(n, (x) => x.tag === "title")[0] ?? "") || (n.attrs["aria-label"] ?? "") || find(n, (x) => x.tag === "text" || x.tag === "tspan").map(rawText).join(" ")); return label ? `[figure: ${esc(label)}]` : "[figure]"; }
+  const src = n.attrs.src ?? find(n, (x) => x.tag === "source")[0]?.attrs.src ?? "";
+  const name = /^data:/i.test(src) ? "" : decodeURIComponent(src.split(/[?#]/)[0].split("/").pop() ?? "").slice(0, 80);
+  return name ? `[${n.tag}: ${esc(name)}]` : `[${n.tag}]`;
+};
 const rawText = (n: Node | string): string => (typeof n === "string" ? n : n.kids.map(rawText).join(""));
 const squash = (s: string) => s.replace(/\s+/g, " ").trim();
 
@@ -70,14 +82,21 @@ function find(n: Node, pick: (x: Node) => boolean, out: Node[] = []): Node[] {
 const esc = (s: string) => s.replace(/([\\`*_\[\]])/g, "\\$1");
 function inline(kids: (Node | string)[], skip?: Node): string {
   let out = "", prev: Node | string | undefined;
-  for (const k of kids) {
+  for (let ki = 0; ki < kids.length; ki++) {
+    const k = kids[ki], next = kids[ki + 1];
     const before = prev; prev = k;
     if (typeof k === "string") { out += esc(k.replace(/\s+/g, " ")); continue; }
     if (k === skip || hidden(k)) continue;
+    if (DECK && FIG.has(k.tag)) { out += " " + figure(k) + " "; continue; }
     if (k.tag === "span" && before && typeof before !== "string" && before.tag === "span" && out && !/\s$/.test(out)) out += " "; // 붙어 있는 span 둘은 칸을 나누는 구조(번호와 글 등)라 한 칸 띄운다
     const t = k.tag, body = () => inline(k.kids, skip);
+    if (DECK && SEP.has(t)) { // 배포용: 붙어 있는 글과 span은 서로 다른 칸일 수 있어(CSS로 블록이 된다) 단어가 붙지 않게 띄운다
+      const b = body();
+      if (b.trim()) out += (out && /[^\s(\[{"'“‘]$/.test(out) ? " " : "") + b + (typeof next === "string" && /^[\p{L}\p{N}]/u.test(next) ? " " : "");
+      continue;
+    }
     if (t === "br") out += "  \n";
-    else if (t === "img") out += k.attrs.src ? `![${esc(squash(k.attrs.alt ?? ""))}](${/^data:/i.test(k.attrs.src) ? "inline-image" : k.attrs.src.replace(/ /g, "%20")})` : ""; // data: 이미지는 글에 붙이기엔 너무 길어 자리표시자로
+    else if (t === "img") out += k.attrs.src ? `![${esc(squash(k.attrs.alt ?? ""))}](${/^data:/i.test(k.attrs.src) || (DECK && !/^(?:https?:)?\/\//i.test(k.attrs.src)) ? "inline-image" : k.attrs.src.replace(/ /g, "%20")})` : ""; // data: 이미지는 글에 붙이기엔 너무 길어 자리표시자로
     else if (t === "a") { const b = body().trim(); out += k.attrs.href && b ? `[${b}](${k.attrs.href.replace(/ /g, "%20")})` : b; }
     else if (t === "b" || t === "strong") { const b = body().trim(); out += b ? `**${b}**` : ""; }
     else if (t === "i" || t === "em") { const b = body().trim(); out += b ? `*${b}*` : ""; }
@@ -138,7 +157,7 @@ function list(n: Node, cx: Ctx, depth: number): string {
 }
 
 function table(n: Node): string[] {
-  const rows = find(n, (x) => x.tag === "tr" && !hidden(x)).map((tr) => tr.kids.filter((c): c is Node => isEl(c) && (c.tag === "td" || c.tag === "th") && !hidden(c)).map((c) => tidy(inline(c.kids)).replace(/\s*\n\s*/g, " ").replace(/\|/g, "\\|")));
+  const rows = find(n, (x) => x.tag === "tr" && !hidden(x)).map((tr) => tr.kids.filter((c): c is Node => isEl(c) && (c.tag === "td" || c.tag === "th") && !hidden(c)).flatMap((c) => { const cell = tidy(inline(c.kids)).replace(/\s*\n\s*/g, " ").replace(/\|/g, "\\|"), span = DECK ? Math.max(1, Math.min(20, Number(c.attrs.colspan) || 1)) : 1; return [cell, ...Array(span - 1).fill("")]; }));
   const cols = Math.max(0, ...rows.map((r) => r.length));
   if (!rows.length || !cols) return [];
   const fill = (r: string[]) => `| ${[...r, ...Array(cols - r.length).fill("")].join(" | ")} |`;
@@ -146,17 +165,23 @@ function table(n: Node): string[] {
 }
 
 // ---- 덱 ----
-export type OutlineOptions = { notes?: boolean };
+export type OutlineOptions = { notes?: boolean; deck?: boolean };
 
 export function outline(html: string, opts: OutlineOptions = {}): string {
+  DECK = !!opts.deck;
+  try { return build(html, opts); } finally { DECK = false; }
+}
+
+function build(html: string, opts: OutlineOptions): string {
   const doc = parse(html);
-  let meta: { title?: unknown; author?: unknown; date?: unknown } = {};
+  let meta: { title?: unknown; subtitle?: unknown; author?: unknown; date?: unknown; lang?: unknown } = {};
   const ms = find(doc, (x) => x.tag === "script" && x.attrs.id === "deck-meta")[0];
   try { if (ms?.raw) meta = JSON.parse(ms.raw); } catch { /* 깨진 메타는 제목 없이 */ }
   const htmlTitle = squash(plain(find(doc, (x) => x.tag === "title")[0] ?? ""));
   const str = (v: unknown) => (typeof v === "string" ? squash(v) : "");
   const out: string[] = [`# ${esc(str(meta.title) || htmlTitle || "Untitled deck")}`];
-  const info = [["Author", str(meta.author)], ["Date", str(meta.date)]].filter(([, v]) => v).map(([k, v]) => `- ${k}: ${esc(v)}`);
+  if (DECK && str(meta.subtitle)) out.push(`> ${esc(str(meta.subtitle))}`);
+  const info = [["Author", str(meta.author)], ["Date", str(meta.date)], ...(DECK ? [["Language", str(meta.lang)]] : [])].filter(([, v]) => v).map(([k, v]) => `- ${k}: ${esc(v)}`);
   if (info.length) out.push(info.join("\n"));
 
   const slides = find(doc, (x) => x.tag === "section" && "data-slide" in x.attrs);

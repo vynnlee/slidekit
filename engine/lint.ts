@@ -134,6 +134,7 @@ export function lint(html: string): Issue[] {
   });
 
   const css = styles.join("\n") + "\n" + (rest.match(/style="[^"]*"/g) ?? []).join("\n");
+  if (/\{[^}]*display\s*:\s*none/i.test(styles.join("\n"))) add("warn", "hidden-css", "덱 <style>에 display:none 규칙이 있다. 배포용 deck.md는 CSS를 평가하지 않아 이렇게 숨긴 글도 담는다. 공개하면 안 되는 글은 aside[data-notes]나 hidden 속성에 둔다");
   if (/\d(?:\.\d+)?\s*(?:vw|vh)\b/i.test(css)) add("error", "units", "vw, vh 단위를 px로 바꾼다. 슬라이드는 1920x1080 고정이다");
   const js = scripts.filter((s) => !/slidekit\.js|application\/json/.test(s.attrs)).map((s) => s.body).join("\n");
   if (/addEventListener\(\s*['"](?:wheel|touchstart|touchend|pointerdown|click)['"]/.test(js) || /\bonclick=/.test(rest)) add("warn", "nav", "슬라이드 이동은 방향키만 쓴다. click, wheel, touch 핸들러를 이동에 쓰지 않는다");

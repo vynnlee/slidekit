@@ -4,7 +4,8 @@ import { chmodSync, closeSync, copyFileSync, existsSync, linkSync, mkdirSync, op
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
-import { editsBetween, hash, noteFileChanged, restore } from "./versions";
+import { editsBetween, hash, noteFileChanged, read as readVersion, restore, type Version } from "./versions";
+import { changedSlides, revisionOf } from "./slide-edit";
 import { readOnlyDeck, withDeckLock } from "./deck-lock";
 
 import { cancelCapture, captureImage, imagePath, parseRegion, removeImage, type Region } from "./capture";
@@ -121,11 +122,35 @@ export function verify(deck: string, c: Comment): boolean {
 const clients = new Set<ReadableStreamDefaultController<string>>();
 const channelClients = new Set<ReadableStreamDefaultController<string>>();
 const removed = new Map<string, Comment>(); // 삭제 되돌리기용 보관함
-function emit(event: string, data: unknown) {
+export function emit(event: string, data: unknown) {
   const chunk = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const c of clients) {
     try { c.enqueue(chunk); } catch { clients.delete(c); }
   }
+}
+
+/** 에이전트 존재 신호(spec/AGENT-PRESENCE.md). 클라이언트는 마지막 이벤트 뒤 ttl이 지나면 그 id를 끝난 것으로 본다. */
+export const EDIT_TTL = 10_000, COMMENT_TTL = 60_000;
+export const presence = (event: "agent.edit.start" | "agent.edit.done" | "agent.edit.fail", data: { id: string; deck: string } & Record<string, unknown>) =>
+  emit(event, { agent: "claude", at: new Date().toISOString(), ttl: EDIT_TTL, ...data });
+/** 코멘트 처리 중 표시: ack가 시작, reply가 끝. changed는 ack 이후 수정 기록(editsBetween)이 있을 때만 채운다. */
+function commentPresence(deck: string, c: Comment, phase: "start" | "done") {
+  const id = `c-${c.id}`;
+  if (phase === "start") return presence("agent.edit.start", { id, deck, kind: "comment", comment_id: c.id, slide: c.slide, anchor: { path: c.path, excerpt: c.excerpt }, ttl: COMMENT_TTL });
+  let changed: { slide: number; excerpt: string }[] = [], revision = "";
+  try {
+    const now = readFileSync(join(decksDir, deck, "index.html"), "utf8");
+    revision = revisionOf(now);
+    if (c.editBase) changed = changedSlides(readVersion(deck, c.editBase) ?? "", now);
+  } catch {}
+  presence("agent.edit.done", { id, deck, kind: "comment", comment_id: c.id, via: "comment", changed, revision });
+}
+/** 앱 밖(도구 없는) 직접 수정: 직전 external 스냅샷과 비교해 바뀐 슬라이드만 done으로 알린다(start 없음). */
+function watchPresence(deck: string, v: Version) {
+  try {
+    const now = readFileSync(join(decksDir, deck, "index.html"), "utf8");
+    presence("agent.edit.done", { id: `w-${crypto.randomUUID().slice(0, 8)}`, deck, via: "watch", changed: changedSlides(readVersion(deck, v.id) ?? "", now), revision: revisionOf(now) });
+  } catch {}
 }
 
 // 덱 폴더 이름만 허용한다(경로 이탈 방지).
@@ -226,7 +251,7 @@ try {
     const [deck, ...rest] = name.split(/[\\/]/);
     if (!rest.length || rest.at(-1) === "comments.json" || rest.some((s) => s.startsWith("."))) return; // .versions 같은 점 폴더 안의 파일도 무시
     clearTimeout(timers.get(deck));
-    timers.set(deck, setTimeout(() => { timers.delete(deck); noteFileChanged(deck); emit("deck-changed", { deck }); }, 250));
+    timers.set(deck, setTimeout(() => { timers.delete(deck); const v = noteFileChanged(deck); emit("deck-changed", { deck }); if (v) watchPresence(deck, v); }, 250));
   });
 } catch {}
 
@@ -297,6 +322,7 @@ export const routes = {
       if (edit) { comment.editBase = edit.base; comment.editHash = edit.hash; }
       save(b.deck, list);
       emit("reply", { deck: b.deck, comment });
+      commentPresence(b.deck, comment, "done");
       return Response.json({ ok: true });
     },
   },
@@ -371,6 +397,7 @@ export const routes = {
         comment.ackAt = new Date().toISOString();
         save(b.deck, list);
         emit("reply", { deck: b.deck, comment });
+        commentPresence(b.deck, comment, "start");
       }
       return Response.json({ ok: true });
     },

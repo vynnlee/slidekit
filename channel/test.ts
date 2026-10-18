@@ -26,7 +26,7 @@ try {
   const caps = client.getServerCapabilities() as any;
   assert(caps.experimental["claude/channel"], "channel capability");
   const names = (await client.listTools()).tools.map((t) => t.name).sort().join();
-  assert(names === "ack,get_pending,reply", names);
+  assert(names === "ack,get_pending,reply,slidekit_edit", names);
   await Bun.sleep(500); // SSE 구독 대기
   assert(((await (await fetch(`${url}/api/channel`)).json()) as any).connected === true, "channel presence true");
 

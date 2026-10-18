@@ -3,6 +3,7 @@ import { readOnlyDeck, withDeckLock } from "./deck-lock";
 import { remap } from "./comments";
 import { afterSave } from "./versions";
 import { deckFolder } from "./folder";
+import { revisionOf } from "./slide-edit";
 import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 
 const decksDir = join(import.meta.dir, "..", "decks");
@@ -22,7 +23,7 @@ export const routes = {
       return withDeckLock(folder, async () => {
         for (let i = 0; ; i++) {
           const before = statSync(file).mtimeMs, source = readFileSync(file, "utf8"), after = statSync(file).mtimeMs;
-          if (before === after || i >= 4) return Response.json({ source, mtime: before }); // 끝까지 안 맞으면 읽기 전 mtime(더 낡은 쪽)을 줘서 다음 저장이 409로 걸리게 한다
+          if (before === after || i >= 4) return Response.json({ source, mtime: before, revision: revisionOf(source) }); // 끝까지 안 맞으면 읽기 전 mtime(더 낡은 쪽)을 줘서 다음 저장이 409로 걸리게 한다
         }
       });
     },

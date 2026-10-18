@@ -1,4 +1,4 @@
-# slidekit 핸드오프 (2026-10-15 갱신)
+# slidekit 핸드오프 (2026-10-18 갱신)
 
 새 세션은 이 문서를 먼저 읽는다. 기획은 `PLAN.md`(초기 기획, 일부 낡음), 덱 규격은 `spec/SPEC.md`(9절은 편집), 속성 패널 설계는 `spec/INSPECTOR.md`, 컨텍스트 메뉴와 커서는 `spec/INTERACTION.md`, 사용법은 `README.md`, 배포는 `deploy/README.md`.
 
@@ -108,6 +108,35 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 - 반영 완료: 채널 입력 정제, 번들러 읽기 범위 제한과 외부 글꼴 SSRF 방어, 비밀번호 8자 이상, wrangler와 fonttools 버전 고정(`deploy/deploy.ts`, `bundler/fonts.ts`의 숫자를 올릴 때는 의도적으로 바꾼다), 덱 단위 잠금(저장과 설정과 복원 경합), 리모컨 세션 가로채기 차단과 SSE 티켓, 버전 기록 상한, 정적 응답 `nosniff`.
 - 보안 감사 3차(2026-10-15, 2차 이후 추가된 표면만, 읽기 중심): 고친 것 둘. (1) `POST /api/comments/send-all`이 보류를 풀 때 한 번에 처리하는 수를 10개로 제한했다(이전에는 개수만큼 묶음 알림이 연달아 나갈 수 있었다). 남은 것은 그대로 두고 응답의 `remaining`으로 알리며 다시 누르면 다음 묶음이 간다. 서명이 검증된 열린 코멘트만 대상이고 한 덱의 코멘트만 한 알림에 담기며 채널도 알림당 10개로 한 번 더 자른다. (2) 서명 키(`~/.config/slidekit/comments.key`)를 처음 만들 때 프로세스 둘이 동시에 와도 키가 하나만 남게 임시 파일에 쓰고 `link`로 건다(예전에는 나중 쓴 쪽이 이겨 먼저 서명한 코멘트가 Unverified가 될 수 있었고, 읽는 쪽이 쓰다 만 파일을 볼 수도 있었다). 문제없음으로 확인한 것: 이미지 업로드(폴더 이름 검증, 20MB 상한과 본문 크기, 확장자와 매직 바이트, SVG 검사, `assets` 심볼릭 링크 거부, O_EXCL과 O_NOFOLLOW 쓰기, 읽기 전용 덱 거부), 휴지통과 복제와 이름 바꾸기와 삭제(새 이름은 소문자 규칙, 기존 이름은 점으로 시작하는 폴더와 슬래시 제외, 휴지통 항목은 이름과 타임스탬프 형식을 검사, 영구 삭제는 폴더 이름 확인 필요), outline API(덱 폴더 검증 뒤 그 덱의 `index.html`만 읽고 코멘트와 게시 기록과 비밀번호는 담지 않으며 모든 `/api/` 경로의 Host와 Origin 검사를 받는다), 리모컨 SSE 티켓(15초, 1회용, 검증 전에 먼저 폐기, 세션과 덱에 묶임, 세션당 미사용 20개, 해시만 보관). 남은 한계: 앱 API에 인증 토큰이 없는 점은 그대로이고, 휴지통으로 옮긴 덱이 게시 중이면 Cloudflare에는 계속 열려 있다(휴지통 복원 뒤 Published에서 취소한다. 휴지통 화면에서 게시 여부는 알려 주지 않는다).
 - 후속 후보: 코멘트 패널 R(답 보기) 단축키, 앱에서 공개 범위 바꾸기, 서명 키 교체와 여러 기기 공유, 버전 기록의 이미지 포함, 설치 때 npm `bun`이 중복으로 깔리는 문제(76MB, `bun-plugin-tailwind`의 peer) 정리, `bun audit` 정기 실행(2026-10-15 기준 0건).
+
+## 2026-10-18 작업 중단 시점 로그 (이 절은 다음 세션이 읽고 지워도 된다)
+
+사용자 지시로 게이트 없이 여기서 마무리했다(브라우저 검증은 발열 때문에 mac-local 전용으로 바꿨고, 전체 게이트는 끝까지 못 돌렸다). 푸시한 main은 가벼운 비브라우저 검사만 통과했다: typecheck, lint, bundler-bundle, scan-secrets, deploy-worker, unit-other, unit-isolated, channel 6종(channel, resilience, trust, edit, flood, stall).
+
+### 이번에 main에 들어간 것
+- 애니메이션 v2(엔진: 빈 단계 압축, `--sk-out-*`, `data-away="out"`, 0~10000ms clamp, `data-stepper`)와 **타임라인 편집 UI**(`spec/ANIMATION.md`, `spec/TIMELINE.md`), `engine/anim-core.ts` 공용 모듈.
+- 코멘트 모드(요소 클릭, 영역 드래그와 이미지, 키보드 영역), 코멘트 UX 1단계(정직한 전송 결과, Stalled와 Resend와 Cancel, 앵커 재계산과 Detached, 상태 이름 Saved/Sent/Working/Replied/Resolved, 작성창 연결 시 Enter=바로 보내기, 해결 핀 숨김; `spec/COMMENT-UX*.md`), 코멘트 자동 전달 상한과 Pause(M5, `spec/COMMENT-FLOOD.md`).
+- `slidekit_edit` 수정 프로토콜과 에이전트 존재 효과(M1, `spec/AGENT-PRESENCE.md`, `spec/AGENT-FX.md`), 배포 Worker 덱 CSP(M2a, `spec/WORKER-CSP.md`), `doctor --artifact`(M2b, `spec/ARTIFACT-CHECK.md`), `deck.md` 생성과 배포와 Copy agent prompt(M3, `spec/DECK-MD.md`, `spec/DECK-MD-DEPLOY.md`).
+- 시험 정리: 사용자 덱 작업트리에 기대던 시험을 커밋 사본 기준으로, 사용자 덱 보호(`SLIDEKIT_READONLY_DECKS`가 코멘트 쓰기도 막음, `scripts/lib/user-decks.ts`).
+- 러너: `bun scripts/test.ts --only`는 **반복해서** 줘야 여러 단계가 선택된다. `--help`를 붙이면 전체가 돈다.
+
+### main에 안 넣은 것 (브랜치 `wip/m4-live-update`, 미검증)
+- M4 발표 화면 실시간 갱신(엔진 `refresh`, `app/src/Presenter.tsx` 연결, `live-update`, 시험 `engine-refresh`/`present-live`), `editor-anim-perf`의 에이전트 효과 항목, 러너 단계 두 개. 엔진 변경이라 브라우저 검증 없이는 main에 넣지 않았다. 재개: 그 브랜치를 main 위로 합치고 mac-local에서 `present-live`, `engine-refresh`, `present`, `engine-verify`, `engine-anim`, `anim-perf`, `editor-anim-perf`를 통과시킨 뒤 푸시.
+
+### 검증하지 못한 것 (mac-local에서 돌릴 것)
+- 전체 게이트(느린 단계 포함). 마지막 mac-local 부분 결과(4d28788 기준 34단계 통과)에서 실패는 `channel`(시험 결함, 수정됨)과 `present` 두 시나리오(`?sync=1` 팝업 주소 타이밍, 시험 수정 `9b27cb3`, 재현 확인 못 함) 둘뿐이었다. 그 뒤 코멘트 UX와 M1~M5 변경은 브라우저 검증을 아직 못 봤다.
+- 코멘트 UX 1단계 화면(`d71d08f` 등)의 `comments-e2e`, `comment-mode`, `comments-a11y`, `comments-perf`, 핀의 접근성 이름은 아직 예전 상태 이름.
+- 방법: `scripts/remote-gate.sh start HEAD --slow`(커밋된 상태를 mac-local의 `~/Developer/ci/slidekit-gate`에 풀어 낮은 우선순위로 실행), `status`, `log`, `stop`. 개발 중 작업물은 `NAME=이름 WORKTREE=1`. 러너 잠금이 mac-local에서 공유되어 한 번에 하나만 돈다. mac-cloud에서는 브라우저 시험을 돌리지 않는다(발열).
+
+### 남은 일
+- 코멘트 UX 2단계(핀 모양, 호버 미리보기, 패널 재구성, 하단 트레이)와 3단계(스레드, 읽지 않음, 팝오버, 바텀 시트): `spec/COMMENT-UX.md`, `spec/COMMENT-UX-UI.md`.
+- `deploy` Worker 실제 배포(CSP와 `deck.md`)는 사용자 승인 뒤. `unpublish`와 비밀번호 덱 발행 테스트도 아직 안 했다.
+- 사용자 확인: `slidekit-guide` 덱이 앱 휴지통(`decks/.trash`)으로 옮겨져 작업트리에서 삭제 표시 상태다(커밋하지 않음, git에는 남아 있고 시험은 HEAD에서 읽는다). 워크숍 덱의 커밋 안 된 편집과 `comments.json`은 사용자 것이라 건드리지 않았다. 코멘트 이미지의 시스템 Chrome 캡처는 mac-local 확인이 필요하다.
+- 알려진 흔들림: `editor-anim-perf`, `editor-perf`는 부하에서 흔들려 재실행 통과가 불안정 WARN으로 남는다. `routes`가 재시도에서 한 번 "Blocked script execution in about:srcdoc"로 실패한 적이 있다(재현 못 함).
+
+### 운영 메모
+- mac-cloud는 전원이 연결돼도 유휴 잠자기에 들 수 있어 오래 걸리는 실행은 `caffeinate -s -i`로 감쌌다(전원 설정은 건드리지 않음). 백그라운드 실행은 세션과 분리(`setsid`)해야 세션이 끝나도 살아남는다.
+- 포트 3250/3251은 안정판 미리보기의 앱 포트(번갈아 사용)라 시험에 쓰지 않는다. 시험 포트: channel-edit 3249, channel-flood 3262, channel-stall 3263.
 
 ## 사용자 확인이 필요한 것
 

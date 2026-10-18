@@ -10,32 +10,35 @@
 
 ## 2. 방식
 
-### 2.1 엔진에 `refresh` (유일한 엔진 변경, engine-dev 리뷰)
+### 2.1 엔진에 `refresh` (유일한 엔진 변경, 받아서 적용만 한다)
 
-엔진(`engine/slidekit.js`)이 자기 덱 파일을 다시 받아 바뀐 슬라이드만 바꿔 끼운다. 두 단계다.
+엔진(`engine/slidekit.js`)은 **파일을 받지도 비교하지도 않는다**(외부 fetch 없음, 저장소 접근 없음). 발표자 앱이 새 파일을 받아 비교한 결과를 메시지로 보내면 그대로 적용만 한다.
 
-1. `peek`: `fetch(자기 문서 주소, {cache:"no-store"})`로 받아 `DOMParser`로 읽고, 슬라이드마다 **원본 지문**(시작할 때 구해 둔 섹션 `outerHTML`의 해시)과 비교한다. 결과는 `{changed:[바뀐 슬라이드 번호], count, mapped:{slide, step}, reload:boolean}`이다.
-2. `apply`: 바뀐 `<section data-slide>`만 `replaceWith`로 바꾸고, 덱 `<style>`은 글자가 다를 때만 교체하며, 슬라이드 목록과 `info`를 다시 만들어 `toParent("info")`를 보낸다. 현재 슬라이드는 `show(mapped.slide, "jump", mapped.step)`(크로스페이드 없음)로 다시 그린다.
+메시지(`v:1`, 부모 앱 postMessage는 `source:"slidekit"`이고 같은 출처의 `window.parent`에서만, 청중 창은 BroadcastChannel의 `role:"presenter"`만):
+`{type:"refresh", slides:[{fp, html}...], styles?:[글자...], base?:[fp...], pos:{slide, step}}`
+- `slides`: 새 파일의 **모든** 슬라이드. `fp`는 섹션 소스의 지문(64자 이하 문자열), `html`은 섹션 하나의 소스. 한도는 슬라이드 2000장, 한 장 2MB, 합계 16MB.
+- `base`: 보내는 쪽이 아는 옛 지문 목록. 엔진은 자기 지문을 모를 때(첫 메시지) 개수가 같으면 `base`를 믿는다.
+- `pos`: 유지할 위치(보내는 쪽이 LCS로 구한다). 엔진은 범위 안으로 맞출 뿐이다.
 
-위치 대응(`mapped`): 옛 지문 목록과 새 지문 목록의 최장 공통 부분열(LCS)로 슬라이드를 짝짓는다. 현재 슬라이드가 짝이 있으면 그 새 번호. 제자리에서 고쳐졌으면(앞뒤 짝 사이의 틈에서 같은 번호) 그 자리. 지워졌으면 틈의 시작, 곧 **가장 가까운 남은 슬라이드**(앞쪽 이웃 우선, 맨 앞이면 1). 단계는 새 슬라이드의 단계 수로 제한한다. 결과는 항상 `1..count`.
+적용: (1) 전부 검증한다(배열, 길이, 문자열, 크기, 각 `html`이 `<section data-slide>` 하나). 하나라도 틀리면 **아무것도 바꾸지 않고** 거절한다(앱에는 `refresh-rejected {reason}`). (2) 지문이 이미 있는 섹션은 **DOM 노드를 그대로 쓴다**(깜빡임 없음, 덱 스크립트가 만든 꾸밈도 남음). 없는 것만 `DOMParser`로 읽어(스크립트는 실행되지 않고 섹션 안 `<script>`는 지운다) 새 노드로 만든다. 인라인 `on*` 속성은 덱 원본을 열 때와 같게 둔다. (3) 사라진 노드는 지우고 순서를 맞춘다(바뀌지 않은 노드는 옮기지 않는다). (4) 슬라이드 목록과 장 목록을 다시 만든다(`makeSlides`), 덱 `<style>`은 개수가 같을 때만 글자를 교체한다, 전체 보기는 열려 있으면 바로 다시 만들고 닫혀 있으면 열 때 만든다. (5) `pos`로 `show(…, "jump", step, 조용히)`를 한다(크로스페이드 없음, 스크린 리더가 다시 읽지 않음). 부모 앱에는 `refreshed {info}`를 보낸다.
 
-`reload:true`(덱 `<script>` 글자나 `data-stepper` 슬라이드, 덱 메타의 id가 바뀜)이면 바꿔 끼우지 않는다. 스크립트는 다시 실행할 수 없기 때문이다. 이때는 발표자 화면이 칩으로 알리고 사용자가 누를 때만 새로고침한다(청중 창은 새로고침하지 않고 발표자가 알려 준다, 4절).
+위치 대응(LCS)은 엔진이 아니라 **발표자 앱**이 한다: 옛 지문 목록과 새 지문 목록의 최장 공통 부분열로 짝을 짓고, 현재 슬라이드가 짝이 있으면 그 새 번호, 제자리에서 고쳐졌으면 그 자리, 지워졌으면 가장 가까운 남은 슬라이드(틈의 시작), 단계는 새 슬라이드의 단계 수로 제한한다.
 
-제약: 엔진은 수신과 교체만 하고 정책(언제 반영할지)은 모른다. 메시지는 기존 채널을 재사용한다: 부모 앱에는 `postMessage {type:"refresh-peek"|"refresh-apply"}`와 응답 `refresh-diff`, 청중 창에는 BroadcastChannel `{v:1, type:"refresh", from, role:"presenter"}`.
+`reload` 판정도 앱이 한다: 덱 `<script>` 글자, 덱 메타(`#deck-meta`), `data-stepper` 슬라이드의 변경은 바꿔 끼우지 않고 칩으로만 알린다(스크립트는 다시 실행할 수 없다).
 
 ### 2.2 발표자 화면 (정책, `Presenter.tsx`)
 
-- `/api/events`를 듣고 `deck-changed`의 `deck`이 자기 덱일 때만 처리한다. 400ms 조용해진 뒤 한 번만 `peek`한다(저장이 연달아 와도 한 번). 에이전트 수정 이벤트(M1의 `agent.edit.done`)가 오면 같은 경로로 처리하고 `changed`를 힌트로 쓴다.
+- `/api/events`를 듣고 `deck-changed`의 `deck`이 자기 덱일 때만 처리한다. 400ms 조용해진 뒤 한 번만 새 파일을 받아 비교한다(저장이 연달아 와도 한 번). 에이전트 수정 이벤트(M1의 `agent.edit.done`)가 오면 같은 경로로 처리하고 `changed`를 힌트로 쓴다.
 - **정책(추천)**: 바뀐 슬라이드에 **현재와 다음 슬라이드가 없으면 자동 반영**한다(청중에게 보이는 변화가 없다). 있으면 자동으로 바꾸지 않고 **칩 "Deck updated · Slide 5 changed · Apply (U)"**을 띄운다(`status` 영역, 포커스를 가져가지 않는다). 사용자가 Apply를 누르거나 U를 누를 때만 반영한다. 발표 중 슬라이드가 갑자기 바뀌어 청중이 놀라지 않는 쪽이 안전하기 때문이다.
 - 설정 한 칸 `Live updates: Auto / Ask / Off`(기본 Auto 곧 위 정책). Ask는 항상 칩, Off는 아무것도 안 한다. `localStorage`에만 저장한다.
 - 발표 창이 열려 있지 않고 리모컨 연결도 없는 상태(준비 중)이면 현재 슬라이드가 바뀌었어도 자동 반영한다(청중이 없다).
-- Apply 순서: 내 iframe 둘에 `refresh-apply` → 그 결과 `info`와 `mapped`로 위치(`posRef`) 갱신 → 청중 창에 BroadcastChannel `refresh`를 보내고, 이어서 내 위치 `state`를 보낸다(`localMove`로 센다). 청중 창은 자기 엔진이 같은 `peek`과 `apply`를 하고, 그 뒤 발표자 `state`가 위치의 최종 권위다.
-- 목록에서 슬라이드가 사라져 현재가 `mapped`로 옮겨진 경우 토스트 "Slide 7 was removed. Moved to slide 6."을 한 번 보인다(`status`로 읽힌다).
+- Apply 순서: 내 iframe 둘에 `refresh` → 그 결과 `info`와 `mapped`로 위치(`posRef`) 갱신 → 청중 창에 BroadcastChannel `refresh`를 보내고, 이어서 내 위치 `state`를 보낸다(`localMove`로 센다). 청중 창은 자기 엔진이 같은 메시지를 적용하고, 그 뒤 발표자 `state`가 위치의 최종 권위다.
+- 목록에서 슬라이드가 사라져 현재가 옮겨진 경우(`pos`가 현재 슬라이드의 짝이 아닌 곳을 가리킴) 토스트 "Slide 7 was removed. Moved to slide 6."을 한 번 보인다(`status`로 읽힌다).
 - 리모컨은 발표자 `info`와 위치를 이미 따라가므로 추가 작업이 없다(전체 장 수와 노트와 제목이 바뀌면 다음 푸시에 따라온다).
 
 ### 2.3 청중 창과 re:n
 
-청중 창은 앱 코드가 없으므로 모든 처리가 엔진이다. 청중이 `refresh`를 받으면 `peek`과 `apply`를 하고 자기 위치를 `state`로 알리지 않는다(발표자가 권위). 하트비트의 `hello n`과 `re:n` 프로토콜은 그대로이고, apply 직전에 온 낡은 `re` 답이 위치를 되돌리지 않도록 발표자는 apply를 `localMove`로 세어 같은 규칙을 쓴다.
+청중 창은 앱 코드가 없으므로 위 적용이 전부 엔진 몫이다. 청중이 `refresh`를 받아도 위치를 `state`로 알리지 않는다(발표자가 권위). 하트비트의 `hello n`과 `re:n` 프로토콜은 그대로이고, Apply는 `localMove`로 세어 apply 직전에 온 낡은 `re` 답이 위치를 되돌리지 않게 한다. 청중 창은 파일을 직접 읽지 않으므로 발표자 화면과 항상 같은 내용을 본다.
 
 ## 3. 합격 기준
 
@@ -49,7 +52,7 @@
 
 ## 4. 시험 계획
 
-- 엔진 단위(`engine/test`, 새 `refresh.cjs`, 러너 단계 `engine-refresh`): 합성 덱으로 `peek`와 `apply`의 위치 대응(삽입, 삭제, 현재 삭제, 단계 수 줄어듦, 전부 교체), 노드 보존, 스크립트 변경은 `reload:true`.
+- 엔진(`engine/test/refresh.cjs`, 러너 단계 `engine-refresh`): 합성 덱에 메시지를 직접 보내 노드 보존, 수정, 삽입, 현재 삭제, 단계 제한, 거절 12가지(DOM 불변), 스크립트 비실행, 스타일, 전체 보기, 그리고 핫 스왑 퍼즈(시드 고정)와 누수.
 - 발표 e2e(`app/test/present.cjs`에 추가 또는 `present-live.cjs`): 시험 덱 사본에서 발표자와 청중 창을 열고 파일을 외부에서 고친다. 정책 4가지(자동, 칩, Off, 준비 중), Apply 후 청중 창 `timeOrigin` 불변, 현재 삭제 토스트, 칩의 `status`와 접근성(axe), 리모컨 상태의 제목과 장 수가 바뀜.
 - 퍼즈와 누수: 위 5와 6. 러너 `--only present`, `engine-refresh`, `engine-verify`, `engine-anim`, `anim-perf`를 함께 돌린다(엔진 변경이라 `present`와 `anim-perf` 필수).
 
@@ -61,18 +64,18 @@
 | 크로스페이드나 단계 전환 도중에 갱신 | 전환이 끝난 뒤(`transitionend` 또는 400ms 뒤)로 미룬다. 큐는 최신 하나만 남긴다. |
 | 에이전트가 연달아 수정(폭주) | 400ms 조용해질 때까지 모아 한 번 반영하고, 반영 사이 최소 1초 간격. 이벤트 수는 서버가 이미 디바운스한다. |
 | 스크립트나 stepper 슬라이드 변경 | 바꿔 끼우지 않고 `reload:true` 칩만. 청중 창은 사용자가 발표자에서 Reload를 눌러 `location.reload()`를 요청할 때만(전체화면이 풀리므로 경고 문구). |
-| 청중 창 fetch가 옛 파일을 받음(캐시) | `cache:"no-store"`와 `?_=<시각>`. 정적 서빙의 `must-revalidate`와 같이 쓴다. |
-| 신뢰: 덱 글자는 데이터 | 엔진은 받은 HTML을 `DOMParser`로 읽어 **섹션과 style만** 가져오고 스크립트는 실행하지 않는다. 앱 API 호출은 없다(자기 파일 fetch만). 덱 스크립트가 앱 API를 부를 수 있다는 기존 한계는 그대로다. |
-| 목록이 매우 클 때 비용 | 지문은 시작 때 한 번, `peek`은 문자열 해시와 LCS(O(n·m), n은 약 50)라 1ms대다. 파일 크기는 워크숍 덱 약 1MB를 기준으로 측정한다. |
+| 발표자 앱이 받는 파일이 옛 것(캐시) | `GET /api/decks/<덱>/source`(앱 API, 캐시 없음)로 받는다. |
+| 신뢰: 덱 글자는 데이터 | 엔진은 받은 HTML을 `DOMParser`(스크립트 비활성)로 읽어 섹션 하나만 가져오고 `<script>`를 지운다. 엔진은 아무것도 fetch하지 않고 `localStorage`도 쓰지 않는다. 메시지는 같은 출처 부모(embed)나 발표자 역할(BroadcastChannel)에서만 받는다. 덱 스크립트가 앱 API를 부를 수 있다는 기존 한계는 그대로다. |
+| 목록이 매우 클 때 비용 | 지문은 앱이 파일을 받을 때 한 번 계산하고 LCS는 O(n·m), n은 약 50이라 1ms대다. 파일 크기는 워크숍 덱 약 1MB를 기준으로 측정한다. |
 
 ## 6. 구현 순서
 
-1. 엔진 `refresh`(peek, apply, 위치 대응)와 엔진 단위 시험(engine-dev 리뷰).
+1. 엔진 `refresh`(적용만)와 엔진 시험 `engine-refresh`(engine-dev 리뷰).
 2. 발표자 화면: SSE 구독, 정책, 칩, 설정, 토스트, 청중 창 전달.
 3. 발표 e2e, 퍼즈, 누수 시험, 문서(SPEC 6.6과 HANDOFF, README의 발표 절).
 
 ## 7. 결정이 필요한 것
 
-1. 엔진에 `refresh`를 넣는 것(`engine/slidekit.js` 약 80줄, 단일 파일 내). 청중 창 전체화면을 유지하려면 필요하다. 대안은 청중 창도 새로고침(전체화면 해제)이다. 추천은 엔진 변경이다.
+1. 엔진에 `refresh`를 넣는 것(`engine/slidekit.js` 약 70줄, 받아서 적용만 하고 fetch 없음). 청중 창 전체화면을 유지하려면 필요하다. 대안은 청중 창도 새로고침(전체화면 해제)이다. 추천은 엔진 변경이다.
 2. 기본 정책(현재와 다음이 안 바뀌면 자동, 바뀌면 칩)과 설정 3값(Auto, Ask, Off).
 3. 스크립트가 바뀌었을 때는 항상 칩과 사용자 요청 새로고침(자동 새로고침 안 함).

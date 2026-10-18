@@ -2,6 +2,7 @@
    패널 열기, 목록 스크롤, 핀과 필름스트립 점(슬라이드 1에 100개), Send all, 상태 변경 한 번의 반응 시간과 긴 작업(50ms 이상)을 잰다.
    덱은 decks/_e2e-comments-perf 사본이고 끝에 지운다. 마우스와 키 입력은 실제 브라우저에서 한다.
    Usage: PW=<playwright-core> CHROME=<headless shell> BASE=http://127.0.0.1:3245 node scripts/comments-perf.cjs */
+process.env.CPU_SLOW ??= '4'; // 느린 기계(mac-cloud)와 게이트의 부하를 흉내 낸다. CPU_SLOW=1이면 끈다
 const { launch } = require('./lib/pw.cjs');
 const fs = require('fs');
 const { makeTestDeck } = require('./lib/test-deck.cjs');
@@ -10,7 +11,7 @@ const J = { 'Content-Type': 'application/json' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fail = 0;
 const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + name + (ok || extra === undefined ? '' : '  ' + JSON.stringify(extra))); };
-const N = 300, PINS = 100;
+const N = 300, PINS = 100, REGIONS = 24; // 영역 코멘트(이미지 있음)는 N과 별개로 슬라이드 3에 더한다
 
 (async () => {
   const t = makeTestDeck('comments-perf');
@@ -53,7 +54,14 @@ const N = 300, PINS = 100;
     const arr = JSON.parse(fs.readFileSync(t.commentsFile, 'utf8'));
     arr.forEach((c, i) => { if (i % 7 === 6) delete c.sig; });
     fs.writeFileSync(t.commentsFile, JSON.stringify(arr));
-    console.log(`시드: 코멘트 ${arr.length}개, 슬라이드 1에 ${PINS}개`);
+    // 이미지 있는 영역 코멘트: 서명을 지키려고 API로 만들고(저장 순간 비동기로 이미지 생성), 모두 끝날 때까지 기다린다. 파일은 더 건드리지 않는다.
+    const tc = Date.now();
+    for (let i = 0; i < REGIONS; i++) await api('/api/comments', { slide: 3, path: '', excerpt: '', text: `영역 코멘트 ${i}: 이 부분을 정리해 주세요.`, region: { x: 0.05 + (i % 4) * 0.2, y: 0.1 + Math.floor(i / 4) * 0.12, w: 0.18, h: 0.1 }, overlap: [] });
+    let regionList = [];
+    for (let i = 0; i < 900; i++) { regionList = (await (await fetch(`${BASE}/api/comments?deck=${t.folder}`)).json()).filter((c) => c.region); if (regionList.length >= REGIONS && !regionList.some((c) => c.image === 'pending')) break; await sleep(200); }
+    const ready = regionList.filter((c) => c.image === 'ready').length;
+    console.log(`시드: 코멘트 ${arr.length}개, 슬라이드 1에 ${PINS}개, 영역 코멘트 ${regionList.length}개(이미지 ${ready}개 준비, 생성 ${Math.round((Date.now() - tc) / 1000)}초)`);
+    check('영역 코멘트 이미지 생성이 끝났다(pending 없음)', regionList.length === REGIONS && !regionList.some((c) => c.image === 'pending'), regionList.map((c) => c.image));
 
     // 긴 작업(50ms 이상)과 프레임 간격을 모으는 도구
     const hook = () => page.evaluate(() => {
@@ -72,7 +80,7 @@ const N = 300, PINS = 100;
     await hook();
     const t0 = Date.now();
     await page.getByRole('tab', { name: /^Comments/ }).click();
-    await page.waitForFunction((n) => document.querySelectorAll('[data-testid=comments-panel] li[data-comment-id]').length >= n, N, { timeout: 20000 });
+    await page.waitForFunction((n) => document.querySelectorAll('[data-testid=comments-panel] li[data-comment-id]').length >= n, N + REGIONS, { timeout: 20000 });
     const openMs = Date.now() - t0;
     const sOpen = await stats();
     console.log(`패널 열기 ${openMs}ms: ${fmt(sOpen)}`);
@@ -141,6 +149,29 @@ const N = 300, PINS = 100;
     const sSend = await stats();
     console.log(`Send all(보류 ${heldBefore}개 중 10개) ${sendMs}ms: ${fmt(sSend)}`);
     check('Send all이 3초 이내에 반영된다', sendMs < 3000, sendMs);
+
+    // 6) 이미지 있는 코멘트: 썸네일이 게으르게 로드되는 목록을 훑을 때(항목마다 보이는 자리로 이동)와 그 슬라이드로 이동
+    const withImg = page.locator('[data-testid=comments-panel] li[data-comment-id]:has(img)');
+    const nImg = await withImg.count();
+    if (ready > 0) {
+      await hook();
+      const t6 = Date.now();
+      for (let i = 0; i < nImg; i++) { await withImg.nth(i).scrollIntoViewIfNeeded(); await sleep(40); }
+      const loaded = await page.waitForFunction(() => { const l = [...document.querySelectorAll('[data-testid=comments-panel] li img')]; return l.length > 0 && l.every((i) => i.complete && i.naturalWidth > 0); }, null, { timeout: 15000 }).then(() => true, () => false);
+      const imgMs = Date.now() - t6;
+      const sImg = await stats();
+      console.log(`이미지 코멘트 ${nImg}개 훑기 ${imgMs}ms: ${fmt(sImg)}`);
+      check('이미지가 있는 코멘트 썸네일이 모두 로드된다', loaded && nImg >= ready - 2, { nImg, ready });
+      check('썸네일을 훑는 동안 긴 작업(1.5초 이상)이 없다', Math.max(0, ...sImg.long) < 1500, sImg.long);
+      await hook();
+      const t7 = Date.now();
+      await tile(2).click();
+      await page.waitForFunction(() => document.querySelector('[data-testid=filmstrip] [role=option][aria-selected=true]') !== null);
+      await sleep(1000);
+      const sSlide3 = await stats();
+      console.log(`영역 코멘트 ${REGIONS}개가 있는 슬라이드 3으로 이동 ${Date.now() - t7}ms(대기 1초 포함): ${fmt(sSlide3)}`);
+      check('영역 코멘트가 많은 슬라이드로 이동할 때 긴 작업(1.5초 이상)이 없다', Math.max(0, ...sSlide3.long) < 1500, sSlide3.long);
+    } else console.log('SKIP 이미지 썸네일 측정: Chrome이 없어 영역 이미지가 만들어지지 않았다');
 
     check('긴 작업(1.5초 이상)이 없다', [sOpen, sScroll, sPins, sState, sSend].every((s) => Math.max(0, ...s.long) < 1500), [sOpen.long, sScroll.long, sPins.long, sState.long, sSend.long]);
   } catch (e) { fail++; console.log('FAIL 예외 ' + e); }

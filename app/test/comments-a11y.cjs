@@ -63,7 +63,7 @@ const J = { 'Content-Type': 'application/json' };
     check('코멘트 8개가 목록에 있다', (await items.count()) === 8, await items.count());
 
     // 1) 상태는 색이 아니라 글자로도 구분된다(각 항목에 상태 이름이 보인다)
-    const LABEL = { held: 'Held', waiting: 'Waiting', sent: 'Sent to Claude', working: 'Claude is working', replied: 'Replied', resolved: 'Resolved', unverified: 'Unverified' };
+    const LABEL = { held: 'Saved', waiting: 'Saved', sent: 'Sent', working: 'Working', replied: 'Replied', resolved: 'Resolved', unverified: 'Unverified' }; // 항목의 화면 이름(핀의 aria-label은 아직 예전 이름)
     const rows = await items.evaluateAll((l) => l.map((e) => ({ state: e.getAttribute('data-state'), text: e.textContent })));
     for (const s of states) check(`상태 ${s}: 항목에 "${LABEL[s]}" 글자가 있다`, rows.some((r) => r.state === s && r.text.includes(LABEL[s])), rows.filter((r) => r.state === s));
     const pinLabels = await page.locator('[data-comment-pin]').evaluateAll((l) => l.map((e) => e.getAttribute('aria-label')));
@@ -125,6 +125,47 @@ const J = { 'Content-Type': 'application/json' };
     check('Esc가 작성창을 닫는다', await page.getByRole('group', { name: 'New comment' }).waitFor({ state: 'detached', timeout: 3000 }).then(() => true, () => false));
     const active = await page.evaluate(() => { const a = document.activeElement; return { tag: a?.tagName, inBody: a === document.body }; });
     check('Esc 뒤 포커스가 문서 body로 사라지지 않는다', !active.inBody, active);
+
+    // 5b) 마우스 없이 영역 코멘트: 모드 토글(Shift+C)로 켜고, Tab으로 요소, A로 조절 상자, 방향키로 이동과 크기, Enter로 확정,
+    //     작성창에 포커스가 가고 Enter(Add)로 닫히면 포커스가 body로 사라지지 않으며, 각 단계를 aria-live가 읽어 준다.
+    const layer = page.getByTestId('comment-mode-layer'), say = () => page.getByTestId('comment-mode-status').textContent();
+    await page.evaluate(() => { const a = document.activeElement; if (a && a !== document.body) a.blur(); });
+    await page.keyboard.press('Shift+C');
+    check('Shift+C가 코멘트 모드를 켜고 모드 층이 키보드 포커스를 받는다', await layer.waitFor({ timeout: 3000 }).then(() => layer.evaluate((e) => e === document.activeElement || e.contains(document.activeElement)), () => false));
+    check('모드 층은 이름 있는 그룹이고 켜짐을 읽어 준다(aria-live)', (await layer.getAttribute('role')) === 'group' && (await layer.getAttribute('aria-label')) === 'Comment mode' && /Comment mode on\./.test(await say()), await say());
+    await page.keyboard.press('Tab');
+    check('Tab이 요소를 가리키고 Enter 안내를 읽어 준다', await page.waitForFunction(() => /Enter to comment/.test(document.querySelector('[data-testid=comment-mode-status]').textContent), null, { timeout: 2000 }).then(() => true, () => false), await say());
+    await page.keyboard.press('a');
+    check('A가 조절 상자를 만들고 위치와 크기를 읽어 준다', await page.waitForFunction(() => /Area \d+ by \d+ pixels at \d+, \d+\./.test(document.querySelector('[data-testid=comment-mode-status]').textContent), null, { timeout: 2000 }).then(() => true, () => false), await say());
+    const s0 = await say();
+    await page.keyboard.press('ArrowRight'); await page.keyboard.press('Shift+ArrowDown');
+    check('방향키로 옮기거나 크기를 바꾸면 새 값을 읽어 준다', await page.waitForFunction((s) => document.querySelector('[data-testid=comment-mode-status]').textContent !== s && /Area \d+ by \d+ pixels/.test(document.querySelector('[data-testid=comment-mode-status]').textContent), s0, { timeout: 2000 }).then(() => true, () => false), await say());
+    await page.keyboard.press('Enter');
+    const composer = page.getByRole('group', { name: 'New comment' }), area = page.getByRole('textbox', { name: 'Comment' });
+    check('Enter가 영역을 확정해 작성창이 열리고 입력창에 포커스가 간다', await composer.waitFor({ timeout: 3000 }).then(() => area.evaluate((e) => e === document.activeElement), () => false));
+    if (AXE) {
+      await page.evaluate(AXE);
+      const v = await page.evaluate(() => axe.run({ include: [['[role=group][aria-label="New comment"]']] }, { resultTypes: ['violations'] }).then((r) => r.violations.filter((x) => x.impact === 'serious' || x.impact === 'critical').map((x) => ({ id: x.id, html: x.nodes[0].html.slice(0, 200) }))));
+      check('axe: 영역 작성창 serious 이상 위반 없음', v.length === 0, v);
+    }
+    await area.fill('키보드로 정한 영역');
+    await page.keyboard.press('Enter');
+    check('Enter(Add)로 작성창이 닫히고 코멘트가 목록에 생긴다', await composer.waitFor({ state: 'detached', timeout: 5000 }).then(() => true, () => false) && await page.waitForFunction(() => [...document.querySelectorAll('[data-testid=comments-panel] li[data-comment-id]')].some((e) => e.textContent.includes('키보드로 정한 영역')), null, { timeout: 5000 }).then(() => true, () => false));
+    const after = await page.evaluate(() => { const a = document.activeElement; return { inBody: a === document.body, inLayer: !!a?.closest('[data-testid=comment-mode-layer]') }; });
+    check('작성창이 닫힌 뒤 포커스가 body로 사라지지 않고 모드 층에 남는다', !after.inBody && after.inLayer, after);
+    await page.keyboard.press('Escape');
+    check('Esc가 모드를 끄고 포커스가 body로 사라지지 않는다', await layer.waitFor({ state: 'detached', timeout: 3000 }).then(() => true, () => false) && !(await page.evaluate(() => document.activeElement === document.body)));
+
+    // 5c) 자동 처리 상태 줄: 이름 있는 상태와 Pause/Resume 단추가 키보드로 되고, 멈추면 이유가 읽힌다(끝에 반드시 Resume으로 돌려 둔다)
+    await page.getByRole('tab', { name: /^Comments/ }).click();
+    const flowBar = page.getByTestId('comment-flow');
+    check('패널 머리에 자동 처리 상태 줄과 Pause 단추가 있다', await flowBar.waitFor({ timeout: 5000 }).then(() => true, () => false) && /Auto-processing on/.test(await flowBar.textContent()) && (await flowBar.getByRole('button', { name: 'Pause', exact: true }).count()) === 1, await flowBar.textContent().catch(() => ''));
+    await flowBar.getByRole('button', { name: 'Pause', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    check('Pause를 키보드로 누르면 멈춤 이유가 보이고 단추가 Resume이 된다', await page.waitForFunction(() => /Paused\. New comments wait/.test(document.querySelector('[data-testid=comment-flow]')?.textContent ?? ''), null, { timeout: 5000 }).then(() => true, () => false));
+    check('상태 줄은 role=status로 읽힌다', (await flowBar.locator('[role=status]').count()) === 1);
+    await flowBar.getByRole('button', { name: 'Resume', exact: true }).click();
+    check('Resume하면 다시 Auto-processing on', await page.waitForFunction(() => /Auto-processing on/.test(document.querySelector('[data-testid=comment-flow]')?.textContent ?? ''), null, { timeout: 5000 }).then(() => true, () => false));
 
     // 6) axe: 상태를 모두 펼친 화면
     if (AXE) {

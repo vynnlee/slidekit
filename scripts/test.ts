@@ -53,13 +53,18 @@ const steps: Step[] = [
   bun("bundler-fonts", "test", "bundler/test/fonts.test.ts"),
   bun("scan-secrets", "test", "scripts/scan-secrets.test.ts"),
   bun("deploy-worker", "test", "deploy/worker"),
+  { ...browser("deploy-csp", "deploy/csp-e2e.cjs", "static", STATIC), server: undefined }, // 배포 Worker의 덱 CSP를 실제 번들과 유출 시도 덱으로 본다(자체 로컬 서버 3296, 원격 호출 없음; spec/WORKER-CSP.md)
   { name: "channel", cmd: ["bun", "channel/test.ts"], env: { TEST_PORT: "3242" } },
   { name: "channel-resilience", cmd: ["bun", "channel/resilience.ts"], env: { TEST_PORT: "3247" } },
   { name: "channel-trust", cmd: ["bun", "channel/trust.ts"], env: { TEST_PORT: "3248" } },
+  { name: "channel-edit", cmd: ["bun", "channel/edit.ts"], env: { TEST_PORT: "3249" } },
+  { name: "channel-flood", cmd: ["bun", "channel/flood.ts"], env: { TEST_PORT: "3262" } }, // 코멘트 전달 상한과 Pause(M5, spec/COMMENT-FLOOD.md)
+  { name: "channel-stall", cmd: ["bun", "channel/stall.ts"], env: { TEST_PORT: "3263" } }, // 멈춘 요청 Stalled와 Resend와 Cancel과 이어받기(spec/COMMENT-UX.md 1단계)
   browser("engine-verify", "engine/test/verify.cjs", "static", STATIC),
   { ...browser("engine-moved", "engine/test/moved.cjs", "static", STATIC), server: undefined }, // file:// 로 연다
   { ...browser("engine-gradient", "engine/test/gradient.cjs", "static", STATIC), server: undefined }, // file:// 로 연다, PDF 바이트의 셰이딩까지 본다
   { ...browser("engine-offline", "engine/test/offline.cjs", "static", STATIC), server: undefined }, // 번들과 PDF가 네트워크 없이 같은지(외부 호출 없음)
+  { ...browser("engine-artifact", "engine/test/artifact.cjs", "static", STATIC), server: undefined }, // 발행 호환: --build 크기와 엄격한 CSP 아래 번들 동작(약 30초)
   { ...browser("engine-anim", "engine/test/anim-stress.cjs", "static", STATIC), server: undefined, slow: true }, // 단계 애니메이션 퍼즈(CPU 1/4/8배, 연타, 청중 동기화), 누수, 긴 작업, 사용자 덱 호환 비교. 시드와 이동 열을 출력. --slow 또는 --only engine-anim
   browser("routes", "app/test/routes.cjs", "app", APP),
   browser("offline-app", "app/test/offline-app.cjs", "app", APP), // 앱 화면이 외부 호스트로 요청하지 않는지
@@ -129,9 +134,10 @@ const MAP: [RegExp, string[]][] = [
   [/\.(ts|tsx)$/, ["typecheck"]],
   [/^engine\/(anim-core\.ts|test\/anim-core)/, ["unit-other", "unit-isolated", "typecheck"]], // 단계 규칙 참조 구현(편집기 모델, lint, 시험이 같이 쓴다)
   [/^engine\/(slidekit\.(js|css)|test\/(verify|moved|gradient|offline|anim-stress)\.cjs)/, ["engine-verify", "engine-moved", "engine-gradient", "engine-offline", "engine-anim", "bundler-bundle"]],
+  [/^engine\/(artifact-check\.ts|test\/artifact)/, ["unit-other", "unit-isolated", "typecheck", "engine-artifact"]], // 발행 호환 검사(M2b)
   [/^engine\/(lint\.ts|test\/lint\.test\.ts|doctor\.ts|new\.ts|template\/)/, ["lint", "tokens"]],
   [/^bundler\//, ["bundler-bundle", "bundler-fonts"]],
-  [/^deploy\//, ["deploy-worker", "export-api"]],
+  [/^deploy\//, ["deploy-worker", "deploy-csp", "export-api", "unit-other"]],
   [/^channel\//, ["channel"]],
   [/^app\/(comments\.ts|src\/(Comment|lib\/(comment|use-comments))|test\/comments)/, ["comments", "channel", "comments-e2e", "comments-a11y", "comment-mode"]],
   [/^app\/(versions\.ts|src\/(VersionHistory|ExportMenu)|test\/versions)/, ["versions", "versions-e2e"]],
@@ -255,7 +261,7 @@ async function run(name: string, cmd: string[], env: Record<string, string> = {}
   const logPath = join(logDir, `${name}.log`), firstPath = join(logDir, `${name}.attempt1.log`);
   if (keepFirst) { try { renameSync(logPath, firstPath); } catch { /* 첫 로그가 없으면 그대로 */ } } else rmSync(firstPath, { force: true });
   const out = createWriteStream(logPath);
-  const p = Bun.spawn([...(env.SLIDEKIT_NORMAL_PRIORITY ? [] : ["taskpolicy", "-b"]), ...cmd], { cwd: root, env: { ...process.env, ...env }, stdout: "pipe", stderr: "pipe", detached: true }); running = p.pid; // SLIDEKIT_NORMAL_PRIORITY: 낮은 우선순위에서는 rAF가 5fps로 떨어지는 측정 단계(anim-perf)만 쓴다
+  const p = Bun.spawn([...(env.SLIDEKIT_NORMAL_PRIORITY ? [] : ["taskpolicy", "-b"]), ...cmd], { cwd: root, env: { ...process.env, SLIDEKIT_READONLY_DECKS: READONLY, ...env }, stdout: "pipe", stderr: "pipe", detached: true }); running = p.pid; // SLIDEKIT_NORMAL_PRIORITY: 낮은 우선순위에서는 rAF가 5fps로 떨어지는 측정 단계(anim-perf)만 쓴다
   // 출력 사이가 3초 넘게 벌어지면 "[느림 +N초]" 줄을 넣는다. 고정 sleep과 긴 대기가 어느 검사 앞에 있는지 찾는 용도다.
   let prev = Date.now();
   const pump = async (s: ReadableStream<Uint8Array>, to: NodeJS.WriteStream) => {

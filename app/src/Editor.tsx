@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ArrowLeft, MonitorPlay, Redo2, Settings2, Undo2 } from "lucide-react";
 import { TextArea } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Shell } from "./Shell";
 import { StatusPage } from "./StatusPage";
 import { Canvas, textual, type CanvasApi } from "./Canvas";
 import { Filmstrip } from "./Filmstrip";
+import { createFlashBus, createPresence, displayName, type Completion, type PresenceEvent, type PresenceStore } from "@/lib/agent-presence";
 import { LayerTree } from "./LayerTree";
 import { createHead } from "@/lib/play-head";
 import { Timeline } from "./Timeline";
@@ -68,6 +69,8 @@ const noteOf = (html: string) => {
   return t.content.querySelector("aside[data-notes]")?.textContent?.trim() ?? "";
 };
 type Shell_ = { prefix: string; suffix: string };
+
+const NO_SUB = () => () => {}, EMPTY_SNAP = { version: 0, sessions: [], hidden: 0 }, NO_SNAP = () => EMPTY_SNAP; // 존재 효과 저장소가 아직 없을 때
 
 export function Editor({ id }: { id: string }) {
   const [deck, setDeck] = useState<DeckEntry | null>(null);
@@ -133,6 +136,11 @@ export function Editor({ id }: { id: string }) {
   const [reloadAsk, setReloadAsk] = useState(false); // 저장 안 한 편집이 있을 때 Reload는 한 번 더 눌러야 한다
   useEffect(() => { if (!changed) setReloadAsk(false); }, [changed]);
   const [updated, setUpdated] = useState<Set<number>>(new Set()); // 밖에서 바뀐 슬라이드(필름스트립에 4초 표시)
+  // 에이전트 존재 효과(spec/AGENT-PRESENCE.md): 저장소는 덱마다 하나, 효과는 캔버스 오버레이와 필름스트립에만 그린다. 완료 처리는 기존 외부 변경 경로(check)를 재사용한다.
+  const [presence, setPresence] = useState<PresenceStore | null>(null);
+  const flashes = useRef(createFlashBus()).current, checkRef = useRef<(() => Promise<void>) | null>(null), presenceRef = useRef<PresenceStore | null>(null), seenSessions = useRef(new Set<string>());
+  const [agentSay, setAgentSay] = useState(""), [agentNote, setAgentNote] = useState<string | null>(null), agentNoteTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const presenceSnap = useSyncExternalStore(presence?.subscribe ?? NO_SUB, presence?.snapshot ?? NO_SNAP);
   const updatedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const comments = live.comments;
   const nums = useMemo(() => numbering(comments), [comments]);
@@ -207,6 +215,23 @@ export function Editor({ id }: { id: string }) {
   useEffect(() => {
     if (!folder) return;
     const es = new EventSource("/api/events");
+    const store = createPresence(folder);
+    presenceRef.current = store; setPresence(store);
+    try { if (localStorage.getItem("slidekit.e2e")) (window as unknown as { __skAgent?: PresenceStore }).__skAgent = store; } catch { /* 시험 전용 훅: 저장소에 가짜 이벤트를 직접 넣는다 */ }
+    for (const type of ["agent.edit.start", "agent.edit.done", "agent.edit.fail"] as const) {
+      es.addEventListener(type, (e) => { try { store.ingest({ ...JSON.parse((e as MessageEvent).data), type } as PresenceEvent); } catch {} });
+    }
+    const note = (text: string, ms: number) => { setAgentNote(text); clearTimeout(agentNoteTimer.current); agentNoteTimer.current = setTimeout(() => setAgentNote(null), ms); };
+    const offDone = store.onCompletion(async (c: Completion) => {
+      const o = c.outcome, name = displayName(c.session.agent);
+      if (o.type === "fail") { setAgentSay(`${name} couldn't finish editing slide ${c.session.slide}`); note(`${name} couldn't finish editing slide ${c.session.slide}`, 6000); return; }
+      const n = o.changed.length, first = o.changed[0]?.slide ?? c.session.slide, label = `slide ${first}${new Set(o.changed.map((x) => x.slide)).size > 1 ? " and more" : ""}`;
+      setAgentSay(`${name} finished editing ${label}, ${n} change${n === 1 ? "" : "s"}`);
+      if (dirtyRef.current) { note(`${name} edited ${label}. Reload to see the changes.`, 8000); return; } // 편집 중이면 기존 외부 변경 규칙(Reload, Overwrite)을 따르고 강조는 하지 않는다
+      note(`${name} finished editing ${label} · ${n} change${n === 1 ? "" : "s"}`, 4000);
+      await checkRef.current?.(); // 파일 변경 이벤트가 늦어도 반영한 뒤 강조한다(같은 내용이면 두 번째 확인은 바로 끝난다)
+      for (const s of new Set(o.changed.map((x) => x.slide))) flashes.request({ slide: s, excerpts: o.changed.filter((x) => x.slide === s).map((x) => x.excerpt), color: c.session.color });
+    });
     const on = (type: string, fn: (d: any) => void) => es.addEventListener(type, (e) => {
       try { const d = JSON.parse((e as MessageEvent).data); if (d.deck === folder) fn(d); } catch {}
     });
@@ -236,14 +261,15 @@ export function Editor({ id }: { id: string }) {
           if (d.changed.length) { // 밖에서 바뀐 슬라이드를 알린다(예: Claude가 코멘트를 처리했을 때)
             setUpdated(new Set(d.changed));
             clearTimeout(updatedTimer.current); updatedTimer.current = setTimeout(() => setUpdated(new Set()), 4000);
-            toast(`${slidesLabel(d.changed)} updated${hadHistory ? (rebased ? ". Changed slides can't be undone." : ". Undo history cleared.") : ""}`, { action: { label: "View", onClick: () => setIndex(d.changed[0]) } });
+            if (!presenceRef.current?.recentDone(d.changed.map((i) => i + 1))) toast(`${slidesLabel(d.changed)} updated${hadHistory ? (rebased ? ". Changed slides can't be undone." : ". Undo history cleared.") : ""}`, { action: { label: "View", onClick: () => setIndex(d.changed[0]) } });
           } else if (hadHistory && !rebased) toast("The file changed outside the editor. Undo history cleared.");
         }
       } catch (e: any) { setErr(String(e.message ?? e)); }
     };
+    checkRef.current = check;
     on("deck-changed", check);
     es.addEventListener("open", () => { check(); }); // 연결이 끊겼다 돌아오거나 막 열렸을 때 놓친 변경을 한 번 확인한다
-    return () => es.close();
+    return () => { es.close(); offDone(); store.dispose(); presenceRef.current = null; checkRef.current = null; setPresence(null); clearTimeout(agentNoteTimer.current); };
   }, [folder, load]);
 
   useEffect(() => {
@@ -764,6 +790,19 @@ export function Editor({ id }: { id: string }) {
       first: i === 0, last: i === n - 1, duplicate: () => dupSlide(i), remove: () => delSlide(i), canDelete: n > 1,
     }));
   };
+  // 에이전트 존재 표시: 필름스트립 점과 헤더 칩, 읽어 주는 문구. 선택은 절대 바꾸지 않고 Follow를 눌렀을 때만 이동한다.
+  const agentSlides = useMemo(() => new Map(presenceSnap.sessions.map((s) => [s.slide, s.color])), [presenceSnap]);
+  const agentChip = useMemo(() => {
+    const s = presenceSnap.sessions[0];
+    if (!s) return agentNote ? { text: agentNote, follow: null } : null;
+    const name = displayName(s.agent), more = presenceSnap.hidden ? ` +${presenceSnap.hidden}` : "";
+    return s.slide === index + 1 ? { text: `${name} is editing this slide${more}`, follow: null } : { text: `${name} is editing slide ${s.slide}${more}`, follow: Math.min(units.length, s.slide) - 1 };
+  }, [presenceSnap, agentNote, index, units.length]);
+  useEffect(() => { // 새 세션이 시작될 때 한 번만 읽어 준다(같은 세션의 반복 start는 다시 읽지 않는다)
+    for (const s of presenceSnap.sessions) if (!seenSessions.current.has(s.id)) { seenSessions.current.add(s.id); setAgentSay(`${displayName(s.agent)} is editing slide ${s.slide}`); }
+    if (seenSessions.current.size > 50) seenSessions.current.clear();
+  }, [presenceSnap]);
+
   keyRef.current = (e) => {
     const t = e.target as HTMLElement, mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
     const typing = t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || (!!t.closest?.('[role=dialog],[role=menu],[role=listbox],[role=radiogroup]') && !t.closest?.('[data-testid=filmstrip]') && !t.closest?.('[data-shell-panel]')); // 슬라이드 필름스트립은 편집기 단축키(실행 취소 등)를 그대로 쓴다
@@ -921,7 +960,7 @@ export function Editor({ id }: { id: string }) {
         }
       >
         <div className="flex h-full flex-col">
-        <Filmstrip shell={shell} folder={folder} units={units} index={index}
+        <Filmstrip agent={agentSlides} agentChip={agentChip} onFollow={(i) => setIndex(i)} shell={shell} folder={folder} units={units} index={index}
           marked={new Set(comments.filter((c) => !c.slideDeleted && c.status === "open").map((c) => c.slide))} origin={origin.current}
           collapsed={filmCollapsed} onToggle={toggleFilm}
           updated={updated} found={find ? matchSlides : undefined} warn={new Set(units.map((u, i) => (overflowByKey[u.key] ? i : -1)).filter((i) => i >= 0))} onSelect={setIndex} onMenu={tileMenuAt} onMove={moveSlide} onDuplicate={dupSlide} onDelete={delSlide} onAdd={addSlide} />
@@ -933,7 +972,7 @@ export function Editor({ id }: { id: string }) {
             onClose={() => setFind(null)} />
         )}
         <div className="min-h-0 flex-1 bg-[var(--canvas-bg)]">
-        <Canvas ref={canvas} shell={shell} folder={folder} units={units} index={index} sel={sel} more={more} onMulti={toggleSel} onGroup={pickGroup}
+        <Canvas ref={canvas} presence={presence} flashes={flashes} shell={shell} folder={folder} units={units} index={index} sel={sel} more={more} onMulti={toggleSel} onGroup={pickGroup}
           comments={comments.filter((c) => !c.slideDeleted && c.slide === origin.current.get(units[index]?.key ?? ""))}
           commentActions={commentActions} overflowOn={overflowOn} safeArea={safeArea} onToggleGuide={toggleGuide} onOverflow={(l) => { setOverflowEls(l); const k = unitsRef.current[indexRef.current]?.key; if (k) setOverflowByKey((m) => (m[k] === l.length ? m : { ...m, [k]: l.length })); }} onImage={addImage} onStyle={style} onContext={({ el, x, y }) => contextAt({ x, y }, el)} onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
           numbers={nums} channel={live.channel} head={head} stepBadges={bottomTab === "animation"} commentMode={commentMode} onCommentMode={setCommentMode}
@@ -971,6 +1010,7 @@ export function Editor({ id }: { id: string }) {
         </div>
         </div>
       </Shell>
+      <span role="status" aria-live="polite" aria-atomic="true" data-testid="agent-live" className="sr-only">{agentSay}</span>
       <ReplyToasts comments={comments} onView={jump} />
       <CommandMenuDialog open={palette} onOpenChange={setPalette} title="Search" description="Go to a slide or run an action">
         <CommandMenu items={paletteItems} suggestions={["act-present", "act-add", "act-find", "act-comment", "act-keys"]} suggestionsLabel="Try" /* 처음 연 팔레트가 슬라이드 목록으로 시작하지 않게 핵심 동작 5개를 앞에 둔다 */>

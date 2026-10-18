@@ -6,6 +6,8 @@ import { TextArea } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
 import { byPath, previewHtml, serializeSlide, type Unit } from "@/lib/deck-source";
 import { applyPlayhead, readSlide, scrubEnd, scrubSet, scrubStart, slideStepCount, stepsOf, type Scrub } from "@/lib/animation-dom";
+import { AgentFx } from "./AgentFx";
+import type { FlashBus, PresenceStore } from "@/lib/agent-presence";
 import type { PlayHead } from "@/lib/play-head";import { childToward, isLeaf, isLockedDeep, pick as pickEl, siblings } from "@/lib/selection";
 import { canMove, canResize, fixSize, moveBy, readTranslate, toLocal, writeTranslate } from "@/lib/move";
 import { lockAxis, snapMove, snapResize, toSlide, unionRect, type Gap, type Guide, type Rect } from "@/lib/guides";
@@ -66,6 +68,8 @@ type Props = {
   onCommentMode(on: boolean): void;
   onMarker(id: string): void;
   stepBadges?: boolean; // Animation 탭이 열려 있을 때 요소 모서리에 등장 번호와 out 번호를 단다
+  presence?: PresenceStore | null; // 에이전트 존재 효과(커서, 광채, 변경 강조)
+  flashes?: FlashBus | null;
   head?: PlayHead; // 재생 헤드: 단계 k의 상태를 그린다(null이면 마지막 단계). animate면 전환을 보인다
   commentActions: CommentActions;
   onReady(): void;
@@ -695,6 +699,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
           <div ref={safeBox} data-testid="safe-area" className="absolute left-0 top-0 hidden border border-dashed border-white/30" />
           <div ref={overflowBoxes} />
           <div ref={badgeLayer} aria-hidden="true" data-testid="step-badges" />
+          {p.presence && p.flashes && <AgentFx presence={p.presence} flashes={p.flashes} slide={cur()} slideNo={p.index + 1} viewKey={`${zoom}|${size.w}|${size.h}`} rev={p.units} />}
           <div ref={marqueeBox} className="absolute left-0 top-0 hidden border border-focus-ring bg-focus-ring/10" />
           <div ref={extraBoxes} />
           <div ref={handles}>

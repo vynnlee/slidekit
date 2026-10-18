@@ -457,6 +457,16 @@ Figma식 계층 선택이다. 구현은 `app/src/lib/selection.ts`(DOM 없이 �
 - 접근성: 구역은 이름 있는 `group`, 트랙은 `list`와 `listitem`, 막대는 `role="button"`과 `aria-roledescription`, 키보드는 roving tabindex(↑↓ 막대 이동, ←→ Delay ±50ms, Shift+←→ Duration, Alt+↑↓ 구역 이동, Home Delay 0, W와 A는 With와 After previous, Delete 삭제, Enter 요소 선택), 변경은 `aria-live`로 알린다.
 - 검증: 단위 `animation-model`, `timeline`(왕복, 퍼즈, 실제 덱 둘), `editor-animation`(끌기, 스냅 칩, 구역 이동, 키보드, 인스펙터, 스크럽 전환 프레임, 외부 변경, 경고, axe), `editor-panels`(인스펙터 섹션), `editor-a11y`(타임라인 axe와 키보드), `editor-anim-perf`(요소 100개와 클릭 19개, CPU 4배), `editor-fuzz` 시드 `a5`(단계 속성과 시간 범위 불변식), 왕복 퍼즈(Undo, 저장, 새로고침, 외부 변경, WebKit 포함은 일회성).
 
+### 9.8 에이전트 존재 효과 (Claude가 고치는 동안)
+
+이벤트(`spec/AGENT-PRESENCE.md`의 `agent.edit.start`, `done`, `fail`)를 SSE로 받아 **편집기 안에서만** 보인다(덱 엔진, 발표 화면, 번들은 그대로). 설계와 스케치는 `spec/AGENT-FX.md`.
+
+- 상태는 `lib/agent-presence.ts`의 외부 저장소(순수 리듀서: 세션, ttl 만료, 같은 id 합치기, 최대 3개 표시)라 이벤트가 와도 편집기 전체가 다시 그려지지 않는다. 도구가 수 ms에 끝나도 start와 done 사이를 최소 600ms 보인다. ttl이 지나면 말없이 정리한다.
+- 캔버스 위 오버레이(`AgentFx.tsx`, `pointer-events:none`, `aria-hidden`, iframe 안은 건드리지 않음): `Claude` 라벨 커서가 앵커 요소(path 또는 excerpt로 찾음, 없으면 슬라이드 중앙)로 transform만으로 이동, 요소 점선 광채, 슬라이드 테두리 광채, 점 격자 파동(정지 마스크 띠 5장에 opacity만 어긋난 delay). 필름스트립 타일에 점과 펄스 링, 헤더에 `Claude is editing slide 3` 칩과 `Follow`. **슬라이드 선택은 바꾸지 않는다**(`Follow`를 눌렀을 때만 이동).
+- 완료: 기존 외부 변경 경로(`check()`)로 캔버스를 제자리에서 갱신한 뒤 바뀐 요소를 1.2초 번쩍인다(최대 12개, 못 찾으면 슬라이드 전체). 저장 안 한 변경이 있으면 기존 규칙(`File changed outside the editor`, Reload/Overwrite)을 유지하고 칩만 `Reload to see the changes`로 바꾸며 강조는 하지 않는다. 도구나 코멘트 수정의 완료는 일반 `updated` 토스트와 합쳐 한 번만 알린다(파일 감시 done은 토스트를 그대로 둔다).
+- 접근성과 성능: `role="status"`(`aria-live=polite`) 문구, `prefers-reduced-motion`이면 이동과 반짝임 없이 정지 외곽선과 칩만, opacity와 transform 애니메이션만 쓰고 `will-change`는 효과 중에만, 대기 중 비용 0, 정리 뒤 오버레이 노드 0. 시험 훅: `localStorage["slidekit.e2e"]`가 있으면 `window.__skAgent`(저장소)로 가짜 이벤트를 넣는다.
+- 검증: 단위 `agent-presence`(리듀서, 최소 표시, ttl, 폭주 합치기, 정리), `editor-external`(커서와 효과, 다른 슬라이드면 선택 불변과 Follow, reduced-motion, 완료 강조와 정리, 실패와 ttl, 폭주, 실제 `slidekit_edit` 경로, 충돌, axe), `editor-anim-perf`(효과 중 긴 작업과 입력 지연).
+
 ## 10. 텍스트 내보내기 (Markdown 개요)
 
 덱 내용을 Claude나 다른 도구에 붙여 넣거나 문서로 쓰려고 Markdown으로 바꾼다. 본체는 `engine/outline.ts`의 순수 함수 `outline(html, { notes })`이고 CLI는 `slidekit outline <덱> [--notes]`, 앱은 Export 메뉴의 Copy as Markdown과 Download .md다(앱은 노트를 넣는다).

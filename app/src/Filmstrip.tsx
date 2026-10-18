@@ -84,6 +84,9 @@ type Props = {
   found?: Map<number, number>; // 찾기 결과: 슬라이드별 일치 수
   warn?: Set<number>; // 내용이 슬라이드 밖으로 넘치는 슬라이드(열어 본 것만 안다)
   updated?: Set<number>; // 밖에서 바뀐 슬라이드(잠시 표시)
+  agent?: Map<number, string>; // 에이전트가 고치는 중인 슬라이드 번호(1부터) -> 색(점과 펄스 링)
+  agentChip?: { text: string; follow: number | null } | null; // 헤더 칩(follow: 따라갈 슬라이드 인덱스, 현재 슬라이드면 null)
+  onFollow?(i: number): void;
   onSelect(i: number): void;
   onMenu(i: number, at: { x: number; y: number }): void; // 우클릭이나 메뉴 키(선택은 호출 쪽이 먼저 한다)
   onMove(from: number, to: number): void;
@@ -128,6 +131,12 @@ export function Filmstrip(p: Props) {
           </Button>
         </Tooltip>
         <span className="text-caption tabular-nums text-muted-foreground">Slide {p.index + 1} / {p.units.length}</span>
+        {p.agentChip && (
+          <span data-testid="agent-chip" className="ml-1 flex items-center gap-1 rounded-full bg-hover px-2 py-0.5 text-caption text-foreground">
+            <span aria-hidden="true">✦</span><span>{p.agentChip.text}</span>
+            {p.agentChip.follow !== null && p.onFollow && <button type="button" onClick={() => p.onFollow!(p.agentChip!.follow!)} className="rounded px-1 text-caption text-focus-ring underline outline-none focus-visible:ring-2 focus-visible:ring-focus-ring">Follow</button>}
+          </span>
+        )}
       </div>
       {!p.collapsed && (
         <ScrollArea orientation="horizontal" className="[mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)]">
@@ -166,6 +175,7 @@ export function Filmstrip(p: Props) {
                 {drop === i + 1 && i === p.units.length - 1 && drag !== null && <div className="absolute -right-1.5 inset-y-0 w-0.5 rounded bg-focus-ring" />}
                 {p.found?.get(i) ? <span aria-hidden="true" data-testid="tile-found" data-count={p.found.get(i)} className="pointer-events-none absolute left-6 top-1 z-10 rounded bg-foreground px-1 py-0.5 text-micro leading-none tabular-nums text-background before:content-[attr(data-count)]" /* 숫자는 글자가 아니라 CSS로 그려 접근 가능한 이름(타일 aria-label)과 어긋나지 않게 한다 */ /> : null}
                 {p.warn?.has(i) && <span role="img" aria-label="Content overflows" title="Content overflows the slide" className="pointer-events-none absolute bottom-1 right-1 z-10 rounded bg-destructive px-0.5 py-0.5 text-white"><TriangleAlert className="size-3" /></span>}
+                {p.agent?.has(i + 1) && <><span aria-hidden="true" data-testid="tile-agent" className="agent-on agent-breathe pointer-events-none absolute inset-0 z-10 rounded-md" style={{ boxShadow: `inset 0 0 0 2px ${p.agent.get(i + 1)}, 0 0 10px ${p.agent.get(i + 1)}99` }} /><span aria-hidden="true" className="pointer-events-none absolute right-1 top-1 z-10 size-2 rounded-full" style={{ background: p.agent.get(i + 1) }} /></>}
                 {p.updated?.has(i) && <span aria-hidden="true" data-testid="tile-updated" className="pointer-events-none absolute bottom-1 left-1 z-10 rounded bg-foreground px-1 py-0.5 text-micro leading-none text-background before:content-['Updated']" />}
                 <Thumb shell={p.shell} unit={u} folder={p.folder} eager={i < 6} keep={i === p.index} />
                 <span aria-hidden="true" className={`pointer-events-none absolute left-1 top-1 rounded px-1 py-0.5 text-micro leading-none tabular-nums ${i === p.index ? "bg-foreground text-background" : "bg-black/75 text-white"}`}>{i + 1}</span>

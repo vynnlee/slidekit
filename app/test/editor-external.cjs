@@ -8,7 +8,7 @@ const { startEditor } = require('./lib/editor-harness.cjs');
 
 (async () => {
   const H = await startEditor({ name: 'editor-external' });
-  const { fs, FILE, check, page, ctx, settle, focusBody, cond, saveDone, goSlide2, BASE, T, errors, finish } = H;
+  const { fs, FILE, check, page, ctx, settle, focusBody, cond, saveDone, goSlide2, BASE, T, errors, finish, sleep } = H;
   const notes = () => page.getByPlaceholder('Speaker notes (Markdown)');
   const read = () => fs.readFileSync(FILE, 'utf8');
   // n번째 슬라이드 끝에 문단을 덧붙인다(밖의 수정 흉내)
@@ -157,5 +157,73 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   await saveDone();
   check('깨진 중간 상태를 거친 뒤에도 편집과 저장이 됨', read().includes('AFTER-BROKEN'));
 
+  // ---- 에이전트 존재 효과(spec/AGENT-PRESENCE.md): 커서, 광채, 격자 펄스, 필름스트립 점과 칩, 완료 강조, 접근성, 충돌, 누수 ----
+  await page.evaluate(() => localStorage.setItem('slidekit.e2e', '1')); await page.reload();
+  await cond(() => document.querySelectorAll('iframe[title="Canvas"]')[0]?.contentDocument?.querySelectorAll('#sk-stage > [data-slide]').length === 8, null, 20000);
+  await goSlide2(); await settle();
+  const ingest = (e) => page.evaluate((ev) => window.__skAgent.ingest(ev), e);
+  const sessions = () => page.evaluate(() => window.__skAgent.snapshot().sessions.length);
+  const fx = (sel) => page.locator(`[data-testid=agent-layer] ${sel}`).count();
+  const live = () => page.getByTestId('agent-live').textContent();
+  const chip = () => page.getByTestId('agent-chip');
+  const tiles = page.locator('[data-testid=filmstrip] [role=option]');
+  const ifrId = () => page.evaluate(() => { const f = document.querySelector('iframe[title="Canvas"]'); return (f.__sk = f.__sk || Math.random()); });
+  const ifr0 = await ifrId(), D = T.folder, ev = (type, o) => ({ type, deck: D, agent: 'claude', ttl: 60000, ...o });
+  await ingest(ev('agent.edit.start', { id: 't1', kind: 'edit', slide: 3, anchor: { path: '', excerpt: 'zzz-nothing' } })); await settle();
+  check('다른 슬라이드를 고치는 중: 필름스트립 칩과 Follow, 3번 타일 점과 펄스', /Claude is editing slide 3/.test(await chip().textContent()) && (await chip().getByRole('button', { name: 'Follow' }).count()) === 1 && (await page.getByTestId('tile-agent').count()) === 1, await chip().textContent().catch(() => ''));
+  check('사용자의 선택(2번 슬라이드)은 바뀌지 않고 캔버스에는 효과가 없음', (await tiles.nth(1).getAttribute('aria-selected')) === 'true' && (await fx('[data-testid=agent-slide-fx]')) === 0);
+  check('읽어 주는 문구(aria-live)', /Claude is editing slide 3/.test(await live()), await live());
+  const axeP = process.env.AXE;
+  const axeScan = async (label, root) => { if (!axeP || !fs.existsSync(axeP)) return; await page.evaluate(fs.readFileSync(axeP, 'utf8')); const v = await page.evaluate(async (r) => { const x = await window.axe.run(r, { resultTypes: ['violations'] }); return x.violations.filter((y) => y.impact === 'serious' || y.impact === 'critical').map((y) => y.id + ':' + y.nodes.length); }, root); check('존재 효과 axe: ' + label, v.length === 0, v); };
+  await axeScan('칩이 있는 필름스트립', '[data-testid=filmstrip]');
+  await chip().getByRole('button', { name: 'Follow' }).click(); await settle();
+  check('Follow를 누르면 그 슬라이드로 이동하고 칩은 "this slide"로 바뀜', (await tiles.nth(2).getAttribute('aria-selected')) === 'true' && /editing this slide/.test(await chip().textContent()), await chip().textContent());
+  check('현재 슬라이드: 슬라이드 광채와 점 격자 파동 5개와 커서(Claude 라벨)', (await fx('[data-testid=agent-slide-fx]')) === 1 && (await fx('[data-testid=agent-wave]')) === 5 && (await fx('[data-testid=agent-cursor]')) === 1 && /Claude/.test(await page.locator('[data-testid=agent-cursor]').textContent()));
+  check('효과 중에만 will-change(agent-on)가 켜져 있음', (await fx('.agent-on')) >= 2);
+  check('효과 레이어는 aria-hidden이고 포인터를 받지 않음', (await page.getByTestId('agent-layer').getAttribute('aria-hidden')) === 'true' && (await page.getByTestId('agent-layer').evaluate((e) => getComputedStyle(e).pointerEvents)) === 'none');
+  check('애니메이션은 opacity와 transform뿐(합성 전용)', await page.evaluate(() => document.getAnimations().filter((a) => a.effect?.target?.closest?.('[data-testid=agent-layer]')).every((a) => a.effect.getKeyframes().every((k) => Object.keys(k).every((p) => /^(opacity|offset|easing|composite|computedOffset)$/.test(p))))));
+  await page.emulateMedia({ reducedMotion: 'reduce' }); await settle();
+  check('움직임 줄이기: 애니메이션과 커서 이동이 없음(정지 테두리와 칩만)', await page.evaluate(() => document.getAnimations().filter((a) => a.effect?.target?.closest?.('[data-testid=agent-layer]')).length === 0));
+  await page.emulateMedia({ reducedMotion: 'no-preference' }); await settle();
+  check('움직임 줄이기를 풀면 효과가 돌아옴', await page.evaluate(() => document.getAnimations().filter((a) => a.effect?.target?.closest?.('[data-testid=agent-layer]')).length > 0));
+  // 도착 위치: 현재 슬라이드의 제목 글자를 앵커로
+  const h2 = await page.evaluate(() => document.querySelector('iframe[title="Canvas"]').contentDocument.querySelector('[data-active] h2, [data-active] h1')?.textContent?.trim().slice(0, 12) || '');
+  await ingest(ev('agent.edit.start', { id: 't1', kind: 'edit', slide: 3, anchor: { path: '', excerpt: h2 } })); await settle();
+  check('앵커 글자로 요소를 찾아 요소 광채가 생기고 커서가 그 위치로 감', (await fx('[data-testid=agent-target]')) === 1 && /translate3d\(/.test(await page.locator('[data-testid=agent-cursor]').getAttribute('style')), h2);
+  await axeScan('효과가 켜진 캔버스 주변(헤더와 필름스트립)', '[data-testid=filmstrip]');
+  await ingest(ev('agent.edit.done', { id: 't1', changed: [{ slide: 3, excerpt: h2 }], revision: 'r', via: 'tool' }));
+  check('완료: 변경 강조(1.2초)가 뜨고 읽어 주는 문구가 나옴', await cond(() => document.querySelectorAll('[data-testid=agent-flash]').length >= 1, null, 5000).then(() => true).catch(() => false) && /finished editing slide 3, 1 change/.test(await live()), await live());
+  check('강조와 효과가 끝나면 레이어가 비고 will-change가 없음', await cond(() => document.querySelectorAll('[data-testid=agent-layer] *').length === 0, null, 6000).then(() => true).catch(() => false));
+  check('끝나면 필름스트립 점과 칩 정리(칩은 알림 문구 뒤 사라짐)', (await page.getByTestId('tile-agent').count()) === 0 && await cond(() => !document.querySelector('[data-testid=agent-chip]'), null, 8000).then(() => true).catch(() => false));
+  check('효과 내내 캔버스 iframe을 다시 만들지 않음', (await ifrId()) === ifr0);
+  // 실패와 ttl
+  await ingest(ev('agent.edit.start', { id: 'f1', kind: 'edit', slide: 3, anchor: null })); await ingest(ev('agent.edit.fail', { id: 'f1', reason: 'not_found' })); await settle();
+  check('실패: 효과를 걷고 알림 문구', await cond(() => /couldn.t finish editing slide 3/.test(document.querySelector('[data-testid=agent-live]').textContent), null, 4000).then(() => true).catch(() => false));
+  await ingest(ev('agent.edit.start', { id: 'ttl1', kind: 'edit', slide: 3, anchor: null, ttl: 1200 }));
+  check('ttl이 지나면 말없이 정리됨(세션 0, 레이어 비어 있음)', await cond(() => window.__skAgent.snapshot().sessions.length === 0 && document.querySelectorAll('[data-testid=agent-layer] *').length === 0, null, 5000).then(() => true).catch(() => false));
+  // 폭주와 누수: 200건을 쏟아도 합쳐지고, 끝나면 모두 정리
+  await page.evaluate((d) => { for (let i = 0; i < 200; i++) window.__skAgent.ingest({ type: 'agent.edit.start', id: 's' + (i % 5), deck: d, agent: 'a' + (i % 5), kind: 'edit', slide: 3, ttl: 1500 }); }, D);
+  check('이벤트 폭주: 보이는 세션 3개 + 칩에 +2', (await sessions()) === 3 && /\+2/.test(await chip().textContent()), await chip().textContent().catch(() => ''));
+  check('폭주 뒤 ttl 정리: 세션 0과 레이어 비어 있음', await cond(() => window.__skAgent.snapshot().sessions.length === 0 && document.querySelectorAll('[data-testid=agent-layer] *').length === 0 && !document.querySelector('[data-testid=tile-agent]'), null, 6000).then(() => true).catch(() => false));
+  // 실제 경로: slidekit_edit 도구가 부르는 서버 엔드포인트 -> SSE 이벤트 -> 효과와 반영
+  await tiles.nth(1).click(); await settle();
+  addTo(3, 'AGENTFX-MARK-ONE'); await cond(() => (document.querySelectorAll('iframe[title="Canvas"]')[0]?.contentDocument?.body?.textContent || '').includes('AGENTFX-MARK-ONE') || true, null, 3000); await sleep(1500);
+  const post = (old, nw) => page.evaluate(async (a) => (await fetch('/api/decks/' + a.f + '/edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ edits: [{ old_str: a.o, new_str: a.n }] }) })).json(), { f: D, o: old, n: nw });
+  const toastsBefore = await page.locator('[data-sonner-toast], [role=status] li').count().catch(() => 0);
+  const r1 = await post('AGENTFX-MARK-ONE', 'AGENTFX-NEW-ONE');
+  check('slidekit_edit 서버 경로가 성공하고 바뀐 슬라이드(3)를 알림', r1.ok === true && r1.changed?.some((c) => c.slide === 3), JSON.stringify(r1).slice(0, 160));
+  check('도구 수정: 3번 타일 점이 최소 표시 시간 동안 보임', await cond(() => !!document.querySelector('[data-testid=tile-agent]'), null, 3000).then(() => true).catch(() => false));
+  check('도구 수정: 끝난 뒤 문구와 칩(1 change)과 파일 반영', await cond(() => /finished editing slide 3, 1 change/.test(document.querySelector('[data-testid=agent-live]').textContent), null, 6000).then(() => true).catch(() => false) && read().includes('AGENTFX-NEW-ONE') && !read().includes('AGENTFX-MARK-ONE'));
+  check('선택(2번 슬라이드)은 그대로', (await tiles.nth(1).getAttribute('aria-selected')) === 'true');
+  check('캔버스 3번 슬라이드에 새 글자가 반영됨(iframe 재생성 없음)', await cond(() => [...document.querySelectorAll('iframe[title="Canvas"]')[0].contentDocument.querySelectorAll('#sk-stage > [data-slide]')][2]?.textContent.includes('AGENTFX-NEW-ONE'), null, 8000).then(() => true).catch(() => false) && (await ifrId()) === ifr0);
+  const fail1 = await post('NOT-THERE-' + Date.now(), 'x');
+  check('없는 글자는 not_found로 거절되고 실패 이벤트가 정리됨', fail1.ok === false && fail1.error === 'not_found' && await cond(() => window.__skAgent.snapshot().sessions.length === 0, null, 5000).then(() => true).catch(() => false), JSON.stringify(fail1).slice(0, 120));
+  // 충돌: 저장 안 한 변경이 있으면 기존 외부 변경 규칙(Reload/Overwrite)을 따르고 강조는 하지 않는다
+  await notes().fill('DIRTY-WHILE-AGENT');
+  const r2 = await post('AGENTFX-NEW-ONE', 'AGENTFX-NEW-TWO');
+  check('충돌: 저장 안 한 변경이 있으면 Reload/Overwrite 안내가 뜸', r2.ok === true && await cond(() => /File changed outside the editor/.test(document.body.textContent), null, 8000).then(() => true).catch(() => false));
+  check('충돌: 칩은 Reload 안내만, 변경 강조는 없음', await cond(() => /Reload to see the changes/.test(document.body.textContent), null, 6000).then(() => true).catch(() => false) && (await page.getByTestId('agent-flash').count()) === 0);
+  check('충돌 중에도 입력 포커스와 내용은 그대로', (await notes().inputValue()) === 'DIRTY-WHILE-AGENT');
+  check('효과 전체에서 페이지 오류 없음', errors.length === 0, errors.slice(0, 2));
   await finish();
 })();

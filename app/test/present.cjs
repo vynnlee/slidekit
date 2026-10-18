@@ -91,6 +91,7 @@ const MOCKS = {
     check(`[${name}] 폴백으로 발표 창이 열린다`, !!pop);
     if (!pop) { await ctx.close(); continue; }
     pop.on('pageerror', (e) => errors.push(String(e)));
+    await pop.waitForURL((u) => u.href.includes('sync=1'), { timeout: 10000 }).catch(() => {}); // 팝업 이벤트는 첫 이동 전에 온다(환경에 따라 주소가 아직 비어 있음)
     check(`[${name}] 발표 창은 ?sync=1 덱 페이지`, pop.url().includes(`/decks/${DECK}/`) && pop.url().includes('sync=1'), pop.url());
     await pop.waitForLoadState('load');
     const note = { unsupported: 'Display access unavailable', denied: 'Display access unavailable', 'single screen': 'No external display found' }[name];

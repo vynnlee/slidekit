@@ -21,6 +21,7 @@ import { go } from "./App";
 import { byPath, compose, duplicateHtml, freshIds, newKey, newSlideHtml, pathOf, splitDeck, type Unit } from "@/lib/deck-source";
 import { ExportMenu } from "./ExportMenu";
 import { ChannelBadge } from "./CommentsPanel";
+import { useShowResolved } from "@/lib/comment-prefs";
 import { ReplyToasts } from "./ReplyToasts";
 import { useCommentsLive } from "@/lib/use-comments-live";
 import { canMove, readTranslate, toLocal, writeTranslate } from "@/lib/move";
@@ -98,6 +99,7 @@ export function Editor({ id }: { id: string }) {
   useEffect(() => { setDraft(null); }, [index, selId]);
 
   const canvas = useRef<CanvasApi>(null);
+  const showResolved = useShowResolved();
   const unitsRef = useRef<Unit[]>([]), indexRef = useRef(0), shellRef = useRef<Shell_ | null>(null);
   const savedRef = useRef(""), mtime = useRef(0);
   const origin = useRef(new Map<string, number>()); // 슬라이드 key -> 마지막 저장(불러오기) 때의 번호. 코멘트 번호가 이 기준이다
@@ -956,7 +958,7 @@ export function Editor({ id }: { id: string }) {
         }
         right={
           <Inspector folder={folder} sel={sel} slide={canvas.current?.slide(index) ?? null} more={more} onAlignGroup={alignGroup} selId={selId} tab={tab} onTab={setTab}
-            comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} onRemove={live.remove} onRevert={live.revert} onSendAll={live.sendAll} onResolveReplied={live.resolveReplied} onStyles={applyStyles} onAnim={animEditMany} onImageFile={(f) => addImage(f, sel)} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
+            comments={comments} channel={live.channel} onResolve={live.resolve} onTrust={live.trust} onRemove={live.remove} onRevert={live.revert} onSendAll={live.sendAll} onResolveReplied={live.resolveReplied} onStartComment={() => setCommentMode(true)} onStyles={applyStyles} onAnim={animEditMany} onImageFile={(f) => addImage(f, sel)} onJump={jump} onStyle={style} onAttr={attr} onElAttr={elAttr} onShowLayers={() => {}} prefix={shell.prefix} onPrefixChange={changePrefix} canvasDoc={canvas.current?.document() ?? null} onSlideStyle={slideStyle} onScrub={(b) => { scrub.current = b; last.current = null; }} />
         }
       >
         <div className="flex h-full flex-col">
@@ -973,7 +975,7 @@ export function Editor({ id }: { id: string }) {
         )}
         <div className="min-h-0 flex-1 bg-[var(--canvas-bg)]">
         <Canvas ref={canvas} presence={presence} flashes={flashes} shell={shell} folder={folder} units={units} index={index} sel={sel} more={more} onMulti={toggleSel} onGroup={pickGroup}
-          comments={comments.filter((c) => !c.slideDeleted && c.slide === origin.current.get(units[index]?.key ?? ""))}
+          comments={comments.filter((c) => !c.slideDeleted && c.slide === origin.current.get(units[index]?.key ?? "") && (showResolved || !c.resolved))}
           commentActions={commentActions} overflowOn={overflowOn} safeArea={safeArea} onToggleGuide={toggleGuide} onOverflow={(l) => { setOverflowEls(l); const k = unitsRef.current[indexRef.current]?.key; if (k) setOverflowByKey((m) => (m[k] === l.length ? m : { ...m, [k]: l.length })); }} onImage={addImage} onStyle={style} onContext={({ el, x, y }) => contextAt({ x, y }, el)} onSel={pickSel} onReady={() => pickSel(null)} onCommit={commit} onKey={(e) => keyRef.current(e)} onDelete={delSelected}
           numbers={nums} channel={live.channel} head={head} stepBadges={bottomTab === "animation"} commentMode={commentMode} onCommentMode={setCommentMode}
           onComment={postComment} onMarker={(cid) => { setTab("comments"); const c = comments.find((x) => x.id === cid); if (c) jump(c); }} />

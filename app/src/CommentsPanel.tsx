@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { flowNote, setPaused, useFlow } from "@/lib/comment-flow";
 import type { Comment } from "@/lib/deck";
 import { STATE_LABEL, ago, numbering, stateOf, type CommentState } from "@/lib/comment-state";
+import { setShowResolved, useShowResolved } from "@/lib/comment-prefs";
 import { hoveredComment, setHoveredComment, subscribeHover } from "@/lib/comment-hover";
 
 const CMD = "claude --dangerously-load-development-channels server:slidekit";
@@ -101,10 +102,13 @@ interface CommentsPanelProps {
   onSendAll?(): void;
   /** 답이 달린 코멘트를 한꺼번에 해결 처리한다. 없으면 버튼을 보이지 않는다. */
   onResolveReplied?(): void;
+  /** 코멘트 모드를 켠다(빈 상태의 Start commenting). 없으면 단추를 보이지 않는다. */
+  onStartComment?(): void;
 }
 
-export function CommentsPanel({ comments, folder, channel, onJump, onResolve, onTrust, onRemove, onRevert, onSendAll, onResolveReplied }: CommentsPanelProps) {
+export function CommentsPanel({ comments, folder, channel, onJump, onResolve, onTrust, onRemove, onRevert, onSendAll, onResolveReplied, onStartComment }: CommentsPanelProps) {
   const [filter, setFilter] = useState<Filter>("all");
+  const showResolved = useShowResolved();
   const [open, setOpen] = useState<Set<string>>(new Set()); // 길어서 펼친 코멘트
   const root = useRef<HTMLDivElement>(null);
   // 핀과 서로 강조: React 상태를 거치지 않고 속성만 바꾼다(목록이 수백 개여도 마우스를 옮길 때 다시 그리지 않는다).
@@ -164,7 +168,7 @@ export function CommentsPanel({ comments, folder, channel, onJump, onResolve, on
   };
 
   return (
-    <div ref={root} onKeyDown={onKeys} className="flex flex-col gap-3 pt-3" data-testid="comments-panel">
+    <div ref={root} onKeyDown={onKeys} className="group/panel flex flex-col gap-3 pt-3" data-testid="comments-panel">
       {channel === false ? <NotConnected open={comments.length === 0} /> : <ChannelBadge connected={channel} />}
       <FlowBar />
       {(showSend || showResolve) && (
@@ -182,9 +186,15 @@ export function CommentsPanel({ comments, folder, channel, onJump, onResolve, on
           ))}
         </div>
       )}
-      {comments.length > 1 && <p className="px-1 text-micro text-muted-foreground">J and K move between comments, E resolves, Delete removes.</p>}
+      {counts.resolved > 0 && (
+        <Button size="compact" variant="ghost" className="self-start" aria-pressed={showResolved} onClick={() => setShowResolved(!showResolved)}>{showResolved ? "Hide resolved pins" : "Show resolved pins"}</Button>
+      )}
+      {comments.length > 1 && <p className="hidden px-1 text-micro text-muted-foreground group-focus-within/panel:block">J and K move between comments, E resolves, Delete removes.</p>}
       {comments.length === 0 && (
-        <p className="text-caption text-muted-foreground">No comments yet. Select an element and press C, or use the comment button in its toolbar.</p>
+        <div className="flex flex-col items-start gap-2" data-testid="comments-empty">
+          <p className="text-caption text-muted-foreground">No comments yet. Click an element and press C, or press Shift+C to comment anywhere. Drag to comment on an area.</p>
+          {onStartComment && <Button size="compact" variant="secondary" leadingIcon={MessageSquare} onClick={onStartComment}>Start commenting</Button>}
+        </div>
       )}
       {comments.length > 0 && shown.length === 0 && <p className="text-caption text-muted-foreground">No comments in this filter.</p>}
       {groups.map(([slide, list]) => (

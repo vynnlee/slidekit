@@ -6,8 +6,8 @@ const fs = require('fs'), path = require('path'), cp = require('child_process'),
 const ROOT = path.join(__dirname, '..', '..'), DIR = path.join(ROOT, 'decks', '_art-e2e'), OUT = path.join(ROOT, 'dist', '_art-e2e.html');
 let fail = 0; const check = (n, ok, x) => { if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + n + (ok || x === undefined ? '' : '  ' + JSON.stringify(x).slice(0, 400))); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-/* M2a(Worker)의 값과 맞출 때까지의 기준 CSP: 자기 출처와 data:만, 연결 없음 */
-const CSP = process.env.ARTIFACT_CSP || "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'";
+/* 배포 Worker가 붙이는 CSP(deploy/worker/src/csp.ts, 외부 호스트 없을 때 가장 엄격한 형태)를 그대로 쓴다. 값이 바뀌어도 이 시험이 따라간다. ARTIFACT_CSP로 덮어쓸 수 있다 */
+const CSP = process.env.ARTIFACT_CSP || cp.spawnSync('bun', ['-e', 'import { deckCsp } from "./deploy/worker/src/csp.ts"; console.log(deckCsp([]))'], { cwd: ROOT, encoding: 'utf8' }).stdout.trim();
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 const html = `<!doctype html><html lang="ko" data-slidekit="1"><head><meta charset="utf-8"><title>art</title>
 <script type="application/json" id="deck-meta">{ "title": "art", "id": "art-e2e" }</script>

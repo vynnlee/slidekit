@@ -108,6 +108,9 @@ type Props = {
   onResolveReplied?(): void;
   /** 코멘트 모드를 켠다(빈 패널의 Start commenting) */
   onStartComment?(): void;
+  onSend?(c: Comment): void;
+  onResend?(c: Comment): void;
+  onCancel?(c: Comment): void;
   onStyle(prop: string, value: string): void;
   onAnim(edits: [HTMLElement, import("@/lib/animation-model").StepSpec][], key?: string): void; // 단계 사양을 쓴다(실행 취소 한 건)
   onStyles(map: Record<string, string>): void; // 여러 속성을 한 번에(실행 취소 한 건)
@@ -574,7 +577,7 @@ export function Inspector(p: Props) {
         )}
       </TabPanel>
       <TabPanel value="comments">
-        <CommentsPanel folder={p.folder} comments={p.comments} channel={p.channel} onJump={p.onJump} onResolve={p.onResolve} onTrust={p.onTrust} onRemove={p.onRemove} onRevert={p.onRevert} onSendAll={p.onSendAll} onResolveReplied={p.onResolveReplied} onStartComment={p.onStartComment} />
+        <CommentsPanel folder={p.folder} comments={p.comments} channel={p.channel} onJump={p.onJump} onResolve={p.onResolve} onTrust={p.onTrust} onRemove={p.onRemove} onRevert={p.onRevert} onSendAll={p.onSendAll} onResolveReplied={p.onResolveReplied} onStartComment={p.onStartComment} onSend={p.onSend} onResend={p.onResend} onCancel={p.onCancel} />
       </TabPanel>
     </Tabs>
   );

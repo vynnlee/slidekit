@@ -6,7 +6,7 @@ import { commentMenu } from "@/lib/comment-actions";
 import { cn } from "@/lib/utils";
 import { flowNote, setPaused, useFlow } from "@/lib/comment-flow";
 import type { Comment } from "@/lib/deck";
-import { STATE_LABEL, ago, numbering, stateOf, type CommentState } from "@/lib/comment-state";
+import { DISPLAY, ago, lifecycle, numbering, reasonText, stateOf, type CommentState } from "@/lib/comment-state";
 import { setShowResolved, useShowResolved } from "@/lib/comment-prefs";
 import { hoveredComment, setHoveredComment, subscribeHover } from "@/lib/comment-hover";
 
@@ -31,13 +31,15 @@ const TONE: Record<CommentState, string> = {
   resolved: "text-muted-foreground",
 };
 
-/** 상태 배지: 아이콘과 이름. 핀과 목록에서 같은 모양을 쓴다. */
+const STEP: Record<CommentState, number> = { held: 1, waiting: 1, unverified: 1, sent: 2, working: 3, replied: 4, resolved: 4 };
+/** 상태 배지: 아이콘, 화면 이름(Saved, Sent, Working, Replied, Resolved), 진행 점 4개(채운 개수가 단계). 핀과 목록에서 같은 이름을 쓴다. */
 export function StateBadge({ state, className }: { state: CommentState; className?: string }) {
   const Icon = ICON[state];
   return (
     // cn은 text-micro(글자 크기)를 글자색으로 보고 지우므로 일반 문자열로 잇는다.
     <span className={`inline-flex items-center gap-1 text-micro ${TONE[state]} ${className ?? ""}`}>
-      <Icon className={`h-3 w-3 ${state === "working" ? "animate-spin" : ""}`} aria-hidden="true" />{STATE_LABEL[state]}
+      <Icon className={`h-3 w-3 ${state === "working" ? "animate-spin" : ""}`} aria-hidden="true" />{state === "unverified" ? "Unverified" : DISPLAY[state]}
+      <span aria-hidden="true" className="ml-0.5 inline-flex gap-0.5">{[1, 2, 3, 4].map((i) => <span key={i} className={`h-1 w-1 rounded-full ${i <= STEP[state] ? "bg-current" : "bg-current opacity-25"}`} />)}</span>
     </span>
   );
 }
@@ -104,11 +106,16 @@ interface CommentsPanelProps {
   onResolveReplied?(): void;
   /** 코멘트 모드를 켠다(빈 상태의 Start commenting). 없으면 단추를 보이지 않는다. */
   onStartComment?(): void;
+  /** 개별 Send(보류나 대기 중인 것), 멈춘 요청의 Resend와 Cancel. 없으면 해당 단추를 보이지 않는다. */
+  onSend?(c: Comment): void;
+  onResend?(c: Comment): void;
+  onCancel?(c: Comment): void;
 }
 
-export function CommentsPanel({ comments, folder, channel, onJump, onResolve, onTrust, onRemove, onRevert, onSendAll, onResolveReplied, onStartComment }: CommentsPanelProps) {
+export function CommentsPanel({ comments, folder, channel, onJump, onResolve, onTrust, onRemove, onRevert, onSendAll, onResolveReplied, onStartComment, onSend, onResend, onCancel }: CommentsPanelProps) {
   const [filter, setFilter] = useState<Filter>("all");
   const showResolved = useShowResolved();
+  const flow = useFlow();
   const [open, setOpen] = useState<Set<string>>(new Set()); // 길어서 펼친 코멘트
   const root = useRef<HTMLDivElement>(null);
   // 핀과 서로 강조: React 상태를 거치지 않고 속성만 바꾼다(목록이 수백 개여도 마우스를 옮길 때 다시 그리지 않는다).
@@ -129,7 +136,7 @@ export function CommentsPanel({ comments, folder, channel, onJump, onResolve, on
   const nums = useMemo(() => numbering(comments), [comments]);
   const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, comments.filter((c) => f.match(stateOf(c))).length])) as Record<Filter, number>, [comments]);
   // 한꺼번에 처리 줄: 보류가 하나라도 있거나 보낼 것이 3개 이상이면 Send all, 답이 달린 것이 2개 이상이면 Resolve all replied
-  const sendable = useMemo(() => comments.filter((c) => !c.slideDeleted && ["held", "waiting"].includes(stateOf(c)) && c.trusted !== false), [comments]);
+  const sendable = useMemo(() => comments.filter((c) => !c.slideDeleted && c.anchor !== "lost" && ["held", "waiting"].includes(stateOf(c)) && c.trusted !== false), [comments]);
   const heldCount = sendable.filter((c) => stateOf(c) === "held").length;
   const repliedCount = comments.filter((c) => stateOf(c) === "replied").length;
   const showSend = !!onSendAll && (heldCount > 0 || sendable.length >= 3);
@@ -137,7 +144,7 @@ export function CommentsPanel({ comments, folder, channel, onJump, onResolve, on
   const shown = comments.filter((c) => FILTERS.find((f) => f.id === filter)!.match(stateOf(c)));
   const groups = useMemo(() => {
     const m = new Map<number, Comment[]>();
-    for (const c of shown) { const k = c.slideDeleted ? -1 : c.slide; m.set(k, [...(m.get(k) ?? []), c]); }
+    for (const c of shown) { const k = c.slideDeleted || c.anchor === "lost" ? -1 : c.slide; m.set(k, [...(m.get(k) ?? []), c]); }
     return [...m.entries()].sort(([a], [b]) => (a === -1 ? 1 : b === -1 ? -1 : a - b));
   }, [shown]);
 
@@ -198,11 +205,11 @@ export function CommentsPanel({ comments, folder, channel, onJump, onResolve, on
       )}
       {comments.length > 0 && shown.length === 0 && <p className="text-caption text-muted-foreground">No comments in this filter.</p>}
       {groups.map(([slide, list]) => (
-        <section key={slide} aria-label={slide === -1 ? "Deleted slides" : `Slide ${slide}`} className="flex flex-col gap-1">
-          <h3 className="px-1 text-micro uppercase tracking-wide text-muted-foreground">{slide === -1 ? "Deleted slides" : `Slide ${slide}`}</h3>
+        <section key={slide} aria-label={slide === -1 ? "Detached" : `Slide ${slide}`} className="flex flex-col gap-1">
+          <h3 className="px-1 text-micro uppercase tracking-wide text-muted-foreground">{slide === -1 ? "Detached" : `Slide ${slide}`}</h3>
           <ul className="flex flex-col gap-1">
             {list.map((c) => {
-              const st = stateOf(c);
+              const lc = lifecycle(c, { channel, flow }), st = lc.state, why = reasonText(lc.reason, flow);
               return (
                 <li
                   key={c.id}
@@ -235,6 +242,7 @@ export function CommentsPanel({ comments, folder, channel, onJump, onResolve, on
                           : c.image === "pending" ? "Making a picture..." : "No picture. Claude gets the area and the elements under it."}
                       </span>
                     )}
+                    {why && <span className="text-micro text-muted-foreground" data-testid="state-reason">Saved &middot; {why}</span>}
                     {c.excerpt && <span className="truncate text-micro text-muted-foreground">on &ldquo;{c.excerpt}&rdquo;</span>}
                     {c.recheck && <span className="text-micro text-muted-foreground">Position needs a check. The text was not found on this slide after a restore.</span>}
                     <span className={cn("whitespace-pre-wrap break-words text-body", c.text.length > 220 && !open.has(c.id) && "line-clamp-5")}>{c.text}</span>
@@ -260,7 +268,16 @@ export function CommentsPanel({ comments, folder, channel, onJump, onResolve, on
                       This comment was not created on this computer, so it is not sent to Claude. Trust it only if you know where it came from.
                     </p>
                   )}
+                  {c.anchor === "lost" && <p className="border-l-2 border-border pl-2 text-micro text-muted-foreground" data-testid="detached-note">This comment lost its place on the slide.</p>}
+                  {lc.stalled && (
+                    <div role="status" className="flex flex-wrap items-center gap-1 border-l-2 border-amber-300 pl-2" data-testid="stalled">
+                      <span className="text-micro text-amber-300">Claude may have stopped</span>
+                      {onResend && <Button size="compact" variant="secondary" onClick={() => onResend(c)} aria-label={`Resend comment ${nums.get(c.id)}`} leadingIcon={Send}>Resend</Button>}
+                      {onCancel && <Button size="compact" variant="ghost" onClick={() => onCancel(c)} aria-label={`Cancel request for comment ${nums.get(c.id)}`}>Cancel</Button>}
+                    </div>
+                  )}
                   <div className="flex justify-end gap-1">
+                    {(st === "held" || st === "waiting") && onSend && c.anchor !== "lost" && <Button size="compact" variant="secondary" onClick={() => onSend(c)} aria-label={`Send comment ${nums.get(c.id)} to Claude`} leadingIcon={Send}>Send</Button>}
                     {st === "unverified" && onTrust && <Button size="compact" variant="secondary" onClick={() => onTrust(c)} aria-label={`Trust comment ${nums.get(c.id)}`} leadingIcon={ShieldAlert}>Trust</Button>}
                     {st === "resolved"
                       ? <Button size="compact" variant="ghost" onClick={() => onResolve(c, false)} aria-label={`Reopen comment ${nums.get(c.id)}`} leadingIcon={RotateCcw}>Reopen</Button>

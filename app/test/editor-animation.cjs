@@ -9,7 +9,7 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   await goSlide2();
   const shot = async (n) => { if (process.env.SHOTS) { fs.mkdirSync(process.env.SHOTS, { recursive: true }); await page.screenshot({ path: `${process.env.SHOTS}/${n}.png` }); } };
   await page.getByRole('tab', { name: 'Animation' }).click(); await settle();
-  check('빈 슬라이드: 안내 문구와 Add animation 비활성', (await page.getByTestId('tl-empty').count()) === 1 && (await page.getByRole('button', { name: 'Add animation' }).isDisabled()));
+  check('빈 슬라이드: 안내 문구와 Add animation 비활성', (await page.getByTestId('tl-empty').count()) === 1 && (await page.getByRole('button', { name: 'Add animation', exact: true }).isDisabled()));
   await shot('1-empty');
   await focusBody(); await page.keyboard.press('Tab'); await settle();
   check('요소를 고르면 유령 트랙(Add animation)이 보임', (await page.getByTestId('tl-ghost').count()) === 1);

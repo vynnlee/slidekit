@@ -12,9 +12,9 @@ const clean = (s: string) => s.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\
 
 /** 반환값은 종료 코드: 0 완료, 1 오류, 2 --yes 없이 목록만 보임, 3 게시되지 않은 덱 */
 export function runUnpublish(deck: string, o: { yes: boolean; dry: boolean }, ops: KvOps | null, log: (s: string) => void = console.log): number {
-  const keys = [`meta:${deck}`, `html:${deck}`]; // meta를 먼저 지운다: 중간에 멈춰도 Worker는 meta가 없으면 404를 주므로 본문(html)이 남아도 열리지 않는다
+  const keys = [`meta:${deck}`, `html:${deck}`]; // deck.md(md:)는 있을 때만 지운다(옛 게시본에는 없고, 없는 키를 지우면 wrangler가 실패할 수 있다) // meta를 먼저 지운다: 중간에 멈춰도 Worker는 meta가 없으면 404를 주므로 본문(html)이 남아도 열리지 않는다
   if (o.dry || !ops) {
-    log(`Dry run: would delete ${keys.join(", ")} (and rl:${deck}:* login counters if any)`); // 앱이 "Dry run:" 접두로 구분한다
+    log(`Dry run: would delete ${keys.join(", ")} (and md:${deck} deck.md and rl:${deck}:* login counters if any)`); // 앱이 "Dry run:" 접두로 구분한다
     log("삭제는 하지 않았습니다.");
     return 0;
   }
@@ -26,6 +26,7 @@ export function runUnpublish(deck: string, o: { yes: boolean; dry: boolean }, op
   }
   let vis = "알 수 없음", title = "";
   try { const m = JSON.parse(raw); vis = m.visibility === "password" ? "비밀번호" : "공개"; title = typeof m.title === "string" ? clean(m.title) : ""; } catch { /* 깨진 meta도 지울 수 있다 */ }
+  if (ops.get(`md:${deck}`) !== null) keys.push(`md:${deck}`);
   const counters = ops.list(`rl:${deck}:`);
   log(`게시 취소 대상: ${deck}${title ? ` ("${title}")` : ""}, 공개 범위 ${vis}`);
   log("지울 KV(DECKS) 키:");

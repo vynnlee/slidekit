@@ -227,3 +227,48 @@ test("덱 CSP: meta.hosts를 다시 검증해 정책에 넣고, 틀린 값은 �
   expect(opened.headers.get("Permissions-Policy")).toBe(PERMISSIONS);
   store["meta:sec"] = JSON.stringify({ visibility: "password", ...pw }); // 다른 시험을 위해 되돌린다
 });
+
+// ---- /<덱>/deck.md (spec/DECK-MD-DEPLOY.md) ----
+const mdGet = (path: string, init: RequestInit = {}) => handle(new Request(`https://x${path}`, init), env);
+test("deck.md: 공개 덱은 누구나 읽고(curl 포함), 헤더는 text/markdown과 엄격한 CSP, HEAD는 본문 없음", async () => {
+  store["md:open"] = "# 공개 덱\n\n## 1. 제목\n";
+  const r = await mdGet("/open/deck.md");
+  expect(r.status).toBe(200);
+  expect(await r.text()).toBe("# 공개 덱\n\n## 1. 제목\n");
+  expect(r.headers.get("Content-Type")).toBe("text/markdown; charset=utf-8");
+  expect(r.headers.get("Content-Security-Policy")).toBe("default-src 'none'; sandbox");
+  expect(r.headers.get("Cache-Control")).toBe("public, max-age=0, must-revalidate");
+  expect(r.headers.get("X-Content-Type-Options")).toBe("nosniff");
+  expect(r.headers.get("Cross-Origin-Resource-Policy")).toBe("same-origin");
+  const h = await mdGet("/open/deck.md", { method: "HEAD" });
+  expect(h.status).toBe(200); expect(await h.text()).toBe("");
+  expect((await mdGet("/open/deck.md", { headers: { "Sec-Fetch-Dest": "empty" } })).status).toBe(200); // 공개 덱에는 Sec-Fetch-Dest 검사가 없다
+  expect((await mdGet("/open/deck.md", { method: "POST", body: "x" })).status).toBe(405);
+});
+
+test("deck.md: md나 meta가 없거나 하위 경로가 다르면 404, 이름 규칙 밖이면 404", async () => {
+  expect((await mdGet("/nope/deck.md")).status).toBe(404);
+  store["meta:nomd"] = JSON.stringify({ visibility: "public" }); store["html:nomd"] = "x";
+  expect((await mdGet("/nomd/deck.md")).status).toBe(404); // 옛 게시본: md 없음
+  for (const p of ["/open/deck.md/x", "/open/other.md", "/open/deck.MD", "/a b/deck.md", "/../deck.md", "/open/deck.markdown"]) expect((await mdGet(p)).status, p).toBe(404);
+  expect(await (await mdGet("/open")).text()).toBe("<p>open</p>"); // 덱 HTML 경로는 그대로
+});
+
+test("deck.md: 비밀번호 덱은 쿠키 없이 403(본문 없음), 쿠키가 있어도 문서가 아닌 요청이나 다른 덱의 쿠키는 403, 통과하면 no-store", async () => {
+  store["md:sec"] = "# 비밀 덱\n\nSECRET-BODY\n";
+  const none = await mdGet("/sec/deck.md");
+  expect(none.status).toBe(403);
+  expect(await none.text()).not.toContain("SECRET-BODY");
+  expect(none.headers.get("Content-Type")).toContain("text/plain");
+  expect((await mdGet("/sec/deck.md", { headers: { Cookie: "sk_sec=1.bad" } })).status).toBe(403);
+  const ok = await post("열쇠", "5.5.5.5");
+  const cookie = ok.headers.get("Set-Cookie")!.split(";")[0];
+  const good = await mdGet("/sec/deck.md", { headers: { Cookie: cookie, "Sec-Fetch-Dest": "document" } });
+  expect(good.status).toBe(200);
+  expect(await good.text()).toContain("SECRET-BODY");
+  expect(good.headers.get("Cache-Control")).toBe("private, no-store");
+  expect((await mdGet("/sec/deck.md", { headers: { Cookie: cookie } })).status).toBe(200); // curl처럼 헤더가 없으면 쿠키만 본다
+  expect((await mdGet("/sec/deck.md", { headers: { Cookie: cookie, "Sec-Fetch-Dest": "empty" } })).status).toBe(403); // 같은 출처 다른 덱의 fetch
+  store["meta:other"] = JSON.stringify({ visibility: "password", ...pw }); store["html:other"] = "x"; store["md:other"] = "# other";
+  expect((await mdGet("/other/deck.md", { headers: { Cookie: cookie } })).status).toBe(403); // 쿠키는 덱마다
+});

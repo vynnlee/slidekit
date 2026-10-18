@@ -25,6 +25,12 @@ test("--yes면 meta, html, 시도 카운터 순으로 지우고 다른 덱은 �
   expect(dels).toEqual(["meta:a", "html:a", "rl:a:9.9.9.9"]);
   expect(out.at(-1)).toBe("Unpublished https://static.vynnlee.com/a");
 });
+test("deck.md(md:)가 있으면 html 다음에 같이 지우고, 없는 덱은 md 삭제를 시도하지 않는다", () => {
+  const { ops, dels } = fake({ "meta:a": "{}", "html:a": "x", "md:a": "# a", "md:ab": "# other", "meta:ab": "{}", "html:ab": "y" });
+  const { log } = lines();
+  expect(runUnpublish("a", { yes: true, dry: false }, ops, log)).toBe(0);
+  expect(dels).toEqual(["meta:a", "html:a", "md:a"]);
+});
 test("게시되지 않은 덱은 종료 코드 3(다른 실패는 1)과 게시된 덱 목록을 보인다", () => {
   const { ops, dels } = fake({ "meta:x": "{}", "html:x": "y" });
   const { out, log } = lines();
@@ -35,7 +41,7 @@ test("게시되지 않은 덱은 종료 코드 3(다른 실패는 1)과 게시�
 test("dry-run은 ops 없이도 지울 키만 출력하고 0", () => {
   const { out, log } = lines();
   expect(runUnpublish("a", { yes: true, dry: true }, null, log)).toBe(0);
-  expect(out[0]).toBe("Dry run: would delete meta:a, html:a (and rl:a:* login counters if any)");
+  expect(out[0]).toBe("Dry run: would delete meta:a, html:a (and md:a deck.md and rl:a:* login counters if any)");
   expect(out.join("\n")).not.toContain("Unpublished");
 });
 test("CLI: 인자 없음과 잘못된 이름은 종료 코드 1, dry-run은 접속 없이 0", () => {

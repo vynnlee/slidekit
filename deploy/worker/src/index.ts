@@ -147,7 +147,30 @@ const form = (m: Msg, meta: Meta, err = "", nonce = crypto.randomUUID().replace(
 <script nonce="${nonce}">(function(){var f=document.forms[0],b=f.querySelector("button"),t=b.textContent;f.addEventListener("submit",function(){b.disabled=true;b.textContent="${m.opening}..."});addEventListener("pageshow",function(){b.disabled=false;b.textContent=t})})()</script>`,
   err ? 401 : 200, {}, nonce);
 
+// /<덱>/deck.md: 덱의 글(발표자 노트 없음)을 Markdown으로. 비밀번호 덱은 덱 HTML과 같은 쿠키 관문 뒤에서만 나온다(spec/DECK-MD-DEPLOY.md).
+// 공개 덱은 누구나(에이전트의 curl 포함) 읽는다. Sec-Fetch-Dest 검사는 비밀번호 덱에만 걸린다: 같은 출처의 다른 덱 스크립트가 fetch로 읽는 것을 막는다.
+const textOnly = (status: number, text: string, extra: Record<string, string> = {}) =>
+  new Response(text + "\n", { status, headers: { ...headers, "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "private, no-store", ...extra } });
+async function serveMarkdown(req: Request, env: Env, deck: string, now: number): Promise<Response> {
+  if (req.method !== "GET" && req.method !== "HEAD") return textOnly(405, "Method not allowed", { Allow: "GET, HEAD" });
+  const meta: Meta | null = JSON.parse((await env.DECKS.get(`meta:${deck}`)) ?? "null");
+  const md = meta && (await env.DECKS.get(`md:${deck}`));
+  if (!meta || !md) return textOnly(404, msgs(req, meta).none);
+  let cache = "public, max-age=0, must-revalidate";
+  if (meta.visibility === "password") {
+    const m = msgs(req, meta);
+    if (!meta.salt || !meta.hash) return textOnly(404, m.none);
+    const dest = req.headers.get("Sec-Fetch-Dest");
+    if (dest && dest !== "document") return textOnly(403, m.denied);
+    if (!(await validCookie(req, env.COOKIE_SECRET, deck, meta.salt, now))) return textOnly(403, m.hint);
+    cache = "private, no-store";
+  }
+  return new Response(req.method === "HEAD" ? null : md, { headers: { ...headers, "Content-Security-Policy": "default-src 'none'; sandbox", "Content-Type": "text/markdown; charset=utf-8", "Content-Disposition": "inline", "Cache-Control": cache } });
+}
+
 export async function handle(req: Request, env: Env, now = Date.now()): Promise<Response> {
+  const md = new URL(req.url).pathname.match(/^\/([\w-]+)\/deck\.md$/);
+  if (md) return serveMarkdown(req, env, md[1], now);
   const deck = new URL(req.url).pathname.replace(/^\/|\/$/g, "");
   if (!/^[\w-]+$/.test(deck)) return plain(404, msgs(req).none, {}, msgs(req));
   const meta: Meta | null = JSON.parse((await env.DECKS.get(`meta:${deck}`)) ?? "null");

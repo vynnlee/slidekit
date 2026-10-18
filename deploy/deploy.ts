@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hashPassword } from "./worker/src/index";
 import { scanHosts } from "./hosts";
+import { MD_MAX, notesLeak, withAlternate } from "./md-publish";
+import { deckMarkdown } from "../engine/deck-md";
 import { WRANGLER } from "./kv";
 import { deckFingerprint, recordPublish } from "../engine/publish-record";
 
@@ -36,6 +38,8 @@ if (arg === "--smoke") {
   ok("공개 덱 CSP: 외부로 나가는 요청을 막음(connect-src, form-action, frame-src, worker-src)", ["connect-src 'none'", "form-action 'none'", "frame-src 'none'", "worker-src 'none'", "default-src 'none'"].every((d) => csp.includes(d)), csp);
   ok("공개 덱 CSP: 허용 호스트는 https만", !/(^|[ ;])(http:|\*)/.test(csp), csp);
   ok("공개 덱 Permissions-Policy", (a.headers.get("permissions-policy") ?? "").includes("camera=()"));
+  const dm = await get(`${pub}/deck.md`);
+  ok("공개 덱의 deck.md: 200 text/markdown(옛 게시본이면 404일 수 있음)", dm.status === 200 && (dm.headers.get("content-type") ?? "").startsWith("text/markdown"), `${dm.status} ${dm.headers.get("content-type") ?? ""}`);
   const n = await get("no-such-deck-smoke"); common(n, "없는 덱");
   ok("없는 덱 404", n.status === 404, String(n.status));
   if (pwd) {
@@ -44,6 +48,8 @@ if (arg === "--smoke") {
     ok("비밀번호 덱은 폼을 보임(슬라이드 없음)", f.status === 200 && t.includes("type=\"password\"") && !t.includes("data-slide"), String(f.status));
     ok("폼 CSP에 nonce", /script-src 'nonce-/.test(f.headers.get("content-security-policy") ?? ""));
     ok("비밀번호 덱 no-store", (f.headers.get("cache-control") ?? "").includes("no-store"));
+    const pm = await get(`${pwd}/deck.md`);
+    ok("비밀번호 덱의 deck.md는 로그인 없이 403(내용 없음)", pm.status === 403 && !(await pm.text()).includes("# "), String(pm.status));
     const x = await fetch(`${base}/${pwd}`, { headers: { "Sec-Fetch-Dest": "empty" } });
     ok("비밀번호 덱은 fetch(문서 아님) 요청을 거부", x.status === 403, String(x.status));
   }
@@ -101,6 +107,16 @@ meta.hosts = scan.hosts;
 if (scan.hosts.length) console.log(`CSP에 허용할 외부 호스트 ${scan.hosts.length}개: ${scan.hosts.join(", ")}`);
 for (const s of scan.skipped) console.log(`경고: 허용하지 못한 외부 자원: ${s}. 게시된 덱에서 이 자원은 막힙니다.`);
 for (const b of scan.blocked) console.log(`경고: 게시된 덱에서 막히는 사용: ${b} (외부로 나가는 요청은 CSP가 막습니다)`);
+// deck.md(노트 없음): 번들러가 만든 dist/<덱>.md, 없으면 번들 HTML에서 만든다. 발표자 노트 글이 한 줄이라도 들어 있으면 올리지 않는다(M3a의 보장이 깨졌을 때를 위한 안전장치).
+let md: string | null = null;
+try { md = existsSync(join(root, "dist", `${arg}.md`)) ? readFileSync(join(root, "dist", `${arg}.md`), "utf8") : deckMarkdown(html); } catch { md = null; }
+if (md !== null) {
+  const leak = notesLeak(html, md);
+  if (leak) { console.error(`deck.md에 발표자 노트 글이 들어 있어 올리지 않습니다: "${leak}". slidekit bundle ${arg} 로 다시 묶으세요.`); process.exit(1); }
+  if (Buffer.byteLength(md) > MD_MAX) { console.log(`경고: deck.md가 ${(Buffer.byteLength(md) / 1024).toFixed(0)} KB로 너무 커서 올리지 않습니다(상한 ${MD_MAX / 1024} KB).`); md = null; }
+} else console.log("경고: deck.md를 만들지 못해 올리지 않습니다. 덱은 그대로 올라갑니다.");
+const uploadHtml = md !== null ? withAlternate(html, arg) : html; // alternate 링크는 올리는 HTML에만 넣는다(로컬 번들은 그대로)
+if (md !== null) console.log(`deck.md ${(Buffer.byteLength(md) / 1024).toFixed(0)} KB, 발표자 노트 글 없음 확인`);
 console.log(`덱 ${arg}: ${(statSync(join(root, "dist", `${arg}.html`)).size / 1024).toFixed(0)} KB, 공개 범위 ${visibility === "password" ? "비밀번호" : "공개"}`);
 if (visibility === "password") {
   // 앱의 Export 메뉴는 비밀번호를 환경 변수로 넘긴다(명령줄과 로그에 남기지 않는다). 터미널에서는 숨김 입력으로 묻는다.
@@ -120,10 +136,17 @@ const tmp = mkdtempSync(join(tmpdir(), "slidekit-"));
 try {
   writeFileSync(join(tmp, "meta.json"), JSON.stringify(meta), { mode: 0o600 });
   // meta를 먼저 올린다. 공개에서 비밀번호로 바꿀 때 html만 새것이고 meta는 옛 public인 상태를 막는다.
-  console.log("공개 범위를 올리는 중 (1/2)");
+  const total = md !== null ? 3 : 2;
+  console.log(`공개 범위를 올리는 중 (1/${total})`);
   wrangler("kv", "key", "put", `meta:${arg}`, "--binding", "DECKS", "--remote", "--path", join(tmp, "meta.json"));
-  console.log("덱을 올리는 중 (2/2)");
-  wrangler("kv", "key", "put", `html:${arg}`, "--binding", "DECKS", "--remote", "--path", join(root, "dist", `${arg}.html`));
+  if (md !== null) {
+    console.log("deck.md를 올리는 중 (2/3)"); // html보다 먼저: alternate 링크가 있는 덱이 열릴 때 deck.md가 이미 있다
+    writeFileSync(join(tmp, "deck.md"), md, { mode: 0o600 });
+    wrangler("kv", "key", "put", `md:${arg}`, "--binding", "DECKS", "--remote", "--path", join(tmp, "deck.md"));
+  }
+  console.log(`덱을 올리는 중 (${total}/${total})`);
+  writeFileSync(join(tmp, "index.html"), uploadHtml, { mode: 0o600 });
+  wrangler("kv", "key", "put", `html:${arg}`, "--binding", "DECKS", "--remote", "--path", join(tmp, "index.html"));
 } finally {
   rmSync(tmp, { recursive: true, force: true });
 }

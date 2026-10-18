@@ -13,6 +13,7 @@ M3a(`spec/DECK-MD.md`, engine-dev)가 `dist/<덱>.md`를 만든다(노트 없음
 - `GET`/`HEAD`만(그 밖은 405). 덱 이름은 기존 규칙(`[\w-]+`)이고 `deck.md` 이외의 하위 경로는 404다.
 - meta가 없거나 `md:<덱>`이 없으면 404(옛 게시본은 deck.md가 없다).
 - **공개 덱**: 200, `Content-Type: text/markdown; charset=utf-8`, `Cache-Control: public, max-age=0, must-revalidate`, 기존 보안 헤더(`nosniff`, `Referrer-Policy`, HSTS, COOP, CORP), `Content-Security-Policy: default-src 'none'; sandbox`, `Content-Disposition: inline`.
+- **`Sec-Fetch-Dest` 검사는 비밀번호 덱에만 걸린다.** 공개 덱의 `deck.md`는 에이전트가 `curl`로 받아 가야 하므로 요청 종류와 상관없이 읽힌다. 비밀번호 덱은 URL만 복사하고, 로그인한 브라우저 컨텍스트에서 주소창으로 열 때(`Dest: document`)만 읽힌다. `curl`처럼 헤더가 없는 요청은 유효한 쿠키만 보고(쿠키가 없으면 403), 헤더가 있는데 `document`가 아니면 쿠키가 있어도 403이다.
 - **비밀번호 덱**: 덱 HTML과 **같은 관문**이다. 유효한 쿠키(`validCookie`)가 없으면 **403**(본문 없는 안내 한 줄: "이 덱은 비밀번호가 필요합니다. 먼저 덱 주소를 열어 비밀번호를 입력하세요."). 로그인 폼은 주지 않는다(에이전트의 `curl`에 HTML 폼을 돌려주지 않는다). 쿠키가 있어도 `Sec-Fetch-Dest`가 있고 `document`가 아니면 403이다(같은 출처의 다른 덱 스크립트가 `fetch`로 읽는 것을 막는 덱 HTML 규칙과 같다). 통과하면 공개 덱과 같은 응답에 `Cache-Control: private, no-store`.
 - `POST`는 받지 않는다(405). 로그인 시도 제한 대상이 아니다(쿠키 검증만).
 
@@ -21,10 +22,12 @@ M3a(`spec/DECK-MD.md`, engine-dev)가 `dist/<덱>.md`를 만든다(노트 없음
 1. `dist/<덱>.md`를 읽는다. 없으면 같은 번들 HTML에서 `deckMarkdown(html)`(노트 없음)로 만든다. 둘 다 안 되면 deck.md 없이 올리고 경고한다(deck.md는 선택 기능이다).
 2. **노트 누출 검사(방어를 한 겹 더)**: 번들 HTML의 `aside[data-notes]` 글(8자 이상)이 `.md`에 한 줄이라도 들어 있으면 올리지 않고 중단한다. M3a의 보장이 깨졌을 때를 위한 안전장치다.
 3. alternate 링크는 **올리는 HTML에만** 넣는다: `<link rel="alternate" type="text/markdown" href="/<덱>/deck.md">`를 `</head>` 앞에 끼운다(이미 있으면 그대로). 로컬 `dist/<덱>.html`(내려받아 공유하는 번들)과 원본 덱은 바꾸지 않는다. 번들러의 `--alternate <href>` 옵션은 쓰지 않는다: 옵션을 번들 단계에 넣으면 내려받은 번들에도 존재하지 않는 사이트를 가리키는 링크가 들어간다. (번들러 쪽 옵션은 그대로 두고, 덱을 다른 곳에 올릴 사람이 쓸 수 있다.) 결정 1.
-4. 순서: meta, md, html. md는 `kv put md:<덱>`이고 크기는 2MiB까지(넘으면 deck.md 없이 올리고 경고).
+4. 순서: meta, md, html. md는 `kv put md:<덱>`이고 크기는 2MiB까지(넘으면 deck.md 없이 올리고 경고). 알려진 한계: 이후 배포에서 deck.md를 못 만들면 이전 배포의 `md:`가 남는다(드문 경우이고 다음 정상 배포가 덮는다).
 5. 드라이런은 deck.md 크기와 노트 검사 결과를 출력한다(앱이 읽는 줄 접두는 기존 그대로).
 
 ## 4. 앱: 배포 완료 화면의 Copy agent prompt
+
+(구현: `app/src/lib/agent-prompt.ts`, `ExportMenu.tsx`. 게시된 주소 형식이 아니면 복사하지 않는다.)
 
 - 배포가 끝난 화면(`data-testid="publish-done"`)과 `Published...` 대화상자에 **Copy agent prompt** 단추를 둔다(Copy link 옆). 문구는 영어, 순수 함수 `agentPrompt(url, visibility)`(`app/src/lib/agent-prompt.ts`)가 만든다.
 - 공개 덱:

@@ -57,6 +57,15 @@
 - 시험: `bun test deploy`(정책 문자열, 호스트 필터와 추출), 러너 `deploy-csp`(실제 번들 두 개가 위반 0건, 유출을 시도하는 덱은 수신구에 한 건도 안 닿음, CSP 없는 대조군은 유출함. 브라우저라 mac-local에서 돌린다), `deploy --smoke`(배포 뒤 헤더 확인에 CSP와 Permissions-Policy 검사 추가).
 - 배포 순서: 승인 → `bun run deploy --worker` → `bun run deploy --smoke vibe-coding-workshop` → 게시된 덱을 모두 열어 확인. 이미 게시된 덱은 메타에 `hosts`가 없어도 정책이 켜진다(번들이 외부 자원을 안 쓰면 영향 없음). 외부 호스트를 쓰는 덱은 다시 `deploy`하면 `hosts`가 채워진다. 롤백은 아래 방법(`wrangler rollback`).
 
+## deck.md (M3b, 코드와 단위 시험까지 끝, 아직 배포 안 함)
+
+설계는 `spec/DECK-MD-DEPLOY.md`. 배포하면 덱 옆에 발표자 노트가 없는 Markdown(`https://static.vynnlee.com/<덱>/deck.md`)이 같이 올라가고, 올라가는 HTML의 `<head>`에 `<link rel="alternate" type="text/markdown" href="/<덱>/deck.md">`가 들어간다(로컬 `dist/<덱>.html`과 원본 덱은 그대로). 에이전트가 덱의 글을 HTML 해석 없이 읽고 이어서 작업하게 하려는 것이다. 앱의 배포 완료 화면과 Published 대화상자에 **Copy agent prompt**가 있다(공개 덱은 주소와 `curl -s <주소>/deck.md`, 비밀번호 덱은 주소만).
+
+- 올리는 순서는 meta, deck.md(`md:<덱>`), html. `deploy`는 `dist/<덱>.md`(없으면 번들에서 생성)에 발표자 노트 글이 한 줄이라도 있으면 중단한다. `unpublish`는 `md:<덱>`이 있으면 같이 지운다.
+- Worker: 공개 덱의 `deck.md`는 누구나, 비밀번호 덱의 `deck.md`는 덱과 같은 쿠키 관문 뒤에서만(쿠키가 없으면 403, `Sec-Fetch-Dest`가 `document`가 아니면 403). 쿠키 경로가 `/<덱>`이라 주소가 `/<덱>/deck.md`다.
+- 시험: `bun test deploy`(Worker 라우트, 노트 누출 중단, alternate 삽입, unpublish), `app/test/agent-prompt.test.ts`, 브라우저 `export` 단계(Copy agent prompt, mac-local). 배포 뒤 `deploy --smoke`에 deck.md 검사가 있다.
+- 배포 순서는 위 "덱 CSP" 절과 같고(승인 → `--worker` → `--smoke`), 이미 게시된 덱은 다시 `deploy`해야 deck.md가 생긴다(없으면 `deck.md`는 404).
+
 ## 게시 취소: slidekit unpublish
 
 배포한 덱을 Worker의 KV(`DECKS`)에서 지운다. 지우는 키는 `meta:<덱>`(공개 범위와 비밀번호 해시), `html:<덱>`(본문), `rl:<덱>:*`(로그인 시도 제한 카운터, 있으면)이다. meta를 먼저 지우므로 중간에 멈춰도 Worker는 404를 주고 남은 본문(html)은 열리지 않는다. 로컬 덱과 `dist/` 파일은 그대로다. Durable Object 시도 제한(`LIMITER`)을 쓰는 경우 카운터는 15분 뒤 알람으로 스스로 비워진다.

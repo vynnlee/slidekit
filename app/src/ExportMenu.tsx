@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ago } from "@/lib/comment-state";
 import { VersionHistory } from "@/VersionHistory";
 import { toast, TOAST } from "@/Toaster";
+import { agentPrompt } from "@/lib/agent-prompt";
 
 interface ExportMenuProps {
   /** 덱 폴더 이름(= /edit/<id>가 아니라 decks/ 아래 폴더). 소문자, 숫자, - 만 쓰는 덱만 내보낼 수 있다. */
@@ -194,6 +195,12 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
   };
   const downloadMarkdown = () => { const a = document.createElement("a"); a.href = `/api/decks/${folder}/outline?download=1`; a.download = `${folder}.md`; a.click(); say(`Downloading ${folder}.md`); };
   const linkOf = () => (pub && pub.published ? pub.url : last?.url ?? "");
+  // 에이전트에게 붙여 넣을 문구: 공개 덱은 주소와 deck.md를 받는 curl, 비밀번호 덱은 주소만(spec/DECK-MD-DEPLOY.md).
+  const copyPrompt = async (u: string, vis: "public" | "password") => {
+    const t = agentPrompt(u, vis);
+    if (!t) return say("No published link to copy");
+    try { await navigator.clipboard.writeText(t); say("Agent prompt copied", TOAST.copy); } catch { say("Could not copy the prompt"); }
+  };
   const copyLast = async () => { try { await navigator.clipboard.writeText(linkOf()); say("Link copied", TOAST.copy); } catch { say("Could not copy. Open Publish to see the link"); } };
   const needPw = visibility === "password";
   const canPublish = !busy && !url && (!needPw || (pw.length >= MIN_PW && pw === pw2)) && (check === null || check === "error" || check.errors === 0 || anyway);
@@ -312,6 +319,7 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
                   <a href={url} target="_blank" rel="noreferrer" className="break-all underline">{url}</a>
                   <div className="flex items-center gap-2">
                     <Button size="compact" variant="secondary" onClick={copy} aria-label="Copy link" leadingIcon={copied ? Check : Copy}>{copied ? "Copied" : "Copy link"}</Button>
+                    <Button size="compact" variant="secondary" onClick={() => void copyPrompt(url, needPw ? "password" : "public")} leadingIcon={FileText}>Copy agent prompt</Button>
                     <a href={url} target="_blank" rel="noreferrer" aria-label="Open in new tab" className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-body hover:bg-hover"><ExternalLink className="h-4 w-4" aria-hidden="true" />Open</a>
                   </div>
                 </div>
@@ -387,6 +395,7 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
               )}
               <div className="flex items-center gap-2">
                 <Button size="compact" variant="secondary" onClick={copyLast} aria-label="Copy published link" leadingIcon={Copy}>Copy link</Button>
+                <Button size="compact" variant="secondary" onClick={() => void copyPrompt(pub.url, pub.visibility)} leadingIcon={FileText}>Copy agent prompt</Button>
                 <a href={pub.url} target="_blank" rel="noreferrer" aria-label="Open published deck in a new tab" className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-body hover:bg-hover"><ExternalLink className="h-4 w-4" aria-hidden="true" />Open</a>
               </div>
               {pub.history.length > 1 && (

@@ -53,6 +53,10 @@ const PW = 'S3cret-pass-ZZ';
   await dlg.getByRole('button', { name: 'Publish', exact: true }).click();
   await p.getByRole('link').first().waitFor({ timeout: 60000 });
   check('성공: URL 링크와 Copy 버튼, dry run 로그', (await p.getByRole('link').first().getAttribute('href')) === 'https://static.vynnlee.com/qa-exp-pub' && (await p.getByRole('button', { name: 'Copy link' }).count()) === 1 && /DRY RUN/.test(await dlg.textContent()), await dlg.textContent());
+  // 에이전트에게 붙여 넣을 문구(M3b): 공개 덱은 주소와 deck.md를 받는 curl, 클립보드 내용을 가로채 확인한다
+  await p.evaluate(() => { window.__clip = null; navigator.clipboard.writeText = async (t) => { window.__clip = t; }; });
+  await dlg.getByRole('button', { name: 'Copy agent prompt' }).click();
+  check('Copy agent prompt(공개): 주소, deck.md curl 한 줄, 노트 없음 설명', await p.evaluate(() => window.__clip) === 'Read this slide deck and help me continue it.\nDeck: https://static.vynnlee.com/qa-exp-pub\nMarkdown (all slide text, no speaker notes): curl -s https://static.vynnlee.com/qa-exp-pub/deck.md', await p.evaluate(() => window.__clip));
   await dlg.getByRole('button', { name: 'Close', exact: true }).first().click();
   // 게시 기록: dry-run 게시는 기록을 남기지 않아 메뉴에 Published가 없다. 기록 파일을 직접 써서 Published와 Unpublish 확인 흐름을 본다.
   const openMenu = async () => { await p.getByRole('button', { name: 'Export' }).click(); };

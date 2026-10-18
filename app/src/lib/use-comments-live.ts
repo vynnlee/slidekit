@@ -63,20 +63,24 @@ export function useCommentsLive(folder: string | null) {
   }, [folder]);
 
 
-  /** 한 코멘트를 보낸다(Send), 멈춘 요청을 다시 보낸다(Resend), 요청을 취소한다(Cancel). 결과는 이유와 함께 토스트로 말한다. */
-  const act = useCallback(async (c: Comment, what: "send" | "resend" | "cancel") => {
+  /** 한 코멘트를 보낸다(Send), 멈춘 요청을 다시 보낸다(Resend), 요청을 취소한다(Cancel). 인자는 코멘트나 id. 결과는 이유와 함께 토스트로 말하고 그대로 돌려준다. */
+  type Result = { sent: boolean; reason: "paused" | "disconnected" | "limit" | null; resetAt?: string };
+  const act = useCallback(async (c: Comment | string, what: "send" | "resend" | "cancel"): Promise<Result | null> => {
+    const id = typeof c === "string" ? c : c.id;
     try {
-      const r = await fetch(`/api/comments/${c.id}/${what}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deck: folder }) });
+      const r = await fetch(`/api/comments/${id}/${what}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deck: folder }) });
       if (!r.ok) throw new Error(String(r.status));
-      const d = (await r.json()) as { sent?: boolean; reason?: "paused" | "disconnected" | "limit" | null; resetAt?: string };
+      const d = (await r.json()) as Partial<Result>;
+      const res: Result = { sent: d.sent === true, reason: d.reason ?? null, ...(d.resetAt ? { resetAt: d.resetAt } : {}) };
       if (what === "cancel") toast("Cancelled. Claude may still finish what it started.", { ms: TOAST.long });
-      else if (d.sent) toast(what === "resend" ? "Sent to Claude again" : "Sent to Claude", { ms: TOAST.info });
-      else toast(d.reason === "paused" ? "Saved. Claude is paused, it sends when you resume." : d.reason === "limit" ? `Saved. Waiting for the hourly limit${d.resetAt ? `, resumes ${new Date(d.resetAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}` : ""}.` : d.reason === "disconnected" ? "Saved. Claude is not connected, it sends when a session connects." : "Already sent", { ms: TOAST.long });
-    } catch { setError(what === "cancel" ? "Could not cancel the request" : "Could not send the comment"); }
+      else if (res.sent) toast(what === "resend" ? "Sent to Claude again" : "Sent to Claude", { ms: TOAST.info });
+      else toast(res.reason === "paused" ? "Saved. Claude is paused, it sends when you resume." : res.reason === "limit" ? `Saved. Waiting for the hourly limit${res.resetAt ? `, resumes ${new Date(res.resetAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}` : ""}.` : res.reason === "disconnected" ? "Saved. Claude is not connected, it sends when a session connects." : "Already sent", { ms: TOAST.long });
+      return res;
+    } catch { setError(what === "cancel" ? "Could not cancel the request" : "Could not send the comment"); return null; }
   }, [folder]);
-  const send = useCallback((c: Comment) => act(c, "send"), [act]);
-  const resend = useCallback((c: Comment) => act(c, "resend"), [act]);
-  const cancel = useCallback((c: Comment) => act(c, "cancel"), [act]);
+  const send = useCallback((c: Comment | string) => act(c, "send"), [act]);
+  const resend = useCallback((c: Comment | string) => act(c, "resend"), [act]);
+  const cancel = useCallback((c: Comment | string) => act(c, "cancel"), [act]);
 
   /** 답이 달린 코멘트를 모두 해결 처리한다. */
   const resolveReplied = useCallback(async () => {

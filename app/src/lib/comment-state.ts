@@ -42,7 +42,7 @@ export const DISPLAY: Record<CommentState, "Saved" | "Sent" | "Working" | "Repli
   held: "Saved", waiting: "Saved", unverified: "Saved", sent: "Sent", working: "Working", replied: "Replied", resolved: "Resolved",
 };
 export type Reason = null | "held" | "disconnected" | "paused" | "limit";
-export type Lifecycle = { state: CommentState; stalled: boolean; reason: Reason };
+export type Lifecycle = { state: CommentState; stalled: boolean; reason: Reason; resetAt?: string };
 
 /** 한 코멘트의 상태, 멈춤 여부, 아직 안 간 이유. Saved(held, waiting)일 때만 reason이 있다. */
 export function lifecycle(c: Comment, ctx: { channel: boolean | null; flow: Flow | null; now?: number }): Lifecycle {
@@ -51,7 +51,7 @@ export function lifecycle(c: Comment, ctx: { channel: boolean | null; flow: Flow
   let reason: Reason = null;
   if (state === "held") reason = "held";
   else if (state === "waiting") reason = ctx.flow?.reason === "user" ? "paused" : ctx.flow?.reason === "limit" ? "limit" : ctx.channel === false ? "disconnected" : null; // 연결돼 있고 막힘이 없으면 곧 전송된다
-  return { state, stalled, reason };
+  return { state, stalled, reason, ...(reason === "limit" && ctx.flow?.resetAt ? { resetAt: ctx.flow.resetAt } : {}) };
 }
 
 /** 이유 한 줄(영어). resetAt은 flow에서 온다. */

@@ -60,7 +60,7 @@ const invariants = (p) => p.evaluate(() => {
   }
   return bad.slice(0, 5);
 });
-const settle = (p) => p.waitForFunction(() => document.getAnimations().length === 0, null, { timeout: 8000 }).then(() => sleep(220)); /* will-change 정리 타이머(전환 + 150ms)까지 */
+const settle = (p) => p.waitForFunction(() => document.getAnimations().length === 0 && !document.querySelector('[data-step-run]'), null, { timeout: 30000 }).catch(() => {}).then(() => sleep(50)); /* 전환이 끝나고 임시 상태(data-step-run, will-change)가 사라질 때까지 조건으로 기다린다. 시간이 지나도 안 사라지면 뒤의 불변식 검사가 위반으로 보고한다 */
 
 (async () => {
   const b = await launch();

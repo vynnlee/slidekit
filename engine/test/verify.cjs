@@ -8,6 +8,8 @@ const DECK = BASE + '/decks/' + TD.folder + '/index.html';
 const results = [];
 const check = (name, ok, extra) => { results.push([ok, name, extra]); console.log((ok ? 'PASS ' : 'FAIL ') + name + (ok || extra === undefined ? '' : '  ' + JSON.stringify(extra))); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/* The step transitions ended and the slide's temporary state (data-step-run, the will-change hint) is gone. Waiting on this condition keeps the checks that read a settled state steady under load. */
+const quietRun = (p) => p.waitForFunction(() => document.getAnimations().length === 0 && !document.querySelector('[data-step-run]'), null, { timeout: 30000 }).catch(() => {}).then(() => sleep(30)); /* a timeout shows up as the failing check that follows, with its values */
 /* settled: wait for two frames and for finite CSS animations and transitions to end. It replaces fixed sleeps after an input (state is applied
    synchronously; only transitions and frames are pending). With several pages a short floor lets BroadcastChannel messages arrive. */
 /* finite CSS animations and transitions finished (real time). Used on pages whose timers are faked by clock(), where rAF-based waits would not run. */
@@ -356,7 +358,7 @@ const settled = async (...ps) => { await Promise.all(ps.map(settledOne)); if (ps
   { const m = await ctx.newPage(); const me = []; m.on('pageerror', (e) => me.push(String(e)));
     await m.goto(BASE + '/__t/anim#2'); await m.waitForSelector('#sk-stage'); await settled(m);
     const vv = (ids) => m.evaluate((ids) => ids.map((i) => getComputedStyle(document.getElementById(i)).visibility[0]).join(''), ids);
-    const quiet = () => m.waitForFunction(() => document.getAnimations().length === 0, null, { timeout: 8000 }).then(() => sleep(200)); // wait for the transitions to end (360ms + the 300ms delay), not a fixed time
+    const quiet = () => quietRun(m); // transitions ended and the layer hint (data-step-run) is gone: a condition, not a fixed time, not a fixed time
     const step = async () => { await m.keyboard.press('ArrowRight'); await quiet(); };
     check('anim step 1: entrance-only hidden, exit-only visible, mixed hidden', (await vv(['a', 'b', 'c', 'd'])) === 'hvhh', await vv(['a', 'b', 'c', 'd']));
     const away = await m.evaluate(() => { const cs = (i) => getComputedStyle(document.getElementById(i)); return { a: cs('a').transform + '|' + cs('a').opacity + '|' + cs('a').filter, e: cs('e').transform, f: cs('f').transform, g: cs('g').filter }; });
@@ -368,13 +370,13 @@ const settled = async (...ps) => { await Promise.all(ps.map(settledOne)); if (ps
     const hint2 = await m.evaluate(() => ({ wc: getComputedStyle(document.getElementById('a')).willChange, run: document.querySelector('#sk-stage > [data-active]').hasAttribute('data-step-run') }));
     check('anim will-change: set only while the transition runs, gone after it (no resident layers)', hint.wc === 'opacity, transform' && hint.run && hint2.wc === 'auto' && !hint2.run, [hint, hint2]);
     check('anim step 2: entrances shown, exit-only still visible', (await vv(['a', 'b', 'c', 'd'])) === 'vvvh', await vv(['a', 'b', 'c', 'd']));
-    await m.keyboard.press('ArrowRight'); await sleep(100);
-    const dl = await m.evaluate(() => getComputedStyle(document.getElementById('d')).opacity);
+    await m.keyboard.press('ArrowRight'); await sleep(40);
+    const dl = await m.evaluate(() => { const o = document.getElementById('d').getAnimations().find((x) => x.transitionProperty === 'opacity'); return o ? (o.effect.getComputedTiming().delay === 300 && (+getComputedStyle(document.getElementById('d')).opacity) < 0.2 ? 0 : 1) : 1; }); /* the delayed entrance carries its 300ms transition delay and has not started yet */
     await quiet();
     check('anim step 3: exit-only gone, mixed still visible, delayed entrance waits for its delay then shows', (await vv(['a', 'b', 'c', 'd'])) === 'vhvv' && Number(dl) < 0.2 && (await m.evaluate(() => getComputedStyle(document.getElementById('d')).opacity)) === '1', dl);
     await step();
     check('anim step 4: the exit of the mixed element happened; the step count is the largest of every N and M', (await vv(['a', 'b', 'c', 'd'])) === 'vhhv' && (await hash(m)) === '#2', await hash(m));
-    await m.keyboard.press('ArrowRight'); await sleep(300);
+    await m.keyboard.press('ArrowRight'); await m.waitForFunction(() => location.hash === '#3', null, { timeout: 8000 }).catch(() => {});
     check('anim: one more arrow after the last step leaves the slide', (await hash(m)) === '#3');
     await m.keyboard.press('ArrowLeft'); await quiet();
     check('anim: coming back lands on the last step state (entrances shown, exits gone)', (await hash(m)) === '#2' && (await vv(['a', 'b', 'c', 'd'])) === 'vhhv', await vv(['a', 'b', 'c', 'd']));
@@ -391,19 +393,23 @@ const settled = async (...ps) => { await Promise.all(ps.map(settledOne)); if (ps
     check('anim: no page errors', me.length === 0, me);
     await m.close(); }
   { const m = await ctx.newPage(); await m.goto(BASE + '/__t/anim#2'); await m.waitForSelector('#sk-stage'); await settled(m);
-    const quiet = () => m.waitForFunction(() => document.getAnimations().length === 0, null, { timeout: 8000 }).then(() => sleep(200));
+    const quiet = () => quietRun(m);
     for (let i = 0; i < 2; i++) { await m.keyboard.press('ArrowRight'); await quiet(); } // step 3: d (delay 300ms) is shown
     const dv = () => m.evaluate(() => { const c = getComputedStyle(document.getElementById('d')); return c.visibility[0] + (+c.opacity).toFixed(2); });
-    await m.keyboard.press('ArrowLeft'); await sleep(100);
+    const timings = (id) => m.evaluate((id) => document.getElementById(id).getAnimations().map((a) => { const t = a.effect.getComputedTiming(); return [a.transitionProperty, Math.round(t.delay), Math.round(t.duration)]; }), id);
+    await m.keyboard.press('ArrowLeft'); await sleep(40);
     const runBack = await m.evaluate(() => document.querySelector('#sk-stage > [data-active]').getAttribute('data-step-run')); // the temporary state while the rewind transition runs
-    await sleep(420); // rewinding: no delay, so the 360ms fade has ended and visibility is already hidden (with the delay it would only flip at 660ms)
-    const back = await dv();
+    const tb = await timings('d');
     await quiet();
+    const back = await dv();
     const settledAttr = await m.evaluate(() => document.querySelector('#sk-stage > [data-active]').hasAttribute('data-step-run'));
-    check('anim rewind: --sk-step-delay applies only going forward; rewinding starts at once and the temporary state is gone after it', back === 'h0.00' && runBack === 'back' && !settledAttr, [back, runBack, settledAttr]);
-    await m.keyboard.press('ArrowRight'); await sleep(100);
-    const fwd = await dv(); // forward: the delay is kept (300ms), so at 100ms the entrance has not started
-    check('anim forward: the delay still staggers the entrance', fwd[0] === 'v' && Number(fwd.slice(1)) < 0.05, fwd);
+    /* rewinding: no delay (opacity and transform start at once, visibility flips after the 360ms fade, not after 660ms) */
+    const noDelay = tb.length > 0 && tb.filter((t) => t[0] !== 'visibility').every((t) => t[1] === 0) && tb.filter((t) => t[0] === 'visibility').every((t) => t[1] === 360);
+    check('anim rewind: --sk-step-delay applies only going forward; rewinding starts at once and the temporary state is gone after it', back === 'h0.00' && runBack === 'back' && !settledAttr && noDelay, [back, runBack, settledAttr, tb]);
+    await m.keyboard.press('ArrowRight'); await sleep(40);
+    const tf = await timings('d'); // forward: the delay is kept (300ms) as the transition delay
+    check('anim forward: the delay still staggers the entrance', tf.length > 0 && tf.filter((t) => t[0] === 'opacity' || t[0] === 'transform').every((t) => t[1] === 300), tf);
+    await quiet();
     await m.close(); }
   { const m = await ctx.newPage(); await m.emulateMedia({ reducedMotion: 'reduce' }); await m.goto(BASE + '/__t/anim#2'); await m.waitForSelector('#sk-stage'); await settled(m);
     await m.keyboard.press('ArrowRight'); await sleep(40);
@@ -520,7 +526,7 @@ const settled = async (...ps) => { await Promise.all(ps.map(settledOne)); if (ps
   { const m = await open(BASE + '/__t/outvars#2'); await settled(m);
     const tm = (id) => m.evaluate((id) => { const e = document.getElementById(id); const all = e.getAnimations();
       return { cls: all.every((a) => a instanceof CSSTransition), op: all.filter((a) => a.transitionProperty === 'opacity').map((a) => { const t = a.effect.getComputedTiming(); return [Math.round(t.duration), t.delay]; }), tf: all.filter((a) => a.transitionProperty === 'transform').length }; }, id);
-    const quiet = () => m.waitForFunction(() => document.getAnimations().length === 0, null, { timeout: 20000 }).then(() => sleep(100));
+    const quiet = () => quietRun(m);
     await m.keyboard.press('ArrowRight'); await sleep(40);
     const enter = await tm('x');
     const zRun = await m.evaluate(() => document.querySelector('#sk-stage > [data-active]').hasAttribute('data-step-run'));

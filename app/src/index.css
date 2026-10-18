@@ -349,3 +349,19 @@ body { margin: 0; font-family: var(--font-sans); background: var(--background); 
     padding-inline: 8px;
   }
 }
+
+
+/* 에이전트 존재 효과(편집기 캔버스 오버레이와 필름스트립 전용): opacity와 transform만 애니메이션한다. will-change는 효과가 켜진 동안(.agent-on)에만 둔다. */
+@keyframes agent-breathe { 0%, 100% { opacity: .3 } 50% { opacity: .75 } }
+@keyframes agent-wave { 0%, 100% { opacity: 0 } 40% { opacity: .55 } 70% { opacity: 0 } }
+@keyframes agent-flash { 0% { opacity: 0 } 22% { opacity: 1 } 100% { opacity: 0 } }
+.agent-on { will-change: opacity, transform; }
+.agent-breathe { animation: agent-breathe 2.4s ease-in-out infinite; }
+.agent-wave { animation: agent-wave 2.8s ease-in-out infinite; }
+.agent-flash { animation: agent-flash 1.2s ease-out both; }
+.agent-cursor { transition: transform 650ms cubic-bezier(.22, 1, .36, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .agent-breathe, .agent-wave, .agent-flash { animation: none !important; }
+  .agent-wave { display: none; }
+  .agent-cursor { transition: none !important; }
+}

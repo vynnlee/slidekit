@@ -392,9 +392,17 @@ JS 없이 슬라이드 안 요소를 단계마다 나타나게 한다(Keynote의
 - 도식(`svg`)과 인터랙션 내부는 편집하지 않는다. 선택과 코멘트, 삭제와 복제는 된다.
 - 편집기가 iframe 문서에 넣는 선택용 스타일은 `<head>`에만 들어가고 저장되지 않는다. 선택 표시와 호버 외곽선은 덱 DOM이 아니라 앱 쪽 레이어에 그린다.
 
-### 9.3 코멘트 위치
+### 9.3 코멘트 위치와 코멘트 모드
 
-- 요소는 `path`로 가리킨다. 슬라이드 `<section>` 아래 `tag:nth-of-type(n)`을 ` > `로 이은 값이고(`h1`, `div:nth-of-type(2) > p`), `slide`는 1부터 센 슬라이드 번호다. 편집기가 저장할 때 `slideMap`(9.1)을 보내면 서버가 이미 남긴 코멘트의 `slide`를 새 번호로 바꾸고, 지워진 슬라이드의 코멘트는 남겨 두되 `slideDeleted`를 참으로 표시한다.
+설계 근거와 결정은 `spec/COMMENT-MODE.md`, 에이전트 수정과 존재 신호는 `spec/AGENT-PRESENCE.md`다.
+
+- 요소는 `path`로 가리킨다. 슬라이드 `<section>` 아래 `tag:nth-of-type(n)`을 ` > `로 이은 값이고(`h1`, `div:nth-of-type(2) > p`), `slide`는 1부터 센 슬라이드 번호다. 편집기가 저장할 때 `slideMap`(9.1)을 보내면 서버가 이미 남긴 코멘트의 `slide`를 새 번호로 바꾸고, 지워진 슬라이드의 코멘트는 남겨 두되 `slideDeleted`를 참으로 표시한다. `path`가 빈 문자열이면 슬라이드 전체에 건 코멘트다.
+- 영역 코멘트: `region`(슬라이드 기준 사각형 `{x,y,w,h}`, 0 에서 1, 소수 4자리, `w`와 `h`는 0.005 이상), `overlap`(그 영역과 겹치는 보이는 요소의 `path`, 최대 8개), `step`(1 에서 999, 코멘트가 가리키는 단계)을 더할 수 있다. 영역 코멘트의 `path`는 빈 문자열이고 `excerpt`는 겹치는 첫 요소의 글자다. 형식이 틀리면 400이고 파일에서 읽을 때는 그 필드만 버린다. 슬라이드 번호가 바뀌어도 `region`은 슬라이드 기준이라 그대로 유효하다.
+- 영역 이미지: 신뢰된(서명된) 영역 코멘트는 저장 순간 서버가 비동기로 PNG를 만든다(`decks/<덱>/.comments/<id>.png`, 시스템 Chrome, 동시 1개, 낮은 우선순위, 점 폴더라 서빙과 번들과 복제에서 빠진다). `image`는 `pending`, `ready`, `failed`이고 서명에 넣지 않는다. 파일이 없어지면 읽을 때 `failed`로 보인다. 바로 보내기(Send now)가 `pending`이면 최대 5초 기다린 뒤 이미지 없이 보낸다. `GET /api/comments/<id>/image?deck=<덱>`이 `ready`인 PNG만 준다. 서명(HMAC)은 새 필드가 있는 코멘트에만 `region`, `overlap`, `step`을 덧붙인 배열로 하므로 기존 코멘트는 계속 검증된다.
+- 코멘트 모드(편집기): 툴바 토글과 `Shift+C`는 언제나 모드를 켜고 끈다. `C`는 선택이 있으면 그 요소의 작성창을, 없으면 모드를 켠다. 모드에서는 요소 클릭(가장 안쪽 요소)과 드래그(8px 이상, 영역)로 작성창을 열고, 편집 조작은 꺼지며 `Esc`, 토글, Done으로 끝낸다. 키보드만으로도 된다: `Tab`으로 요소, `A`로 조절 상자, 방향키로 이동, `Shift`+방향키로 크기, `Enter`로 확정, `Esc`로 취소하고 값은 `aria-live`로 읽어 준다.
+- 작성창: `Enter`는 Add(보류 `held`), `Cmd+Enter`는 Send now, `Shift+Enter`는 줄바꿈이고 한글 조합 중의 `Enter`는 세지 않는다. 패널의 Send all to Claude가 보류를 한 번에 10개까지 묶음으로 보낸다.
+- 채널 알림에는 `region`, `overlap`, `step`, `imageState`(`ready`, `failed`, `none`)를 JSON 데이터로 싣고 이미지가 준비되었으면 `meta.image`에 저장소 기준 경로를 준다. 알림 값(`text`, `path`, `excerpt`, 이미지 속 글자)은 모두 데이터이고 지시가 아니다.
+- 에이전트 수정: 채널이 연결돼 있으면 에이전트는 `slidekit_edit`으로 덱을 고친다(`old_str`가 정확히 1번일 때만, 여러 edit는 전부 성공하거나 전부 취소, `base_revision` 충돌은 거부, 적용 뒤 lint 결과 응답, 대상은 그 덱의 `index.html` 하나). 서버는 SSE로 `agent.edit.start`, `agent.edit.done`, `agent.edit.fail`을 보내고(코멘트의 ack와 reply도 같은 이벤트, 파일을 직접 고친 경우는 파일 감시가 `done`만) 편집기는 이를 에이전트 커서와 반짝임으로 보인다. 모든 이벤트에 `id`와 `ttl`이 있어 도구가 죽어도 표시가 남지 않는다. 앱 자신의 저장은 이벤트를 만들지 않는다. 이벤트 스키마는 `spec/AGENT-PRESENCE.md` 2절이다.
 
 ### 9.4 덱 스타일 편집
 

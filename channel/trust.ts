@@ -48,7 +48,9 @@ try {
   const pend = (await client.callTool({ name: "get_pending", arguments: {} })) as any;
   const arr2 = JSON.parse(pend.content[0].text);
   assert(arr2.length === 1 && arr2[0].id === A, "get_pending도 서명된 코멘트만");
-  assert(/검증 안 된 코멘트 2개/.test(pend.content[1]?.text ?? ""), "건너뛴 코멘트 수를 알린다");
+  // get_pending은 모든 덱의 코멘트를 본다. 다른 시험이나 사용자의 덱에 남은 서명 안 된 코멘트도 세어지므로 이 덱의 2개 이상으로 본다.
+  const skipped = Number(/검증 안 된 코멘트 (\d+)개/.exec(pend.content[1]?.text ?? "")?.[1] ?? 0);
+  assert(skipped >= 2, `건너뛴 코멘트 수를 알린다: ${pend.content[1]?.text}`);
 
   // ack: 앱에 작업 시작이 반영된다
   await client.callTool({ name: "ack", arguments: { id: A } });

@@ -49,6 +49,14 @@
 5. 게시를 취소해 볼 때는 먼저 `SLIDEKIT_DEPLOY_DRY_RUN=1 bun run slidekit unpublish <덱>`으로 지울 키를 보고, 사용자가 확인한 뒤에만 `--yes`를 붙인다(아래 절). 비밀번호 덱을 올릴 때: `bun run deploy <덱>`(비밀번호는 숨김 입력), 이어서 `bun run deploy --smoke vibe-coding-workshop <덱>`, 그리고 손으로 틀린 비밀번호 한 번과 맞는 비밀번호 한 번을 확인한다. 같은 IP로 틀린 비밀번호를 5번 보내면 6번째가 429이고 `Retry-After`가 붙는지도 한 번 본다.
 6. 문제가 있으면 `cd deploy/worker && bunx wrangler@4.150.0 rollback`. 코드만 이전 버전으로 돌아가고 마이그레이션과 Durable Object 클래스는 남지만, 구코드가 쓰지 않으므로 해가 없다(KV 카운터로 돌아간다).
 
+## 덱 CSP (M2a, 코드와 시험까지 끝, 아직 배포 안 함)
+
+설계는 `spec/WORKER-CSP.md`. Worker가 덱 응답(공개, 비밀번호 통과 뒤)에 `default-src 'none'`, `connect-src 'none'`, `form-action/frame-src/worker-src 'none'`을 붙여 공개된 덱의 스크립트가 데이터를 밖으로 보내지 못하게 한다. 인라인 스크립트와 스타일, `data:`/`blob:` 자원은 허용하고, 덱이 쓰는 외부 호스트(이미지, 미디어, 글꼴, 스타일의 `https`)만 KV 메타 `hosts`로 연다. 호스트는 `deploy.ts`가 번들에서 뽑아 올리고(20개까지, 형식이 틀리면 건너뛰고 경고) Worker가 다시 검증한다. 메타에 `hosts`가 없거나 틀리면 가장 엄격한 정책이다. 입력 폼, 안내, 오류는 이미 더 엄격해서 그대로다.
+
+- 올리기 전 확인표: `bun deploy/csp-check.ts [덱...] [--build]`. 덱마다 번들 크기, CSP가 허용할 호스트, 허용하지 못한 외부 자원, 막힐 사용(스크립트의 `fetch`, `WebSocket` 등, `iframe`, 폼 `action`), 판정(OK, CHECK, NO BUNDLE)을 표로 찍는다. 이 표를 Worker 배포 승인 요청에 같이 올린다. CHECK인 덱은 게시본을 열어 해당 기능이 막혀도 되는지 본다.
+- 시험: `bun test deploy`(정책 문자열, 호스트 필터와 추출), 러너 `deploy-csp`(실제 번들 두 개가 위반 0건, 유출을 시도하는 덱은 수신구에 한 건도 안 닿음, CSP 없는 대조군은 유출함. 브라우저라 mac-local에서 돌린다), `deploy --smoke`(배포 뒤 헤더 확인에 CSP와 Permissions-Policy 검사 추가).
+- 배포 순서: 승인 → `bun run deploy --worker` → `bun run deploy --smoke vibe-coding-workshop` → 게시된 덱을 모두 열어 확인. 이미 게시된 덱은 메타에 `hosts`가 없어도 정책이 켜진다(번들이 외부 자원을 안 쓰면 영향 없음). 외부 호스트를 쓰는 덱은 다시 `deploy`하면 `hosts`가 채워진다. 롤백은 아래 방법(`wrangler rollback`).
+
 ## 게시 취소: slidekit unpublish
 
 배포한 덱을 Worker의 KV(`DECKS`)에서 지운다. 지우는 키는 `meta:<덱>`(공개 범위와 비밀번호 해시), `html:<덱>`(본문), `rl:<덱>:*`(로그인 시도 제한 카운터, 있으면)이다. meta를 먼저 지우므로 중간에 멈춰도 Worker는 404를 주고 남은 본문(html)은 열리지 않는다. 로컬 덱과 `dist/` 파일은 그대로다. Durable Object 시도 제한(`LIMITER`)을 쓰는 경우 카운터는 15분 뒤 알람으로 스스로 비워진다.

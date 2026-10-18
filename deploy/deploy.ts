@@ -5,6 +5,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hashPassword } from "./worker/src/index";
+import { scanHosts } from "./hosts";
 import { WRANGLER } from "./kv";
 import { deckFingerprint, recordPublish } from "../engine/publish-record";
 
@@ -31,6 +32,10 @@ if (arg === "--smoke") {
   ok("공개 덱 200", a.status === 200, String(a.status));
   ok("공개 덱 캐시 must-revalidate", (a.headers.get("cache-control") ?? "").includes("must-revalidate"), a.headers.get("cache-control") ?? "");
   ok("공개 덱이 슬라이드 HTML", (await a.text()).includes("data-slide"));
+  const csp = a.headers.get("content-security-policy") ?? "";
+  ok("공개 덱 CSP: 외부로 나가는 요청을 막음(connect-src, form-action, frame-src, worker-src)", ["connect-src 'none'", "form-action 'none'", "frame-src 'none'", "worker-src 'none'", "default-src 'none'"].every((d) => csp.includes(d)), csp);
+  ok("공개 덱 CSP: 허용 호스트는 https만", !/(^|[ ;])(http:|\*)/.test(csp), csp);
+  ok("공개 덱 Permissions-Policy", (a.headers.get("permissions-policy") ?? "").includes("camera=()"));
   const n = await get("no-such-deck-smoke"); common(n, "없는 덱");
   ok("없는 덱 404", n.status === 404, String(n.status));
   if (pwd) {
@@ -89,7 +94,13 @@ if (visibility !== "public" && visibility !== "password") { console.error(`알 �
 const lang = typeof dm.lang === "string" ? dm.lang.split("-")[0] : undefined; // ko, en-US처럼 지역이 붙어도 Worker는 언어만 쓴다
 // 공개 덱은 제목을 올린다. 비밀번호 덱은 인증 전에 제목이 보이므로 deck-meta에 "lockTitle": true를 적은 경우에만 올린다.
 const title = visibility === "public" || dm.lockTitle === true ? dm.title : undefined;
-const meta: Record<string, string> = { visibility, ...(lang === "en" || lang === "ko" ? { lang } : {}), ...(typeof title === "string" && title ? { title: title.slice(0, 120) } : {}) };
+const meta: Record<string, string | string[]> = { visibility, ...(lang === "en" || lang === "ko" ? { lang } : {}), ...(typeof title === "string" && title ? { title: title.slice(0, 120) } : {}) };
+// 덱이 쓰는 외부 호스트(이미지, 미디어, 글꼴, 스타일)를 Worker의 CSP에 알린다. 못 넣은 것과 CSP가 막을 사용은 올리기 전에 알린다(spec/WORKER-CSP.md).
+const scan = scanHosts(html);
+meta.hosts = scan.hosts;
+if (scan.hosts.length) console.log(`CSP에 허용할 외부 호스트 ${scan.hosts.length}개: ${scan.hosts.join(", ")}`);
+for (const s of scan.skipped) console.log(`경고: 허용하지 못한 외부 자원: ${s}. 게시된 덱에서 이 자원은 막힙니다.`);
+for (const b of scan.blocked) console.log(`경고: 게시된 덱에서 막히는 사용: ${b} (외부로 나가는 요청은 CSP가 막습니다)`);
 console.log(`덱 ${arg}: ${(statSync(join(root, "dist", `${arg}.html`)).size / 1024).toFixed(0)} KB, 공개 범위 ${visibility === "password" ? "비밀번호" : "공개"}`);
 if (visibility === "password") {
   // 앱의 Export 메뉴는 비밀번호를 환경 변수로 넘긴다(명령줄과 로그에 남기지 않는다). 터미널에서는 숨김 입력으로 묻는다.

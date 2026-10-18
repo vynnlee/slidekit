@@ -2,6 +2,8 @@
 //   html:<deck> = 번들 HTML, meta:<deck> = {visibility, salt, hash}
 // 비밀번호는 해시만 저장한다. 쿠키 서명 키는 Worker 비밀 값 COOKIE_SECRET이다.
 
+import { PERMISSIONS, cleanHosts, deckCsp } from "./csp";
+
 type KV = {
   get(key: string, type?: "text"): Promise<string | null>;
   put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
@@ -10,7 +12,7 @@ type KV = {
 // 로그인 시도 카운터 Durable Object 바인딩(선택). 없으면 KV 카운터로 동작한다(구버전 배포와 호환).
 export type LimiterNs = { idFromName(name: string): unknown; get(id: unknown): { fetch(req: Request): Promise<Response> } };
 export type Env = { DECKS: KV; COOKIE_SECRET: string; LIMITER?: LimiterNs };
-export type Meta = { visibility: "public" | "password"; lang?: string; title?: string; salt?: string; hash?: string };
+export type Meta = { visibility: "public" | "password"; lang?: string; title?: string; salt?: string; hash?: string; hosts?: unknown };
 
 const enc = new TextEncoder();
 const ITER = 100_000; // Workers의 PBKDF2 반복 상한
@@ -48,7 +50,7 @@ async function validCookie(req: Request, secret: string, deck: string, salt: str
   } catch { return false; }
 }
 
-// script-src는 건드리지 않는다. 덱이 인라인 스크립트와 스타일을 쓴다.
+// 이 공통 헤더의 CSP는 안내 페이지와 오류용이다. 덱 응답은 page()에서 deckCsp(meta.hosts)로 바꾼다(spec/WORKER-CSP.md).
 // Cross-Origin-Opener-Policy와 Resource-Policy: 같은 출처의 다른 덱이 window.open이나 fetch로 잠금 해제된 덱을 읽지 못하게 한다.
 const headers = {
   "X-Robots-Tag": "noindex", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer",
@@ -154,7 +156,8 @@ export async function handle(req: Request, env: Env, now = Date.now()): Promise<
   if (!meta || !html) return plain(404, msgs(req, meta).none, {}, msgs(req, meta));
   const m = msgs(req, meta);
 
-  const page = (cache: string) => new Response(html, { headers: { ...headers, "Content-Type": "text/html; charset=utf-8", "Cache-Control": cache } });
+  // 덱 응답(공개, 비밀번호 통과 뒤)은 외부로 나가는 요청을 막는 CSP를 붙인다. hosts는 deploy가 번들에서 뽑아 올린 값이고 여기서 다시 검증한다.
+  const page = (cache: string) => new Response(html, { headers: { ...headers, "Content-Security-Policy": deckCsp(cleanHosts(meta.hosts)), "Permissions-Policy": PERMISSIONS, "Content-Type": "text/html; charset=utf-8", "Cache-Control": cache } });
   if (meta.visibility !== "password") return page("public, max-age=0, must-revalidate");
   if (!meta.salt || !meta.hash) return plain(404, m.none, {}, m);
 

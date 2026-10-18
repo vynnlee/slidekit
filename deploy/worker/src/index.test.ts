@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { PERMISSIONS, deckCsp } from "./csp";
 import worker, { handle, hashPassword, Limiter, makeCookie, type Env, type LimiterNs } from "./index";
 
 const pw = await hashPassword("열쇠");
@@ -73,8 +74,11 @@ test("보안 헤더와 캐시", async () => {
     expect(r.headers.get("Cross-Origin-Opener-Policy")).toBe("same-origin");
     expect(r.headers.get("Strict-Transport-Security")).toContain("max-age=");
   }
-  // 공개 덱은 덱 스크립트가 돌아야 해서 script-src를 건드리지 않는다. 입력 폼은 nonce 기반 CSP다.
-  expect((await get("open")).headers.get("Content-Security-Policy")).toBe("frame-ancestors 'none'");
+  // 공개 덱은 덱 스크립트가 돌아야 해서 인라인 스크립트는 허용하되 외부로 나가는 요청은 막는다(spec/WORKER-CSP.md). 입력 폼은 nonce 기반 CSP다.
+  const deckCspOpen = (await get("open")).headers.get("Content-Security-Policy")!;
+  expect(deckCspOpen).toBe(deckCsp([]));
+  expect(deckCspOpen).toContain("connect-src 'none'");
+  expect((await get("open")).headers.get("Permissions-Policy")).toBe(PERMISSIONS);
   expect((await get("sec")).headers.get("Content-Security-Policy")).toMatch(/script-src 'nonce-[0-9a-f]{32}'.*form-action 'self'/);
   expect((await get("open")).headers.get("Cache-Control")).toBe("public, max-age=0, must-revalidate");
   expect((await get("sec")).headers.get("Cache-Control")).toBe("private, no-store");
@@ -200,4 +204,26 @@ test("런타임 진입점(default.fetch)은 ctx를 시각으로 오해하지 않
   expect(res.status).toBe(303);
   expect(res.headers.get("Set-Cookie")).toMatch(/HttpOnly; Secure; SameSite=Strict/);
   expect(res.headers.get("Set-Cookie")).not.toContain("NaN"); // ctx가 시각으로 새면 만료 시각이 NaN이 된다(workerd에서는 Invalid Date로 500)
+});
+
+test("덱 CSP: meta.hosts를 다시 검증해 정책에 넣고, 틀린 값은 흔적도 없고, 비밀번호 덱은 로그인 뒤에 같은 정책, 폼은 그대로", async () => {
+  store["html:ext"] = "<p>x</p>"; store["meta:ext"] = JSON.stringify({ visibility: "public", hosts: ["fonts.gstatic.com", "images.example.com", "*", "https://evil.com", "EVIL.com", "a.b/path", "evil.com:8080", "localhost", "1.2.3.4", 5, null, "images.example.com"] });
+  const csp = (await get("ext")).headers.get("Content-Security-Policy")!;
+  expect(csp).toBe(deckCsp(["fonts.gstatic.com", "images.example.com"]));
+  expect(csp).toContain("img-src data: blob: https://fonts.gstatic.com https://images.example.com");
+  expect(csp).toContain("font-src data: https://fonts.gstatic.com https://images.example.com");
+  expect(csp).not.toMatch(/evil|\*|localhost|1\.2\.3\.4/);
+  expect(csp).toContain("connect-src 'none'");
+  store["meta:bad1"] = JSON.stringify({ visibility: "public", hosts: "fonts.gstatic.com" }); store["html:bad1"] = "x";
+  store["meta:bad2"] = JSON.stringify({ visibility: "public", hosts: { 0: "a.example.com" } }); store["html:bad2"] = "x";
+  for (const d of ["open", "bad1", "bad2"]) expect((await get(d)).headers.get("Content-Security-Policy")).toBe(deckCsp([])); // hosts가 없거나 배열이 아니면 가장 엄격
+  store["meta:sec"] = JSON.stringify({ visibility: "password", hosts: ["fonts.gstatic.com"], ...pw });
+  const form = await get("sec");
+  expect(form.headers.get("Content-Security-Policy")).toMatch(/^default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-[0-9a-f]{32}'; form-action 'self'/); // 폼은 이미 더 엄격하고 호스트를 넣지 않는다
+  expect(form.headers.get("Permissions-Policy")).toBeNull();
+  const ok = await post("열쇠", "6.6.6.6");
+  const opened = await get("sec", ok.headers.get("Set-Cookie")!.split(";")[0]);
+  expect(opened.headers.get("Content-Security-Policy")).toBe(deckCsp(["fonts.gstatic.com"]));
+  expect(opened.headers.get("Permissions-Policy")).toBe(PERMISSIONS);
+  store["meta:sec"] = JSON.stringify({ visibility: "password", ...pw }); // 다른 시험을 위해 되돌린다
 });

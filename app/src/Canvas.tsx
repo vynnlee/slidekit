@@ -675,9 +675,9 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
       m.style.display = "block";
       // 요소가 슬라이드 오른쪽 끝까지 닿거나 위쪽 끝에 붙어도 핀이 잘리지 않게 캔버스 안으로 밀어 넣는다.
       // 같은 요소의 핀 개수만큼 줄 전체를 왼쪽으로 당겨 순서를 지킨 채 들어가게 한다.
-      const maxX = size.w * zoom - 24 - (same.get(m.dataset.path!)! - 1) * 22;
-      const x = Math.max(0, Math.min(mr.right - 6, maxX)) + Number(m.dataset.off ?? 0) * 22;
-      m.style.transform = `translate(${x}px,${Math.max(0, mr.top - 6)}px)`;
+      const maxX = size.w * zoom - 24 - (same.get(m.dataset.path!)! - 1) * 26;
+      const x = Math.max(0, Math.min(mr.right - 24, maxX)) + Number(m.dataset.off ?? 0) * 26; // 말풍선 꼬리(오른쪽 아래)가 요소의 오른쪽 위 모서리에 닿는다
+      m.style.transform = `translate(${x}px,${Math.max(0, mr.top - 24)}px)`;
     }
   }, [size.w, size.h, zoom, composing]);
   useEffect(() => { place(); const t = setInterval(place, 60); return () => clearInterval(t); });

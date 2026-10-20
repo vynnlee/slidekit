@@ -8,16 +8,6 @@ export type CommentState = "held" | "waiting" | "sent" | "working" | "replied" |
 export const stateOf = (c: Comment): CommentState =>
   c.resolved ? "resolved" : c.status === "done" ? "replied" : c.trusted === false ? "unverified" : c.ackAt ? "working" : c.deliveredAt ? "sent" : c.held ? "held" : "waiting";
 
-export const STATE_LABEL: Record<CommentState, string> = {
-  held: "Held",
-  waiting: "Waiting",
-  sent: "Sent to Claude",
-  working: "Claude is working",
-  unverified: "Unverified",
-  replied: "Replied",
-  resolved: "Resolved",
-};
-
 /** 덱 전체에서 작성 순서대로 1부터 매기는 번호. 캔버스 핀과 목록이 같은 번호를 쓴다. */
 export function numbering(comments: Comment[]): Map<string, number> {
   const sorted = [...comments].sort((a, b) => a.createdAt.localeCompare(b.createdAt));

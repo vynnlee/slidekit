@@ -9,14 +9,14 @@ import type { Comment } from "@/lib/deck";
 import { DISPLAY, ago, lifecycle, numbering, reasonText, stateOf, type CommentState } from "@/lib/comment-state";
 import { setShowResolved, useShowResolved } from "@/lib/comment-prefs";
 import { hoveredComment, setHoveredComment, subscribeHover } from "@/lib/comment-hover";
+import { FILTER_MATCH, filterCounts, sendable as sendableOf, trayText, type Filter } from "@/lib/comment-view";
 
 const CMD = "claude --dangerously-load-development-channels server:slidekit";
-type Filter = "all" | "open" | "replied" | "resolved";
-const FILTERS: { id: Filter; label: string; match: (s: CommentState) => boolean }[] = [
-  { id: "all", label: "All", match: () => true },
-  { id: "open", label: "Open", match: (s) => s === "held" || s === "waiting" || s === "sent" || s === "working" || s === "unverified" },
-  { id: "replied", label: "Replied", match: (s) => s === "replied" },
-  { id: "resolved", label: "Resolved", match: (s) => s === "resolved" },
+const FILTERS: { id: Filter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "open", label: "Open" },
+  { id: "replied", label: "Replied" },
+  { id: "resolved", label: "Resolved" },
 ];
 
 const ICON = { held: Pause, waiting: Clock, sent: Send, working: Loader2, replied: MessageSquare, resolved: CheckCheck, unverified: ShieldAlert } as const;
@@ -61,7 +61,7 @@ function FlowBar() {
   if (!flow) return null;
   const note = flowNote(flow), paused = flow.paused;
   return (
-    <div className="flex items-center gap-2 px-1" data-testid="comment-flow">
+    <div className="flex min-w-0 flex-1 items-center gap-2" data-testid="comment-flow">
       <span role="status" className={cn("text-micro", note ? "text-amber-300" : "text-muted-foreground")}>{note ?? "Auto-processing on"}</span>
       <Button size="compact" variant="ghost" className="ml-auto" leadingIcon={paused ? Play : Pause} onClick={() => { void setPaused(!paused); }}>{paused ? "Resume" : "Pause"}</Button>
     </div>
@@ -134,14 +134,14 @@ export function CommentsPanel({ comments, folder, channel, onJump, onResolve, on
   // 우클릭 메뉴(INTERACTION 2.5): 삭제 연결이 있을 때만 연다. 핀 전용 항목(Open in panel)은 없다.
   const actions = onRemove ? { resolve: onResolve, trust: onTrust, remove: onRemove, revert: onRevert } : null;
   const nums = useMemo(() => numbering(comments), [comments]);
-  const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f.id, comments.filter((c) => f.match(stateOf(c))).length])) as Record<Filter, number>, [comments]);
-  // 한꺼번에 처리 줄: 보류가 하나라도 있거나 보낼 것이 3개 이상이면 Send all, 답이 달린 것이 2개 이상이면 Resolve all replied
-  const sendable = useMemo(() => comments.filter((c) => !c.slideDeleted && c.anchor !== "lost" && ["held", "waiting"].includes(stateOf(c)) && c.trusted !== false), [comments]);
+  const counts = useMemo(() => filterCounts(comments), [comments]);
+  // 하단 트레이: 보류가 하나라도 있거나 보낼 것이 3개 이상이면 'N saved · Send all'
+  const sendable = useMemo(() => sendableOf(comments), [comments]);
   const heldCount = sendable.filter((c) => stateOf(c) === "held").length;
   const repliedCount = comments.filter((c) => stateOf(c) === "replied").length;
-  const showSend = !!onSendAll && (heldCount > 0 || sendable.length >= 3);
+  const tray = onSendAll && (heldCount > 0 || sendable.length >= 3) ? trayText(sendable.length) : null;
   const showResolve = !!onResolveReplied && repliedCount >= 2;
-  const shown = comments.filter((c) => FILTERS.find((f) => f.id === filter)!.match(stateOf(c)));
+  const shown = comments.filter((c) => FILTER_MATCH[filter](stateOf(c)));
   const groups = useMemo(() => {
     const m = new Map<number, Comment[]>();
     for (const c of shown) { const k = c.slideDeleted || c.anchor === "lost" ? -1 : c.slide; m.set(k, [...(m.get(k) ?? []), c]); }
@@ -176,25 +176,26 @@ export function CommentsPanel({ comments, folder, channel, onJump, onResolve, on
 
   return (
     <div ref={root} onKeyDown={onKeys} className="group/panel flex flex-col gap-3 pt-3" data-testid="comments-panel">
-      {channel === false ? <NotConnected open={comments.length === 0} /> : <ChannelBadge connected={channel} />}
-      <FlowBar />
-      {(showSend || showResolve) && (
-        <div role="group" aria-label="Batch actions" className="flex flex-wrap gap-1">
-          {showSend && <Button size="compact" variant="secondary" leadingIcon={Send} onClick={onSendAll}>{`Send all to Claude (${sendable.length > 10 ? "10+" : sendable.length})`}</Button>}
-          {showResolve && <Button size="compact" variant="ghost" leadingIcon={CheckCheck} onClick={onResolveReplied}>{`Resolve all replied (${repliedCount})`}</Button>}
-        </div>
-      )}
+      {/* 머리: 연결 상태와 자동 처리(Pause)를 한 줄로 */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1">
+        {channel === false ? null : <ChannelBadge connected={channel} />}
+        <FlowBar />
+      </div>
+      {channel === false && <NotConnected open={comments.length === 0} />}
       {comments.length > 0 && (
-        <div role="group" aria-label="Filter comments" className="flex flex-wrap gap-1">
-          {FILTERS.filter((f) => f.id === "all" || f.id === "open" || f.id === filter || counts[f.id] > 0).map((f) => ( // Replied와 Resolved는 0건이면 숨겨 한 줄에 맞춘다
+        <div role="group" aria-label="Filter comments" className="grid grid-cols-4 gap-1"> {/* 0건도 숨기지 않아 줄이 점프하지 않는다 */}
+          {FILTERS.map((f) => (
             <Button key={f.id} size="compact" variant={filter === f.id ? "secondary" : "ghost"} aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
               {f.label} <span className="tabular-nums text-muted-foreground">{counts[f.id]}</span>
             </Button>
           ))}
         </div>
       )}
-      {counts.resolved > 0 && (
-        <Button size="compact" variant="ghost" className="self-start" aria-pressed={showResolved} onClick={() => setShowResolved(!showResolved)}>{showResolved ? "Hide resolved pins" : "Show resolved pins"}</Button>
+      {(showResolve || counts.resolved > 0) && (
+        <div className="flex flex-wrap gap-1">
+          {showResolve && <Button size="compact" variant="ghost" leadingIcon={CheckCheck} onClick={onResolveReplied}>{`Resolve all replied (${repliedCount})`}</Button>}
+          {counts.resolved > 0 && <Button size="compact" variant="ghost" aria-pressed={showResolved} onClick={() => setShowResolved(!showResolved)}>{showResolved ? "Hide resolved pins" : "Show resolved pins"}</Button>}
+        </div>
       )}
       {comments.length > 1 && <p className="hidden px-1 text-micro text-muted-foreground group-focus-within/panel:block">J and K move between comments, E resolves, Delete removes.</p>}
       {comments.length === 0 && (
@@ -220,12 +221,13 @@ export function CommentsPanel({ comments, folder, channel, onJump, onResolve, on
                   onMouseLeave={() => setHoveredComment(null)}
                   onFocus={() => setHoveredComment(c.id)}
                   onBlur={() => setHoveredComment(null)}
-                  className={cn("flex flex-col gap-1 rounded-lg p-2", "bg-hover/60 data-[hover=true]:bg-hover data-[hover=true]:ring-1 data-[hover=true]:ring-focus-ring/60", st === "resolved" && "opacity-70")}
+                  className={cn("group/card flex flex-col gap-1 rounded-lg p-2", "bg-hover/60 data-[hover=true]:bg-hover data-[hover=true]:ring-1 data-[hover=true]:ring-focus-ring/60", st === "resolved" && "opacity-70")}
                 >
                   <button
                     type="button"
                     data-comment-main
                     aria-keyshortcuts="J K E"
+                    title={c.excerpt ? `on \u201c${c.excerpt}\u201d` : undefined} // 인용은 툴팁으로 내려 카드를 줄인다
                     onClick={() => onJump(c)} // 이름은 보이는 글자(번호, 상태, 시각, 요소, 본문)에서 온다. aria-label을 따로 두면 보이는 글자가 이름에 빠진다(WCAG 2.5.3)
                     className="flex cursor-default flex-col gap-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
                   >
@@ -243,7 +245,6 @@ export function CommentsPanel({ comments, folder, channel, onJump, onResolve, on
                       </span>
                     )}
                     {why && <span className="text-micro text-muted-foreground" data-testid="state-reason">Saved &middot; {why}</span>}
-                    {c.excerpt && <span className="truncate text-micro text-muted-foreground">on &ldquo;{c.excerpt}&rdquo;</span>}
                     {c.recheck && <span className="text-micro text-muted-foreground">Position needs a check. The text was not found on this slide after a restore.</span>}
                     <span className={cn("whitespace-pre-wrap break-words text-body", c.text.length > 220 && !open.has(c.id) && "line-clamp-5")}>{c.text}</span>
                   </button>
@@ -276,7 +277,8 @@ export function CommentsPanel({ comments, folder, channel, onJump, onResolve, on
                       {onCancel && <Button size="compact" variant="ghost" onClick={() => onCancel(c)} aria-label={`Cancel request for comment ${nums.get(c.id)}`}>Cancel</Button>}
                     </div>
                   )}
-                  <div className="flex justify-end gap-1">
+                  {/* 단추는 호버나 포커스 때만 보인다(터치 화면에서는 항상). 포커스는 숨겨진 채로도 받는다. */}
+                  <div className="flex justify-end gap-1 opacity-0 transition-opacity group-focus-within/card:opacity-100 group-hover/card:opacity-100 [@media(hover:none)]:opacity-100">
                     {(st === "held" || st === "waiting") && onSend && c.anchor !== "lost" && <Button size="compact" variant="secondary" onClick={() => onSend(c)} aria-label={`Send comment ${nums.get(c.id)} to Claude`} leadingIcon={Send}>Send</Button>}
                     {st === "unverified" && onTrust && <Button size="compact" variant="secondary" onClick={() => onTrust(c)} aria-label={`Trust comment ${nums.get(c.id)}`} leadingIcon={ShieldAlert}>Trust</Button>}
                     {st === "resolved"
@@ -289,6 +291,12 @@ export function CommentsPanel({ comments, folder, channel, onJump, onResolve, on
           </ul>
         </section>
       ))}
+      {tray && (
+        <div role="group" aria-label="Saved comments" data-testid="comment-tray" className="sticky bottom-0 flex items-center gap-2 rounded-lg bg-surface-3 p-2 shadow-surface-3">
+          <span className="text-caption tabular-nums">{tray}</span>
+          <Button size="compact" variant="secondary" className="ml-auto" leadingIcon={Send} onClick={onSendAll} aria-label={`Send all to Claude (${sendable.length > 10 ? "10+" : sendable.length})`}>Send all</Button>
+        </div>
+      )}
       {actions && <ContextMenu menu={cm} />}
     </div>
   );

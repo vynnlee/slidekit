@@ -716,7 +716,7 @@ export const Canvas = forwardRef<CanvasApi, Props>(function Canvas(p, ref) {
               doc={() => frame.current?.contentDocument ?? null} slide={cur} slideNumber={p.index + 1}
               onPick={(t) => { setTarget(t); setComposing(true); }}
               onSlide={() => { setTarget(null); setComposing(true); }}
-              onExit={() => { setComposing(false); setTarget(null); p.onCommentMode(false); }}
+              onExit={() => { setComposing(false); setTarget(null); p.onCommentMode(false); setTimeout(() => document.querySelector<HTMLElement>('button[aria-label="Comment mode"]')?.focus(), 0); }} // 층이 사라지면 포커스가 body로 가므로 켠 단추로 돌려 놓는다
               onCancelCompose={() => { setComposing(false); setTarget(null); }}
             />
           )}

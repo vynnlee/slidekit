@@ -3,7 +3,7 @@
    덱은 decks/_e2e-comments-perf 사본이고 끝에 지운다. 마우스와 키 입력은 실제 브라우저에서 한다.
    Usage: PW=<playwright-core> CHROME=<headless shell> BASE=http://127.0.0.1:3245 node scripts/comments-perf.cjs */
 process.env.CPU_SLOW ??= '4'; // 느린 기계와 게이트의 부하를 흉내 낸다. CPU_SLOW=1이면 끈다
-/* 한도: CPU_SLOW=1(CPU 4배 없음)은 엄격한 값이고 그 밖(기본 4배, 게이트 부하를 흉내)은 느슨한 값이다. 기준선(2026-10-21, mac-local, CPU 4배, 영역 이미지 24개): main(64bc5ea)이 패널 열기 2957ms(긴 작업 최대 2071ms)로 경계선이었고,
+/* 한도: CPU_SLOW=1(CPU 4배 없음)은 엄격한 값이고 그 밖(기본 4배, 게이트 부하를 흉내)은 느슨한 값이다. 기준선(2026-10-21, 성능 좋은 기계, CPU 4배, 영역 이미지 24개): main(64bc5ea)이 패널 열기 2957ms(긴 작업 최대 2071ms)로 경계선이었고,
    oss/prep은 패널 열기 3997ms, 핀 100개 3479ms, 상태 변경 3361ms였다(핀 100개는 Show resolved를 켠 가장 무거운 경우). 회귀로 단정할 근거가 없고 한도 3초가 이 환경에는 빡빡해서 느슨한 한도를 4.5초 안팎으로 둔다.
    회귀는 CPU_SLOW=1의 엄격한 한도(기존 값)로 잡는다: bun scripts/test.ts --only comments-perf 를 CPU_SLOW=1로 돌린다. */
 const STRICT = process.env.CPU_SLOW === '1';

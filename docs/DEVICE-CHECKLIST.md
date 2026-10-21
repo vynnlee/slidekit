@@ -24,7 +24,7 @@
 - 실패하면: 어느 화면, 어느 버튼을 누르려다 무엇이 눌렸는지(스크린 녹화가 가장 좋다).
 
 ## 3. 새 기계에서 첫 실행
-- 방법: 새 폴더에서 `git clone git@github.com:vynnlee/slidekit.git && cd slidekit && bun install && bun run slidekit`, 열린 앱에서 New deck을 만든다. 이어서 `bun run slidekit pdf <덱 폴더 이름>`을 실행한다(Chrome이 설치돼 있고 `SLIDEKIT_CHROME`은 지정하지 않는다).
+- 방법: 새 폴더에서 `git clone https://github.com/vynnlee/slidekit.git && cd slidekit && bun install && bun run slidekit`, 열린 앱에서 New deck을 만든다. 이어서 `bun run slidekit pdf <덱 폴더 이름>`을 실행한다(Chrome이 설치돼 있고 `SLIDEKIT_CHROME`은 지정하지 않는다).
 - 기대: 앱이 http://127.0.0.1:3200에 열리고 덱이 만들어진다. PDF는 시스템 Chrome을 찾아 `dist/`에 생긴다.
 - 실패하면: 터미널 출력 마지막 20줄. PDF는 `Chrome을 찾지 못했다` 같은 문구와 Chrome 설치 위치.
 

@@ -25,7 +25,7 @@ description: slidekit 덱(HTML 슬라이드)을 새로 만들거나 고칠 때 �
   <meta charset="utf-8">
   <title>덱 제목</title>
   <script type="application/json" id="deck-meta">
-    { "title": "덱 제목", "author": "이성빈", "date": "2026-10-13", "visibility": "public", "id": "deck-id" }
+    { "title": "덱 제목", "author": "Author Name", "date": "2026-10-13", "visibility": "public", "id": "deck-id" }
   </script>
   <link rel="stylesheet" href="../../engine/slidekit.css">
   <style> /* 덱 토큰과 덱 전용 스타일 */ </style>

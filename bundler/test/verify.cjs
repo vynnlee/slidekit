@@ -30,9 +30,10 @@ const check = (n, ok, x) => { out.push(ok); console.log((ok ? 'PASS ' : 'FAIL ')
   check('tok stepper 1,2,3,4 on one slide', seq.join() === '1,2,3,4' && (await act()) === tokIdx, seq);
   const img = await p.evaluate(async () => { const i = document.querySelector('img'); await i.decode().catch(() => {}); return i.naturalWidth; });
   check('inline image decodes', img > 0, img);
+  // 번들한 덱에 '한글 글꼴', '한글'이라는 글자가 들어 있어야 글꼴 부분집합에 글리프가 있다
   const fonts = await p.evaluate(async () => {
-    await document.fonts.load('400 20px "Noto Sans KR"', '바이브 코딩'); await document.fonts.load('500 20px "JetBrains Mono"', 'index.html');
-    return { noto: document.fonts.check('400 20px "Noto Sans KR"', '바이브 코딩'), noto700: document.fonts.check('700 20px "Noto Sans KR"', '바이브'), mono: document.fonts.check('500 20px "JetBrains Mono"', 'index.html'),
+    await document.fonts.load('400 20px "Noto Sans KR"', '한글 글꼴'); await document.fonts.load('500 20px "JetBrains Mono"', 'index.html');
+    return { noto: document.fonts.check('400 20px "Noto Sans KR"', '한글 글꼴'), noto700: document.fonts.check('700 20px "Noto Sans KR"', '한글'), mono: document.fonts.check('500 20px "JetBrains Mono"', 'index.html'),
       loaded: [...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family) };
   });
   check('fonts load from embedded @font-face', fonts.noto && fonts.noto700 && fonts.mono && fonts.loaded.length >= 2, fonts);

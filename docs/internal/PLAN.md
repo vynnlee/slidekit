@@ -27,7 +27,7 @@
 | 내보내기 | 글꼴과 이미지까지 넣은 완전한 HTML 파일 하나 |
 | 배포 | `your-domain.example/<덱이름>`, 덱마다 공개 범위 선택(공개, 비밀번호) |
 | 덱 보관 | `slidekit/decks/<덱이름>/` |
-| 첫 예제 | 디자이너를 위한 바이브 코딩 워크숍 덱 |
+| 첫 예제 | 워크숍 덱 |
 | 첫 버전 | 규격 + 발표 |
 | 런타임 | Bun (서버, 코멘트 채널, 번들러, `slidekit` 명령) |
 | 앱 화면 | React + Tailwind v4 + shadcn/ui + Fluid Functionalism 컴포넌트 |
@@ -57,8 +57,8 @@ slidekit/
 <html data-slidekit="1">
 <head>
   <script type="application/json" id="deck-meta">
-    { "title": "디자이너를 위한 바이브 코딩 워크숍",
-      "author": "이성빈", "date": "2026-10-12",
+    { "title": "Workshop Title",
+      "author": "Author Name", "date": "2026-10-12",
       "visibility": "public" }
   </script>
   <style>
@@ -67,7 +67,7 @@ slidekit/
 </head>
 <body>
   <section data-slide="cover"> ... </section>
-  <section data-slide="chapter" data-title="바이브 코딩"> ... </section>
+  <section data-slide="chapter" data-title="Chapter Title"> ... </section>
   <section data-slide="content">
     ...
     <aside data-notes>발표자만 보는 노트</aside>

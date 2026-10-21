@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const texts = [
-  "A", "https://example.com/", "https://mac-cloud.tail5a652b.ts.net:3243/remote/slidekit-guide#code=ABCDEFGH",
-  "https://mac-cloud.tail5a652b.ts.net:3243/remote/" + "x".repeat(60) + "#code=ABCDEFGH", // 버전 7 이상(버전 정보 비트)
-  "https://mac-cloud.tail5a652b.ts.net:3243/remote/" + "y".repeat(140) + "#code=ABCDEFGH", // 버전 9 이상
+  "A", "https://example.com/", "https://box.example.ts.net:3243/remote/slidekit-guide#code=ABCDEFGH",
+  "https://box.example.ts.net:3243/remote/" + "x".repeat(60) + "#code=ABCDEFGH", // 버전 7 이상(버전 정보 비트)
+  "https://box.example.ts.net:3243/remote/" + "y".repeat(140) + "#code=ABCDEFGH", // 버전 9 이상
   "z".repeat(213), "리모컨 한글 주소 ✓",
 ];
 const cases = texts.map((text) => ({ text, rows: qrMatrix(text).map((r) => r.map((b) => (b ? "1" : "0")).join("")) }));

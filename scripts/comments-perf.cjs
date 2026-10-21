@@ -2,7 +2,7 @@
    패널 열기, 목록 스크롤, 핀과 필름스트립 점(슬라이드 1에 100개), Send all, 상태 변경 한 번의 반응 시간과 긴 작업(50ms 이상)을 잰다.
    덱은 decks/_e2e-comments-perf 사본이고 끝에 지운다. 마우스와 키 입력은 실제 브라우저에서 한다.
    Usage: PW=<playwright-core> CHROME=<headless shell> BASE=http://127.0.0.1:3245 node scripts/comments-perf.cjs */
-process.env.CPU_SLOW ??= '4'; // 느린 기계(mac-cloud)와 게이트의 부하를 흉내 낸다. CPU_SLOW=1이면 끈다
+process.env.CPU_SLOW ??= '4'; // 느린 기계와 게이트의 부하를 흉내 낸다. CPU_SLOW=1이면 끈다
 const { launch } = require('./lib/pw.cjs');
 const fs = require('fs');
 const { makeTestDeck } = require('./lib/test-deck.cjs');

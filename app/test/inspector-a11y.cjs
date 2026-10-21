@@ -16,8 +16,8 @@ const check = (sev, kind, state, name, ok, extra) => {
 };
 const findAxe = () => {
   if (process.env.AXE) return process.env.AXE;
-  const r = cp.spawnSync('sh', ['-c', "ls /tmp/claude-501/*/*/scratchpad/axe/node_modules/axe-core/axe.min.js /tmp/claude-501/*/*/scratchpad/*/node_modules/axe-core/axe.min.js 2>/dev/null | head -1"]);
-  return r.stdout.toString().trim() || null;
+  const own = require('path').join(__dirname, '..', '..', 'node_modules', 'axe-core', 'axe.min.js'); // devDependency
+  return require('fs').existsSync(own) ? own : null;
 };
 
 (async () => {

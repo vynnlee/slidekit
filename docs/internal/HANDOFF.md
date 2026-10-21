@@ -32,7 +32,7 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 
 ## 실행과 명령
 
-- 앱: `bun run slidekit`(127.0.0.1:3200, `PORT`로 변경). tailnet 미리보기는 개발 서버가 Host를 막으므로 `PORT=3220 bun run app/server.ts`와 `UP=3220 PORT=3221 bun app/preview-proxy.ts`를 띄우고 https://mac-cloud.tail5a652b.ts.net:3221 로 연다(열고 닫는 일은 미리보기 도구 `/preview`로 한다). 3221은 사용자가 쓰는 포트라 임의로 끄지 않는다. 안정 미리보기와 라이브 미리보기를 함께 관리하는 감독자는 `scripts/preview.ts`.
+- 앱: `bun run slidekit`(127.0.0.1:3200, `PORT`로 변경). tailnet 미리보기는 개발 서버가 Host를 막으므로 `PORT=3220 bun run app/server.ts`와 `UP=3220 PORT=3221 bun app/preview-proxy.ts`를 띄우고 https://<host>.<tailnet>.ts.net:3221 로 연다(열고 닫는 일은 미리보기 도구 `/preview`로 한다). 3221은 사용자가 쓰는 포트라 임의로 끄지 않는다. 안정 미리보기와 라이브 미리보기를 함께 관리하는 감독자는 `scripts/preview.ts`.
 - 모든 하위 명령은 `bun app/server.ts <하위 명령>` 또는 `bun run slidekit <하위 명령>`. 사용법은 README.
 - Playwright: `/tmp/claude-501/sp/pw`의 playwright-core, `~/Library/Caches/ms-playwright/chromium_headless_shell-*/*/chrome-headless-shell`(args `--disable-gpu`). 러너가 공용 서버와 브라우저를 `scripts/lib/pw*.cjs`로 띄운다.
 
@@ -40,17 +40,17 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 
 - `bun run test [--only <이름|글로브|그룹>] [--changed] [--list] [--bail] [--slow] [--trace]`. 공정 큐(`/tmp/slidekit-heavy.queue`)로 잠금 `/tmp/slidekit-heavy.lock`을 순서대로 잡고, 단계 로그는 `/tmp/slidekit-test-logs/`, 단계당 상한 900초(`SLIDEKIT_STEP_TIMEOUT`). 실패한 브라우저 단계는 트레이스를 켜고 한 번 더 돈다. **단계 이름은 위치 인자가 아니라 `--only`로 준다**(위치 인자는 무시되고 전체가 돈다). `--only editor`는 editor 단계 하나만(정확 일치), 여럿은 글로브 `--only 'editor*'`, 그룹 별칭은 `unit`, `channel`, `ux-shots`, `bundler`(`scripts/lib/select-steps.ts`). 시작 줄의 `선택:`으로 고른 단계를 확인한다.
 - 집계 단계 42개(전체 게이트는 약 15분, 정확한 시간은 재측정 필요): roundtrip, deck-source.fuzz, deck-tokens, deck-fonts, editor-readonly, export-api, comments, lint, bundler-bundle, bundler-fonts, scan-secrets, deploy-worker, unit-other, unit-isolated, channel, channel-resilience, channel-trust, engine-verify, engine-moved, engine-gradient, engine-offline, routes, offline-app, list, present, remote, responsive, controls, inspector, inspector-a11y, editor, editor-assets, editor-multi, editor-menus, editor-panels, editor-external, editor-a11y, comments-e2e, comments-a11y, versions-e2e, tokens, export. `--slow`나 `--only`로만 도는 단계 8개: ux-shots-1440, ux-shots-390, editor-save-shots, editor-fuzz, editor-perf, list-load, a11y-app, bundler-fonts-e2e(인터넷과 uv 필요). 최신 목록은 `bun run test --list`.
-- 덱 60개 성능(2026-10-15, 격리 worktree, 덱 20개는 53장 워크숍 사본, mac-cloud `taskpolicy -b`): `/api/decks` 15~22ms(12.5KB), `/api/search-index` 첫 호출 57ms와 이후 4~6ms(653KB), 목록 카드 60개 표시 1.4~2.3초, 썸네일 로드가 메인 스레드를 400~800ms 점유하는 긴 작업이 몇 번 생긴다(같은 출처 iframe, 동시 3개 상한). 병목은 서버가 아니라 팔레트였고 입력 상태를 별도 컴포넌트(`DeckPalette.tsx`)로 빼고 줄 수를 제한해 글자당 입력 지연 264~304ms에서 128ms(일반 우선순위)로, 팔레트 열기 923ms에서 542ms로 줄었다. 캐시는 필요 없었다.
-- 큰 덱 편집기 성능(2026-10-15, dev 서버, mac-cloud `taskpolicy -b`, `bun scripts/test.ts --only editor-perf`, 80장 덱에 한 장 요소 1000개): 열기 3.5~4.5초, 요소 선택 응답 0.5~1초, 드래그 프레임 간격 최대 0.4~0.9초, Layers 150행 2.6초와 1000행 8.6초(dev 빌드 React 비용이 지배적, 가상화는 하지 않음), 찾기 3.6초(경로 계산 제곱 비용 제거 전 5~12초), 넘침 검사는 느린 슬라이드에서 간격을 10배로 물려 CPU 10% 이내.
+- 덱 60개 성능(2026-10-15, 격리 worktree, 덱 20개는 53장 워크숍 사본, 개발 서버 기계 `taskpolicy -b`): `/api/decks` 15~22ms(12.5KB), `/api/search-index` 첫 호출 57ms와 이후 4~6ms(653KB), 목록 카드 60개 표시 1.4~2.3초, 썸네일 로드가 메인 스레드를 400~800ms 점유하는 긴 작업이 몇 번 생긴다(같은 출처 iframe, 동시 3개 상한). 병목은 서버가 아니라 팔레트였고 입력 상태를 별도 컴포넌트(`DeckPalette.tsx`)로 빼고 줄 수를 제한해 글자당 입력 지연 264~304ms에서 128ms(일반 우선순위)로, 팔레트 열기 923ms에서 542ms로 줄었다. 캐시는 필요 없었다.
+- 큰 덱 편집기 성능(2026-10-15, dev 서버, 개발 서버 기계 `taskpolicy -b`, `bun scripts/test.ts --only editor-perf`, 80장 덱에 한 장 요소 1000개): 열기 3.5~4.5초, 요소 선택 응답 0.5~1초, 드래그 프레임 간격 최대 0.4~0.9초, Layers 150행 2.6초와 1000행 8.6초(dev 빌드 React 비용이 지배적, 가상화는 하지 않음), 찾기 3.6초(경로 계산 제곱 비용 제거 전 5~12초), 넘침 검사는 느린 슬라이드에서 간격을 10배로 물려 CPU 10% 이내.
 - 단계 전환 성능(2026-10-15, 헤드리스, `bun scripts/test.ts --only anim-perf`, 낮은 우선순위 없이 약 60초, 구현 전 기준선 scripts/anim-perf.baseline.json과 비교): 단계 전환 1회의 스크립트 시간 중앙값 CPU 1배 약 1ms, 4배 약 2ms(구현 전후 같음), 스타일과 레이아웃 시간 중앙값 1x 1.3~1.5ms에서 1.7~2.4ms로 소폭 증가(합격선 2배 이내), 긴 작업 1x 0건, 500회 이동 뒤 노드와 리스너 증가 0(힙 +30KB), 전환 뒤 노드 수 같음(6430, 1563), 프레임 p95는 소프트웨어 렌더링 잡음 범위(100~133ms)로 구현 전후 구분 안 됨. 4x 워크숍 스크립트 시간이 한 번 5.2ms로 튄 적이 있으나 재측정 4회는 1.8~2.9ms(잡음). 낮은 우선순위(taskpolicy -b)에서는 rAF가 5fps로 떨어져 프레임 수치가 무의미하다.
-- 코멘트 300개 성능(2026-10-15, dev 서버, mac-cloud `taskpolicy -b`, `bun scripts/test.ts --only comments-perf`, 슬라이드 1에 핀 100개): 패널 열기 1.2~1.8초, 목록 스크롤 2초 프레임 p95 약 220ms(긴 작업 0), 목록 위 마우스 이동 20번 약 4.6초(긴 작업 0), 슬라이드 1로 이동해 핀 100개 표시 1.5~2.0초, 상태 변경(E) 한 번 0.75~1.2초, Send all(10개) 0.5~0.9초. 병목은 두 가지였고 고쳤다: (1) 코멘트에 마우스를 올릴 때마다 편집기 전체가 다시 그려지던 hover 상태를 React 밖의 작은 저장소(`app/src/lib/comment-hover.ts`)로 옮겨 마우스 이동 20번이 11~22초에서 4~5초로, 스크롤 중 프레임 p95가 700~800ms에서 약 220ms로 줄었다(스크롤 중 내용이 포인터 밑으로 지나가며 hover가 바뀌는 것이 원인이었다). (2) 60ms마다 도는 핀 위치 계산이 핀마다 읽기와 쓰기를 번갈아 해 레이아웃을 반복 계산하던 것을 읽기를 먼저 모으도록 바꿨다. 남은 비용(상태 변경 때 300개 목록 전체 렌더)은 항목 메모이제이션이 필요하나 이 규모에서는 허용 범위라 두었다. 가상화는 하지 않았다.
+- 코멘트 300개 성능(2026-10-15, dev 서버, 개발 서버 기계 `taskpolicy -b`, `bun scripts/test.ts --only comments-perf`, 슬라이드 1에 핀 100개): 패널 열기 1.2~1.8초, 목록 스크롤 2초 프레임 p95 약 220ms(긴 작업 0), 목록 위 마우스 이동 20번 약 4.6초(긴 작업 0), 슬라이드 1로 이동해 핀 100개 표시 1.5~2.0초, 상태 변경(E) 한 번 0.75~1.2초, Send all(10개) 0.5~0.9초. 병목은 두 가지였고 고쳤다: (1) 코멘트에 마우스를 올릴 때마다 편집기 전체가 다시 그려지던 hover 상태를 React 밖의 작은 저장소(`app/src/lib/comment-hover.ts`)로 옮겨 마우스 이동 20번이 11~22초에서 4~5초로, 스크롤 중 프레임 p95가 700~800ms에서 약 220ms로 줄었다(스크롤 중 내용이 포인터 밑으로 지나가며 hover가 바뀌는 것이 원인이었다). (2) 60ms마다 도는 핀 위치 계산이 핀마다 읽기와 쓰기를 번갈아 해 레이아웃을 반복 계산하던 것을 읽기를 먼저 모으도록 바꿨다. 남은 비용(상태 변경 때 300개 목록 전체 렌더)은 항목 메모이제이션이 필요하나 이 규모에서는 허용 범위라 두었다. 가상화는 하지 않았다.
 - 수동 도구(집계 밖): `app/test/remote-qa.cjs`(폰 4종 크기 스크린샷과 axe). list-load(덱 30개 합성 부하)와 a11y-app(axe와 스크린샷)은 `--slow`나 `--only`로 돈다.
 - 시간은 sleep이 아니라 낮은 우선순위(`taskpolicy -b`)에서의 페이지 로드와 렌더 CPU가 지배한다(sleep 정리와 가짜 시계의 효과는 약 4%). 남은 고정 sleep(editor.cjs 약 137곳, inspector-a11y.cjs 약 32곳)은 시간 단축보다 흔들림 감소 목적으로만 조건 대기로 바꾼다. `[느림 +N초]` 표시로 찾는다.
 
 ## 테스트 공백 (2026-10-15, 단위 기준 점검)
 
 `bun test --coverage`는 띄운 서버와 CLI 프로세스를 세지 않아 단위 기준이다. 아래는 단위로도 e2e로도 직접 닿지 않거나 약한 곳이고, 이번에 `preview-proxy`(Host와 Origin 거절), `search-api`(색인 추출과 캐시), `decks-trash`(이름 바꾸기, 휴지통, 복원, 영구 삭제 확인)를 채웠다.
-- `app/launch.ts`: `openApp`의 열지 않는 조건(PORT, SSH, mac-cloud)과 `alreadyUp` 판정은 테스트가 없다(17줄, 낮음).
+- `app/launch.ts`: `openApp`의 열지 않는 조건(PORT, SSH, 개발 서버 기계)과 `alreadyUp` 판정은 테스트가 없다(17줄, 낮음).
 - `engine/chrome.ts`: Chrome 경로 찾기(환경 변수, Playwright, 설치된 브라우저 순서)는 단위 25%이고 순서 검증이 없다(낮음, 없으면 doctor와 pdf가 안내).
 - `engine/*-cli.ts`(image, templates, lint, outline): 얇은 래퍼라 `cli.test.ts`가 일부만 본다.
 - `deploy/deploy.ts`: 올리기와 비밀번호 흐름은 dry-run e2e로만 본다(스크립트라 단위 불가, 원격 쓰기는 승인 뒤 `--smoke`). Worker는 `deploy/rehearse.ts`가 로컬로 본다.
@@ -111,7 +111,7 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 
 ## 2026-10-18 작업 중단 시점 로그 (이 절은 다음 세션이 읽고 지워도 된다)
 
-사용자 지시로 게이트 없이 여기서 마무리했다(브라우저 검증은 발열 때문에 mac-local 전용으로 바꿨고, 전체 게이트는 끝까지 못 돌렸다). 푸시한 main은 가벼운 비브라우저 검사만 통과했다: typecheck, lint, bundler-bundle, scan-secrets, deploy-worker, unit-other, unit-isolated, channel 6종(channel, resilience, trust, edit, flood, stall).
+사용자 지시로 게이트 없이 여기서 마무리했다(브라우저 검증은 발열 때문에 주 노트북 전용으로 바꿨고, 전체 게이트는 끝까지 못 돌렸다). 푸시한 main은 가벼운 비브라우저 검사만 통과했다: typecheck, lint, bundler-bundle, scan-secrets, deploy-worker, unit-other, unit-isolated, channel 6종(channel, resilience, trust, edit, flood, stall).
 
 ### 이번에 main에 들어간 것
 - 애니메이션 v2(엔진: 빈 단계 압축, `--sk-out-*`, `data-away="out"`, 0~10000ms clamp, `data-stepper`)와 **타임라인 편집 UI**(`spec/ANIMATION.md`, `spec/TIMELINE.md`), `engine/anim-core.ts` 공용 모듈.
@@ -124,14 +124,14 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 - M4 발표 화면 실시간 갱신(엔진 `refresh`, `app/src/Presenter.tsx` 연결, `live-update`, 시험 `engine-refresh`/`present-live`), `editor-anim-perf`의 에이전트 효과 항목, 러너 단계 두 개. 엔진 변경이라 브라우저 검증 없이는 main에 넣지 않았다. 재개: 그 브랜치를 main 위로 합치고 mac-local에서 `present-live`, `engine-refresh`, `present`, `engine-verify`, `engine-anim`, `anim-perf`, `editor-anim-perf`를 통과시킨 뒤 푸시.
 
 ### 검증하지 못한 것 (mac-local에서 돌릴 것)
-- 전체 게이트(느린 단계 포함). 마지막 mac-local 부분 결과(4d28788 기준 34단계 통과)에서 실패는 `channel`(시험 결함, 수정됨)과 `present` 두 시나리오(`?sync=1` 팝업 주소 타이밍, 시험 수정 `9b27cb3`, 재현 확인 못 함) 둘뿐이었다. 그 뒤 코멘트 UX와 M1~M5 변경은 브라우저 검증을 아직 못 봤다.
+- 전체 게이트(느린 단계 포함). 마지막 주 노트북 부분 결과(4d28788 기준 34단계 통과)에서 실패는 `channel`(시험 결함, 수정됨)과 `present` 두 시나리오(`?sync=1` 팝업 주소 타이밍, 시험 수정 `9b27cb3`, 재현 확인 못 함) 둘뿐이었다. 그 뒤 코멘트 UX와 M1~M5 변경은 브라우저 검증을 아직 못 봤다.
 - 코멘트 UX 1단계 화면(`d71d08f` 등)의 `comments-e2e`, `comment-mode`, `comments-a11y`, `comments-perf`, 핀의 접근성 이름은 아직 예전 상태 이름.
 - 방법: `scripts/remote-gate.sh start HEAD --slow`(커밋된 상태를 mac-local의 `~/Developer/ci/slidekit-gate`에 풀어 낮은 우선순위로 실행), `status`, `log`, `stop`. 개발 중 작업물은 `NAME=이름 WORKTREE=1`. 러너 잠금이 mac-local에서 공유되어 한 번에 하나만 돈다. mac-cloud에서는 브라우저 시험을 돌리지 않는다(발열).
 
 ### 남은 일
 - 코멘트 UX 2단계(핀 모양, 호버 미리보기, 패널 재구성, 하단 트레이)와 3단계(스레드, 읽지 않음, 팝오버, 바텀 시트): `spec/COMMENT-UX.md`, `spec/COMMENT-UX-UI.md`.
 - `deploy` Worker 실제 배포(CSP와 `deck.md`)는 사용자 승인 뒤. `unpublish`와 비밀번호 덱 발행 테스트도 아직 안 했다.
-- 사용자 확인: `slidekit-guide` 덱이 앱 휴지통(`decks/.trash`)으로 옮겨져 작업트리에서 삭제 표시 상태다(커밋하지 않음, git에는 남아 있고 시험은 HEAD에서 읽는다). 워크숍 덱의 커밋 안 된 편집과 `comments.json`은 사용자 것이라 건드리지 않았다. 코멘트 이미지의 시스템 Chrome 캡처는 mac-local 확인이 필요하다.
+- 사용자 확인: `slidekit-guide` 덱이 앱 휴지통(`decks/.trash`)으로 옮겨져 작업트리에서 삭제 표시 상태다(커밋하지 않음, git에는 남아 있고 시험은 HEAD에서 읽는다). 워크숍 덱의 커밋 안 된 편집과 `comments.json`은 사용자 것이라 건드리지 않았다. 코멘트 이미지의 시스템 Chrome 캡처는 주 노트북 확인이 필요하다.
 - 알려진 흔들림: `editor-anim-perf`, `editor-perf`는 부하에서 흔들려 재실행 통과가 불안정 WARN으로 남는다. `routes`가 재시도에서 한 번 "Blocked script execution in about:srcdoc"로 실패한 적이 있다(재현 못 함).
 
 ### 운영 메모
@@ -144,12 +144,12 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 
 1. ~~Worker 배포 승인~~: 2026-10-15 완료(위 배포 상태). 남은 것은 배포 후 사용자 몫인 2건이다: 비밀번호 덱을 쓰는 사람의 첫 로그인 재입력 안내, 실제 비밀번호 덱을 하나 올려 속도 제한 확인(5번).
 2. **실기기 iPhone 리모컨**: Safari에서 QR 스캔, 화면 잠금 뒤 재연결, Wake Lock, 지연 체감(두 컨텍스트 e2e와 QR 디코드는 통과).
-3. **mac-local 첫 실행**: 새 clone에서 `bun install`, `bun run slidekit doctor`, 한글 IME 편집, Cmd 단축키, 드래그 체감, 외장 모니터 발표(권한 팝업, 창 배치, 두 창 동기화). 시스템 Chrome 경로의 PDF는 headless shell로만 검증했다.
+3. **주 노트북 첫 실행**: 새 clone에서 `bun install`, `bun run slidekit doctor`, 한글 IME 편집, Cmd 단축키, 드래그 체감, 외장 모니터 발표(권한 팝업, 창 배치, 두 창 동기화). 시스템 Chrome 경로의 PDF는 headless shell로만 검증했다.
 4. **맥 미리보기에서 그라디언트 PDF가 검게 보임**: macOS 미리보기와 Quick Look(CoreGraphics)이 Chrome의 PDF 셰이딩을 검게 그린다. PDF 자체는 정상(셰이딩과 SMask가 들어 있음)이고 Chrome이나 Acrobat에서는 맞게 보이는 것으로 추정하며, 사용자의 Chrome에서 한 번 확인해 달라.
 5. 비밀번호 덱을 하나 올려 접근과 시도 제한 확인(5회 뒤 429와 `Retry-After`). Worker는 이미 배포되어 있어 덱 업로드만 하면 된다(`docs/DEVICE-CHECKLIST.md` 5번).
 
 ## 환경 메모
 
-- 경로 `~/Developer/slidekit`(mac-local과 mac-cloud 동일). 기계 지침은 `~/.claude/CLAUDE.md`. 점검은 `bun app/server.ts doctor`.
+- 경로 `~/Developer/slidekit`(mac-local과 개발 서버 기계 동일). 기계 지침은 `~/.claude/CLAUDE.md`. 점검은 `bun app/server.ts doctor`.
 
 - 코멘트 모드(spec/COMMENT-MODE.md): 모드 층 `CommentModeLayer.tsx`, 순수 계산 `lib/comment-mode.ts`, 캡처 `app/capture.ts`(Chrome CLI와 sips, 이미지 `.comments/<id>.png`, gitignore). 테스트 `comment-mode` 단계와 단위 `comment-mode.test.ts`, `capture.test.ts`. 미검증: 시스템 Chrome(`--headless=new`) 캡처는 mac-local에서 확인 필요.

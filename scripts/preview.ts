@@ -5,9 +5,10 @@
 //          앱 코드는 스냅샷이고 decks/는 실제 저장소 폴더를 가리키는 심볼릭 링크라 편집 내용은 실제 덱에 저장된다. 3250/3251 -> 프록시 3230
 // 안정판은 푸시된 커밋(origin/main)만 따른다: 로컬에만 있는 미완성·미검증 커밋은 보이지 않는다.
 // 사용: nohup bun scripts/preview.ts > /tmp/sk-preview.log 2>&1 &   (종료는 이 프로세스의 pid에만 SIGTERM)
-// tailnet에는 프록시 포트(3221, 3230)를 homelab-preview 도구로 연다. 프록시는 Host와 Origin을 검사하고 Host를 로컬로 다시 쓴다.
+// 다른 기기에서 열려면 프록시 포트(3221, 3230)를 사설망 터널 등으로 직접 연다. 프록시는 Host와 Origin을 검사하고 Host를 로컬로 다시 쓴다.
 import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { allowedHosts as allowedHostsOf } from "../app/allowed-hosts";
 
 const repo = join(import.meta.dir, "..");
 const LIVE = { app: 3220, proxy: 3221 };
@@ -15,7 +16,7 @@ const LIVE_ON = process.env.PREVIEW_LIVE !== "0"; // PREVIEW_LIVE=0이면 라이
 const STABLE = { proxy: 3230, apps: [3250, 3251] };
 const SNAP_ROOT = "/tmp/sk-stable";
 const PID_FILE = "/tmp/sk-preview.pid";
-const allowedHosts = new Set(["127.0.0.1", "localhost", "mac-cloud.tail5a652b.ts.net"]);
+const allowedHosts = allowedHostsOf(); // SLIDEKIT_ALLOWED_HOSTS(쉼표로 구분)로 다른 기기에서 열 주소를 더한다
 const log = (...a: unknown[]) => console.log(new Date().toTimeString().slice(0, 8), ...a);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

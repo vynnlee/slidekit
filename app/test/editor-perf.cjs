@@ -1,5 +1,5 @@
 /* 큰 덱에서 편집기의 응답을 잰다(슬라이드 80장, 요소 많은 슬라이드, Layers 1000행). 수치를 INFO로 찍고 넉넉한 한도만 검사한다.
-   한도는 느린 기계(mac-cloud, 낮은 우선순위)에서도 통과하도록 잡은 "눈에 띄게 멈춤" 기준이다. 실행: bun scripts/test.ts --only editor-perf */
+   한도는 느린 기계(낮은 우선순위)에서도 통과하도록 잡은 "눈에 띄게 멈춤" 기준이다. 실행: bun scripts/test.ts --only editor-perf */
 const { startEditor } = require('./lib/editor-harness.cjs');
 
 (async () => {

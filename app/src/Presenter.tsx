@@ -544,7 +544,7 @@ export function Presenter({ id }: { id: string }) {
               <RemoteQr text={remoteUrl(deck.folder, remote.session.code)} />
               <Field readOnly aria-label="Remote address" value={remoteUrl(deck.folder, remote.session.code)} onFocus={(e) => e.currentTarget.select()} />
               <p className="text-body tabular-nums">Code: <span aria-label="Pairing code" className="font-medium">{remote.session.code}</span></p>
-              {isLocalOrigin() && <p className="text-caption text-muted-foreground">This page is open on this computer only. Open slidekit through your tailnet address so the phone can reach it.</p>}
+              {isLocalOrigin() && <p className="text-caption text-muted-foreground">This page is open on this computer only. Open slidekit through an address your phone can reach (for example a Tailscale or LAN address) so the phone can connect.</p>}
               <div className="flex justify-end gap-2 pt-1">
                 <Button variant="ghost" size="compact" onClick={() => { navigator.clipboard?.writeText(remoteUrl(deck.folder, remote.session!.code)).then(() => toast("Remote address copied", { ms: 2000 }), () => toast("Could not copy the address", { ms: 3000 })); }}>Copy address</Button>
                 <Button variant="secondary" size="compact" onClick={() => { void remote.stop(); }}>Stop remote</Button>

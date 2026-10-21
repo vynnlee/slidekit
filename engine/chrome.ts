@@ -16,6 +16,6 @@ export function findChrome(): string | null {
         if (existsSync(exe)) return exe;
       }
   }
-  // Playwright의 headless shell이 없으면 설치된 Chrome 계열을 쓴다(mac-local처럼 개발용 브라우저를 따로 받지 않은 기계)
+  // Playwright의 headless shell이 없으면 설치된 Chrome 계열을 쓴다(개발용 브라우저를 따로 받지 않은 기계)
   return SYSTEM_CHROMES.find(existsSync) ?? null;
 }

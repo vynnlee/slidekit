@@ -26,7 +26,7 @@ const AXE = (() => {
   if (process.env.AXE && existsSync(process.env.AXE)) return process.env.AXE;
   const own = join(import.meta.dir, "..", "node_modules", "axe-core", "axe.min.js");
   if (existsSync(own)) return own;
-  const cands = [...globSync(join(homedir(), "Developer/*/node_modules/axe-core/axe.min.js")), ...globSync(join(homedir(), ".bun/install/cache/axe-core@*/axe.min.js")), ...globSync("/tmp/claude-501/*/*/scratchpad/*/node_modules/axe-core/axe.min.js")];
+  const cands = [...globSync(join(homedir(), "Developer/*/node_modules/axe-core/axe.min.js")), ...globSync(join(homedir(), ".bun/install/cache/axe-core@*/axe.min.js"))];
   return cands.sort().at(-1) ?? "";
 })();
 

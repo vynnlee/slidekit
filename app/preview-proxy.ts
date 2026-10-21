@@ -1,18 +1,18 @@
 #!/usr/bin/env bun
-// tailnet 미리보기용 프록시. Bun 개발 서버는 Host와 Origin이 다르면 403이므로 둘을 다시 쓴다.
-// 사용: UP=3220 PORT=3221 bun app/preview-proxy.ts (127.0.0.1에만 바인딩)
+// 다른 기기에서 열기 위한 미리보기 프록시(사설망 터널 등 뒤에서 쓴다). Bun 개발 서버는 Host와 Origin이 다르면 403이므로 둘을 다시 쓴다.
+// 사용: SLIDEKIT_ALLOWED_HOSTS=<열 주소의 호스트 이름> UP=3220 PORT=3221 bun app/preview-proxy.ts (127.0.0.1에만 바인딩)
+import { allowedHosts } from "./allowed-hosts";
 const up = Number(process.env.UP ?? 3220);
 const port = Number(process.env.PORT ?? 3221);
-const allowedHosts = new Set(["127.0.0.1", "localhost", "mac-cloud.tail5a652b.ts.net"]);
 const local = `127.0.0.1:${up}`;
 
 type Data = { url: string; upstream?: WebSocket; queue: (string | Buffer)[] };
 
 /** 이 Host와 Origin의 요청을 거절해야 하는지. Host는 허용 목록만, Origin은 있으면 Host와 같아야 하고 깨진 값("null" 등)은 거절한다. */
-export function forbidden(host: string, origin: string | null): boolean {
+export function forbidden(host: string, origin: string | null, hosts: Set<string> = allowedHosts()): boolean {
   let originHost = "";
   if (origin) { try { originHost = new URL(origin).host; } catch { return true; } }
-  return !allowedHosts.has(host.replace(/:\d+$/, "")) || (!!origin && originHost !== host);
+  return !hosts.has(host.replace(/:\d+$/, "")) || (!!origin && originHost !== host);
 }
 
 if (import.meta.main) Bun.serve<Data>({

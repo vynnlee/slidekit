@@ -224,7 +224,7 @@
 
 - 단위: `lifecycle`(모든 필드 조합 → 상태·이유·Stalled), `turns`, 앵커 대응(LCS, 삽입·삭제·이동·복원 왕복, 인라인 태그와 엔티티 정규화), 서명(루트 호환, 새 메시지, 위조 reply), `sanitize`의 `thread` 처리와 다운그레이드.
 - 채널 통합(`channel/*`): 질문 `ask` 왕복, 후속 알림의 `history`·`related`·`anchorLost`와 틀 위조 방어, `Resend`와 재연결 backfill(죽은 세션 이어받기), `Cancel`+`withdrawn`, Send all 결과 모양, M5 상한과 thread 전달 합산.
-- 브라우저(mac-local): 항목 이유 한 줄, Stalled와 Resend, 스레드 답글 키보드 흐름, Detached 구역, Trust all, 읽음 점, a11y(axe, 키보드), perf(코멘트 300개+스레드).
+- 브라우저: 항목 이유 한 줄, Stalled와 Resend, 스레드 답글 키보드 흐름, Detached 구역, Trust all, 읽음 점, a11y(axe, 키보드), perf(코멘트 300개+스레드).
 - 기존 시험은 `data-state` 값과 흐름이 그대로라 변경 없이 통과해야 한다.
 
 ## 11. 합격 기준

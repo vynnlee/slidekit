@@ -37,4 +37,4 @@
 
 - 단위: 사용량 계산(60분 창, 덱 여러 개 합산, `deliveredAt` 없는 것 제외), 한도 0은 끔, `resetAt`, `flow.json` 저장과 손상 파일, 입력 검증(`paused`는 불리언).
 - 채널 통합(`channel/flood.ts`, `SLIDEKIT_COMMENT_HOURLY=2`): 코멘트 3개 → 2개만 전달되고 3번째는 `Waiting`, `flow` 이벤트에 `reason:"limit"`, Pause 중에는 새 코멘트가 전달되지 않고 `get_pending`이 안내만 줌, Resume하면 밀린 것이 오래된 순으로 전달, 서버 재시작 뒤에도 멈춤 유지, 상한 아래의 기존 흐름 불변(기존 channel 시험이 그대로 통과).
-- 브라우저(`comments-e2e` 확장, mac-local): 패널 상태 줄과 Pause 단추, 토스트, 작성창 안내.
+- 브라우저(`comments-e2e` 확장): 패널 상태 줄과 Pause 단추, 토스트, 작성창 안내.

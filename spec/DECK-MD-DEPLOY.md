@@ -57,7 +57,7 @@ M3a(`spec/DECK-MD.md`, engine-dev)가 `dist/<덱>.md`를 만든다(노트 없음
 
 - 단위(`bun test`): Worker 라우트(합격 1, 2, 5), `withAlternate`/노트 검사 함수(3, 4), `agentPrompt`(6), `unpublish-core`(5).
 - 배포 드라이런 e2e(`export-api`): 노트 문구가 든 덱으로 `deck.md` 줄과 노트 비포함 출력을 확인.
-- 브라우저(mac-local): `export` 화면 시험에 Copy agent prompt 단추와 클립보드 내용(공개, 비밀번호)과 axe. 로컬 Worker(`csp-serve`)로 `deck.md` 응답 헤더 한 번 확인.
+- 브라우저: `export` 화면 시험에 Copy agent prompt 단추와 클립보드 내용(공개, 비밀번호)과 axe. 로컬 Worker(`csp-serve`)로 `deck.md` 응답 헤더 한 번 확인.
 - 배포 뒤(승인 필요): `deploy --smoke`에 `deck.md` 검사 추가(공개 덱 200 `text/markdown`, 비밀번호 덱 403).
 
 ## 7. 구현 순서

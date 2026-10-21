@@ -300,7 +300,7 @@ With previous와 After previous 같은 관계는 파일에 없다. 저장되는 
 
 ### 5.2a 검토한 대안(채택하지 않음)
 
-**비활성 슬라이드에 `content-visibility: hidden`**(자손 규칙 `... > [data-slide]:not([data-active]):not([data-leaving]) *`의 `visibility: hidden !important`와 `transition: none !important`는 `@supports not` 안에만 두는 안). 기대는 하위 트리의 렌더링과 스타일 계산을 건너뛰어 대형 덱의 이동 비용이 줄고 겹침 버그 클래스가 구조적으로 막히는 것이었다. 2026-10-15 마이크로벤치(슬라이드 40장 x 300요소 약 12000노드, 방향키 이동 한 번의 keydown 처리와 강제 스타일, 레이아웃, 변형마다 60회, 2~3회 반복, mac-cloud 소프트웨어 렌더링)로 비교했다. 아래는 중앙값 / p90 / 최대(ms)다.
+**비활성 슬라이드에 `content-visibility: hidden`**(자손 규칙 `... > [data-slide]:not([data-active]):not([data-leaving]) *`의 `visibility: hidden !important`와 `transition: none !important`는 `@supports not` 안에만 두는 안). 기대는 하위 트리의 렌더링과 스타일 계산을 건너뛰어 대형 덱의 이동 비용이 줄고 겹침 버그 클래스가 구조적으로 막히는 것이었다. 2026-10-15 마이크로벤치(슬라이드 40장 x 300요소 약 12000노드, 방향키 이동 한 번의 keydown 처리와 강제 스타일, 레이아웃, 변형마다 60회, 2~3회 반복, 저사양 노트북의 소프트웨어 렌더링)로 비교했다. 아래는 중앙값 / p90 / 최대(ms)다.
 
 | 변형 | 중앙값 | p90 | 최대 |
 |---|---|---|---|

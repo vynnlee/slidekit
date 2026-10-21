@@ -67,7 +67,7 @@ const J = { 'Content-Type': 'application/json' };
     const rows = await items.evaluateAll((l) => l.map((e) => ({ state: e.getAttribute('data-state'), text: e.textContent })));
     for (const s of states) check(`상태 ${s}: 항목에 "${LABEL[s]}" 글자가 있다`, rows.some((r) => r.state === s && r.text.includes(LABEL[s])), rows.filter((r) => r.state === s));
     const pinLabels = await page.locator('[data-comment-pin]').evaluateAll((l) => l.map((e) => e.getAttribute('aria-label')));
-    check('핀의 이름에 번호와 상태 글자가 있다', pinLabels.length >= 6 && pinLabels.every((n) => /^Comment \d+, (Held|Waiting|Sent to Claude|Claude is working|Replied|Resolved|Unverified): /.test(n)), pinLabels);
+    check('핀의 이름에 번호와 상태 글자가 있다', pinLabels.length >= 6 && pinLabels.every((n) => /^Comment \d+, (Saved|Sent|Working|Replied|Resolved): /.test(n)), pinLabels);
 
     // 2) 같은 요소의 핀은 겹치지 않고 각각 키보드 포커스를 받는다
     const boxes = await page.locator('[data-comment-pin]').evaluateAll((l) => l.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; }));

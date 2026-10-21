@@ -62,7 +62,7 @@ const json = { 'Content-Type': 'application/json' };
     check('Waiting 상태로 목록에 나타난다', await stateIs('waiting'));
     const pin = page.locator('[data-comment-pin]');
     await pin.first().waitFor({ timeout: 5000 }).catch(() => {}); // 핀은 목록과 같은 데이터로 그려지지만 다음 프레임에 놓인다
-    check('캔버스에 번호 핀이 있고 이름에 번호와 상태가 있다', (await pin.count()) === 1 && /^Comment 1, Waiting: E2E/.test((await pin.getAttribute('aria-label')) ?? ''), await pin.getAttribute('aria-label'));
+    check('캔버스에 번호 핀이 있고 이름에 번호와 상태가 있다', (await pin.count()) === 1 && /^Comment 1, Saved: E2E/.test((await pin.getAttribute('aria-label')) ?? ''), await pin.getAttribute('aria-label'));
 
     // 가짜 채널 소비자: /api/events?client=channel 로 연결, 연결 때 대기 코멘트를 따라잡아 전달 표시, 잠시 뒤 답한다.
     const delivered = [];
@@ -91,7 +91,7 @@ const json = { 'Content-Type': 'application/json' };
 
     check('채널이 연결되면 안내가 사라지고 연결됨 표시', await page.waitForFunction(() => !document.querySelector('[data-testid=channel-help]') && /Claude connected/.test(document.body.textContent), null, { timeout: 8000 }).then(() => true, () => false));
     check('따라잡기 전달 뒤 Sent to Claude 상태', await stateIs('sent'));
-    check('핀 이름도 Sent to Claude로 바뀐다', /Sent to Claude/.test((await pin.getAttribute('aria-label')) ?? ''), await pin.getAttribute('aria-label'));
+    check('핀 이름도 Sent로 바뀐다', /^Comment 1, Sent: /.test((await pin.getAttribute('aria-label')) ?? ''), await pin.getAttribute('aria-label'));
 
     // 답: 패널, 핀, 알림
     check('답이 도착하면 Replied 상태', await stateIs('replied'));
@@ -168,13 +168,14 @@ const json = { 'Content-Type': 'application/json' };
     // 보류와 한꺼번에 보내기: hold로 쓴 코멘트는 Held로 보이고 Send all이 보류를 풀며 개수를 보인다
     const nowCount = await items.count();
     for (const text of ['보류 하나', '보류 둘']) await fetch(`${BASE}/api/comments`, { method: 'POST', headers: json, body: JSON.stringify({ deck: DECK, slide: 1, path: '', excerpt: '', text, hold: true }) });
-    check('보류한 코멘트가 Held로 보인다', await stateIs('held', 2).then(() => true, () => false));
+    check('보류한 코멘트가 Held로 보인다', await stateIs('held', 2));
     const sendAll = page.getByRole('button', { name: /^Send all to Claude \(\d+\)$/ });
     check('보류가 있으면 Send all 버튼이 보인다', await sendAll.waitFor({ timeout: 5000 }).then(() => true, () => false), (await panel.textContent()).slice(0, 400));
+    const sentToast = page.getByText(/^Sent \d+ comments? to Claude/).first().waitFor({ timeout: 30000 }).then(() => true, () => false); // 토스트는 몇 초면 사라지므로 누르기 전에 기다리기 시작한다(상태 확인이 느려도 놓치지 않게)
     await sendAll.click();
-    check('Send all이 보류를 푼다(Held가 없어진다)', await stateIs('held', 0).then(() => true, () => false));
+    check('Send all이 보류를 푼다(Held가 없어진다)', await stateIs('held', 0));
     check('전부 그대로 남는다(지워지지 않는다)', (await items.count()) === nowCount + 2);
-    check('Send all 토스트', await page.getByText(/^Sent \d+ comments? to Claude$/).first().waitFor({ timeout: 5000 }).then(() => true, () => false));
+    check('Send all 토스트는 실제 결과를 말한다(가짜 채널이 연결돼 있으니 Sent N to Claude)', await sentToast);
 
     // 파일 변경 -> 캔버스 새로고침
     const src = fs.readFileSync(t.file, 'utf8');

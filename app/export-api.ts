@@ -5,6 +5,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { deckFingerprint, readPublish, recordUnpublish } from "../engine/publish-record";
 import { deckCheck } from "../engine/deck-check";
+import { deployEnabled, publishHost } from "../engine/features";
 import { outline } from "../engine/outline";
 import { readOnlyDeck } from "./deck-lock";
 
@@ -140,22 +141,25 @@ export function makeRoutes(run: Run = spawnRun) {
       lowContrast: c.contrast.filter((r) => r.level === "fail" && r.ratio !== null).slice(0, 2).map((r) => ({ name: r.name, ratio: r.ratio, need: r.need })),
     });
   };
+  // 배포 기능은 실험 기능이라 기본 꺼짐이다(engine/features.ts): 켜지 않으면 배포 관련 경로는 404다.
+  const gated = <H extends (req: Req) => Response | Promise<Response>>(h: H) => (req: Req) => (deployEnabled() ? h(req) : bad("experimental", 404));
   return {
-    "/api/decks/:id/check": { GET: check },
+    "/api/features": { GET: () => Response.json({ deploy: deployEnabled(), publishHost: deployEnabled() ? publishHost() : "" }) },
+    "/api/decks/:id/check": { GET: gated(check) },
     // 게시 기록(.publish.json)과 현재 덱의 달라짐. 기록이 없으면 published false.
     "/api/decks/:id/published": {
-      GET: (req: Req) => {
+      GET: gated((req: Req) => {
         const id = deckId(req);
         if (!id) return bad("deck", 404);
         const dir = join(root, "decks", id);
         const { current, history } = readPublish(dir);
         if (!current) return Response.json({ published: false });
         return Response.json({ published: true, ...current, changed: deckFingerprint(dir) !== current.sha, history: history.slice(0, 20) });
-      },
+      }),
     },
     // 게시 취소: 확인(confirm)이 있어야 하고 CLI를 --yes로 부른다. 실제 삭제는 이 요청에서만 일어난다. 기록의 name으로 지워서 폴더 이름이 바뀌었어도 옛 주소를 취소할 수 있다.
     "/api/decks/:id/unpublish": {
-      POST: async (req: Req) => {
+      POST: gated(async (req: Req) => {
         const id = deckId(req);
         if (!id) return bad("deck", 404);
         const b = (await req.json().catch(() => null)) as { confirm?: unknown; confirmName?: unknown } | null;
@@ -188,7 +192,7 @@ export function makeRoutes(run: Run = spawnRun) {
           },
         });
         return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" } });
-      },
+      }),
     },
     "/api/export/cancel": { POST: () => Response.json({ ok: true, canceled: cancelExport() }) },
     "/api/decks/:id/bundle": { POST: quick("bundler/bundle.ts", "html") },
@@ -220,7 +224,7 @@ export function makeRoutes(run: Run = spawnRun) {
       },
     },
     "/api/decks/:id/deploy": {
-      POST: async (req: Req) => {
+      POST: gated(async (req: Req) => {
         const id = deckId(req);
         if (!id) return bad("deck", 404);
         const b = (await req.json().catch(() => null)) as { confirm?: unknown; password?: unknown } | null;
@@ -251,7 +255,7 @@ export function makeRoutes(run: Run = spawnRun) {
               const env: Record<string, string> = pw ? { SLIDEKIT_DEPLOY_PASSWORD: pw } : {};
               if (process.env.SLIDEKIT_DEPLOY_DRY_RUN) env.SLIDEKIT_DEPLOY_DRY_RUN = "1";
               const d = await run("deploy/deploy.ts", id, env, (l) => send({ log: scrub(l) }));
-              const url = d.lines.map(scrub).join("\n").match(/https:\/\/static\.vynnlee\.com\/[\w-]+/)?.[0];
+              const url = d.lines.map(scrub).join("\n").match(new RegExp(`${publishHost().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/[\\w-]+`))?.[0];
               if (canceled) send({ error: WORDS.canceled, code: "canceled" });
               else if (d.code !== 0 || !url) send({ error: `The upload failed. ${why(d.lines) || "See Details."}`, details: d.lines.slice(-3).map(scrub).join("\n") });
               else send({ done: true, url, visibility, dryRun: !!process.env.SLIDEKIT_DEPLOY_DRY_RUN });
@@ -260,7 +264,7 @@ export function makeRoutes(run: Run = spawnRun) {
           },
         });
         return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" } });
-      },
+      }),
     },
   };
 }

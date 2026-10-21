@@ -110,11 +110,11 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   check('경로 이탈 이름 거부', (await ctx.request.post(BASE + '/api/decks/..%2Fapp/rename', { data: { name: 'zz-e2e-x' } })).status() === 404);
   // 게시 중인 덱을 휴지통으로 옮겨도 게시본은 계속 열려 있다: 토스트가 알리고 휴지통 행에 Published가 보인다
   await post('/api/decks', { name: 'zz-e2e-pub', title: 'zz-e2e-pub' });
-  fs.writeFileSync(path.join(DECKS, 'zz-e2e-pub', '.publish.json'), JSON.stringify({ current: { name: 'zz-e2e-pub', url: 'https://static.vynnlee.com/zz-e2e-pub', at: new Date().toISOString(), visibility: 'public', bytes: 10, sha: '0123456789abcdef0123456789abcdef01234567' }, history: [] }));
+  fs.writeFileSync(path.join(DECKS, 'zz-e2e-pub', '.publish.json'), JSON.stringify({ current: { name: 'zz-e2e-pub', url: 'https://static.example.com/zz-e2e-pub', at: new Date().toISOString(), visibility: 'public', bytes: 10, sha: '0123456789abcdef0123456789abcdef01234567' }, history: [] }));
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await actions('zz-e2e-pub').first().click({ force: true });
   await item('Move to trash').click();
-  check('게시 중인 덱을 휴지통으로 옮기면 게시본이 남아 있다고 알린다', await until(async () => (await page.getByText(/Still published at https:\/\/static\.vynnlee\.com\/zz-e2e-pub\. Unpublish with slidekit unpublish zz-e2e-pub/).count()) >= 1));
+  check('게시 중인 덱을 휴지통으로 옮기면 게시본이 남아 있다고 알린다', await until(async () => (await page.getByText(/Still published at https:\/\/static\.example\.com\/zz-e2e-pub\. Unpublish with slidekit unpublish zz-e2e-pub/).count()) >= 1));
   await page.getByRole('button', { name: 'Trash', exact: true }).click();
   check('휴지통 행에 Published 표시', await until(async () => (await page.getByText('Published', { exact: true }).count()) >= 1));
   await page.getByRole('button', { name: 'Trash', exact: true }).click(); // 목록으로 돌아간다

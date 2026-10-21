@@ -11,6 +11,7 @@ import { ago } from "@/lib/comment-state";
 import { VersionHistory } from "@/VersionHistory";
 import { toast, TOAST } from "@/Toaster";
 import { agentPrompt } from "@/lib/agent-prompt";
+import { useFeatures } from "@/lib/features";
 
 interface ExportMenuProps {
   /** 덱 폴더 이름(= /edit/<id>가 아니라 decks/ 아래 폴더). 소문자, 숫자, - 만 쓰는 덱만 내보낼 수 있다. */
@@ -38,7 +39,6 @@ const ORDER: Stage[] = ["idle", "saving", "bundling", "publishing", "done"];
 const readPublished = (folder: string): { url: string; at: string } | null => {
   try { return JSON.parse(localStorage.getItem(PUBLISHED_KEY(folder)) ?? "null"); } catch { return null; }
 };
-const HOST = "https://static.vynnlee.com";
 
 async function post(path: string, body?: unknown) {
   return fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
@@ -92,7 +92,9 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
   useEffect(() => { const on = () => setVersions(true); window.addEventListener("slidekit:open-versions", on); return () => window.removeEventListener("slidekit:open-versions", on); }, []);
   const [last, setLast] = useState(() => readPublished(folder));
   const logEnd = useRef<HTMLDivElement>(null);
-  const target = `${HOST}/${folder}`;
+  // 배포는 실험 기능이라 기본 꺼짐이다: 서버가 켠 경우에만 Publish 관련 항목이 보인다(engine/features.ts).
+  const { deploy, publishHost } = useFeatures();
+  const target = `${publishHost}/${folder}`;
 
   const saved = async () => !dirty || !onSave || (await onSave());
   // 작업 중에 닫으면(Esc, Cancel) 서버의 번들, PDF, 게시 프로세스도 멈춘다.
@@ -197,7 +199,7 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
   const linkOf = () => (pub && pub.published ? pub.url : last?.url ?? "");
   // 에이전트에게 붙여 넣을 문구: 공개 덱은 주소와 deck.md를 받는 curl, 비밀번호 덱은 주소만(spec/DECK-MD-DEPLOY.md).
   const copyPrompt = async (u: string, vis: "public" | "password") => {
-    const t = agentPrompt(u, vis);
+    const t = agentPrompt(u, vis, publishHost);
     if (!t) return say("No published link to copy");
     try { await navigator.clipboard.writeText(t); say("Agent prompt copied", TOAST.copy); } catch { say("Could not copy the prompt"); }
   };
@@ -215,10 +217,10 @@ export function ExportMenu({ folder, dirty, onSave }: ExportMenuProps) {
           <MenuItem index={2} icon={FileText} label="PDF options..." onSelect={() => setPdfDialog(true)} />
           <MenuItem index={3} icon={Copy} label="Copy as Markdown" onSelect={copyMarkdown} />
           <MenuItem index={4} icon={FileText} label="Download .md" onSelect={downloadMarkdown} />
-          <MenuItem index={5} icon={Globe} label="Publish to static.vynnlee.com..." onSelect={openPublish} />
-          {(pub?.published || last) && <MenuItem index={6} icon={Link2} label="Copy published link" onSelect={copyLast} />}
-          {pub?.published && <MenuItem index={7} icon={Globe} label="Published..." onSelect={() => { void loadPub(); setPubOpen(true); }} />}
-          <MenuItem index={pub?.published ? 8 : (pub?.published || last) ? 7 : 6} icon={History} label="Version history..." onSelect={() => setVersions(true)} />
+          {deploy && <MenuItem index={5} icon={Globe} label={`Publish to ${publishHost.replace(/^https:\/\//, "")}...`} onSelect={openPublish} />}
+          {deploy && (pub?.published || last) && <MenuItem index={6} icon={Link2} label="Copy published link" onSelect={copyLast} />}
+          {deploy && pub?.published && <MenuItem index={7} icon={Globe} label="Published..." onSelect={() => { void loadPub(); setPubOpen(true); }} />}
+          <MenuItem index={!deploy ? 5 : pub?.published ? 8 : (pub?.published || last) ? 7 : 6} icon={History} label="Version history..." onSelect={() => setVersions(true)} />
         </DropdownContent>
       </DropdownMenu>
       <Dialog open={mode !== "idle"} onOpenChange={(o) => !o && close()}>

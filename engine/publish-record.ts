@@ -4,8 +4,9 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 
-/** 게시 주소의 호스트. 기록의 url은 이 호스트와 name으로 만든 값만 받는다(위조된 기록이 임의 주소를 "Open" 링크로 보이지 못하게). */
-export const PUBLISH_HOST = "https://static.vynnlee.com";
+import { publishHost } from "./features";
+
+/* 기록의 url은 설정된 게시 호스트(SLIDEKIT_PUBLISH_HOST, engine/features.ts)와 name으로 만든 값만 받는다(위조된 기록이 임의 주소를 "Open" 링크로 보이지 못하게). 호스트가 설정되지 않았으면 어떤 기록도 받지 않는다. */
 
 export type Entry = { name: string; url: string; at: string; visibility: "public" | "password"; bytes: number; sha: string; unpublishedAt?: string };
 export type PublishRecord = { current: Entry | null; history: Entry[] };
@@ -43,7 +44,8 @@ function entryOf(v: unknown): Entry | null {
   if (typeof v !== "object" || v === null) return null;
   const e = v as Record<string, unknown>;
   if (typeof e.name !== "string" || !/^[A-Za-z0-9_][\w-]{0,99}$/.test(e.name)) return null; // 맨 앞에 -를 허용하지 않는다(명령 인자로 오해되지 않게)
-  if (e.url !== `${PUBLISH_HOST}/${e.name}`) return null;
+  const host = publishHost();
+  if (!host || e.url !== `${host}/${e.name}`) return null;
   if (!isoOk(e.at)) return null;
   if (e.visibility !== "public" && e.visibility !== "password") return null;
   if (typeof e.bytes !== "number" || !Number.isFinite(e.bytes) || e.bytes < 0) return null;

@@ -1,20 +1,38 @@
+# slidekit publishing (experimental, off by default)
+
+> Publishing a deck to a Cloudflare Worker is **not part of slidekit v0.1**. The code is kept in this folder, but the Publish menu, the `deploy` and `unpublish` commands, and the publishing API routes are all switched off. Everything here is something you set up and run yourself, with your own Cloudflare account and domain. (한국어: v0.1에서는 배포 기능이 기본으로 꺼져 있다. 아래를 직접 설정해야 켜진다.)
+
+## Turn it on (set it up yourself)
+
+1. Create your own Worker config. `deploy/worker/wrangler.toml` ships with **example values**: change `routes` to your own domain (`static.example.com` is a placeholder) and create a KV namespace for `id` (`cd deploy/worker && bunx wrangler kv namespace create DECKS`, then paste the id; it is empty in the repo).
+2. Log in to Cloudflare (`bunx wrangler login`) or provide an API token. Set a cookie-signing secret for the password gate: `openssl rand -base64 32 | bunx wrangler secret put COOKIE_SECRET` (run in `deploy/worker`).
+3. Deploy the Worker once: `SLIDEKIT_EXPERIMENTAL_DEPLOY=1 SLIDEKIT_PUBLISH_HOST=https://static.your-domain.example bun run deploy --worker`.
+4. Run slidekit with the same two variables to see the feature:
+   - `SLIDEKIT_EXPERIMENTAL_DEPLOY=1` turns publishing on. Without it the app hides Publish, the API answers 404 (`experimental`), and `deploy`/`unpublish` print how to enable it and exit.
+   - `SLIDEKIT_PUBLISH_HOST=https://static.your-domain.example` is where published decks live (https, host only, no path). It is also the only host recorded publish URLs may point to. Without a valid value the feature stays off.
+5. Publish: `bun run slidekit bundle <deck>` then `bun run slidekit deploy <deck>` (or Export, Publish in the app). Unpublish: `bun run slidekit unpublish <deck> --yes`.
+
+Tests for this folder are not part of the default gate: `bun scripts/test.ts --only deploy-unit` (Worker routes, CSP, host extraction, deck.md, unpublish) and `--only deploy-csp` (real browser, local server) run only on request or with `--slow`.
+
+The rest of this file is the maintainer's original notes (Korean) and mentions the author's own domain and account as history.
+
 # slidekit 배포
 
-**배포 이력**: 2026-10-15 Worker 배포(사용자 승인, 버전 ID `1e8ae8bc-4516-40a1-bb54-7a5ac73f8b04`). 리허설 전체 통과, `bun run deploy --worker`, `bun run deploy --smoke vibe-coding-workshop` 전체 통과. 롤백은 `cd deploy/worker && bunx wrangler@4.150.0 rollback`.
+**배포 이력**: 2026-10-15 작성자의 Worker 배포(사용자 승인). 리허설 전체 통과, `bun run deploy --worker`, `bun run deploy --smoke <공개덱>` 전체 통과. 롤백은 `cd deploy/worker && bunx wrangler@4.150.0 rollback`.
 
 **Worker 배포 체크리스트** (다음 Worker 변경 때도 사용자 승인 전에는 실행하지 않는다. 자세한 설명은 아래 "Worker 배포 준비와 점검")
 1. 사전: `git status`가 깨끗하고 `bun deploy/rehearse.ts`가 전체 통과(단위 테스트, 드라이런, 로컬 Worker와 로그인 제한 리허설. 원격 호출과 토큰이 없다).
 2. 토큰: 키체인 `slidekit-cloudflare-token`이 있는지 `bun run slidekit doctor`로 본다(값은 출력하지 않는다).
 3. 배포: `bun run deploy --worker`(코드, Durable Object 바인딩, 마이그레이션 v1이 한 번에 올라간다. `COOKIE_SECRET`은 이미 설정되어 있다).
-4. 확인: `bun run deploy --smoke vibe-coding-workshop`이 모두 PASS(비밀번호 덱이 있으면 이름을 하나 더 준다). 실패하면 바로 5번.
+4. 확인: `bun run deploy --smoke <공개덱>`이 모두 PASS(비밀번호 덱이 있으면 이름을 하나 더 준다). 실패하면 바로 5번.
 5. 롤백: `cd deploy/worker && bunx wrangler@4.150.0 rollback`(코드만 이전 버전으로 돌아가고 마이그레이션과 DO 클래스는 남지만 구코드가 쓰지 않아 해가 없다. 로그인 제한은 KV 카운터로 돌아간다).
 6. 사용자만 하는 것: Cloudflare 토큰 발급과 `wrangler login`, 3번 실행 승인, 게시 취소의 `--yes`. 에이전트는 이 셋을 직접 하지 않는다.
 
-1. Cloudflare 대시보드에서 토큰을 만든다(계정 권한: Workers Scripts 편집, Workers KV Storage 편집, Account Settings 읽기. vynnlee.com zone 권한: DNS 편집, Workers Routes 편집, Zone 읽기. 계정 하나와 zone 하나로 범위를 좁힌다). 키체인 저장: `security add-generic-password -a $USER -s slidekit-cloudflare-token -w` (토큰은 프롬프트에 붙여넣기). 토큰 이름은 slidekit-static-deploy이고 2026-10-13에 만들었다.
+1. Cloudflare 대시보드에서 토큰을 만든다(계정 권한: Workers Scripts 편집, Workers KV Storage 편집, Account Settings 읽기. example.com zone 권한: DNS 편집, Workers Routes 편집, Zone 읽기. 계정 하나와 zone 하나로 범위를 좁힌다). 키체인 저장: `security add-generic-password -a $USER -s slidekit-cloudflare-token -w` (토큰은 프롬프트에 붙여넣기). 토큰 이름은 slidekit-static-deploy이고 2026-10-13에 만들었다.
 2. `cd deploy/worker && bunx wrangler kv namespace create DECKS` 결과의 id를 `wrangler.toml`의 `REPLACE_WITH_KV_NAMESPACE_ID`에 넣는다. 토큰은 `export CLOUDFLARE_API_TOKEN=$(security find-generic-password -s slidekit-cloudflare-token -w)`로 셸에 올린다.
 3. 쿠키 서명 키 등록: `openssl rand -base64 32 | bunx wrangler secret put COOKIE_SECRET` (deploy/worker에서).
-4. vynnlee.com이 Cloudflare DNS에 있으면 Worker 배포 때 `static.vynnlee.com`이 자동 연결된다. 첫 배포: `bun run deploy --worker`
-5. 덱 올리기: 번들 후 `bun run deploy <덱>` (비밀번호 덱이면 비밀번호를 물어본다). 주소는 static.vynnlee.com/<덱>.
+4. example.com이 Cloudflare DNS에 있으면 Worker 배포 때 `static.example.com`이 자동 연결된다. 첫 배포: `bun run deploy --worker`
+5. 덱 올리기: 번들 후 `bun run deploy <덱>` (비밀번호 덱이면 비밀번호를 물어본다). 주소는 static.example.com/<덱>.
 
 공개 덱은 올릴 때 `deck-meta`의 `title`도 함께 올라간다. 비밀번호 덱은 인증 전에 제목이 보이므로 `deck-meta`에 `"lockTitle": true`를 적은 경우에만 올린다. 비밀번호는 8자 이상이고, 바꾸면 이미 발급된 쿠키가 모두 무효가 된다. 비밀번호, 잠금(5회 틀리면 15분), 404 안내 페이지는 같은 모양이며 모바일 390px에서도 한 칸 폭을 지킨다. Worker 변경은 `bun run deploy --worker`로 올려야 반영된다.
 
@@ -45,8 +63,8 @@
 1. 작업트리가 깨끗한지 `git status`로 확인하고 `bun test deploy`가 통과하는지 본다(unpublish 단위 테스트와 Worker 동시 요청 테스트 포함).
 2. `cd deploy/worker && bunx wrangler@4.150.0 deploy --dry-run --outdir /tmp/sk-wr`로 번들과 바인딩(LIMITER, DECKS)을 확인한다.
 3. `bun run deploy --worker`: 코드, Durable Object 바인딩, 마이그레이션 v1이 함께 올라간다(`COOKIE_SECRET`은 이미 설정되어 있다).
-4. `bun run deploy --smoke vibe-coding-workshop`: 모두 PASS여야 한다.
-5. 게시를 취소해 볼 때는 먼저 `SLIDEKIT_DEPLOY_DRY_RUN=1 bun run slidekit unpublish <덱>`으로 지울 키를 보고, 사용자가 확인한 뒤에만 `--yes`를 붙인다(아래 절). 비밀번호 덱을 올릴 때: `bun run deploy <덱>`(비밀번호는 숨김 입력), 이어서 `bun run deploy --smoke vibe-coding-workshop <덱>`, 그리고 손으로 틀린 비밀번호 한 번과 맞는 비밀번호 한 번을 확인한다. 같은 IP로 틀린 비밀번호를 5번 보내면 6번째가 429이고 `Retry-After`가 붙는지도 한 번 본다.
+4. `bun run deploy --smoke <공개덱>`: 모두 PASS여야 한다.
+5. 게시를 취소해 볼 때는 먼저 `SLIDEKIT_DEPLOY_DRY_RUN=1 bun run slidekit unpublish <덱>`으로 지울 키를 보고, 사용자가 확인한 뒤에만 `--yes`를 붙인다(아래 절). 비밀번호 덱을 올릴 때: `bun run deploy <덱>`(비밀번호는 숨김 입력), 이어서 `bun run deploy --smoke <공개덱> <덱>`, 그리고 손으로 틀린 비밀번호 한 번과 맞는 비밀번호 한 번을 확인한다. 같은 IP로 틀린 비밀번호를 5번 보내면 6번째가 429이고 `Retry-After`가 붙는지도 한 번 본다.
 6. 문제가 있으면 `cd deploy/worker && bunx wrangler@4.150.0 rollback`. 코드만 이전 버전으로 돌아가고 마이그레이션과 Durable Object 클래스는 남지만, 구코드가 쓰지 않으므로 해가 없다(KV 카운터로 돌아간다).
 
 ## 덱 CSP (M2a, 코드와 시험까지 끝, 아직 배포 안 함)
@@ -55,11 +73,11 @@
 
 - 올리기 전 확인표: `bun deploy/csp-check.ts [덱...] [--build]`. 덱마다 번들 크기, CSP가 허용할 호스트, 허용하지 못한 외부 자원, 막힐 사용(스크립트의 `fetch`, `WebSocket` 등, `iframe`, 폼 `action`), 판정(OK, CHECK, NO BUNDLE)을 표로 찍는다. 이 표를 Worker 배포 승인 요청에 같이 올린다. CHECK인 덱은 게시본을 열어 해당 기능이 막혀도 되는지 본다.
 - 시험: `bun test deploy`(정책 문자열, 호스트 필터와 추출), 러너 `deploy-csp`(실제 번들 두 개가 위반 0건, 유출을 시도하는 덱은 수신구에 한 건도 안 닿음, CSP 없는 대조군은 유출함. 브라우저라 mac-local에서 돌린다), `deploy --smoke`(배포 뒤 헤더 확인에 CSP와 Permissions-Policy 검사 추가).
-- 배포 순서: 승인 → `bun run deploy --worker` → `bun run deploy --smoke vibe-coding-workshop` → 게시된 덱을 모두 열어 확인. 이미 게시된 덱은 메타에 `hosts`가 없어도 정책이 켜진다(번들이 외부 자원을 안 쓰면 영향 없음). 외부 호스트를 쓰는 덱은 다시 `deploy`하면 `hosts`가 채워진다. 롤백은 아래 방법(`wrangler rollback`).
+- 배포 순서: 승인 → `bun run deploy --worker` → `bun run deploy --smoke <공개덱>` → 게시된 덱을 모두 열어 확인. 이미 게시된 덱은 메타에 `hosts`가 없어도 정책이 켜진다(번들이 외부 자원을 안 쓰면 영향 없음). 외부 호스트를 쓰는 덱은 다시 `deploy`하면 `hosts`가 채워진다. 롤백은 아래 방법(`wrangler rollback`).
 
 ## deck.md (M3b, 코드와 단위 시험까지 끝, 아직 배포 안 함)
 
-설계는 `spec/DECK-MD-DEPLOY.md`. 배포하면 덱 옆에 발표자 노트가 없는 Markdown(`https://static.vynnlee.com/<덱>/deck.md`)이 같이 올라가고, 올라가는 HTML의 `<head>`에 `<link rel="alternate" type="text/markdown" href="/<덱>/deck.md">`가 들어간다(로컬 `dist/<덱>.html`과 원본 덱은 그대로). 에이전트가 덱의 글을 HTML 해석 없이 읽고 이어서 작업하게 하려는 것이다. 앱의 배포 완료 화면과 Published 대화상자에 **Copy agent prompt**가 있다(공개 덱은 주소와 `curl -s <주소>/deck.md`, 비밀번호 덱은 주소만).
+설계는 `spec/DECK-MD-DEPLOY.md`. 배포하면 덱 옆에 발표자 노트가 없는 Markdown(`https://static.example.com/<덱>/deck.md`)이 같이 올라가고, 올라가는 HTML의 `<head>`에 `<link rel="alternate" type="text/markdown" href="/<덱>/deck.md">`가 들어간다(로컬 `dist/<덱>.html`과 원본 덱은 그대로). 에이전트가 덱의 글을 HTML 해석 없이 읽고 이어서 작업하게 하려는 것이다. 앱의 배포 완료 화면과 Published 대화상자에 **Copy agent prompt**가 있다(공개 덱은 주소와 `curl -s <주소>/deck.md`, 비밀번호 덱은 주소만).
 
 - 올리는 순서는 meta, deck.md(`md:<덱>`), html. `deploy`는 `dist/<덱>.md`(없으면 번들에서 생성)에 발표자 노트 글이 한 줄이라도 있으면 중단한다. `unpublish`는 `md:<덱>`이 있으면 같이 지운다.
 - Worker: 공개 덱의 `deck.md`는 누구나, 비밀번호 덱의 `deck.md`는 덱과 같은 쿠키 관문 뒤에서만(쿠키가 없으면 403, `Sec-Fetch-Dest`가 `document`가 아니면 403). 쿠키 경로가 `/<덱>`이라 주소가 `/<덱>/deck.md`다.

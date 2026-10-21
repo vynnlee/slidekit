@@ -25,10 +25,10 @@ const USAGE = `사용법: slidekit [명령]
   templates        새 덱 템플릿 목록(--json). new <이름> --template <id>로 고른다
   image <덱> <파일> 이미지를 덱의 assets/에 안전하게 저장한다(--max 2400)
   outline <덱>     덱을 Markdown 개요로 출력한다(--notes로 발표자 노트 포함)
-  unpublish <덱>   배포한 덱을 지운다(--yes가 있어야 지움, 없으면 목록만 보임)
+  unpublish <덱>   (실험 기능, 꺼짐) 배포한 덱을 지운다(--yes가 있어야 지움, 없으면 목록만 보임)
   bundle <덱>      단독 HTML 한 파일로 묶는다
   pdf <덱>         슬라이드당 한 페이지의 PDF로 내보낸다
-  deploy <덱>      static.vynnlee.com에 올린다
+  deploy <덱>      (실험 기능, 꺼짐) 직접 설정한 Cloudflare Worker에 올린다(deploy/README.md)
   doctor [<덱>]    환경을 점검한다. 덱 이름을 주면 그 덱의 lint, 크기, 이미지, 노트, 색 대비를 한 화면에 요약한다(--layout은 넘침도 잰다)`;
 const dist = (a: string, b: string) => { const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]); for (let j = 1; j <= b.length; j++) d[0][j] = j; for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); return d[a.length][b.length]; };
 if (sub === "help" || sub === "--help" || sub === "-h") { console.log(USAGE); process.exit(0); }

@@ -1,7 +1,8 @@
 name = "slidekit-static"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
-routes = [{ pattern = "static.vynnlee.com", custom_domain = true }]
+# 직접 설정: 이 값들은 예시다. 자기 도메인과 KV 네임스페이스 id로 바꾼다(deploy/README.md "직접 설정").
+routes = [{ pattern = "static.example.com", custom_domain = true }]
 
 # 로그인 시도 카운터 Durable Object(SQLite 기반, 무료 플랜 가능). 코드와 바인딩과 마이그레이션은 `bun run deploy --worker` 한 번에 적용한다.
 # 마이그레이션 v1은 한 번만 적용되며 되돌리려면 새 태그의 마이그레이션이 필요하다(deploy/README.md).
@@ -15,4 +16,4 @@ new_sqlite_classes = ["Limiter"]
 
 [[kv_namespaces]]
 binding = "DECKS"
-id = "b368a418ca274335947e4c4074eedd8c" # bunx wrangler kv namespace create DECKS 의 결과
+id = "" # bunx wrangler kv namespace create DECKS 의 결과를 넣는다

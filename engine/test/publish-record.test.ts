@@ -3,6 +3,9 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deckFingerprint, localImageRefs, readPublish, recordPublish, recordUnpublish, type Entry } from "../publish-record";
+process.env.SLIDEKIT_EXPERIMENTAL_DEPLOY = "1"; // 배포는 실험 기능이라 기본 꺼짐이다(engine/features.ts). 이 시험은 켠 상태를 본다.
+process.env.SLIDEKIT_PUBLISH_HOST = "https://static.example.com";
+
 
 const tmp = () => mkdtempSync(join(tmpdir(), "sk-pub-"));
 const deck = (html: string, files: Record<string, string> = {}) => {
@@ -11,7 +14,7 @@ const deck = (html: string, files: Record<string, string> = {}) => {
   for (const [p, c] of Object.entries(files)) { mkdirSync(join(d, p, ".."), { recursive: true }); writeFileSync(join(d, p), c); }
   return d;
 };
-const entry = (n: number, extra: Partial<Entry> = {}): Entry => ({ name: "x", url: "https://static.vynnlee.com/x", at: new Date(1_700_000_000_000 + n * 1000).toISOString(), visibility: "public", bytes: 100 + n, sha: "a".repeat(40), ...extra });
+const entry = (n: number, extra: Partial<Entry> = {}): Entry => ({ name: "x", url: "https://static.example.com/x", at: new Date(1_700_000_000_000 + n * 1000).toISOString(), visibility: "public", bytes: 100 + n, sha: "a".repeat(40), ...extra });
 
 test("지문: html과 참조한 로컬 이미지의 경로와 크기가 바뀌면 달라지고, 외부 주소와 덱 밖과 없는 파일은 무시", () => {
   const html = `<img src="img/a.png"><div style="background:url('img/b.jpg')"></div><img src="https://x.com/c.png"><img src="data:image/png;base64,AAAA"><img src="/abs.png"><img src="../outside.png"><img src="img/missing.png"><link href="img/icon.svg?v=2">`;
@@ -60,7 +63,7 @@ test("recordPublish와 recordUnpublish: current 교체, 최신순 history 최대
 
 test("보안 감사: 기록의 url은 PUBLISH_HOST와 name으로 만든 값만, name은 맨 앞에 하이픈이나 옵션 모양을 허용하지 않는다", () => {
   const d = deck("<html></html>");
-  writeFileSync(join(d, ".publish.json"), JSON.stringify({ current: entry(1, { url: "https://evil.example/login" }), history: [entry(2), entry(3, { name: "-x", url: "https://static.vynnlee.com/-x" }), entry(4, { name: "--yes", url: "https://static.vynnlee.com/--yes" }), entry(5, { name: "a b", url: "https://static.vynnlee.com/a b" }), entry(6, { url: "http://static.vynnlee.com/x" })] }));
+  writeFileSync(join(d, ".publish.json"), JSON.stringify({ current: entry(1, { url: "https://evil.example/login" }), history: [entry(2), entry(3, { name: "-x", url: "https://static.example.com/-x" }), entry(4, { name: "--yes", url: "https://static.example.com/--yes" }), entry(5, { name: "a b", url: "https://static.example.com/a b" }), entry(6, { url: "http://static.example.com/x" })] }));
   const r = readPublish(d);
   expect(r.current).toBeNull();
   expect(r.history.map((e) => e.bytes)).toEqual([102]);

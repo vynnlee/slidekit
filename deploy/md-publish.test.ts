@@ -32,7 +32,7 @@ const NAME = "qa-md-notes", html = doc(`<section data-slide="cover"><h1>제목</
 const files = [join(root, "dist", `${NAME}.html`), join(root, "dist", `${NAME}.md`)];
 mkdirSync(join(root, "dist"), { recursive: true });
 afterAll(() => { for (const f of files) rmSync(f, { force: true }); });
-const run = () => Bun.spawnSync(["bun", join(import.meta.dir, "deploy.ts"), NAME, "--dry-run"], { cwd: root, env: { ...process.env, CLOUDFLARE_API_TOKEN: "x" }, stdout: "pipe", stderr: "pipe" });
+const run = () => Bun.spawnSync(["bun", join(import.meta.dir, "deploy.ts"), NAME, "--dry-run"], { cwd: root, env: { ...process.env, CLOUDFLARE_API_TOKEN: "x", SLIDEKIT_EXPERIMENTAL_DEPLOY: "1", SLIDEKIT_PUBLISH_HOST: "https://static.example.com" }, stdout: "pipe", stderr: "pipe" });
 
 test("deploy 드라이런: 노트 글이 deck.md에 있으면 중단(종료 1)하고 노트 글을 출력에 되풀이하지 않는 일은 없다(어느 줄인지는 알린다)", () => {
   writeFileSync(files[0], html);
@@ -62,4 +62,15 @@ test("deploy 드라이런: dist의 .md가 없으면 번들 HTML에서 만들고(
   const r = run();
   expect(r.exitCode).toBe(0);
   expect(r.stdout.toString()).toContain("발표자 노트 글 없음 확인");
+});
+
+test("deploy 명령은 기본 꺼짐: 스위치나 호스트가 없으면 어떤 인자에도 종료 1과 안내(드라이런, --worker, --smoke 포함)", () => {
+  for (const args of [[NAME, "--dry-run"], ["--worker"], ["--smoke", "x"]]) {
+    for (const off of [{ SLIDEKIT_EXPERIMENTAL_DEPLOY: "" }, { SLIDEKIT_PUBLISH_HOST: "" }]) {
+      const r = Bun.spawnSync(["bun", join(import.meta.dir, "deploy.ts"), ...args], { cwd: root, env: { ...process.env, CLOUDFLARE_API_TOKEN: "x", SLIDEKIT_EXPERIMENTAL_DEPLOY: "1", SLIDEKIT_PUBLISH_HOST: "https://static.example.com", ...off }, stdout: "pipe", stderr: "pipe" });
+      expect(r.exitCode, args.join(" ")).toBe(1);
+      expect(r.stderr.toString()).toContain("experimental");
+      expect(r.stdout.toString()).toBe("");
+    }
+  }
 });

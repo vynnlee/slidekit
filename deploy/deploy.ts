@@ -10,16 +10,21 @@ import { MD_MAX, notesLeak, withAlternate } from "./md-publish";
 import { deckMarkdown } from "../engine/deck-md";
 import { WRANGLER } from "./kv";
 import { deckFingerprint, recordPublish } from "../engine/publish-record";
+import { DEPLOY_OFF_HELP, deployEnabled, publishHost } from "../engine/features";
 
 const root = join(import.meta.dir, "..");
 const workerDir = join(import.meta.dir, "worker");
 const arg = process.argv[2];
 if (!arg) { console.error("사용: bun run deploy <덱> 또는 bun run deploy --worker"); process.exit(1); }
+// 배포는 실험 기능이라 기본 꺼짐이다. 켜는 방법은 deploy/README.md.
+if (!deployEnabled()) { console.error(DEPLOY_OFF_HELP); process.exit(1); }
+const HOST = publishHost();
 
 // 배포 뒤 점검: bun run deploy --smoke [공개덱 [비밀번호덱]]. GET만 보낸다(토큰 불필요, 잘못된 비밀번호 POST는 시도 횟수를 쓰므로 보내지 않는다). SLIDEKIT_BASE로 주소를 바꾼다.
 if (arg === "--smoke") {
-  const base = process.env.SLIDEKIT_BASE ?? "https://static.vynnlee.com";
-  const [pub = "vibe-coding-workshop", pwd] = process.argv.slice(3);
+  const base = process.env.SLIDEKIT_BASE ?? HOST;
+  const [pub, pwd] = process.argv.slice(3);
+  if (!pub) { console.error("사용: bun run deploy --smoke <공개덱> [비밀번호덱]"); process.exit(1); }
   let bad = 0;
   const ok = (name: string, good: boolean, extra = "") => { if (!good) bad++; console.log(`${good ? "PASS" : "FAIL"} ${name}${good || !extra ? "" : "  " + extra}`); };
   const get = (p: string) => fetch(`${base}/${p}`, { redirect: "manual" }).catch((e) => { console.error(`접속 실패: ${e.message}. mac-cloud의 DNS 캐시 문제면 HANDOFF의 dig 안내를 본다`); process.exit(1); });
@@ -127,7 +132,7 @@ if (visibility === "password") {
 
 // --dry-run(또는 SLIDEKIT_DEPLOY_DRY_RUN=1): 여기까지만 하고 업로드는 하지 않는다. 테스트용.
 if (dryRun) {
-  console.log(`DRY RUN: https://static.vynnlee.com/${arg} (${visibility}) 업로드는 하지 않았습니다`); // export-api가 이 줄에서 주소를 읽는다
+  console.log(`DRY RUN: ${HOST}/${arg} (${visibility}) 업로드는 하지 않았습니다`); // export-api가 이 줄에서 주소를 읽는다
   process.exit(0);
 }
 
@@ -152,9 +157,9 @@ try {
 }
 // 업로드가 모두 끝난 뒤에만 기록한다(dry-run은 위에서 이미 끝났다). 기록 실패는 게시 결과에 영향을 주지 않는다.
 try {
-  recordPublish(join(root, "decks", arg), { name: arg, url: `https://static.vynnlee.com/${arg}`, at: new Date().toISOString(), visibility: visibility as "public" | "password", bytes: statSync(join(root, "dist", `${arg}.html`)).size, sha: deckFingerprint(join(root, "decks", arg)) });
+  recordPublish(join(root, "decks", arg), { name: arg, url: `${HOST}/${arg}`, at: new Date().toISOString(), visibility: visibility as "public" | "password", bytes: statSync(join(root, "dist", `${arg}.html`)).size, sha: deckFingerprint(join(root, "decks", arg)) });
 } catch { console.log("게시 기록(.publish.json)을 남기지 못했습니다. 게시는 끝났습니다."); }
-console.log(`\n올렸습니다: https://static.vynnlee.com/${arg} (${visibility})`);
+console.log(`\n올렸습니다: ${HOST}/${arg} (${visibility})`);
 if (visibility === "password") console.log("비밀번호 덱입니다. 주소와 비밀번호를 따로 전달하세요. 비밀번호는 저장되지 않고 해시만 올라갑니다.");
 else console.log("공개 덱입니다. 주소를 아는 누구나 볼 수 있습니다(검색 엔진에는 노출되지 않습니다).");
 console.log("내용을 고쳤다면 slidekit bundle, slidekit deploy를 다시 실행하세요.");

@@ -3,6 +3,8 @@ import { makeRoutes } from "../export-api";
 import { execFileSync } from "node:child_process";
 import { cpSync as cp, existsSync, mkdirSync as mk, readFileSync as rd, rmSync as rm, writeFileSync as wr } from "node:fs";
 import { join as pj } from "node:path";
+process.env.SLIDEKIT_EXPERIMENTAL_DEPLOY = "1"; // 배포는 실험 기능이라 기본 꺼짐이다(engine/features.ts). 이 시험은 켠 상태를 본다.
+process.env.SLIDEKIT_PUBLISH_HOST = "https://static.example.com";
 
 // 사용자의 덱에 기대지 않도록, 저장소의 시험용 덱(app/test/fixtures/decks/sample)으로 임시 덱 폴더를 만든다(export-api의 id 규칙이 _로 시작하는 폴더를 거절하므로 qa- 이름을 쓴다).
 const WORK = "qa-export-work";
@@ -137,7 +139,7 @@ const withPubDeck = async (fn: () => Promise<void>) => {
   cpSync(pjoin(workDir, "index.html"), pjoin(pubDir, "index.html"));
   try { await fn(); } finally { rmSync(pubDir, { recursive: true, force: true }); }
 };
-const entry = () => ({ name: PUB_DECK, url: `https://static.vynnlee.com/${PUB_DECK}`, at: new Date().toISOString(), visibility: "public" as const, bytes: 1234, sha: deckFingerprint(pubDir) });
+const entry = () => ({ name: PUB_DECK, url: `https://static.example.com/${PUB_DECK}`, at: new Date().toISOString(), visibility: "public" as const, bytes: 1234, sha: deckFingerprint(pubDir) });
 const lines = async (res: Response) => (await res.text()).split("\n").filter(Boolean).map((l) => JSON.parse(l) as any);
 
 test("published: 기록이 없으면 false, 있으면 주소와 시각, 덱이 바뀌면 changed", async () => {
@@ -157,7 +159,7 @@ test("published: 기록이 없으면 false, 있으면 주소와 시각, 덱이 �
 test("unpublish: confirm 필수, 기록 없으면 409, 읽기 전용 403, 실제 실행은 --yes와 기록의 name으로", async () => {
   await withPubDeck(async () => {
     const calls: { script: string; id: string; args?: string[] }[] = [];
-    const r = makeRoutes(async (script, id, _env, _on, args) => { calls.push({ script, id, args }); return { code: 0, lines: [`Unpublished https://static.vynnlee.com/${id}`] }; });
+    const r = makeRoutes(async (script, id, _env, _on, args) => { calls.push({ script, id, args }); return { code: 0, lines: [`Unpublished https://static.example.com/${id}`] }; });
     expect((await r["/api/decks/:id/unpublish"].POST(req(PUB_DECK, {}))).status).toBe(400); // confirm 없음
     expect((await r["/api/decks/:id/unpublish"].POST(req(PUB_DECK, { confirm: true }))).status).toBe(409); // 기록 없음
     recordPublish(pubDir, entry());
@@ -195,8 +197,8 @@ test("unpublish: dry-run은 기록을 그대로 두고, 토큰 없음과 이미 
 test("unpublish: 기록의 name이 폴더와 다르면 confirmName이 같아야 CLI를 부른다", async () => {
   await withPubDeck(async () => {
     const calls: string[] = [];
-    const r = makeRoutes(async (_s, id) => { calls.push(id); return { code: 0, lines: [`Unpublished https://static.vynnlee.com/${id}`] }; });
-    recordPublish(pubDir, { ...entry(), name: "my-talk", url: "https://static.vynnlee.com/my-talk" });
+    const r = makeRoutes(async (_s, id) => { calls.push(id); return { code: 0, lines: [`Unpublished https://static.example.com/${id}`] }; });
+    recordPublish(pubDir, { ...entry(), name: "my-talk", url: "https://static.example.com/my-talk" });
     expect((await r["/api/decks/:id/unpublish"].POST(req(PUB_DECK, { confirm: true }))).status).toBe(400);
     expect((await r["/api/decks/:id/unpublish"].POST(req(PUB_DECK, { confirm: true, confirmName: "other" }))).status).toBe(400);
     expect(calls.length).toBe(0);
@@ -228,9 +230,45 @@ test("outline: Markdown 본문(노트는 기본 포함, notes=0이면 제외), �
     expect(md.startsWith("# ")).toBe(true);
     expect(md).toContain("## 1. ");
     expect(md).toContain("> Notes:");
-    expect(md).not.toContain("static.vynnlee.com"); // .publish.json의 주소는 들어가지 않는다
+    expect(md).not.toContain("static.example.com"); // .publish.json의 주소는 들어가지 않는다
     expect(await (await get("notes=0")).text()).not.toContain("> Notes:");
     expect((await get("download=1")).headers.get("content-disposition")).toBe(`attachment; filename="${PUB_DECK}.md"`);
     expect((await r["/api/decks/:id/outline"].GET(req("../x"))).status).toBe(404);
+  });
+});
+
+// ---- 배포는 실험 기능이라 기본 꺼짐(engine/features.ts): 스위치나 올바른 호스트가 없으면 배포 관련 경로는 404이고 아무것도 실행하지 않는다 ----
+const withEnv = async (env: Record<string, string | undefined>, fn: () => Promise<void>) => {
+  const keys = ["SLIDEKIT_EXPERIMENTAL_DEPLOY", "SLIDEKIT_PUBLISH_HOST"], prev = keys.map((k) => process.env[k]);
+  try { for (const k of keys) { if (env[k] === undefined) delete process.env[k]; else process.env[k] = env[k]; } await fn(); }
+  finally { keys.forEach((k, i) => { if (prev[i] === undefined) delete process.env[k]; else process.env[k] = prev[i]; }); }
+};
+const gatedPaths = (r: ReturnType<typeof makeRoutes>) => [
+  () => r["/api/decks/:id/check"].GET(req("qa-nope")),
+  () => r["/api/decks/:id/published"].GET(req("qa-nope")),
+  () => r["/api/decks/:id/unpublish"].POST(req("qa-nope", { confirm: true })),
+  () => r["/api/decks/:id/deploy"].POST(req("qa-nope", { confirm: true })),
+];
+test("배포 기능 꺼짐(기본): features는 false, 점검, 게시 기록, 게시 취소, 배포는 404 experimental이고 아무것도 실행하지 않는다", async () => {
+  for (const env of [{}, { SLIDEKIT_EXPERIMENTAL_DEPLOY: "1" }, { SLIDEKIT_PUBLISH_HOST: "https://static.example.com" }, { SLIDEKIT_EXPERIMENTAL_DEPLOY: "1", SLIDEKIT_PUBLISH_HOST: "http://static.example.com" }]) {
+    await withEnv(env, async () => {
+      let ran = 0;
+      const r = makeRoutes(async () => { ran++; return { code: 0, lines: [] }; });
+      expect(await (r["/api/features"].GET() as Response).json()).toEqual({ deploy: false, publishHost: "" });
+      for (const call of gatedPaths(r)) { const res = await call(); expect(res.status, JSON.stringify(env)).toBe(404); expect(((await res.json()) as any).code).toBe("experimental"); }
+      expect(ran).toBe(0);
+    });
+  }
+});
+test("배포 기능 켜짐: features가 호스트를 알리고 번들, PDF, 다운로드, 개요는 켜짐 여부와 상관없이 동작한다", async () => {
+  await withEnv({ SLIDEKIT_EXPERIMENTAL_DEPLOY: "1", SLIDEKIT_PUBLISH_HOST: "https://static.example.com/" }, async () => {
+    const r = makeRoutes(ok());
+    expect(await (r["/api/features"].GET() as Response).json()).toEqual({ deploy: true, publishHost: "https://static.example.com" });
+    for (const call of gatedPaths(r)) expect((await call()).status).toBe(404); // 켜지면 경로가 열리고 덱 검사에서 404(없는 덱)
+  });
+  await withEnv({}, async () => { // 꺼진 상태에서도 번들은 열려 있다(없는 덱이라 404지만 experimental이 아니다)
+    const r = makeRoutes(ok());
+    const res = await r["/api/decks/:id/bundle"].POST(req("qa-nope"));
+    expect(res.status).toBe(404); expect(((await res.json()) as any).code).not.toBe("experimental");
   });
 });

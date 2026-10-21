@@ -52,8 +52,9 @@ const steps: Step[] = [
   bun("bundler-bundle", "test", "bundler/test/bundle.test.ts"),
   bun("bundler-fonts", "test", "bundler/test/fonts.test.ts"),
   bun("scan-secrets", "test", "scripts/scan-secrets.test.ts"),
-  bun("deploy-worker", "test", "deploy/worker"),
-  { ...browser("deploy-csp", "deploy/csp-e2e.cjs", "static", STATIC), server: undefined }, // 배포 Worker의 덱 CSP를 실제 번들과 유출 시도 덱으로 본다(자체 로컬 서버 3296, 원격 호출 없음; spec/WORKER-CSP.md)
+  // 배포(Publish)는 v0.1에서 실험 기능이라 기본 게이트에서 뺀다(--slow 또는 --only deploy-unit, deploy-csp로만 돈다). 코드는 deploy/에 그대로 있고 SLIDEKIT_EXPERIMENTAL_DEPLOY=1과 SLIDEKIT_PUBLISH_HOST로 켠다(deploy/README.md).
+  { ...bun("deploy-unit", "test", "deploy"), slow: true }, // Worker 라우트와 CSP, 호스트 추출, deck.md 배포, unpublish, deploy 명령의 꺼짐 확인
+  { ...browser("deploy-csp", "deploy/csp-e2e.cjs", "static", STATIC), server: undefined, slow: true }, // 배포 Worker의 덱 CSP를 실제 번들과 유출 시도 덱으로 본다(자체 로컬 서버 3296, 원격 호출 없음; spec/WORKER-CSP.md)
   { name: "channel", cmd: ["bun", "channel/test.ts"], env: { TEST_PORT: "3242" } },
   { name: "channel-resilience", cmd: ["bun", "channel/resilience.ts"], env: { TEST_PORT: "3247" } },
   { name: "channel-trust", cmd: ["bun", "channel/trust.ts"], env: { TEST_PORT: "3248" } },
@@ -137,7 +138,7 @@ const MAP: [RegExp, string[]][] = [
   [/^engine\/(artifact-check\.ts|test\/artifact)/, ["unit-other", "unit-isolated", "typecheck", "engine-artifact"]], // 발행 호환 검사(M2b)
   [/^engine\/(lint\.ts|test\/lint\.test\.ts|doctor\.ts|new\.ts|template\/)/, ["lint", "tokens"]],
   [/^bundler\//, ["bundler-bundle", "bundler-fonts"]],
-  [/^deploy\//, ["deploy-worker", "deploy-csp", "export-api", "unit-other"]],
+  [/^deploy\//, ["deploy-unit", "deploy-csp", "export-api"]],
   [/^channel\//, ["channel"]],
   [/^app\/(comments\.ts|src\/(Comment|lib\/(comment|use-comments))|test\/comments)/, ["comments", "channel", "comments-e2e", "comments-a11y", "comment-mode"]],
   [/^app\/(versions\.ts|src\/(VersionHistory|ExportMenu)|test\/versions)/, ["versions", "versions-e2e"]],
@@ -322,7 +323,7 @@ async function ensure(kind: "app" | "dry" | "static") {
   const log = Bun.file("/tmp/sk-eng-srv.log");
   const p = Bun.spawn(["taskpolicy", "-b", "bun", "run", "app/server.ts"], {
     cwd: root, stdout: log, stderr: log, detached: true,
-    env: { ...process.env, PORT: "3245", SLIDEKIT_STABLE: "1", SLIDEKIT_READONLY_DECKS: READONLY, SLIDEKIT_DEPLOY_DRY_RUN: "1", SLIDEKIT_KEY_FILE: "/tmp/slidekit-test.key" },
+    env: { ...process.env, PORT: "3245", SLIDEKIT_STABLE: "1", SLIDEKIT_READONLY_DECKS: READONLY, SLIDEKIT_DEPLOY_DRY_RUN: "1", SLIDEKIT_EXPERIMENTAL_DEPLOY: "1", SLIDEKIT_PUBLISH_HOST: "https://static.example.com", SLIDEKIT_KEY_FILE: "/tmp/slidekit-test.key" },
   });
   servers.set(kind, () => killTree(p.pid));
   await waitUp(DRY);

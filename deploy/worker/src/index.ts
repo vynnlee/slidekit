@@ -1,4 +1,4 @@
-// static.vynnlee.com Worker. 덱 HTML과 공개 범위는 KV(DECKS)에 있다.
+// 덱 게시용 Worker(사용자가 직접 배포한다, deploy/README.md). 덱 HTML과 공개 범위는 KV(DECKS)에 있다.
 //   html:<deck> = 번들 HTML, meta:<deck> = {visibility, salt, hash}
 // 비밀번호는 해시만 저장한다. 쿠키 서명 키는 Worker 비밀 값 COOKIE_SECRET이다.
 

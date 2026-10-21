@@ -1,0 +1,112 @@
+<!doctype html>
+<!--
+  Demo deck for slidekit. Spec: spec/SPEC.md, check with `bun run slidekit lint demo`.
+  Open it in the editor to try dragging, the inspector, the animation timeline and comments.
+-->
+<html lang="en" data-slidekit="1">
+<head>
+  <meta charset="utf-8">
+  <title>slidekit in five minutes</title>
+  <script type="application/json" id="deck-meta">
+    { "title": "slidekit in five minutes", "subtitle": "A demo deck", "author": "slidekit", "date": "2026-10-21", "lang": "en", "visibility": "public", "id": "demo" }
+  </script>
+  <link rel="stylesheet" href="../../engine/slidekit.css">
+  <style>
+    /* Deck tokens and deck-only styles. Tokens: --sk-accent, --sk-font, ... (spec section 4) */
+    /* cover, chapter and end sit low on the left; content titles stay at a fixed height */
+    [data-slide="cover"], [data-slide="chapter"], [data-slide="end"] { justify-content: flex-end; padding-bottom: 200px; }
+    [data-slide="cover"] h1, [data-slide="end"] h1 { font-size: 160px; letter-spacing: -.03em; }
+    [data-slide="cover"] { gap: 28px; }
+    [data-slide="chapter"] h1 { font-size: 132px; }
+    body { counter-reset: ch; }
+    [data-slide="chapter"] { counter-increment: ch; gap: 36px; }
+    [data-slide="chapter"]::before { content: counter(ch, decimal-leading-zero); font: 500 28px var(--sk-font-mono); color: var(--sk-faint); }
+    [data-slide="content"] { justify-content: flex-start; padding-top: 180px; gap: 40px; }
+    /* shapes used by this deck */
+    .rows { display: flex; flex-direction: column; gap: 28px; }
+    .rows p { margin: 0; }
+    .code { font: 500 30px/1.5 var(--sk-font-mono); background: var(--sk-panel); border: 1px solid var(--sk-line); border-radius: 14px; padding: 36px 44px; margin: 0; white-space: pre; color: var(--sk-fg); }
+    .code .dim { color: var(--sk-muted); }
+    [data-slide].two-col { display: grid; grid-template-columns: 1fr 1fr; align-content: start; column-gap: var(--sk-gap); row-gap: var(--sk-gap); }
+    .two-col > :not(.col) { grid-column: 1 / -1; }
+    .two-col > .col { display: flex; flex-direction: column; gap: calc(var(--sk-gap) / 2); min-width: 0; }
+    .two-col > .col h3 { margin: 0; font-size: calc(var(--sk-fs-body) * 1.1); font-weight: 700; line-height: 1.3; color: var(--sk-fg); }
+    [data-slide].big-number { justify-content: center; padding-block: var(--sk-pad-y); }
+    .big-number .big { font-size: 260px; font-weight: 800; line-height: 1; letter-spacing: -.04em; color: var(--sk-accent); max-width: none; }
+  </style>
+</head>
+<body>
+
+<section data-slide="cover">
+  <h1>slidekit in five minutes</h1>
+  <p>Slides are one HTML file. This deck shows what that gives you.</p>
+  <aside data-notes>Welcome. This deck is also a test bed: open it in the editor and try things while you read the notes.
+
+The cover has no animation on purpose. Press the right arrow to move on.</aside>
+</section>
+
+<section data-slide="chapter" data-title="Write">
+  <h1>Write</h1>
+  <aside data-notes>Chapter one is about the file format. Keep it short.</aside>
+</section>
+
+<section data-slide="content">
+  <h2>A deck is a folder with one HTML file</h2>
+  <div class="rows">
+    <p>Each slide is a section element.</p>
+    <p data-step="2">Each step is one attribute.</p>
+    <p data-step="3">Speaker notes sit in an aside.</p>
+  </div>
+  <aside data-notes>Press the right arrow to reveal the lines one by one. Each click shows one new fact.
+
+In the editor, open the Animation tab below the canvas to see the same three lines as bars on a timeline.</aside>
+</section>
+
+<section data-slide="content">
+  <h2>Everything fits in a few lines</h2>
+  <pre class="code"><span class="dim">&lt;section data-slide="content"&gt;</span>
+  &lt;h2&gt;A title&lt;/h2&gt;
+  &lt;p data-step="2"&gt;Appears on click one&lt;/p&gt;
+<span class="dim">&lt;/section&gt;</span></pre>
+  <aside data-notes>This is the whole idea. The editor reads and writes exactly this markup, so you can switch between the file and the canvas at any time.</aside>
+</section>
+
+<section data-slide="chapter" data-title="Animate">
+  <h1>Animate</h1>
+  <aside data-notes>Chapter two shows the animation model: steps, clicks, and the timeline.</aside>
+</section>
+
+<section data-slide="content">
+  <h2>Elements can come in and go out</h2>
+  <div class="rows">
+    <p data-step="2" data-step-out="4">Visible on clicks one and two, then gone</p>
+    <p data-step="3" style="--sk-step-delay: 300ms; --sk-away-y: 0px; --sk-away-x: -48px">Slides in from the left after a short delay</p>
+    <p data-step="4" data-step-effect="scale">Scales up on click three</p>
+  </div>
+  <aside data-notes>The first line leaves when the fourth step arrives. The second line uses a delay and a sideways start. The third uses a named effect.
+
+Try dragging the bars in the Animation tab, then press Play to compare.</aside>
+</section>
+
+<section data-slide="content" class="two-col">
+  <h2>Write by hand or edit on the canvas</h2>
+  <div class="col">
+    <h3>In the file</h3>
+    <p>Plain HTML and CSS, tracked in git.</p>
+  </div>
+  <div class="col">
+    <h3>In the editor</h3>
+    <p>Select, drag, comment, and let an agent edit.</p>
+  </div>
+  <aside data-notes>Both paths change the same file. Leave a comment on this slide in comment mode (press C) to see the agent workflow.</aside>
+</section>
+
+<section data-slide="end">
+  <h1>Make your own deck</h1>
+  <p>bun run slidekit new my-talk</p>
+  <aside data-notes>Close with the command. The README covers installation and the editor.</aside>
+</section>
+
+<script src="../../engine/slidekit.js"></script>
+</body>
+</html>

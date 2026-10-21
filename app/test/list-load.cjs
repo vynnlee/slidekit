@@ -19,7 +19,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fail = 0;
 const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + name + (ok || extra === undefined ? '' : '  ' + JSON.stringify(extra))); };
 const rssMB = (pid) => { // 브라우저 프로세스와 모든 자손의 RSS 합(MB)
-  const rows = execSync('ps -axo pid=,ppid=,rss=').toString().trim().split('\n').map((l) => l.trim().split(/\s+/).map(Number));
+  const rows = execSync('ps -axo pid=,ppid=,rss=', { maxBuffer: 64 << 20 }).toString().trim().split('\n').map((l) => l.trim().split(/\s+/).map(Number));
   const kids = new Map(); for (const [p, pp, r] of rows) kids.set(p, { pp, r });
   let sum = 0; for (const [p, { r }] of kids) { let c = p; while (c && c !== pid) c = kids.get(c)?.pp; if (c === pid) sum += r; }
   return Math.round(sum / 1024);
@@ -28,7 +28,7 @@ const rssMB = (pid) => { // 브라우저 프로세스와 모든 자손의 RSS �
 (async () => {
   const browser = await chromium.launch({ executablePath: process.env.CHROME, args: ['--disable-gpu'] });
   // 브라우저 프로세스: 이 node 프로세스의 직계 자식인 chrome
-  const pid = Number(execSync('ps -axo pid=,ppid=,command=').toString().split('\n').map((l) => l.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/)).find((m) => m && Number(m[2]) === process.pid && /chrome/.test(m[3]))?.[1]);
+  const pid = Number(execSync('ps -axo pid=,ppid=,command=', { maxBuffer: 64 << 20 }).toString().split('\n').map((l) => l.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/)).find((m) => m && Number(m[2]) === process.pid && /chrome/.test(m[3]))?.[1]);
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
   const page = await ctx.newPage();

@@ -168,13 +168,14 @@ const json = { 'Content-Type': 'application/json' };
     // 보류와 한꺼번에 보내기: hold로 쓴 코멘트는 Held로 보이고 Send all이 보류를 풀며 개수를 보인다
     const nowCount = await items.count();
     for (const text of ['보류 하나', '보류 둘']) await fetch(`${BASE}/api/comments`, { method: 'POST', headers: json, body: JSON.stringify({ deck: DECK, slide: 1, path: '', excerpt: '', text, hold: true }) });
-    check('보류한 코멘트가 Held로 보인다', await stateIs('held', 2).then(() => true, () => false));
+    check('보류한 코멘트가 Held로 보인다', await stateIs('held', 2));
     const sendAll = page.getByRole('button', { name: /^Send all to Claude \(\d+\)$/ });
     check('보류가 있으면 Send all 버튼이 보인다', await sendAll.waitFor({ timeout: 5000 }).then(() => true, () => false), (await panel.textContent()).slice(0, 400));
+    const sentToast = page.getByText(/^Sent \d+ comments? to Claude/).first().waitFor({ timeout: 30000 }).then(() => true, () => false); // 토스트는 몇 초면 사라지므로 누르기 전에 기다리기 시작한다(상태 확인이 느려도 놓치지 않게)
     await sendAll.click();
-    check('Send all이 보류를 푼다(Held가 없어진다)', await stateIs('held', 0).then(() => true, () => false));
+    check('Send all이 보류를 푼다(Held가 없어진다)', await stateIs('held', 0));
     check('전부 그대로 남는다(지워지지 않는다)', (await items.count()) === nowCount + 2);
-    check('Send all 토스트', await page.getByText(/^Sent \d+ comments? to Claude$/).first().waitFor({ timeout: 5000 }).then(() => true, () => false));
+    check('Send all 토스트는 실제 결과를 말한다(가짜 채널이 연결돼 있으니 Sent N to Claude)', await sentToast);
 
     // 파일 변경 -> 캔버스 새로고침
     const src = fs.readFileSync(t.file, 'utf8');

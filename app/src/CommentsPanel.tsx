@@ -175,7 +175,7 @@ export function CommentsPanel({ comments, folder, channel, onJump, onResolve, on
   };
 
   return (
-    <div ref={root} onKeyDown={onKeys} className="group/panel flex flex-col gap-3 pt-3" data-testid="comments-panel">
+    <div ref={root} onKeyDown={onKeys} className="flex flex-col gap-3 pt-3" data-testid="comments-panel">
       {/* 머리: 연결 상태와 자동 처리(Pause)를 한 줄로 */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1">
         {channel === false ? null : <ChannelBadge connected={channel} />}
@@ -197,7 +197,7 @@ export function CommentsPanel({ comments, folder, channel, onJump, onResolve, on
           {counts.resolved > 0 && <Button size="compact" variant="ghost" aria-pressed={showResolved} onClick={() => setShowResolved(!showResolved)}>{showResolved ? "Hide resolved pins" : "Show resolved pins"}</Button>}
         </div>
       )}
-      {comments.length > 1 && <p className="hidden px-1 text-micro text-muted-foreground group-focus-within/panel:block">J and K move between comments, E resolves, Delete removes.</p>}
+      {comments.length > 1 && <p className="sr-only">J and K move between comments, E resolves, Delete removes.</p>}
       {comments.length === 0 && (
         <div className="flex flex-col items-start gap-2" data-testid="comments-empty">
           <p className="text-caption text-muted-foreground">No comments yet. Click an element and press C, or press Shift+C to comment anywhere. Drag to comment on an area.</p>
@@ -221,7 +221,7 @@ export function CommentsPanel({ comments, folder, channel, onJump, onResolve, on
                   onMouseLeave={() => setHoveredComment(null)}
                   onFocus={() => setHoveredComment(c.id)}
                   onBlur={() => setHoveredComment(null)}
-                  className={cn("group/card flex flex-col gap-1 rounded-lg p-2", "bg-hover/60 data-[hover=true]:bg-hover data-[hover=true]:ring-1 data-[hover=true]:ring-focus-ring/60", st === "resolved" && "opacity-70")}
+                  className={cn("group/card flex flex-col gap-1 rounded-lg p-2", "bg-hover/60 data-[hover=true]:bg-hover data-[hover=true]:ring-1 data-[hover=true]:ring-focus-ring/60", st === "resolved" && "text-muted-foreground")}
                 >
                   <button
                     type="button"

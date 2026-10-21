@@ -123,8 +123,9 @@ const J = { 'Content-Type': 'application/json' };
     check('C가 작성창을 열고 입력창에 포커스가 있다', await box.waitFor({ timeout: 3000 }).then(() => box.evaluate((e) => e === document.activeElement), () => false));
     await page.keyboard.press('Escape');
     check('Esc가 작성창을 닫는다', await page.getByRole('group', { name: 'New comment' }).waitFor({ state: 'detached', timeout: 3000 }).then(() => true, () => false));
-    const active = await page.evaluate(() => { const a = document.activeElement; return { tag: a?.tagName, inBody: a === document.body }; });
-    check('Esc 뒤 포커스가 문서 body로 사라지지 않는다', !active.inBody, active);
+    // 포커스 복귀는 언마운트 뒤의 타이머와 효과로 일어나므로 닫힌 직후 한 번 보지 않고 잠깐 기다린다
+    const notBody = (ms = 2000) => page.waitForFunction(() => document.activeElement && document.activeElement !== document.body, null, { timeout: ms }).then(() => true, () => false);
+    check('Esc 뒤 포커스가 문서 body로 사라지지 않는다', await notBody());
 
     // 5b) 마우스 없이 영역 코멘트: 모드 토글(Shift+C)로 켜고, Tab으로 요소, A로 조절 상자, 방향키로 이동과 크기, Enter로 확정,
     //     작성창에 포커스가 가고 Enter(Add)로 닫히면 포커스가 body로 사라지지 않으며, 각 단계를 aria-live가 읽어 준다.
@@ -151,10 +152,10 @@ const J = { 'Content-Type': 'application/json' };
     await area.fill('키보드로 정한 영역');
     await page.keyboard.press('Enter');
     check('Enter(Add)로 작성창이 닫히고 코멘트가 목록에 생긴다', await composer.waitFor({ state: 'detached', timeout: 5000 }).then(() => true, () => false) && await page.waitForFunction(() => [...document.querySelectorAll('[data-testid=comments-panel] li[data-comment-id]')].some((e) => e.textContent.includes('키보드로 정한 영역')), null, { timeout: 5000 }).then(() => true, () => false));
-    const after = await page.evaluate(() => { const a = document.activeElement; return { inBody: a === document.body, inLayer: !!a?.closest('[data-testid=comment-mode-layer]') }; });
-    check('작성창이 닫힌 뒤 포커스가 body로 사라지지 않고 모드 층에 남는다', !after.inBody && after.inLayer, after);
+    const inLayer = await page.waitForFunction(() => !!document.activeElement?.closest('[data-testid=comment-mode-layer]'), null, { timeout: 2000 }).then(() => true, () => false);
+    check('작성창이 닫힌 뒤 포커스가 body로 사라지지 않고 모드 층에 남는다', inLayer, await page.evaluate(() => document.activeElement?.tagName));
     await page.keyboard.press('Escape');
-    check('Esc가 모드를 끄고 포커스가 body로 사라지지 않는다', await layer.waitFor({ state: 'detached', timeout: 3000 }).then(() => true, () => false) && !(await page.evaluate(() => document.activeElement === document.body)));
+    check('Esc가 모드를 끄고 포커스가 body로 사라지지 않는다', await layer.waitFor({ state: 'detached', timeout: 3000 }).then(() => true, () => false) && await notBody());
 
     // 5c) 자동 처리 상태 줄: 이름 있는 상태와 Pause/Resume 단추가 키보드로 되고, 멈추면 이유가 읽힌다(끝에 반드시 Resume으로 돌려 둔다)
     await page.getByRole('tab', { name: /^Comments/ }).click();

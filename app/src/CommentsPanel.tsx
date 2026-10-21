@@ -175,7 +175,7 @@ export function CommentsPanel({ comments, folder, channel, onJump, onResolve, on
   };
 
   return (
-    <div ref={root} onKeyDown={onKeys} className="group/panel flex flex-col gap-3 pt-3" data-testid="comments-panel">
+    <div ref={root} onKeyDown={onKeys} className="flex flex-col gap-3 pt-3" data-testid="comments-panel">
       {channel === false ? <NotConnected open={comments.length === 0} /> : <ChannelBadge connected={channel} />}
       <FlowBar />
       {(showSend || showResolve) && (
@@ -196,7 +196,7 @@ export function CommentsPanel({ comments, folder, channel, onJump, onResolve, on
       {counts.resolved > 0 && (
         <Button size="compact" variant="ghost" className="self-start" aria-pressed={showResolved} onClick={() => setShowResolved(!showResolved)}>{showResolved ? "Hide resolved pins" : "Show resolved pins"}</Button>
       )}
-      {comments.length > 1 && <p className="hidden px-1 text-micro text-muted-foreground group-focus-within/panel:block">J and K move between comments, E resolves, Delete removes.</p>}
+      {comments.length > 1 && <p className="sr-only">J and K move between comments, E resolves, Delete removes.</p>}
       {comments.length === 0 && (
         <div className="flex flex-col items-start gap-2" data-testid="comments-empty">
           <p className="text-caption text-muted-foreground">No comments yet. Click an element and press C, or press Shift+C to comment anywhere. Drag to comment on an area.</p>

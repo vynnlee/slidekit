@@ -221,7 +221,8 @@ export function CommentsPanel({ comments, folder, channel, onJump, onResolve, on
                   onMouseLeave={() => setHoveredComment(null)}
                   onFocus={() => setHoveredComment(c.id)}
                   onBlur={() => setHoveredComment(null)}
-                  className={cn("group/card flex flex-col gap-1 rounded-lg p-2", "bg-hover/60 data-[hover=true]:bg-hover data-[hover=true]:ring-1 data-[hover=true]:ring-focus-ring/60", st === "resolved" && "text-muted-foreground")}
+                  className={cn("group/card flex flex-col gap-1 rounded-lg p-2 [content-visibility:auto] [contain-intrinsic-size:auto_96px]", // 화면 밖 카드는 배치와 그리기를 미룬다(수백 개일 때 패널 열기와 스크롤 비용)
+                     "bg-hover/60 data-[hover=true]:bg-hover data-[hover=true]:ring-1 data-[hover=true]:ring-focus-ring/60", st === "resolved" && "text-muted-foreground")}
                 >
                   <button
                     type="button"

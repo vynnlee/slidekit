@@ -20,7 +20,7 @@ const N = 300, PINS = 100, REGIONS = 24; // 영역 코멘트(이미지 있음)�
     browser = await launch();
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
-    await ctx.addInitScript(() => { try { localStorage.setItem('slidekit.tip.editor', '1'); } catch {} });
+    await ctx.addInitScript(() => { try { localStorage.setItem('slidekit.tip.editor', '1'); localStorage.setItem('slidekit.comments.showResolved', '1'); } catch {} }); // 해결한 코멘트의 핀은 기본 숨김이라 가장 무거운 경우(모든 핀)를 재려고 켠다
     const page = await ctx.newPage();
     const api = (p, b) => fetch(`${BASE}${p}`, { method: 'POST', headers: J, body: JSON.stringify({ deck: t.folder, ...b }) });
     const open = async () => {

@@ -39,9 +39,15 @@ Quick unit tests also run directly: `bun test app/test/<file>.test.ts`.
 
 The runner serializes heavy work with a lock so two runs do not fight over the CPU. Do not delete the lock by hand.
 
+### Tips for browser tests
+
+- Browser tests can be unstable on a slow or busy machine. If one fails, run just that step again with `bun scripts/test.ts --only <step>` before you assume your change broke it.
+- When a browser step fails, the runner retries it once with tracing. On a very slow machine that retry process may not finish on its own; stop it with Ctrl+C and run steps one at a time with `--only` instead of the whole suite.
+- Setting `SLIDEKIT_GATE_HOST` is optional: `scripts/remote-gate.sh` uses it to run the checks on another machine you can reach over ssh (it needs Bun and Chrome). You do not need it to contribute.
+
 ## Tests must not touch your real decks
 
-Tests that edit a deck must work on a copy (`makeTestDeck` in `scripts/lib/test-deck.cjs`, folders starting with `_`) or a temporary directory. Never write to a deck you actually use. The runner passes `SLIDEKIT_READONLY_DECKS` so test servers refuse writes to committed decks.
+Tests that edit a deck must work on a copy (`makeTestDeck` in `scripts/lib/test-deck.cjs`, folders starting with `_`) or a temporary directory. The source decks for the copies are in `app/test/fixtures/decks` (see the README there); do not edit them to add real content. Never write to a deck you actually use. The runner passes `SLIDEKIT_READONLY_DECKS` so test servers refuse writes to committed decks.
 
 ## Code style
 

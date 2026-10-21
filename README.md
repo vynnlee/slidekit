@@ -53,7 +53,10 @@ A short sample deck, `decks/demo` (eight slides, English), shows how steps, note
 - Comment on an element, a slide, or a dragged area (Shift+C toggles comment mode); area comments carry an image of the area
 - Claude Code channel (`channel/`, a research-preview feature) delivers comments, the agent edits the deck with an update-style tool (`slidekit_edit`) and replies in the app
 - Presence: the editor shows what the agent is changing while it works
-- Per-comment states (Saved, Sent, Working, Replied, Resolved), Send all, hourly limit and a Pause switch for auto-processing, signed comments so a deck from someone else cannot talk to your agent until you trust it
+- Speech-bubble pins on the slide with a hover preview, a tray at the bottom of the panel ("N saved" and Send all), and a toggle to show or hide resolved pins
+- Enter sends a comment when Claude is connected and saves it otherwise (Cmd+Enter always sends, Shift+Enter is a new line)
+- Per-comment states (Saved, Sent, Working, Replied, Resolved) with the reason a comment is waiting, Resend and Cancel for stalled requests, Detached comments when a slide disappears, an hourly limit and a Pause switch for auto-processing
+- Signed comments: a deck from someone else cannot talk to your agent until you trust it
 
 **Command line**
 - `lint`, `doctor` (including layout overflow checks), `bundle` (single offline HTML file), `pdf` (slides, notes, handouts), `outline` (Markdown), `image`, `new`, `templates`
@@ -71,6 +74,7 @@ bun run slidekit image <deck> <file> [--max 2400]   # store an image in the deck
 bun run slidekit outline <deck> [--notes]  # print a Markdown outline
 bun run slidekit bundle <deck>           # dist/<deck>.html, one self-contained file
 bun run slidekit pdf <deck> [--notes | --handout [2|3|4|6]]   # dist/<deck>.pdf
+# `deploy` and `unpublish` also exist but are experimental and off by default (see Known limitations)
 bun run test                             # the full check suite (slow, see CONTRIBUTING.md)
 bun run test:changed                     # only the steps mapped to your changes
 ```
@@ -98,16 +102,32 @@ The editor shows "Claude connected" when it is wired up. Details, the tool list 
 - **git** (optional): fills the `author` of a new deck from `git config user.name`.
 - `bun run slidekit doctor` checks your setup and tells you what is missing.
 
+### Environment variables
+
+All optional.
+
+| Variable | What it does |
+|---|---|
+| `PORT` | Port of the app (default 3200). It always binds to `127.0.0.1`. |
+| `SLIDEKIT_CHROME` | Path of the Chrome executable to use for PDF, layout checks and area images. |
+| `SLIDEKIT_ALLOWED_HOSTS` | Extra host names the preview proxy (`app/preview-proxy.ts`) accepts, comma separated, no ports. |
+| `SLIDEKIT_COMMENT_HOURLY` | Hourly limit for comments sent to an agent (default 60, `0` turns the limit off). |
+| `SLIDEKIT_EXPERIMENTAL_DEPLOY` | Set to `1` to turn on the experimental publishing feature (needs `SLIDEKIT_PUBLISH_HOST` too). |
+| `SLIDEKIT_PUBLISH_HOST` | `https://` host where your own Worker serves published decks. |
+| `SLIDEKIT_URL` | Where the comment channel finds the app (local addresses only). |
+
 ## Project layout
 
 ```
 app/        the editor app and local server (React, Bun.serve), comment and version APIs
+app/test/   tests; app/test/fixtures/decks holds the decks the tests copy and edit
 engine/     the vanilla slide engine (slidekit.js, slidekit.css), CLI tools (lint, doctor, pdf, outline)
 bundler/    single-file bundle builder (inlines engine, images, font subsets)
 channel/    MCP channel that connects comments to a Claude Code session
 decks/      your decks, one folder each (decks/<name>/index.html)
 spec/       the deck spec (SPEC.md) and design notes
-docs/       changelog, device checklist, media
+docs/       changelog, device checklist, media; docs/internal/ has maintainer notes (status log, original plan)
+deploy/     experimental publishing to your own Cloudflare Worker (off by default)
 scripts/    the test runner and helpers
 .claude/    the slidekit skill and project settings for Claude Code
 ```
@@ -121,7 +141,8 @@ slidekit is a local tool. The server binds to `127.0.0.1` only; do not bind it t
 This is a beta. Things you may run into:
 
 - **macOS first.** Image resizing uses `sips`, some checks use the macOS keychain, and everything is developed and tested on macOS. Linux and Windows are untested.
-- **Publishing is not part of v0.1.** Export to a single HTML file or PDF and host it yourself. A publishing feature may come back later.
+- **Publishing is experimental and off by default.** The code for publishing to your own Cloudflare Worker is in `deploy/`, but the Publish menu, the `deploy` and `unpublish` commands and their API routes stay switched off until you set up your own Worker and domain (`deploy/README.md`) and run with `SLIDEKIT_EXPERIMENTAL_DEPLOY=1` and `SLIDEKIT_PUBLISH_HOST=https://static.your-domain.example`. Otherwise export to a single HTML file or PDF and host it yourself.
+- **Many comments render slowly on slow machines.** With 300+ comments (including 24 area comments with images) on a slow or heavily loaded machine, opening the Comments panel can take 3 to 4 seconds and the `comments-perf` test may be unstable. Comments are not lost, only rendering is slow.
 - **Browser tests are heavy and some are flaky.** The full suite takes a long time and loads a laptop CPU hard. Run single steps with `bun scripts/test.ts --only <step>`. See [CONTRIBUTING.md](CONTRIBUTING.md).
 - **System Chrome for PDF is less tested** than Playwright's headless shell.
 - **The comment channel is a research preview** in Claude Code and its flag and behavior can change.

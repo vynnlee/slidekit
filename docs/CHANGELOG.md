@@ -34,6 +34,7 @@ First public beta. slidekit has been built in the open from its first commit, an
 - `slidekit_edit`: an update-style editing tool for agents (a string must match exactly once, edits are atomic, a stale revision is rejected, lint results come back) with presence in the editor: you see what the agent is changing while it works.
 - Comment states Saved, Sent, Working, Replied and Resolved, with the reason a comment is waiting (not connected, paused, hourly limit). Stalled requests can be resent or cancelled, and a new session picks up requests that a crashed session had received.
 - Anchors are recomputed whenever the deck changes (editor save, agent edit, direct edit, restore), so comments follow moved slides. Comments that lose their place move to a Detached group and come back when the slide does.
+- Speech-bubble pins with a hover preview, a bottom tray ("N saved", Send all), a toggle for resolved pins, and Enter that sends when Claude is connected and saves otherwise.
 - Send all, Resolve all replied, Revert Claude's edit, an hourly limit (default 60) and a Pause switch for auto-processing.
 - Signed comments: a comment that is not signed with your key shows as Unverified and is not sent to an agent until you press Trust.
 
@@ -43,6 +44,7 @@ First public beta. slidekit has been built in the open from its first commit, an
 - `doctor` checks your environment and, for a deck, lint, size, images, notes, WCAG color contrast and external fonts; `--layout` also measures overflow and clipping in headless Chrome.
 
 ### Security and robustness
+- The preview proxy accepts only local host names plus those in `SLIDEKIT_ALLOWED_HOSTS`.
 - The server binds to `127.0.0.1` only; mutating routes check `Host` and `Origin` and accept JSON only.
 - Image and SVG checks (no scripts in SVG, pixel limits), bundler read limits, input sanitizing, per-deck write locks, and a read-only guard so tests cannot write to your real decks.
 - A pre-commit secret scan (`.githooks/pre-commit`, enable with `git config core.hooksPath .githooks`).
@@ -52,10 +54,11 @@ First public beta. slidekit has been built in the open from its first commit, an
 
 ### Development
 - `bun run test` runs the steps through a runner with a lock so heavy work never overlaps; `--only`, `--changed`, `--list` and `--slow` select steps. Browser steps use a shared browser server, fake clocks and condition waits to reduce flakiness.
-- A short sample deck (`decks/demo`) shows steps, notes and the editor, and `docs/DEVICE-CHECKLIST.md` lists what to verify on real devices.
+- A short sample deck (`decks/demo`, eight slides) shows steps, notes and the editor; tests copy the decks in `app/test/fixtures/decks` and never touch yours, and `docs/DEVICE-CHECKLIST.md` lists what to verify on real devices.
 
 ### Known limitations
 - macOS first; Linux and Windows are untested.
-- Publishing a deck to a hosting service is not part of v0.1. Export to HTML or PDF and host it yourself.
+- Publishing a deck to your own Cloudflare Worker (`deploy/`) is experimental and off by default; it needs `SLIDEKIT_EXPERIMENTAL_DEPLOY=1` and `SLIDEKIT_PUBLISH_HOST`. Otherwise export to HTML or PDF and host it yourself.
+- With 300+ comments (24 area comments with images) on a slow or heavily loaded machine, opening the Comments panel can take 3 to 4 seconds and the comments-perf test may be unstable. Comments are not lost, only rendering is slow.
 - Browser tests are heavy and some are timing sensitive.
 - The Claude Code channel is a research preview and may change.

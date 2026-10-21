@@ -53,7 +53,10 @@ bun run slidekit                  # 앱을 연다: http://127.0.0.1:3200
 - 요소, 슬라이드, 끌어 지정한 영역에 코멘트(Shift+C로 코멘트 모드). 영역 코멘트에는 그 영역의 그림이 함께 간다
 - Claude Code 채널(`channel/`, 연구 프리뷰 기능)이 코멘트를 전달하고, 에이전트가 update 방식 도구(`slidekit_edit`)로 덱을 고쳐 앱에 답한다
 - 존재 표시: 에이전트가 일하는 동안 무엇을 바꾸는지 편집기가 보여 준다
-- 코멘트 상태(Saved, Sent, Working, Replied, Resolved), Send all, 시간당 상한과 자동 처리 Pause, 서명된 코멘트(남에게 받은 덱의 코멘트는 Trust 전에는 에이전트에 가지 않는다)
+- 슬라이드 위 말풍선 핀과 호버 미리보기, 패널 아래 트레이("N saved"와 Send all), 해결한 핀 숨기기 토글
+- 코멘트의 Enter는 Claude가 연결돼 있으면 바로 보내고 아니면 저장한다(Cmd+Enter는 언제나 보내기, Shift+Enter는 줄바꿈)
+- 코멘트 상태(Saved, Sent, Working, Replied, Resolved)와 대기 이유, 멈춘 요청의 Resend와 Cancel, 슬라이드가 사라진 코멘트의 Detached 구역, 시간당 상한과 자동 처리 Pause
+- 서명된 코멘트: 남에게 받은 덱의 코멘트는 Trust 전에는 에이전트에 가지 않는다
 
 **명령줄**
 - `lint`, `doctor`(레이아웃 넘침 점검 포함), `bundle`(오프라인 HTML 한 파일), `pdf`(슬라이드, 노트, 유인물), `outline`(Markdown), `image`, `new`, `templates`
@@ -71,6 +74,7 @@ bun run slidekit image <덱> <파일> [--max 2400]   # 이미지를 덱의 asset
 bun run slidekit outline <덱> [--notes]  # Markdown 개요 출력
 bun run slidekit bundle <덱>             # dist/<덱>.html 한 파일
 bun run slidekit pdf <덱> [--notes | --handout [2|3|4|6]]   # dist/<덱>.pdf
+# `deploy`와 `unpublish`도 있지만 실험 기능이고 기본으로 꺼져 있다(알려진 한계 참고)
 bun run test                             # 전체 검증(느리다, CONTRIBUTING.md 참고)
 bun run test:changed                     # 바뀐 파일에 연결된 단계만
 ```
@@ -98,16 +102,32 @@ claude --dangerously-load-development-channels server:slidekit
 - **git**(선택): 새 덱의 `author`를 `git config user.name`으로 채운다.
 - `bun run slidekit doctor`가 환경을 점검하고 없는 것을 알려 준다.
 
+### 환경 변수
+
+모두 선택 사항이다.
+
+| 변수 | 하는 일 |
+|---|---|
+| `PORT` | 앱 포트(기본 3200). 항상 `127.0.0.1`에만 바인딩한다. |
+| `SLIDEKIT_CHROME` | PDF, 레이아웃 점검, 영역 그림에 쓸 Chrome 실행 파일 경로. |
+| `SLIDEKIT_ALLOWED_HOSTS` | 미리보기 프록시(`app/preview-proxy.ts`)가 더 받을 호스트 이름(쉼표로 구분, 포트 없이). |
+| `SLIDEKIT_COMMENT_HOURLY` | 에이전트에 보내는 코멘트의 시간당 상한(기본 60, `0`이면 끈다). |
+| `SLIDEKIT_EXPERIMENTAL_DEPLOY` | `1`이면 실험 기능인 게시를 켠다(`SLIDEKIT_PUBLISH_HOST`도 필요). |
+| `SLIDEKIT_PUBLISH_HOST` | 내 Worker가 게시한 덱을 내보낼 `https://` 호스트. |
+| `SLIDEKIT_URL` | 코멘트 채널이 앱을 찾는 주소(로컬 주소만). |
+
 ## 폴더 구조
 
 ```
 app/        편집기 앱과 로컬 서버(React, Bun.serve), 코멘트와 버전 API
+app/test/   테스트. app/test/fixtures/decks에 테스트가 복사해 고치는 덱이 있다
 engine/     바닐라 슬라이드 엔진(slidekit.js, slidekit.css)과 CLI 도구(lint, doctor, pdf, outline)
 bundler/    단일 파일 번들러(엔진, 이미지, 글꼴 부분집합을 내장)
 channel/    코멘트를 Claude Code 세션에 잇는 MCP 채널
 decks/      내 덱, 폴더 하나에 덱 하나(decks/<이름>/index.html)
 spec/       덱 규격(SPEC.md)과 설계 노트
-docs/       변경 기록, 실기기 체크리스트, 미디어
+docs/       변경 기록, 실기기 체크리스트, 미디어. docs/internal/에 관리자 노트(진행 로그, 처음 계획)
+deploy/     내 Cloudflare Worker로 게시하는 실험 기능(기본 꺼짐)
 scripts/    테스트 러너와 도우미
 .claude/    Claude Code용 slidekit 스킬과 프로젝트 설정
 ```
@@ -121,7 +141,8 @@ slidekit은 로컬 도구다. 서버는 `127.0.0.1`에만 바인딩한다. `0.0.
 베타라서 만날 수 있는 것들:
 
 - **macOS 우선.** 이미지 축소는 `sips`, 일부 점검은 macOS 키체인을 쓰고 모든 개발과 검증이 macOS에서 이뤄졌다. Linux와 Windows는 검증하지 않았다.
-- **게시(배포)는 v0.1에 없다.** HTML 한 파일이나 PDF로 내보내 직접 올린다. 게시 기능은 나중에 돌아올 수 있다.
+- **게시(배포)는 실험 기능이고 기본으로 꺼져 있다.** 내 Cloudflare Worker로 올리는 코드는 `deploy/`에 있지만, 내 Worker와 도메인을 직접 설정(`deploy/README.md`)하고 `SLIDEKIT_EXPERIMENTAL_DEPLOY=1`, `SLIDEKIT_PUBLISH_HOST=https://static.내-도메인.example`로 실행하기 전에는 Publish 메뉴, `deploy`와 `unpublish` 명령, 관련 API가 모두 꺼져 있다. 그 밖에는 HTML 한 파일이나 PDF로 내보내 직접 올린다.
+- **코멘트가 많으면 느린 기계에서 그리기가 느리다.** 알려진 한계: 코멘트가 300개 이상(이미지가 있는 영역 코멘트 24개 포함)이고 기계가 느리거나 부하가 크면 코멘트 패널이 열리는 데 3~4초 걸리고 comments-perf 시험이 불안정할 수 있다. 코멘트는 사라지지 않고 그리기만 느리다.
 - **브라우저 테스트는 무겁고 일부는 불안정하다.** 전체 테스트는 오래 걸리고 노트북 CPU를 많이 쓴다. 단계 하나만 `bun scripts/test.ts --only <단계>`로 돌린다. [CONTRIBUTING.md](CONTRIBUTING.md) 참고.
 - **PDF의 시스템 Chrome 경로는** Playwright headless shell보다 덜 검증됐다.
 - **코멘트 채널은 연구 프리뷰**라 Claude Code 쪽 플래그와 동작이 바뀔 수 있다.

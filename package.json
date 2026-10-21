@@ -1,5 +1,28 @@
 {
   "name": "slidekit",
+  "version": "0.1.0-beta",
+  "description": "Slide decks as plain HTML: a vanilla engine, a local visual editor, a presenter view, and comments that coding agents can act on.",
+  "license": "MIT",
+  "author": "Seongbeen Lee",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vynnlee/slidekit.git"
+  },
+  "homepage": "https://github.com/vynnlee/slidekit#readme",
+  "bugs": {
+    "url": "https://github.com/vynnlee/slidekit/issues"
+  },
+  "keywords": [
+    "slides",
+    "presentation",
+    "html",
+    "slide-deck",
+    "editor",
+    "bun",
+    "claude-code",
+    "mcp",
+    "coding-agent"
+  ],
   "private": true,
   "type": "module",
   "bin": {

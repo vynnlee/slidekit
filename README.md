@@ -34,7 +34,7 @@ bun run slidekit                  # opens the app at http://127.0.0.1:3200
 
 Open `my-talk` from the deck list to edit it. Double-click text to change it; edits autosave after 1.5 seconds (Cmd+S also works). Present with Cmd+Enter (from the current slide) or Shift+Cmd+Enter (from the start). Arrow keys move, `F` is fullscreen, `O` is overview, `B` and `W` black out and white out the screen.
 
-A sample deck, `slidekit-guide`, shows how the editor and engine behave.
+A short sample deck, `decks/demo` (eight slides, English), shows how steps, notes and the editor behave. Open it from the deck list first.
 
 ## Features
 

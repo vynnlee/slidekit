@@ -52,7 +52,7 @@ First public beta. slidekit has been built in the open from its first commit, an
 
 ### Development
 - `bun run test` runs the steps through a runner with a lock so heavy work never overlaps; `--only`, `--changed`, `--list` and `--slow` select steps. Browser steps use a shared browser server, fake clocks and condition waits to reduce flakiness.
-- A sample deck (`slidekit-guide`) shows the features, and `docs/DEVICE-CHECKLIST.md` lists what to verify on real devices.
+- A short sample deck (`decks/demo`) shows steps, notes and the editor, and `docs/DEVICE-CHECKLIST.md` lists what to verify on real devices.
 
 ### Known limitations
 - macOS first; Linux and Windows are untested.

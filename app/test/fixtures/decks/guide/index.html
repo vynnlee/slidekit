@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en" data-slidekit="1">
+<head>
+  <meta charset="utf-8">
+  <title>Guide deck (test fixture)</title>
+  <script type="application/json" id="deck-meta">
+    { "title": "Guide deck (test fixture)", "subtitle": "Test fixture", "author": "slidekit", "date": "2026-01-01", "visibility": "public", "id": "sample" }
+  </script>
+  <link rel="stylesheet" href="../../engine/slidekit.css">
+  <style>
+    :root {
+      --sk-accent: #a78bfa;
+    }
+    [data-slide="cover"], [data-slide="chapter"], [data-slide="end"] { justify-content: flex-end; padding-bottom: 200px; }
+    [data-slide="cover"] h1, [data-slide="end"] h1 { font-size: 160px; letter-spacing: -.03em; }
+    [data-slide="cover"] { gap: 28px; }
+    [data-slide="chapter"] h1 { font-size: 132px; }
+    body { counter-reset: ch; }
+    [data-slide="chapter"] { counter-increment: ch; gap: 36px; }
+    [data-slide="chapter"]::before { content: counter(ch, decimal-leading-zero); font: 500 28px var(--sk-font-mono); color: var(--sk-faint); }
+    [data-slide="content"] { justify-content: flex-start; padding-top: 180px; gap: 44px; }
+    ul.items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 36px; counter-reset: i; }
+    ul.items li { font-size: 34px; line-height: 1.5; color: var(--sk-fg); position: relative; padding-left: 72px; counter-increment: i; }
+    ul.items li::before { content: counter(i, decimal-leading-zero); font: 500 24px var(--sk-font-mono); color: var(--sk-faint); position: absolute; left: 0; top: 9px; }
+    ul.items li b { font-weight: 700; }
+    .keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+    .key { background: var(--sk-panel); border: 1px solid var(--sk-line); border-radius: 14px; padding: 30px 34px; display: flex; flex-direction: column; gap: 14px; }
+    .key .k { font: 500 52px var(--sk-font-mono); color: var(--sk-fg); line-height: 1; }
+    .key .d { word-break: keep-all; font-size: 28px; line-height: 1.45; color: var(--sk-muted); }
+    .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 28px; }
+    .grid2 .k { font: 700 40px var(--sk-font); letter-spacing: -.01em; }
+    .flow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; align-items: stretch; }
+    .flow .node { background: var(--sk-panel); border: 1px solid var(--sk-line); border-radius: 14px; padding: 30px 34px; display: flex; flex-direction: column; gap: 16px; }
+    .flow .node .t { font: 500 30px var(--sk-font-mono); color: var(--sk-fg); }
+    .flow .node .d { word-break: keep-all; font-size: 28px; line-height: 1.45; color: var(--sk-muted); }
+    [data-slide].two-col { display: grid; grid-template-columns: 1fr 1fr; align-content: start; column-gap: var(--sk-gap); row-gap: var(--sk-gap); }
+    .two-col > :not(.col) { grid-column: 1 / -1; }
+    .two-col > .col { display: flex; flex-direction: column; gap: calc(var(--sk-gap) / 2); min-width: 0; }
+    .two-col > .col h3 { margin: 0; font-size: calc(var(--sk-fs-body) * 1.1); font-weight: 700; line-height: 1.3; color: var(--sk-fg); }
+    [data-slide].big-number { justify-content: center; padding-block: var(--sk-pad-y); }
+    .big-number .big { font-size: 260px; font-weight: 800; line-height: 1; letter-spacing: -.04em; color: var(--sk-accent); max-width: none; }
+    code { font-family: var(--sk-font-mono); font-size: 0.82em; color: var(--sk-fg); background: var(--sk-panel); border: 1px solid var(--sk-line); border-radius: 8px; padding: .08em .45em; margin: 0 .12em; white-space: nowrap; }
+  </style>
+</head>
+<body>
+
+<section data-slide="cover">
+  <h1>slidekit</h1>
+  <p>HTMLin page select ox</p>
+  <aside data-notes>**slidekit**as column method. to by that slidekitam summary.
+
+or go second, on, time, AIus inside page bright.</aside>
+</section>
+
+<section data-slide="chapter" data-title="across">
+  <h1>button</h1>
+  <aside data-notes>so he in we that when column.
+
+- if
+- me to
+- update no
+- am is</aside>
+</section>
+
+<section data-slide="content">
+  <h2>or have screen</h2>
+  <div class="flow">
+    <div class="node"><span class="t">bun run slidekit</span><span class="d">on 127.0.0.1:3200do text it make that</span></div>
+    <div class="node"><span class="t">slidekit new &lt;be&gt;</span><span class="d">at so each. in summary up ox as</span></div>
+    <div class="node"><span class="t">page</span><span class="d">have, like, by no, text is second go</span></div>
+  </div>
+  <p>when work do, summary it an my, Cmd+with at page have. like 1.5we your ox figure Cmd+Sif update. when before from am 10then, summary review of inside Retry page us.</p>
+  <aside data-notes>it an my text at make that.
+
+**when we up**ox then, what sample.
+to: will page am is this summary text summary make. us 1when.</aside>
+</section>
+<section data-slide="content">
+<h2>result from folder at</h2>
+<div class="flow">
+<div class="node"><span class="t">Cmd+K</span><span class="d">so time. column Present, Add slide, Find, Add comment, Keyboard shortcutswe up ox</span></div>
+<div class="node"><span class="t">Cmd+F</span><span class="d">like this. before text detail make</span></div>
+<div class="node"><span class="t">Cmd+G</span><span class="d">that review or Shift+Cmd+Ggo of. Cmd+Alt+Con Vdo time with layout</span></div>
+</div>
+<p>page be(at, so, he in, Layers, summary up), ox when work, from summary by what am. is will Keyboard shortcuts(Cmd+/)go of.</p>
+<aside data-notes>on this **result text**. they make be around work from figure then up.
+language as design Gradient page have.
+by: Cmd+Kno number is summary bright Cmd+Fof on work us it. an 1what.</aside>
+</section>
+<section data-slide="content">
+<h2>be at section page</h2>
+<div class="flow">
+<div class="node"><span class="t">Gradient</span><span class="d">Fillin Backgroundwe up 2~4ox as language make</span></div>
+<div class="node"><span class="t">Deck colors</span><span class="d">to when work var()am change then go of on will</span></div>
+<div class="node"><span class="t">Recent</span><span class="d">us it like my be at so he</span></div>
+</div>
+<p>PDFthat template work from.</p>
+<aside data-notes>**detail then me**to with no am is like. go of text they WCAG make it an.
+my section Gradient at so what in with. up ox have like me to by change make.</aside>
+</section>
+<section data-slide="content">
+<h2>across when work</h2>
+<div class="flow">
+<div class="node"><span class="t">of on</span><span class="d">select Version historyus it with will summary window</span></div>
+<div class="node"><span class="t">like sample</span><span class="d">your we up make screen if work to by no am</span></div>
+<div class="node"><span class="t">is</span><span class="d">result go page have do us Undoit method</span></div>
+</div>
+<p>they make that when work from each then.</p>
+<aside data-notes>**screen time if me**. page 30MBby across this your text.
+go: make on when work it Version historyan window. update time so will in second.</aside>
+</section>
+
+<section data-slide="chapter" data-title="up">
+  <h1>ox</h1>
+  <aside data-notes>as if me to by button result.
+
+is or, then of, time column will.</aside>
+</section>
+
+<section data-slide="content">
+  <h2>page have like be</h2>
+  <div class="keys">
+    <div class="key"><span class="k">← →</span><span class="d">your design. he, second, practice review work.</span></div>
+    <div class="key"><span class="k">F  O</span><span class="d">Fas change, Ome to button.</span></div>
+    <div class="key"><span class="k">B  W</span><span class="d">with am is or like.</span></div>
+  </div>
+  <p>building Cmd+Enteron do language, Shift+Cmd+Enterit update sample. be at each second Enterin time up will page if. like this your no folder, is, simple go of on figure us what time.</p>
+  <aside data-notes>my will detail have like **in we inside ox make**if.
+
+when work from each am is or. go method Chrome on workflow us.
+sample before text be make. that Enterhe in we, Bup Wox as button me to.</aside>
+</section>
+
+<section data-slide="content">
+  <h2>page have am</h2>
+  <div class="flow">
+    <div class="node"><span class="t">is</span><span class="d">overview asidego language on. do sample work from</span></div>
+    <div class="node"><span class="t">each be</span><span class="d">what so number, in, page, up like this if me to</span></div>
+    <div class="node"><span class="t">make</span><span class="d">Tno around column section go then what do with design</span></div>
+  </div>
+  <p>an my screen at your text they make across.</p>
+  <aside data-notes>when **result** if each. to by, no am, is page have.
+
+like this do us it an my be at.
+from each in what up with will page have. Tto around no.</aside>
+</section>
+<section data-slide="content">
+<h2>method summary or</h2>
+<div class="flow">
+<div class="node"><span class="t">go</span><span class="d">when work from each QR then what my be</span></div>
+<div class="node"><span class="t">at</span><span class="d">change have in we up ox they make that to by method</span></div>
+<div class="node"><span class="t">am</span><span class="d">then, or time, before design do section like this</span></div>
+</div>
+<p>my section change so he section we from.</p>
+<aside data-notes>folder **then what me to will** figure. have like this before of detail.
+do: summary QRit an inside change at so. he structure we page have as this me.</aside>
+</section>
+
+<section data-slide="chapter" data-title="text">
+  <h1>they</h1>
+  <aside data-notes>no am is or go detail.
+
+on, do time, it, an, my, be like this.</aside>
+</section>
+
+<section data-slide="content">
+  <h2>your in they select</h2>
+  <div class="grid2">
+    <div class="key"><span class="k">ox</span><span class="d">cover, chapter, content, end. as column data-titleme figure.</span></div>
+    <div class="key"><span class="k">by</span><span class="d">1920x1080 update am is will page have.</span></div>
+    <div class="key"><span class="k">on</span><span class="d">do, us, it, an make --sk- across at result from.</span></div>
+    <div class="key"><span class="k">each we</span><span class="d">what asideox teaching if. page to by no your is summary.</span></div>
+  </div>
+  <aside data-notes>go that `spec/SPEC.md`on AIwork **us**it an what time at.
+
+will `:root` he have like around ox text they.</aside>
+</section>
+
+<section data-slide="content">
+  <h2>make to styleby work</h2>
+  <div class="flow">
+    <div class="node"><span class="t">from is</span><span class="d">then screen of number inside page. it an my HTML summary</span></div>
+    <div class="node"><span class="t">text</span><span class="d">so stylehe simple when sectionup from</span></div>
+    <div class="node"><span class="t">as</span><span class="d">if me styleto by no am is or go of</span></div>
+  </div>
+  <p>AIon do us it. when work be CSSat so he.</p>
+  <aside data-notes>time with will ox. **as CSSif me to**by.
+no am is or work. from each then what.</aside>
+</section>
+
+<section data-slide="content" class="big-number">
+  <p class="big">1</p>
+  <p>it with will be have so he in CSS we they ox.</p>
+  <aside data-notes>as when work to. each no am time or 1go page bright.</aside>
+</section>
+
+<section data-slide="content" class="two-col">
+  <h2>do us your an</h2>
+  <div class="col">
+    <h3>they be at so</h3>
+    <p>he HTML in each up. AIox sample if me.</p>
+  </div>
+  <div class="col">
+    <h3>detail by no</h3>
+    <p>section your or they make. that button.</p>
+  </div>
+  <aside data-notes>us from **an my**be time. so will figure we.</aside>
+</section>
+
+<section data-slide="content">
+  <h2>update this your</h2>
+  <div class="flow">
+    <div class="node"><span class="t">--sk-accent</span><span class="d">if me make by when number from</span></div>
+    <div class="node"><span class="t">--sk-font</span><span class="d">each go of on with us page have</span></div>
+    <div class="node"><span class="t">--sk-pad-x</span><span class="d">like be your method he window that</span></div>
+  </div>
+  <p>when <code>:root</code> ox from each second to time with.</p>
+  <aside data-notes>will page bright like button your. do they **Reset it**an my summary from so he.
+in: we before ox as if me this your no they.</aside>
+</section>
+<section data-slide="content">
+<h2>make or go</h2>
+<div class="flow">
+<div class="node"><span class="t">Theme</span><span class="d">of layout each then it an with be at have</span></div>
+<div class="node"><span class="t">Deck settings</span><span class="d">he, in, your, up, ox, as that when work</span></div>
+<div class="node"><span class="t">by</span><span class="d">each am across or with layout page</span></div>
+</div>
+<p>have <code>deck-meta</code> like <code>html lang</code>it column.</p>
+<aside data-notes>text **be at so**he work from each ox what if.
+me will template section like is or text folder make.
+do: Themeus work Deck settingsan each then. at time with in page.</aside>
+</section>
+
+<section data-slide="content">
+  <h2>second like review</h2>
+  <p>if section <code>data-step</code>to make across.</p>
+  <ul class="items">
+    <li data-step="2"><code>data-step="N"</code>am is Nlayout each.</li>
+    <li data-step="3" data-step-effect="fade">then <code>data-step-effect</code>on rise, fade, left, scale, blur, none do with.</li>
+    <li data-step="4" data-step-effect="none">JSit an my.</li>
+  </ul>
+  <aside data-notes>update at your text they second.
+
+up when **fade**, as from **none** change. to by left, scale, blurno am.
+is or have simple. around do text they window my.</aside>
+</section>
+
+<section data-slide="chapter" data-title="AIbe before">
+  <h1>AIso detail</h1>
+  <aside data-notes>then we AI time summary.
+
+will if, me, PDF, to, by your text.</aside>
+</section>
+
+<section data-slide="content">
+  <h2>AIis or go when</h2>
+  <div class="flow">
+    <div class="node"><span class="t">work</span><span class="d">from us then an my Claude Code with at so have like</span></div>
+    <div class="node"><span class="t">we</span><span class="d">number slidekit text as AIif that to by no each</span></div>
+    <div class="node"><span class="t">lint</span><span class="d">slidekit lintis or time of on</span></div>
+  </div>
+  <p>template C us, like, sample Add commentmy be, Shift+C they section that review work up change(then across button). summary Enterby Add(no), Cmd+Enteram Send now(like), Shift+Enteror summary, of on window that Send all to Claudeit an my 10each at what. he number we summary workflow as this result layout folder(Claude Code Channels).</p>
+  <aside data-notes>AIno that **when, or, lint** go each section.
+
+update sample it an my be like so he.
+in: they bright ox Claude Code when work from each. select simple Enter(Add)am is Send all to Claudeor go of like.</aside>
+</section>
+<section data-slide="content">
+<h2>sample Claudeus text an</h2>
+<ul class="items">
+<li>make: that when Cso he in(Shift+C then what time result will me). Enterto Add, Cmd+Enterby Send now, Shift+Enterno summary. text they window that on.</li>
+<li>work: Claude connectedus each an Sent to Claude, what review Claude is workingat will. Claude not connectedhe have across Claude Codeup ox. layout Waitingif select.</li>
+<li>simple: Enter(Add)by column am each Send all to Claudeor what of 10on do. Cmd+Enter(Send now)us have like.</li>
+<li>my be: Repliedat so Resolve(E)he, that we up Revert Claude's editox as then simple.</li>
+</ul>
+<aside data-notes>to by: will figure is, or this before, text Sent to Claudedo Claude is working, Repliedus that an my be Revertat so he.
+in result up ox have(simple me to by)no Unverifiedam that Trustor work from Claudeon do what.</aside>
+</section>
+
+<section data-slide="content">
+  <h2>section an inside</h2>
+  <div class="flow">
+    <div class="node"><span class="t">bundle</span><span class="d">be, have, like he HTML in we</span></div>
+    <div class="node"><span class="t">pdf</span><span class="d">summary ox that, 16:9. when me to by no 2, 3, 4, 6am is before will</span></div>
+    <div class="node"><span class="t">deploy</span><span class="d">static.vynnlee.com, of on screen</span></div>
+  </div>
+  <p>review Export summary an my be.</p>
+  <aside data-notes>across **so, PDF, he** in folder.
+
+then `slidekit bundle`, `slidekit pdf`, `slidekit deploy`ox Export time if will to.
+by update sample. before design they of screen PDFdo number.</aside>
+</section>
+<section data-slide="content">
+<h2>from change</h2>
+<div class="flow">
+<div class="node"><span class="t">Export my</span><span class="d">Unpublishbe at with he in have up this your</span></div>
+<div class="node"><span class="t">slidekit unpublish</span><span class="d">if they to by when work. is or go --yesof time</span></div>
+<div class="node"><span class="t">do us</span><span class="d">it an dist like section your text they</span></div>
+</div>
+<p>in that up work <code>.publish.json</code>as each.</p>
+<aside data-notes>**then what by no**. am page or like this.
+your text us make an my work. --yes at so select in.</aside>
+</section>
+
+<section data-slide="content">
+  <h2>we up method</h2>
+  <div class="flow">
+    <div class="node"><span class="t">slidekit lint</span><span class="d">as have me to your no am</span></div>
+    <div class="node"><span class="t">slidekit doctor</span><span class="d">is that review, of from do then, it, time result. --layoutbe page have he</span></div>
+    <div class="node"><span class="t">around</span><span class="d">column up 8ox window that me before</span></div>
+  </div>
+  <p>Export from Publishno then is or with of on. bright us this your text they, Layersat so when, summary we, Viewup Safe areaox as if.</p>
+  <aside data-notes>with **to detail have am**is. lint your go of make.
+
+summary us it an each.
+doctorbe at time with will. we up like this your design.</aside>
+</section>
+<section data-slide="content">
+<h2>to by no when number</h2>
+<ul class="items">
+<li><code>slidekit doctor &lt;or&gt; --layout</code>go of on time.</li>
+<li><code>slidekit bundle &lt;us&gt;</code>it HTML an have like. at your text in we.</li>
+<li><code>slidekit pdf &lt;up&gt; --notes</code>ox as PDFif each.</li>
+<li>to HTMLby section am is or have of on.</li>
+<li>your layout summary <code>docs/DEVICE-CHECKLIST.md</code>an summary around.</li>
+</ul>
+<aside data-notes>work section figure in we. **time HTMLox as page me** interface by your am.
+is PDFor across of on layout us.</aside>
+</section>
+
+<section data-slide="end">
+  <h1>section</h1>
+  <aside data-notes>what time.
+
+with will.
+page have. in we your READMEox 5as teaching.</aside>
+</section>
+
+<script src="../../engine/slidekit.js"></script>
+</body>
+</html>

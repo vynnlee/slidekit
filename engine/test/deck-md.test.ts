@@ -7,7 +7,8 @@ import { TEMPLATE_IDS, buildDeck } from "../templates";
 
 const root = join(import.meta.dir, "..", "..");
 const wrap = (sections: string, head = "") => `<!doctype html><html lang="ko" data-slidekit="1"><head><meta charset="utf-8"><title>T</title>${head}<script type="application/json" id="deck-meta">{"title":"제목","subtitle":"부제목","author":"작성자","date":"2026-10-18","lang":"ko"}</script></head><body>${sections}</body></html>`;
-const git = (path: string) => { const g = Bun.spawnSync(["git", "show", `HEAD:${path}`], { cwd: root, stdout: "pipe", stderr: "pipe", maxBuffer: 1 << 28 }); return g.exitCode === 0 ? g.stdout.toString() : null; };
+/** 시험용 덱(app/test/fixtures/decks/<이름>)의 index.html */
+const fixture = (name: string) => readFileSync(join(root, "app", "test", "fixtures", "decks", name, "index.html"), "utf8");
 
 test("노트는 기본으로 새지 않는다: aside, 중첩, 주석, 메타 어디에도", () => {
   const html = wrap(`<section data-slide="content"><h2>A</h2><p>본문</p><aside data-notes>SECRETNOTE 하나</aside></section>
@@ -91,14 +92,14 @@ function lossless(name: string, html: string) {
   for (const [w, n] of a) if ((b.get(w) ?? 0) < n) missing.push(`${w}(${n}>${b.get(w) ?? 0})`);
   expect([name, missing.slice(0, 8)]).toEqual([name, []]);
 }
-test("글 무손실: 템플릿 3종과 커밋된 안내 덱과 워크숍 덱", () => {
+test("글 무손실: 템플릿 3종과 시험용 덱 둘", () => {
   for (const id of TEMPLATE_IDS) lossless(`템플릿 ${id}`, buildDeck(id, { title: "샘플", date: "2026-10-18", author: "작성자", id: "s" }));
-  for (const d of ["slidekit-guide", "vibe-coding-workshop"]) { const h = git(`decks/${d}/index.html`); if (h) lossless(d, h); }
+  for (const d of ["guide", "sample"]) lossless(d, fixture(d));
 });
 
 test("실덱: 이미지 수가 같고 노트가 없으며 같은 입력은 같은 출력이고 100ms 안에 끝난다", () => {
-  for (const d of ["slidekit-guide", "vibe-coding-workshop"]) {
-    const h = git(`decks/${d}/index.html`); if (!h) continue;
+  for (const d of ["guide", "sample"]) {
+    const h = fixture(d);
     deckMarkdown(h); // 예열
     const t0 = performance.now(); const md = deckMarkdown(h); const ms = performance.now() - t0;
     expect(deckMarkdown(h)).toBe(md);

@@ -5,7 +5,7 @@ const { chromium } = require(process.env.PW || 'playwright-core');
 const fs = require('fs'), path = require('path');
 const BASE = process.env.BASE || 'http://127.0.0.1:3200';
 const { makeTestDeck } = require('../../scripts/lib/test-deck.cjs');
-const T = makeTestDeck('editor', 'vibe-coding-workshop', { slides: 8 }); // 실제 덱 대신 작은 사본(8장)에서만 고친다: 대부분의 검사는 장수와 무관하게 빨리 돌게
+const T = makeTestDeck('editor', 'sample', { slides: 8 }); // 실제 덱 대신 작은 사본(8장)에서만 고친다: 대부분의 검사는 장수와 무관하게 빨리 돌게
 const TL = makeTestDeck('editor-long'); // 53장 사본: 필름스트립 썸네일 검사에만 쓰고 고치지 않는다
 const N0 = 8;
 const FILE = T.file;

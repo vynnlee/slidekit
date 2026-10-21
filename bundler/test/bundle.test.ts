@@ -59,7 +59,7 @@ test("저장소 내부(.git, 다른 덱, .env)와 덱 밖을 가리키는 심볼
   const { symlinkSync } = require("node:fs");
   mkdirSync(dir, { recursive: true });
   try {
-    for (const [src, why] of [["../../.git/config", ".git"], ["../vibe-coding-workshop/index.html", "다른 덱"], ["../../.env", ".env"], ["../../deploy/deploy.ts", "deploy"], ["link.txt", "심볼릭 링크"]] as const) {
+    for (const [src, why] of [["../../.git/config", ".git"], ["../demo/index.html", "다른 덱"], ["../../.env", ".env"], ["../../deploy/deploy.ts", "deploy"], ["link.txt", "심볼릭 링크"]] as const) {
       if (src === "link.txt") { try { symlinkSync("/etc/hosts", join(dir, "link.txt")); } catch { /* 이미 있음 */ } }
       writeFileSync(join(dir, "index.html"), `<html data-slidekit="1"><head><title>t</title><script type="application/json" id="deck-meta">{"title":"t"}</script></head><body><section data-slide="cover"><img src="${src}"></section></body></html>`);
       const r = Bun.spawnSync(["bun", join(root, "bundler", "bundle.ts"), "_bundletest"], { stderr: "pipe" });

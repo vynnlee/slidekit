@@ -6,7 +6,7 @@
    2) CPU 속도 1배, 4배, 8배에서 같은 불변식(느린 기계에서 전환이 겹쳐도 깨지지 않는다)
    3) 긴 작업(50ms 초과)은 건수만 INFO로 출력한다(환경 잡음과 섞이므로 단언하지 않는다). 대신 큰 덱의 이동 한 번의 비용(중앙값, p90)을 단언한다
    4) 누수: 이동 수백 번 뒤 DOM 노드 수와 이벤트 리스너 수가 처음과 같다
-   5) 호환: 단계가 있는 덱(vibe-coding-workshop 읽기 전용 사본, slidekit-guide)을 이전 엔진(ANIM_BASE, 기본 c11afe0)과 같은 순서로 걸어 상태, 안내 문장, 직접 만든 stepper 호출 로그를 비교
+   5) 호환: 단계가 있는 덱(sample, guide 시험용 덱)을 이전 엔진(ANIM_BASE, 기본 c11afe0)과 같은 순서로 걸어 상태, 안내 문장, 직접 만든 stepper 호출 로그를 비교
    환경 변수: ANIM_MOVES, ANIM_SEEDS, ANIM_RATES, ANIM_REPEAT(같은 시드를 되풀이해 발생률을 잼), ANIM_TRACE(긴 작업이 나오면 Chrome 트레이스로 스크립트, 스타일, 레이아웃, 페인트, GC를 구분), ANIM_ONLY_COMPAT, ANIM_SKIP_COMPAT
    사용: PW=<playwright-core> CHROME=<headless shell> node engine/test/anim-stress.cjs   (ANIM_MOVES로 이동 횟수, 기본 150) */
 const { launch } = require('../../scripts/lib/pw.cjs');
@@ -130,7 +130,7 @@ const settle = (p) => p.waitForFunction(() => document.getAnimations().length ==
         await ctx.close();
       } finally { fs.rmSync(CDIR, { recursive: true, force: true }); }
     }
-    /* 호환: 단계가 있는 덱(사용자 덱 vibe-coding-workshop, 안내 덱 slidekit-guide)을 이전 엔진과 새 엔진으로 같은 이동 순서로 걸어 비교한다(읽기 전용 사본, 사용자 덱은 건드리지 않는다).
+    /* 호환: 단계가 있는 시험용 덱(sample, guide)을 이전 엔진과 새 엔진으로 같은 이동 순서로 걸어 비교한다(읽기 전용 사본).
        각 슬라이드: 점프 -> 앞으로 끝까지 -> 뒤로 처음까지 -> 다시 점프. 지점마다 해시, 안내 문장(슬라이드 n / N, 단계 k / S: info.steps와 활성 단계), 선언형 요소의 계산 상태,
        SlideKit.stepper로 등록한 직접 만든 stepper의 호출 로그(메서드 이름, 인자, 반환 값의 순서와 횟수)를 기록해 두 엔진의 기록이 같아야 한다. */
     if (!process.env.ANIM_SKIP_COMPAT) {
@@ -138,14 +138,11 @@ const settle = (p) => p.waitForFunction(() => document.getAnimations().length ==
       let okOld = true;
       for (const f of ['slidekit.js', 'slidekit.css']) { const g = cp.spawnSync('git', ['show', `${BASE_REV}:engine/${f}`], { cwd: ROOT, encoding: 'utf8' }); if (g.status !== 0) okOld = false; else fs.writeFileSync(path.join(OLD, 'engine', f), g.stdout); }
       if (!okOld) console.log('SKIP 호환 비교(기준 엔진 ' + BASE_REV + '을 git에서 못 읽음)');
-      else for (const name of ['vibe-coding-workshop', 'slidekit-guide']) {
-        const src = path.join(ROOT, 'decks', name, 'index.html');
+      else for (const name of ['sample', 'guide']) {
+        const src = path.join(ROOT, 'app', 'test', 'fixtures', 'decks', name, 'index.html');
         fs.mkdirSync(path.join(OLD, 'decks', name), { recursive: true });
-        /* 시험은 사용자의 커밋 안 된 편집에 기대지 않는다: 두 엔진 모두 커밋된 내용(HEAD)을 읽는다. git에서 못 읽을 때만 작업트리 파일을 쓴다 */
-        let from = src;
-        const g = cp.spawnSync('git', ['show', `HEAD:decks/${name}/index.html`], { cwd: ROOT, encoding: 'utf8', maxBuffer: 1 << 28 });
-        if (g.status === 0) { from = path.join(DECKROOT, 'decks', '_anim-compat-' + name, 'index.html'); fs.mkdirSync(path.dirname(from), { recursive: true }); fs.writeFileSync(from, g.stdout); } /* 엔진은 상대 경로로 새 엔진을 읽는다 */
-        else if (!fs.existsSync(src)) continue;
+        /* 시험용 덱(app/test/fixtures/decks)을 새 엔진의 decks 폴더로 복사해 읽는다(엔진은 상대 경로로 새 엔진을 읽는다) */
+        const from = path.join(DECKROOT, 'decks', '_anim-compat-' + name, 'index.html'); fs.mkdirSync(path.dirname(from), { recursive: true }); fs.copyFileSync(src, from);
         fs.copyFileSync(from, path.join(OLD, 'decks', name, 'index.html'));
         const walk = async (url) => {
           const ctx = await b.newContext({ viewport: { width: 1600, height: 900 } }); await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
@@ -196,7 +193,7 @@ const settle = (p) => p.waitForFunction(() => document.getAnimations().length ==
     }
   } finally {
     await b.close(); fs.rmSync(DIR, { recursive: true, force: true }); fs.rmSync(OLD, { recursive: true, force: true });
-    for (const n of ['vibe-coding-workshop', 'slidekit-guide']) fs.rmSync(path.join(DECKROOT, 'decks', '_anim-compat-' + n), { recursive: true, force: true });
+    for (const n of ['sample', 'guide']) fs.rmSync(path.join(DECKROOT, 'decks', '_anim-compat-' + n), { recursive: true, force: true });
   }
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); fs.rmSync(DIR, { recursive: true, force: true }); process.exit(2); });

@@ -9,7 +9,7 @@ let fail = 0;
 const check = (label, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + label + (ok || extra === undefined ? '' : '  ' + JSON.stringify(extra))); };
 
 (async () => {
-  const T = makeTestDeck('error-boundary', 'vibe-coding-workshop', { slides: 3 });
+  const T = makeTestDeck('error-boundary', 'sample', { slides: 3 });
   const browser = await launch();
   const ctx = await browser.newContext({ viewport: { width: 1100, height: 800 }, permissions: ['clipboard-read', 'clipboard-write'] });
   await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());

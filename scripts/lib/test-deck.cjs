@@ -8,7 +8,6 @@
    decks 아래 _로 시작하는 폴더는 .gitignore에 있어 커밋되지 않는다. */
 const fs = require('fs');
 const path = require('path');
-const { execFileSync } = require('child_process');
 
 const decks = path.join(__dirname, '..', '..', 'decks');
 
@@ -20,26 +19,20 @@ function keepSlides(html, n) {
   return html.slice(0, starts[n]).replace(/\s+$/, '') + html.slice(tail);
 }
 
-// 시험은 사용자의 커밋 안 된 덱 편집에 기대면 안 된다: index.html은 작업트리가 아니라 커밋된 내용(HEAD)을 쓴다. git이 없거나 추적 밖의 덱이면 작업트리 파일을 쓴다.
-function committedHtml(from, fallback) {
-  try { return execFileSync('git', ['show', `HEAD:decks/${from}/index.html`], { cwd: path.join(__dirname, '..', '..'), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return fallback; }
-}
+// 시험용 원본 덱은 저장소에 커밋된 app/test/fixtures/decks/<이름>/index.html이다(sample: 53장, 단계 요소와 stepper와 이미지를 가진 긴 덱, guide: 26장, 외부 참조가 없는 덱, 글은 뜻 없는 영어 단어). 사용자의 덱과 무관하다.
+const fixtures = path.join(__dirname, '..', '..', 'app', 'test', 'fixtures', 'decks');
 
-function makeTestDeck(name, from = 'vibe-coding-workshop', opts = {}) {
+function makeTestDeck(name, from = 'sample', opts = {}) {
   if (!/^[a-z0-9-]+$/.test(name)) throw new Error('name은 소문자, 숫자, -만 쓴다');
   const folder = `_e2e-${name}`;
   const id = `e2e-${name}`;
   const dir = path.join(decks, folder);
   fs.rmSync(dir, { recursive: true, force: true });
-  if (fs.existsSync(path.join(decks, from))) fs.cpSync(path.join(decks, from), dir, { recursive: true });
-  else { // 작업트리에서 사라진 덱(사용자가 휴지통으로 옮김)은 커밋된 내용에서 꺼낸다
-    const root = path.join(__dirname, '..', '..'), tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'td-'));
-    execFileSync('sh', ['-c', `git archive HEAD decks/${from} | tar -x -C "${tmp}"`], { cwd: root });
-    fs.cpSync(path.join(tmp, 'decks', from), dir, { recursive: true }); fs.rmSync(tmp, { recursive: true, force: true });
-  }
+  if (!fs.existsSync(path.join(fixtures, from, 'index.html'))) throw new Error(`시험용 덱이 없다: app/test/fixtures/decks/${from}`);
+  fs.cpSync(path.join(fixtures, from), dir, { recursive: true });
   fs.rmSync(path.join(dir, 'comments.json'), { force: true });
   const file = path.join(dir, 'index.html');
-  const html = committedHtml(from, fs.readFileSync(file, 'utf8')); /* 사본 index.html은 커밋된 내용이다 */
+  const html = fs.readFileSync(file, 'utf8');
   // 원본 id(없으면 폴더 이름)를 사본 id로 바꾼다. 편집기 라우트가 메타 id로 덱을 연다.
   const m = html.match(/"id"\s*:\s*"([^"]+)"/);
   let out = m ? html.replace(m[0], `"id": "${id}"`) : html.replace(/(<script[^>]*id="deck-meta"[^>]*>\s*\{)/, `$1 "id": "${id}",`);

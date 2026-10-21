@@ -36,7 +36,7 @@ window.__tries = tries;
 
 (async () => {
   const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'sk-csp-'));
-  const decks = { 'csp-work': makeTestDeck('csp-work'), 'csp-guide': makeTestDeck('csp-guide', 'slidekit-guide') };
+  const decks = { 'csp-work': makeTestDeck('csp-work'), 'csp-guide': makeTestDeck('csp-guide', 'guide') };
   const files = [];
   for (const [name, t] of Object.entries(decks)) {
     const r = cp.spawnSync('bun', [path.join(ROOT, 'app/server.ts'), 'bundle', t.folder], { cwd: ROOT, encoding: 'utf8' });

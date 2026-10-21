@@ -141,9 +141,9 @@ test("퍼즈: 무작위 편집 뒤에도 불변식(퇴장 > 등장, 값 범위),
   }
 });
 
-test("실제 덱 둘: 모든 슬라이드의 단계 속성을 타임라인으로 읽고 같은 값 재편집은 아무것도 쓰지 않는다", () => {
-  for (const deck of ["vibe-coding-workshop", "slidekit-guide"]) {
-    const f = new URL(`../../decks/${deck}/index.html`, import.meta.url);
+test("시험용 덱 둘(sample, guide): 모든 슬라이드의 단계 속성을 타임라인으로 읽고 같은 값 재편집은 아무것도 쓰지 않는다", () => {
+  for (const deck of ["sample", "guide"]) {
+    const f = new URL(`./fixtures/decks/${deck}/index.html`, import.meta.url);
     if (!existsSync(f)) continue;
     const html = readFileSync(f, "utf8");
     for (const sec of html.split(/<section\b[^>]*data-slide/).slice(1)) {

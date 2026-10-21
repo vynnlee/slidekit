@@ -30,8 +30,8 @@ const AXE = (() => {
   return cands.sort().at(-1) ?? "";
 })();
 
-// 테스트 서버는 이 덱들에 PUT하지 못한다(실제 덱 보호). 고치는 테스트는 makeTestDeck 사본을 쓴다.
-const READONLY = "vibe-coding-workshop,slidekit-guide";
+// 테스트 서버는 이 덱에 PUT하지 못한다(저장소의 덱 보호). 고치는 테스트는 makeTestDeck 사본을 쓴다.
+const READONLY = "demo";
 // 포트: 3240 정적(엔진), 3242 채널, 3245 앱(배포 dry-run, 모든 앱 단계가 공유)
 const DRY = "http://127.0.0.1:3245", APP = DRY, STATIC = "http://127.0.0.1:3240";
 type Step = { name: string; cmd: string[]; env?: Record<string, string>; server?: "app" | "dry" | "static"; slow?: boolean; needs?: "axe" };

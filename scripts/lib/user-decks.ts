@@ -1,4 +1,4 @@
-// 사용자 덱 보호: 시험이 커밋된 실제 덱(decks/vibe-coding-workshop 등)의 index.html, comments.json, 점 폴더(.versions, .comments), 파일 목록을
+// 사용자 덱 보호: 시험이 커밋된 실제 덱(decks/demo 등)의 index.html, comments.json, 점 폴더(.versions, .comments), 파일 목록을
 // 바꾸지 않았는지 단계 앞뒤로 비교한다. 러너가 단계마다 snapshot()을 찍고 diff()가 있으면 알린다(scripts/test.ts 연결은 lead).
 // 사용자가 시험 도중 직접 편집할 수도 있으므로 기본은 경고이고, SLIDEKIT_GUARD_STRICT=1이면 실패로 다룬다.
 import { createHash } from "node:crypto";

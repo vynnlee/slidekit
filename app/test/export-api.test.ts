@@ -4,14 +4,13 @@ import { execFileSync } from "node:child_process";
 import { cpSync as cp, existsSync, mkdirSync as mk, readFileSync as rd, rmSync as rm, writeFileSync as wr } from "node:fs";
 import { join as pj } from "node:path";
 
-// 사용자의 커밋 안 된 덱 편집에 기대지 않도록, 커밋된 워크숍 덱(HEAD)의 index.html로 임시 덱 폴더를 만든다(export-api의 id 규칙이 _로 시작하는 폴더를 거절하므로 qa- 이름을 쓴다).
+// 사용자의 덱에 기대지 않도록, 저장소의 시험용 덱(app/test/fixtures/decks/sample)으로 임시 덱 폴더를 만든다(export-api의 id 규칙이 _로 시작하는 폴더를 거절하므로 qa- 이름을 쓴다).
 const WORK = "qa-export-work";
 const workDir = pj(import.meta.dir, "..", "..", "decks", WORK);
-const committed = (() => { try { return execFileSync("git", ["show", "HEAD:decks/vibe-coding-workshop/index.html"], { cwd: pj(import.meta.dir, "..", ".."), encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] }); } catch { return rd(pj(import.meta.dir, "..", "..", "decks", "vibe-coding-workshop", "index.html"), "utf8"); } })();
+const srcDir = pj(import.meta.dir, "fixtures", "decks", "sample");
 rm(workDir, { recursive: true, force: true });
-const srcDir = pj(import.meta.dir, "..", "..", "decks", "vibe-coding-workshop");
-if (existsSync(srcDir)) cp(srcDir, workDir, { recursive: true }); else mk(workDir, { recursive: true }); // 이미지는 작업트리 것을 쓰고 본문만 커밋된 내용으로 바꾼다
-wr(pj(workDir, "index.html"), committed.replace(/"id"\s*:\s*"[^"]*"/, `"id": "${WORK}"`)); // 같은 id의 덱이 목록에 둘 생기지 않게 id를 바꾼다
+cp(srcDir, workDir, { recursive: true });
+wr(pj(workDir, "index.html"), rd(pj(srcDir, "index.html"), "utf8").replace(/"id"\s*:\s*"[^"]*"/, `"id": "${WORK}"`)); // 같은 id의 덱이 목록에 둘 생기지 않게 id를 바꾼다
 afterAll(() => rm(workDir, { recursive: true, force: true })); // bun test는 exit 이벤트를 안 불러 사본이 남는다
 
 const req = (id: string, body?: unknown, url = "http://x/") => Object.assign(new Request(url, { method: body === undefined ? "GET" : "POST", body: body === undefined ? undefined : JSON.stringify(body), headers: { "content-type": "application/json" } }), { params: { id } });
@@ -68,7 +67,7 @@ test("비밀번호 덱: 6자 미만이나 없는 비밀번호는 400, 공개 범
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("배포 전 점검: 잘못된 id는 404, 커밋된 워크숍 덱 사본은 lint 개수, 공개 범위, 크기 추정을 준다(읽기만 한다)", async () => {
+test("배포 전 점검: 잘못된 id는 404, 시험용 덱 사본은 lint 개수, 공개 범위, 크기 추정을 준다(읽기만 한다)", async () => {
   const r = makeRoutes(ok());
   expect((await r["/api/decks/:id/check"].GET(req("../x"))).status).toBe(404);
   const res = await r["/api/decks/:id/check"].GET(req(WORK));

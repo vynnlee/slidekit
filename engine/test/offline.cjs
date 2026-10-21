@@ -1,6 +1,6 @@
 /* 번들한 덱과 PDF가 네트워크 없이 같은 결과인지 본다(발표장 와이파이가 불안정한 경우).
    1) 외부 참조가 없는 덱(이미지, CSS url, poster)을 번들해 file://로 열고 http(s)와 ws 요청을 모두 막고 기록한다: 0건, 화면이 뜸, 이미지가 그려짐, setOffline도 같은 결과
-   2) slidekit-guide도 같다
+   2) guide도 같다
    3) 외부 이미지 참조가 남은 덱은 lint가 external을 경고하고 doctor가 알리며, 번들 결과에 그 참조가 남아 있음을 확인한다(숨기지 않는다)
    4) 느린 망(외부 요청 응답 5초 지연): 번들은 영향 없음(요청이 없다), 번들하지 않은 외부 글꼴 덱은 렌더가 그만큼 막히는지 재서 알린다(덱 수정은 사용자 몫, 실패로 치지 않음)
    5) PDF 생성은 네트워크를 쓰지 않는다(Chrome 호스트 해석을 막은 채 만든다): 페이지 수가 같다
@@ -37,7 +37,7 @@ const external = (h) => [...h.matchAll(/\b(?:src|href|poster)=["'](https?:\/\/[^
     fs.mkdirSync(D1, { recursive: true }); fs.mkdirSync(D2, { recursive: true }); fs.mkdirSync(D3, { recursive: true });
     fs.writeFileSync(path.join(D3, 'index.html'), html3);
     fs.writeFileSync(path.join(D1, 'pic.png'), PNG); fs.writeFileSync(path.join(D1, 'index.html'), html1); fs.writeFileSync(path.join(D2, 'index.html'), html2);
-    const TG = require('../../scripts/lib/test-deck.cjs').makeTestDeck('offline-guide', 'slidekit-guide'); /* 커밋된 안내 덱의 사본 */
+    const TG = require('../../scripts/lib/test-deck.cjs').makeTestDeck('offline-guide', 'guide'); /* 커밋된 안내 덱의 사본 */
     const guideHtml = path.join(ROOT, 'dist', TG.folder + '.html');
     check('번들 생성(외부 참조 없는 덱)', sh('bun app/server.ts bundle _off-test').status === 0);
     const out1 = path.join(ROOT, 'dist', '_off-test.html'), t1 = fs.readFileSync(out1, 'utf8');
@@ -46,11 +46,11 @@ const external = (h) => [...h.matchAll(/\b(?:src|href|poster)=["'](https?:\/\/[^
       const r = await open(out1, off);
       check(`번들을 ${name} 상태로: 외부 요청 0건, 화면이 뜨고 이미지가 그려짐, 페이지 오류 없음`, r.reqs.length === 0 && r.errors.length === 0 && r.info.slides === 2 && r.info.img === 1, r);
     }
-    check('번들 생성(slidekit-guide)', sh('bun app/server.ts bundle ' + TG.folder).status === 0);
+    check('번들 생성(guide)', sh('bun app/server.ts bundle ' + TG.folder).status === 0);
     const tg = fs.readFileSync(guideHtml, 'utf8');
-    check('slidekit-guide 번들에 http(s) 참조가 없다', external(tg).length === 0, external(tg));
+    check('guide 번들에 http(s) 참조가 없다', external(tg).length === 0, external(tg));
     const g = await open(guideHtml, true);
-    check('slidekit-guide를 오프라인으로: 외부 요청 0건, 26장, 오류 없음', g.reqs.length === 0 && g.errors.length === 0 && g.info.slides >= 20, g);
+    check('guide를 오프라인으로: 외부 요청 0건, 26장, 오류 없음', g.reqs.length === 0 && g.errors.length === 0 && g.info.slides >= 20, g);
     // 외부 참조가 남은 덱: 숨기지 않고 알린다
     const lint = sh('bun app/server.ts lint _off-ext'); check('lint가 외부 리소스를 경고', /external|외부 리소스/.test(lint.stdout), lint.stdout.slice(-200));
     const doc = sh('bun app/server.ts doctor _off-ext'); check('doctor <덱>이 경고 수에 알림', /경고 [1-9]|WARN|!!/.test(doc.stdout), doc.stdout.slice(0, 300));

@@ -1,10 +1,10 @@
 /* 앱 화면(목록, 발표자 화면, 편집기, 리모컨)이 외부 호스트로 요청을 보내지 않는지 본다. 발표장 와이파이가 불안정해도 화면이 떠야 한다.
    127.0.0.1 밖으로 나가는 요청을 모두 막고 기록해 0건이어야 하고, 막은 상태에서도 화면이 뜨고 페이지 오류가 없어야 한다.
-   외부 글꼴을 쓰는 덱(예: vibe-coding-workshop)은 그 덱의 요청이므로 여기서 보지 않고, 외부 참조가 없는 slidekit-guide로 본다.
+   외부 글꼴을 쓰는 덱(예: 글꼴 CDN을 쓰는 덱)은 그 덱의 요청이므로 여기서 보지 않고, 외부 참조가 없는 guide 시험용 덱으로 본다.
    Usage: PW=<playwright-core> CHROME=<headless shell> BASE=http://127.0.0.1:3200 node app/test/offline-app.cjs */
 const { launch } = require('../../scripts/lib/pw.cjs');
 const { makeTestDeck } = require('../../scripts/lib/test-deck.cjs');
-const T = makeTestDeck('offline-app', 'slidekit-guide'); // 커밋된 안내 덱의 사본(작업트리의 덱이 바뀌거나 없어도 같다)
+const T = makeTestDeck('offline-app', 'guide'); // 커밋된 안내 덱의 사본(작업트리의 덱이 바뀌거나 없어도 같다)
 const BASE = process.env.BASE || 'http://127.0.0.1:3200';
 let fail = 0;
 const check = (name, ok, extra) => { if (!ok) fail++; console.log((ok ? 'PASS ' : 'FAIL ') + name + (ok || extra === undefined ? '' : '  ' + JSON.stringify(extra))); };

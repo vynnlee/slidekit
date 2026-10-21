@@ -174,7 +174,7 @@ SlideKit.stepper(document.getElementById('tok-slide'), {
 - `setInterval`이나 타이머로 도는 장식은 `slide.hasAttribute('data-active')`일 때만 움직인다. 슬라이드 진입과 이탈은 요소의 `sk:enter`, `sk:leave` 이벤트(버블링)로도 알 수 있다.
 - 전체 보기의 축소판은 `inert` 사본이고 stepper는 동작하지 않는다(1단계 모습). 1단계가 정적으로도 의미 있게 보이게 만든다.
 
-워크숍 덱(`decks/vibe-coding-workshop/index.html`)의 토큰 데모가 기준 패턴이다. 큰 틀은 다음과 같다.
+시험용 덱(`app/test/fixtures/decks/sample/index.html`)의 `tok-slide`가 실제 예이고 기준 패턴이다. 큰 틀은 다음과 같다.
 
 ```js
 (function () {

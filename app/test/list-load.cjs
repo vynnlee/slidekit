@@ -1,12 +1,12 @@
 /* 덱 30개 목록의 부하 측정과 검증: 스크롤해도 동시에 올라 있는 썸네일 iframe 수와 브라우저 메모리가 제한되는지,
-   검색이 바로 반응하는지 본다. 테스트 덱은 decks/_e2e-load-NN(워크숍 덱 사본)로 만들고 끝나면 지운다.
+   검색이 바로 반응하는지 본다. 테스트 덱은 decks/_e2e-load-NN(시험용 덱 사본)로 만들고 끝나면 지운다.
    Usage: PW=<playwright-core> CHROME=<headless shell> BASE=http://127.0.0.1:3200 [CHECK=1] node list-load.cjs */
 const { chromium } = require(process.env.PW || 'playwright-core');
 const fs = require('fs'), path = require('path'), { execSync } = require('child_process');
 const BASE = process.env.BASE || 'http://127.0.0.1:3200';
 const DECKS = path.join(__dirname, '..', '..', 'decks');
-// 사용자의 커밋 안 된 편집이 아니라 커밋된 내용(HEAD)의 워크숍 덱을 쓴다. git이 없으면 작업트리 파일로 폴백.
-const SRC_HTML = (() => { try { return execSync('git show HEAD:decks/vibe-coding-workshop/index.html', { cwd: path.join(__dirname, '..', '..'), maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] }).toString(); } catch { return fs.readFileSync(path.join(DECKS, 'vibe-coding-workshop', 'index.html'), 'utf8'); } })();
+// 시험용 덱(app/test/fixtures/decks/sample)을 쓴다.
+const SRC_HTML = fs.readFileSync(path.join(__dirname, 'fixtures', 'decks', 'sample', 'index.html'), 'utf8');
 const N = 30;
 const names = Array.from({ length: N }, (_, i) => `_e2e-load-${String(i).padStart(2, '0')}`);
 for (const n of names) {

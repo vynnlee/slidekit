@@ -9,7 +9,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const slides = (s) => (s.match(/<section\b[^>]*\bdata-slide\b/g) || []).length;
 
 async function startEditor({ name, slides: nSlides = 8 } = {}) {
-  const T = makeTestDeck(name, 'vibe-coding-workshop', { slides: nSlides });
+  const T = makeTestDeck(name, 'sample', { slides: nSlides });
   const FILE = T.file;
   let fail = 0, lastT = Date.now();
   const check = (label, ok, extra) => {

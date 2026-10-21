@@ -432,7 +432,7 @@ const until = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now()
   // 편집기 첫 열기 안내 카드: 보이고, 아래 요소(필름스트립)의 클릭을 막지 않으며, 첫 상호작용에 사라지고, 다시 안 뜬다
   const ctx5 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx5.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
-  const tipDeck = makeTestDeck('list-tip', 'slidekit-guide'); // 커밋된 안내 덱 사본(26장)
+  const tipDeck = makeTestDeck('list-tip', 'guide'); // 시험용 안내 덱 사본(26장)
   const p5 = await ctx5.newPage();
   await p5.goto(BASE + `/edit/${tipDeck.id}`, { waitUntil: 'domcontentloaded' });
   const tip = p5.getByRole('region', { name: 'Editor tips' });

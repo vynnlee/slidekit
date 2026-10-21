@@ -7,7 +7,7 @@ import { diff, snapshot, userDecks } from "./user-decks";
 
 test("userDecks: 커밋된 실제 덱만(시험 사본 _로 시작하는 것은 빠진다)", () => {
   const names = userDecks();
-  expect(names).toContain("vibe-coding-workshop");
+  expect(names).toContain("demo");
   expect(names.every((n) => !n.startsWith("_") && !n.startsWith("."))).toBe(true);
 });
 test("snapshot과 diff: index.html, comments.json, 점 폴더, 파일 목록이 바뀌면 잡는다", () => {

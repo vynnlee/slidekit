@@ -25,7 +25,7 @@ const { startEditor } = require('./lib/editor-harness.cjs');
   await scan('코멘트 표시가 있는 타일');
   // 찾기 일치 배지
   await focusBody(); await page.keyboard.press('Meta+f');
-  await page.getByLabel('Find', { exact: true }).fill('바이브');
+  await page.getByLabel('Find', { exact: true }).fill('Sample');
   await cond(() => !!document.querySelector('[data-testid=filmstrip] [data-testid=tile-found]'), null, 8000);
   await scan('찾기 일치 배지가 있는 타일');
   await page.getByLabel('Find', { exact: true }).press('Escape'); await settle();

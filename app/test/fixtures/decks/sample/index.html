@@ -1,0 +1,1260 @@
+<!doctype html>
+<html lang="en" data-slidekit="1">
+<head>
+<meta charset="utf-8">
+<title>Sample deck (test fixture)</title>
+  <script type="application/json" id="deck-meta">
+    { "title": "Sample deck (test fixture)", "subtitle": "Test fixture", "author": "slidekit", "date": "2026-01-01", "visibility": "public", "id": "sample" }
+  </script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../../engine/slidekit.css">
+<style>
+:root{
+  --sk-accent:#a78bfa;
+  --sk-bg:#000;
+  --sk-fg:#fff;
+  --sk-muted:#9a9a9f;
+  --sk-faint:#5c5c62;
+  --sk-line:#2b2b30;
+  --sk-panel:#0f0f12;
+  --r-user:#e6e6ea;
+  --r-model:var(--sk-accent);
+  --r-tool:#f59e42;
+  --r-pc:#34d399;
+  /* token palette (tokenization demo only) */
+  --t1:#6fa8ff;--t2:#4fd1c5;--t3:#7bd88f;--t4:#f2c14e;--t5:#f59e5b;--t6:#f27a9b;--t7:#b18cf2;
+  --sk-font:"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --sk-font-mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+
+p b,td b{color:var(--sk-fg);font-weight:500}
+.body{display:flex;flex-direction:column;gap:28px}
+code,.mono{font-family:var(--sk-font-mono);font-size:.9em;color:var(--sk-fg)}
+h2,p,td,li,.node,figcaption{word-break:keep-all}
+
+.with-photo{display:grid;grid-template-columns:1fr 560px;gap:96px;align-items:center}
+.with-photo>*{min-width:0}
+.wp-text{display:flex;flex-direction:column;gap:56px}
+.photo{margin:0;display:flex;flex-direction:column;gap:22px}
+.photo img{width:100%;aspect-ratio:4/3;object-fit:cover;object-position:60% 30%;border-radius:12px}
+.photo figcaption{font-size:24px;line-height:1.6;color:var(--sk-muted);word-break:keep-all}
+.photo figcaption b{display:block;font-size:28px;font-weight:500;color:var(--sk-fg);margin-bottom:6px}
+.ab{display:grid;grid-template-columns:240px 1fr 1fr;max-width:1580px;width:100%}
+.ab>div{padding:24px 32px;font-size:32px;line-height:1.45;border-top:1px solid var(--sk-line);word-break:keep-all;min-width:0}
+.ab-k{padding-left:0!important;color:var(--sk-faint);font-size:26px!important;align-self:stretch}
+.ab-a{color:var(--sk-muted)}
+.ab-b{color:var(--sk-fg);background:color-mix(in srgb,var(--r-model) 10%,var(--sk-bg));border-left:2px solid var(--r-model)}
+.ab>div:nth-last-child(-n+3){border-bottom:1px solid var(--sk-line)}
+.ab-h{border-top:0!important;font-size:48px!important;font-weight:700;color:var(--sk-fg)!important;display:flex;flex-direction:column;gap:10px;padding-top:30px!important;padding-bottom:30px!important}
+.ab-h small{font-size:26px;font-weight:400;color:var(--sk-muted)}
+.ab-h.ab-b small{color:color-mix(in srgb,var(--r-model) 75%,var(--sk-fg))}
+.ab-tag{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:8px;font-size:26px;font-weight:700;border:1.5px solid var(--sk-faint);color:var(--sk-muted)}
+.ab-h.ab-b .ab-tag{border-color:var(--r-model);color:var(--r-model)}
+.ab>div:first-child{border-top:0}
+.with-tree{display:grid;grid-template-columns:1fr 620px;gap:90px;align-items:center}
+.with-tree h2{font-size:62px;white-space:nowrap}
+.with-tree p{font-size:32px;white-space:nowrap}
+.with-tree>*{min-width:0}
+.ft{background:var(--sk-panel);border:1px solid var(--sk-line);border-radius:18px;padding:36px 36px;font-size:30px}
+.ft ul{list-style:none;margin:0;padding:0 0 0 22px;margin-left:14px;border-left:1.5px solid var(--sk-line)}
+.ft li{position:relative;padding:8px 0 8px 26px}
+.ft li::before{content:"";position:absolute;left:-1px;top:50%;width:22px;height:1.5px;background:var(--sk-line)}
+.ft li:has(ul)::before{top:32px}
+.ft li:last-child{border-left:0}
+.ft-row{display:flex;align-items:center;gap:16px}
+.ft-row.root{padding-bottom:8px}
+.ft-row b{font-family:var(--sk-font-mono);font-weight:500;font-size:28px;color:var(--sk-fg)}
+.ft-row em{margin-left:auto;font-style:normal;font-size:22px;color:var(--sk-muted)}
+svg.ft-i{width:30px;height:30px;flex:none;fill:color-mix(in srgb,var(--fc) 18%,transparent);stroke:var(--fc);stroke-width:1.6;stroke-linejoin:round}
+.ft li ul{margin-top:8px}
+.ft{position:relative}
+.cc-bot{position:absolute;left:-34px;top:0;width:88px;height:55px;z-index:2;transition:transform .7s cubic-bezier(.5,0,.3,1)}
+.cc-bot svg{width:100%;height:100%;display:block;overflow:visible}
+.cc-bot.walk svg{animation:cc-hop .35s steps(2) infinite}
+.cc-bot.walk .lg2{animation:cc-leg .35s steps(1) infinite}
+.cc-bot.walk .lg1{animation:cc-leg .35s steps(1) infinite reverse}
+@keyframes cc-hop{0%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@keyframes cc-leg{0%{opacity:1}50%{opacity:.25}}
+.ft-row{border-radius:8px;transition:background .3s}
+.ft-row.hot{background:color-mix(in srgb,#D97757 16%,transparent)}
+.ft-row.hot b{color:#F0A487}
+@media (prefers-reduced-motion:reduce){.cc-bot{transition:none}.cc-bot.walk svg,.cc-bot.walk .lg1,.cc-bot.walk .lg2{animation:none}}
+.wfs{display:grid;grid-template-columns:repeat(3,1fr);gap:36px;max-width:1580px}
+.wf{position:relative;border:1.5px solid var(--sk-line);border-radius:18px;padding:30px 34px;background:var(--sk-panel);opacity:.55}
+.wf.on{opacity:1;border:2px solid var(--r-model);background:color-mix(in srgb,var(--r-model) 10%,var(--sk-bg))}
+.wf-tag{position:absolute;top:-17px;left:28px;font-size:22px;font-weight:500;padding:4px 14px;border-radius:999px;background:var(--r-model);color:#120b24}
+.wf-tag.off{background:var(--sk-bg);color:var(--sk-faint);border:1px solid var(--sk-line)}
+.wf-h{display:flex;align-items:center;gap:16px}
+.wf-h b{font-family:var(--sk-font-mono);font-weight:500;font-size:30px;color:var(--sk-fg)}
+svg.wf-i{width:44px;height:44px;flex:none;fill:color-mix(in srgb,var(--sk-muted) 15%,transparent);stroke:var(--sk-muted);stroke-width:1.5;stroke-linejoin:round}
+.wf.on svg.wf-i{fill:color-mix(in srgb,var(--r-model) 25%,transparent);stroke:var(--r-model)}
+svg.wf-bot{width:64px;height:40px;margin-left:auto}
+@media (prefers-reduced-motion:no-preference){[data-slide][data-active] svg.wf-bot{animation:wf-bob 1.2s steps(2) infinite}}
+@keyframes wf-bob{50%{transform:translateY(-4px)}}
+.wf ul{list-style:none;margin:18px 0 0;padding:0 0 0 60px;display:flex;flex-direction:column;gap:6px;font-family:var(--sk-font-mono);font-size:24px;color:var(--sk-muted)}
+.os2{display:grid;grid-template-columns:1fr 1fr;gap:56px;max-width:1580px}
+.os2>*{min-width:0}
+.os-h{display:flex;align-items:center;gap:16px;font-size:36px;font-weight:700;margin-bottom:22px}
+svg.os-i{width:40px;height:40px}
+.os-tree{padding:30px 34px}
+.os-tree .ft-row b{font-size:27px}
+.os-tree .ft-row.dev b{color:var(--r-model)}
+.os-c{font-size:26px;line-height:1.6;margin-top:22px}
+.os-c b{color:var(--sk-fg)}
+.pj{border:2px solid var(--r-model);border-radius:20px;padding:30px 36px;background:color-mix(in srgb,var(--r-model) 8%,var(--sk-bg));max-width:1580px}
+.pj-h{display:flex;align-items:center;gap:20px;margin-bottom:26px}
+.pj-h .wf-tag{position:static}
+.pj-h b{font-size:34px;font-weight:700}
+.pj-h svg.wf-bot{margin-left:auto}
+.pj-row{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.pj-f{display:flex;flex-direction:column;gap:10px;padding:24px 26px;border:1.5px solid color-mix(in srgb,var(--r-model) 50%,transparent);border-radius:14px;background:var(--sk-panel);--fc:var(--r-model)}
+.pj-f b{font-family:var(--sk-font-mono);font-weight:500;font-size:28px}
+.pj-f em{font-style:normal;font-family:var(--sk-font-mono);font-size:20px;color:var(--sk-muted)}
+.cols.am{grid-template-columns:1fr 640px;gap:72px;align-items:center}
+.am td:first-child{width:200px}
+.am td{font-size:28px;padding:16px 0}
+.am pre{font-size:24px;line-height:1.65}
+.am-logos{margin-top:30px}
+.am-logos span{font-size:24px;color:var(--sk-muted)}
+.am-logos svg{width:30px;height:30px}
+.md2{display:grid;grid-template-columns:1fr 1fr;gap:48px;max-width:1580px;align-items:stretch}
+.md2>*{min-width:0}
+.md-col{display:flex;flex-direction:column;gap:16px}
+.md-lab{font-size:26px;color:var(--sk-muted)}
+.md2 pre{flex:1;font-size:30px;line-height:1.75}
+.md-out{flex:1;border:1px solid var(--sk-line);border-radius:14px;padding:40px 48px;background:#f6f6f4;color:#1b1b1d;display:flex;flex-direction:column;gap:14px}
+.md-out .r1{font-size:50px;font-weight:700;line-height:1.2}
+.md-out .r2{font-size:36px;font-weight:700;margin-top:10px}
+.md-out ul{margin:0;padding-left:34px;font-size:30px;line-height:1.6}
+.md-out .r3{font-size:30px}.md-out .r3 b{font-weight:700}
+.md-out .r4{font-size:30px;color:#2457d6;text-decoration:underline;text-underline-offset:6px}
+.mdw{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;max-width:1580px}
+.mdw-c{border-top:2px solid var(--sk-fg);padding-top:24px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.mdw-c b{font-size:34px;font-weight:700}
+.mdw-c p{font-size:28px}
+.mdw-apps{gap:18px;margin-top:8px}
+.mdw-apps span{font-size:22px;color:var(--sk-muted);gap:8px}
+.mdw-apps svg{width:26px;height:26px}
+.plg{display:flex;align-items:center;max-width:1580px}
+.plg-box{flex:1;border:2px solid var(--r-model);border-radius:20px;padding:26px 30px 30px;background:color-mix(in srgb,var(--r-model) 8%,var(--sk-bg))}
+.plg-t{display:flex;align-items:center;gap:16px;margin-bottom:22px;font-size:24px;color:var(--sk-muted)}
+.plg-tag{font-size:24px;font-weight:700;padding:4px 16px;border-radius:999px;background:var(--r-model);color:#120b24}
+.plg-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
+.plg-c{--c:var(--sk-muted);display:flex;flex-direction:column;gap:8px;padding:20px 18px;border-radius:12px;border:1.5px solid color-mix(in srgb,var(--c) 45%,transparent);background:var(--sk-panel);min-width:0}
+.plg-c.main{border-color:var(--c);background:color-mix(in srgb,var(--c) 16%,var(--sk-bg))}
+.plg-c b{font-size:28px;color:var(--sk-fg)}
+.plg-c.main b{color:var(--c)}
+.plg-c code{font-size:19px;color:var(--sk-muted)}
+.plg-c span{font-size:21px;color:var(--sk-muted);line-height:1.4;word-break:keep-all}
+.cols.sk2{grid-template-columns:600px 1fr;gap:56px;align-items:center}
+.sk2 pre{font-size:26px}
+.sk-flow{display:flex;align-items:stretch;max-width:1580px}
+.sk-flow .larr{align-self:center}
+.sk-st{flex:1;border:1.5px solid color-mix(in srgb,var(--c) 55%,transparent);border-radius:16px;padding:26px 28px;background:color-mix(in srgb,var(--c) 7%,var(--sk-bg));display:flex;flex-direction:column;gap:12px;min-width:0}
+.sk-st em{font-style:normal;font-size:22px;color:var(--c)}
+.sk-st b{font-size:34px}
+.sk-st p{font-size:24px;line-height:1.5}
+.sk-list{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.sk-list span{font-family:var(--sk-font-mono);font-size:20px;color:var(--sk-faint);padding:6px 12px;border-radius:6px;border:1px solid var(--sk-line)}
+.sk-list span.on{color:var(--sk-fg);border-color:var(--c);background:color-mix(in srgb,var(--c) 22%,var(--sk-bg))}
+.mcp{display:flex;align-items:center;max-width:1580px}
+.mcp .node.rn svg.si{width:36px;height:36px;fill:var(--r)}
+.mcp-svc .mini span{color:var(--sk-fg)}
+.mcp-svc{flex:1;padding:24px 28px}
+.mcp-svc .mini{margin:0;justify-content:center;gap:28px}
+.mcp-two{display:grid;grid-template-columns:1fr 1fr;gap:40px;max-width:1580px}
+.mcp-two>div{border-top:1px solid var(--sk-line);padding-top:18px;display:flex;flex-direction:column;gap:8px}
+.mcp-two b{font-size:30px}
+.mcp-two p{font-size:28px}
+b.ui{font-weight:600;color:var(--sk-fg);background:var(--sk-panel);border:1px solid var(--sk-line);border-radius:8px;padding:0 10px;font-size:.9em}
+.sk-loc td:first-child{width:230px}
+.sk-loc td{font-size:26px}
+.sk-ab .ab-b{background:color-mix(in srgb,var(--r-tool) 10%,var(--sk-bg));border-left-color:var(--r-tool)}
+.sk-ab .ab-h.ab-b small{color:color-mix(in srgb,var(--r-tool) 75%,var(--sk-fg))}
+.sk-case{border:1.5px solid var(--sk-line);border-radius:16px;padding:30px 34px}
+.sk-case.on{border-color:var(--r-tool);background:color-mix(in srgb,var(--r-tool) 8%,var(--sk-bg))}
+.sk-case.on h3{color:var(--r-tool)}
+.cols.skmd{grid-template-columns:640px 1fr;gap:56px;align-items:center}
+.skmd pre{font-size:25px;line-height:1.6}
+.sk-fm{display:block;color:var(--r-tool);background:color-mix(in srgb,var(--r-tool) 12%,transparent);margin:0 -16px;padding:4px 16px;border-radius:8px}
+.sk-bd{display:block;margin-top:10px}
+.sk-ann{display:flex;flex-direction:column;gap:30px;min-width:0}
+.sk-a{border-left:3px solid var(--sk-line);padding-left:26px;display:flex;flex-direction:column;gap:10px}
+.sk-a.fm{border-left-color:var(--r-tool)}
+.sk-a > b{font-size:32px}
+.sk-a.fm > b{color:var(--r-tool)}
+.sk-a p{font-size:26px}
+.sk-a td{font-size:24px;padding:12px 0}
+.sk-a td:first-child{width:170px}
+.cols.skf{grid-template-columns:680px 1fr;gap:80px}
+.skf .ft{font-size:32px}
+.dp{display:flex;align-items:center;max-width:1580px}
+.dp-c{flex:1;display:flex;flex-direction:column;gap:14px;padding:34px 38px;border:1.5px solid var(--sk-line);border-radius:16px;background:var(--sk-panel)}
+.dp-c.on{border-color:var(--r-tool);background:color-mix(in srgb,var(--r-tool) 10%,var(--sk-bg))}
+.dp-lab{font-size:24px;color:var(--sk-muted)}
+.dp-c .mono{font-size:40px}
+.dp-c .lbl{font-size:26px;color:var(--sk-muted)}
+.drop{display:flex;align-items:stretch;max-width:1580px}
+.drop .larr{align-self:center}
+.drop-s{flex:1;display:flex;flex-direction:column;gap:12px;padding:28px 26px;border:1.5px solid color-mix(in srgb,var(--r-tool) 45%,transparent);border-radius:16px;background:var(--sk-panel);min-width:0}
+.drop-s.on{border-color:var(--r-tool);background:color-mix(in srgb,var(--r-tool) 14%,var(--sk-bg))}
+.drop-s em{font-style:normal;font-size:22px;color:var(--r-tool)}
+.drop-s > b{font-size:34px}
+.drop-s p{font-size:24px;line-height:1.55}
+.drop-s b.hl{color:var(--r-tool);font-weight:600}
+.gr{display:flex;align-items:center;max-width:1580px}
+.gr-now,.gr-hist{display:flex;flex-direction:column;gap:14px}
+.gr-now{width:520px}
+.gr-hist{flex:1}
+.gr-lab{font-size:24px;color:var(--sk-muted)}
+.gr .ft{padding:28px 32px}
+.gr .ft-row b{font-size:27px}
+.gr-card{display:flex;justify-content:space-between;align-items:baseline;gap:20px;padding:20px 26px;border:1.5px solid color-mix(in srgb,#F05032 45%,transparent);border-radius:12px;background:color-mix(in srgb,#F05032 8%,var(--sk-bg));font-size:22px;color:var(--sk-muted);font-variant-numeric:tabular-nums}
+.gr-card b{order:-1;font-size:28px;font-weight:500;color:var(--sk-fg)}
+.gr-card:first-of-type{border-color:#F05032}
+.gt{width:1500px}
+.gt .commit .dot{border-color:#F05032}
+.gt .commit.cur .dot{background:#F05032;border-color:#F05032}
+.gt .commit.back .dot{box-shadow:0 0 0 6px color-mix(in srgb,#F05032 30%,transparent)}
+.gt-back{position:relative;margin:30px 0 0 calc((1500px - 300px) * 2 / 3 + 13px);width:calc((1500px - 300px) / 3);height:44px;border:2px dashed #F05032;border-top:0;border-radius:0 0 16px 16px}
+.gt-back::after{content:"";position:absolute;left:-9px;top:-14px;border:8px solid transparent;border-bottom:14px solid #F05032;border-top:0}
+.gt-back span{position:absolute;top:56px;right:-60px;white-space:nowrap;font-size:24px;color:#F05032}
+.gh{display:flex;align-items:center;max-width:1580px}
+.gh-arr{display:flex;flex-direction:column;gap:18px}
+.gh-hub{width:340px;display:flex;flex-direction:column;align-items:center;gap:10px;border:2px solid var(--sk-fg)}
+.gh-hub svg.si{width:52px;height:52px}
+.gh-two{margin-top:6px}
+.gcmd td{vertical-align:middle}
+.gcmd td:first-child{width:760px}
+.ask{display:inline-block;font-size:28px;color:var(--sk-fg);padding:10px 20px;border-radius:14px 14px 14px 4px;background:color-mix(in srgb,var(--r-user) 14%,var(--sk-bg))}
+.gcmd code{font-size:26px;color:#F05032}
+.today{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;max-width:1580px}
+.td-c{display:flex;flex-direction:column;gap:22px;padding:40px 40px 44px;border:1.5px solid var(--sk-line);border-radius:18px;background:var(--sk-panel);min-width:0}
+.td-c > span{font-size:26px;color:var(--sk-muted)}
+.td-c b .nw{white-space:nowrap}
+.td-c b{font-size:40px;font-weight:700;line-height:1.35;word-break:keep-all}
+.td-c.on{border-color:var(--r-tool);background:color-mix(in srgb,var(--r-tool) 10%,var(--sk-bg))}
+.td-c.on > span{color:var(--r-tool)}
+.td-c code{align-self:flex-start;font-size:24px;color:var(--r-tool);border:1px solid color-mix(in srgb,var(--r-tool) 50%,transparent);border-radius:8px;padding:6px 14px}
+/* cover and section */
+
+[data-slide="cover"],[data-slide="end"]{gap:40px}
+[data-slide="cover"] h1,[data-slide="end"] h1{font-size:96px}
+.cover-head{display:flex;flex-direction:column;gap:28px}
+.meta{display:grid;grid-template-columns:auto 1fr;column-gap:48px;row-gap:14px;margin:24px 0 0;font-size:30px;line-height:1.5}
+.meta dt{color:var(--sk-faint)}
+.meta dd{margin:0;color:var(--sk-muted);font-variant-numeric:tabular-nums}
+[data-slide="cover"] .sub{font-size:44px;color:var(--sk-muted)}
+[data-slide="chapter"] h1{font-size:132px}
+[data-slide="chapter"] .icon-lg{width:120px;height:120px}
+.icon-lg svg{width:100%;height:100%}
+
+/* logos */
+svg.si{fill:currentColor}
+svg.si.claude{fill:#D97757}
+.logos{display:flex;gap:72px;flex-wrap:wrap;align-items:flex-start}
+.logo{display:flex;flex-direction:column;align-items:center;gap:22px;margin:0;width:150px}
+.logo svg{width:76px;height:76px}
+.logo figcaption{font-size:26px;color:var(--sk-muted);text-align:center;line-height:1.35}
+.logo figcaption span{display:block;font-size:22px;color:var(--sk-faint)}
+
+/* rows */
+table{border-collapse:collapse;width:100%;max-width:1580px}
+td{font-size:34px;line-height:1.5;padding:22px 0;border-top:1px solid var(--sk-line);vertical-align:top;color:var(--sk-muted)}
+tr:last-child td{border-bottom:1px solid var(--sk-line)}
+td:first-child{color:var(--sk-fg);font-weight:500;width:420px;padding-right:48px}
+td+td{padding-right:56px}
+td s{text-decoration-thickness:2px;color:var(--sk-muted)}
+.deprec{font-size:26px;font-weight:400;color:var(--sk-faint)}
+td:last-child{padding-right:0}
+td.mono-cell{font-family:var(--sk-font-mono);font-weight:400;font-size:31px}
+th{font-size:26px;font-weight:500;color:var(--sk-faint);text-align:left;padding:0 0 18px}
+
+/* code */
+pre{margin:0;background:var(--sk-panel);border:1px solid var(--sk-line);border-radius:14px;padding:40px 48px;font-family:var(--sk-font-mono);font-size:30px;line-height:1.7;color:#e6e6e9;white-space:pre;overflow:hidden}
+pre .c{color:var(--sk-faint)}
+pre .k{color:var(--sk-muted)}
+
+/* columns */
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:start}
+.cols.c3{grid-template-columns:repeat(3,1fr);gap:64px}
+.cols.wide-left{grid-template-columns:1.1fr 1fr}
+.cols>*{min-width:0}
+.col h3{font-size:40px;font-weight:700;margin:0 0 24px}
+.col p{font-size:32px}
+.col ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:18px}
+.col li{font-size:32px;line-height:1.5;color:var(--sk-muted);padding-left:30px;position:relative}
+.col li::before{content:"";position:absolute;left:0;top:.7em;width:10px;height:2px;background:var(--sk-faint)}
+.cols.agents{grid-template-columns:1.25fr 1fr;gap:0}
+.cols.agents>.col{padding-right:80px}
+.cols.agents>.col+.col{padding:0 0 0 80px;border-left:1px solid var(--sk-line)}
+.sub{display:flex;flex-direction:column;gap:0;margin-top:36px}
+.sublab{font-size:26px;color:var(--sk-faint)}
+.sub .mini{margin-top:16px}
+.models{display:grid;grid-template-columns:auto 1fr;column-gap:40px;row-gap:6px;margin-bottom:14px}
+.models>div{display:contents}
+.models b{color:var(--sk-fg);font-weight:500}
+.mini{display:flex;gap:28px;flex-wrap:wrap;margin-top:28px}
+.mini span{display:flex;align-items:center;gap:14px;font-size:28px;color:var(--sk-fg)}
+.mini svg{width:40px;height:40px}
+
+/* flow diagrams */
+.flow{display:flex;align-items:center;gap:0;flex-wrap:nowrap}
+.node{border:1px solid var(--sk-line);background:var(--sk-panel);border-radius:14px;padding:30px 34px;font-size:32px;line-height:1.4;text-align:center;min-width:0}
+.node small{display:block;font-size:24px;color:var(--sk-faint);margin-top:8px}
+.node.hi{border-color:var(--sk-fg)}
+.arrow{flex:none;width:72px;height:20px;position:relative}
+.arrow::before{content:"";position:absolute;left:10px;right:14px;top:9px;height:2px;background:var(--sk-faint)}
+.arrow::after{content:"";position:absolute;right:8px;top:3px;border:7px solid transparent;border-left:12px solid var(--sk-faint);border-right:0}
+.arrow.both::before{left:22px}
+.arrow.both{background:none}
+.arrow.both i{position:absolute;left:8px;top:3px;border:7px solid transparent;border-right:12px solid var(--sk-faint);border-left:0}
+
+.dflow{display:flex;align-items:center}
+.frame{position:relative;display:flex;align-items:center;border:1.5px dashed var(--sk-muted);border-radius:18px;padding:64px 32px 32px}
+.frame .t{position:absolute;top:18px;left:32px;font-size:24px;color:var(--sk-muted)}
+.node.rn{border-color:color-mix(in srgb,var(--r) 60%,transparent);background:color-mix(in srgb,var(--r) 12%,var(--sk-bg));display:flex;flex-direction:column;align-items:center;gap:10px}
+.node.rn small{margin-top:0;color:color-mix(in srgb,var(--r) 70%,var(--sk-muted))}
+svg.ico{width:48px;height:48px;fill:none;stroke:var(--r);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+svg.ico-s{width:26px;height:26px;flex:none;fill:none;stroke:var(--r);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.larr{flex:none;width:130px;display:flex;flex-direction:column;gap:12px;font-size:24px;font-weight:500;text-align:center;color:var(--a,var(--sk-faint))}
+.larr .ln{display:block;height:2px;background:var(--a,var(--sk-faint));position:relative;margin:0 14px}
+.larr .ln::after{content:"";position:absolute;top:-6px;border:7px solid transparent}
+.larr .ln.r::after{right:-4px;border-left:12px solid var(--a,var(--sk-faint));border-right:0}
+.larr .ln.l::after{left:-4px;border-right:12px solid var(--a,var(--sk-faint));border-left:0}
+.node.tools{align-items:stretch;text-align:left;gap:12px}
+.node.tools b{display:flex;align-items:center;gap:14px;font-weight:500;margin-bottom:4px}
+.node.tools b svg.ico{width:40px;height:40px}
+.node.tools span{display:flex;align-items:center;gap:12px;font-size:24px;color:var(--sk-muted)}
+.cols.lim{gap:100px}
+.lim-col h3{display:flex;align-items:baseline;gap:18px;margin-bottom:36px;color:var(--c)}
+.lim-col h3 span{font-size:28px;font-weight:400;color:var(--sk-muted)}
+.ul-top{display:flex;justify-content:space-between;font-size:24px;color:var(--sk-muted);margin-bottom:12px}
+.ul-cap{color:var(--c)}
+.ul-bar,.cw-row{display:flex;gap:4px;height:88px;padding:6px;border:2px solid var(--c);border-radius:12px;position:relative}
+.ul-bar i,.cw-row i{display:flex;align-items:center;justify-content:center;font-style:normal;font-size:24px;color:var(--sk-fg);border-radius:6px;background:color-mix(in srgb,var(--c) 34%,var(--sk-bg));min-width:0;white-space:nowrap;overflow:hidden}
+.ul-bar i:nth-child(even),.cw-row i:nth-child(even){background:color-mix(in srgb,var(--c) 22%,var(--sk-bg))}
+.ul-bar b,.cw-row b{display:flex;align-items:center;justify-content:center;font-weight:400;font-size:22px;color:var(--sk-muted);border:1.5px dashed color-mix(in srgb,var(--c) 60%,transparent);border-radius:6px;min-width:0;white-space:nowrap}
+.ul-foot{font-size:26px;line-height:1.5;color:var(--sk-muted);margin-top:20px;word-break:keep-all}
+.cw{display:flex;align-items:flex-end;gap:0}
+.cw-out{flex:none;width:120px;height:88px;margin-bottom:8px;display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--sk-muted);border:1.5px dashed var(--sk-muted);border-radius:8px}
+.cw-win{flex:1;min-width:0}
+.cw-lab{display:block;font-size:24px;color:var(--sk-muted);margin-bottom:12px}
+.loop{width:1380px}
+.lp-row{display:grid;grid-template-columns:360px 150px 360px 150px 360px;align-items:stretch}
+.lp-row .larr{align-self:center}
+.lp-row .larr{width:auto}
+.node.lp{padding:34px 28px;gap:8px}
+.node.lp b{font-size:40px;font-weight:700;color:var(--sk-fg)}
+.node.lp em{font-style:normal;font-size:22px;color:var(--r);border:1px solid color-mix(in srgb,var(--r) 50%,transparent);border-radius:999px;padding:2px 14px}
+.node.lp small{font-size:24px;color:var(--sk-muted)!important;margin-top:6px}
+.lp-back{position:relative;margin:0 180px;height:64px;border:2px dashed var(--sk-muted);border-top:0;border-radius:0 0 18px 18px}
+.lp-back::after{content:"";position:absolute;left:-9px;top:-14px;border:8px solid transparent;border-bottom:14px solid var(--sk-muted);border-top:0}
+.lp-back span{position:absolute;left:50%;bottom:-18px;transform:translateX(-50%);background:var(--sk-bg);padding:0 18px;font-size:24px;font-weight:500;color:var(--sk-muted)}
+.ca{display:grid;grid-template-columns:1fr 1fr;gap:48px;max-width:1580px}
+.ca-card{--r:var(--r-user);display:flex;flex-direction:column;border:1.5px solid color-mix(in srgb,var(--r) 45%,transparent);border-radius:18px;background:color-mix(in srgb,var(--r) 5%,var(--sk-bg));overflow:hidden;min-width:0}
+.ca-card.agent{border-color:var(--r);background:color-mix(in srgb,var(--r) 9%,var(--sk-bg))}
+.ca-head{display:flex;align-items:baseline;gap:18px;padding:28px 36px 0;font-size:40px;font-weight:700;color:var(--sk-fg)}
+.ca-head span{font-size:24px;font-weight:400;color:var(--sk-muted)}
+.ca-card.agent .ca-head{color:var(--r)}
+.ca-body{flex:1;display:flex;flex-direction:column;gap:18px;padding:28px 36px}
+.bub{font-size:26px;line-height:1.5;padding:16px 22px;border-radius:16px;max-width:85%;word-break:keep-all}
+.bub.me{align-self:flex-end;background:color-mix(in srgb,var(--r-user) 16%,var(--sk-bg));border-bottom-right-radius:4px}
+.bub.bot{align-self:flex-start;background:var(--sk-panel);border:1px solid var(--sk-line);border-bottom-left-radius:4px;color:var(--sk-muted)}
+.steps-v{display:flex;flex-direction:column;align-items:flex-start;gap:0}
+.steps-v span{display:flex;align-items:center;gap:14px;font-size:26px;padding:12px 20px;border-radius:10px;border:1.5px solid var(--r);background:color-mix(in srgb,var(--r) 22%,var(--sk-bg))}
+.steps-v svg.ico-s{stroke:var(--r)}
+.steps-v i{display:block;width:2px;height:18px;margin-left:32px;background:var(--r)}
+.ca-out{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:22px 36px;border-top:1px solid color-mix(in srgb,var(--r) 35%,transparent);font-size:28px;color:var(--sk-fg)}
+.ca-out b{font-size:22px;font-weight:500;color:var(--sk-muted);margin-right:8px}
+.ca-out em{flex-basis:100%;font-style:normal;font-size:22px;color:var(--sk-muted)}
+.ca-out svg.ico-s{stroke:var(--r-pc)}
+.cx{--c:var(--r-model);display:grid;grid-template-columns:220px 1fr 200px;column-gap:24px;row-gap:16px;align-items:center;max-width:1580px}
+.cx-scale{display:flex;justify-content:space-between;font-size:22px;color:var(--sk-muted)}
+.cx-l{font-size:28px;font-weight:500;color:var(--sk-fg)}
+.cx-l.cx-hl{color:var(--r-pc);font-weight:700}
+.cx-win{display:flex;gap:4px;height:64px;padding:5px;border:2px solid color-mix(in srgb,var(--c) 70%,transparent);border-radius:10px}
+.cx-win.full{border-color:#f87171}
+.cx-win i{display:flex;align-items:center;justify-content:center;font-style:normal;font-size:22px;color:var(--sk-fg);border-radius:6px;white-space:nowrap;overflow:hidden;min-width:0}
+.cx-win .k1{background:color-mix(in srgb,var(--c) 60%,var(--sk-bg))}
+.cx-win .k2{background:color-mix(in srgb,var(--c) 36%,var(--sk-bg))}
+.cx-win .k3{background:color-mix(in srgb,var(--c) 20%,var(--sk-bg))}
+.cx-win .k4,.cx-sum{background:color-mix(in srgb,var(--r-pc) 40%,var(--sk-bg));border:1.5px solid var(--r-pc)}
+.cx-win b{border:1.5px dashed color-mix(in srgb,var(--c) 40%,transparent);border-radius:6px}
+.cx-cmp{display:flex;gap:4px;height:64px;padding:5px 7px}
+.cx-ghost{display:flex;align-items:center;gap:20px;padding:0 20px;border:1.5px dashed var(--sk-muted);border-radius:6px;color:var(--sk-muted);font-size:22px}
+.cx-arw{flex:1;height:2px;background:var(--r-pc);position:relative}
+.cx-arw::after{content:"";position:absolute;right:-2px;top:-6px;border:7px solid transparent;border-left:12px solid var(--r-pc);border-right:0}
+.cx-sum{font-style:normal;font-size:22px;color:var(--sk-fg);padding:10px 22px;border-radius:6px}
+.cx-n{font-size:24px;color:var(--sk-muted)}
+.cx-n.cx-hl,.cx-n.cx-hl2{color:var(--r-pc)}
+/* token & context visuals */
+.tokens{display:flex;gap:10px;flex-wrap:wrap}
+.tokens span{font-size:44px;border:1px solid var(--sk-line);background:var(--sk-panel);border-radius:10px;padding:14px 20px;white-space:pre}
+/* tokenization demo */
+.tok-slide{align-items:center;padding-block:90px}
+.tok{display:flex;flex-direction:column;align-items:center;text-align:center;width:100%}
+.tok-lab{font-size:22px;color:var(--sk-faint);height:34px}
+.tok-outlab{visibility:hidden;margin-top:40px}
+.tok.out .tok-outlab{visibility:visible}
+.tok-src{position:relative;width:1500px}
+#tok-input,.tok-mirror{font:500 52px/1.4 var(--sk-font);padding:0 0 14px;margin:0;letter-spacing:0;text-align:center}
+#tok-input{width:100%;background:none;border:0;border-bottom:1px solid var(--sk-line);color:var(--sk-fg);outline:none;border-radius:0}
+#tok-input:focus{border-bottom-color:var(--sk-muted)}
+.tok.split #tok-input{color:var(--sk-muted)}
+.tok-mirror{position:absolute;left:0;right:0;top:0;white-space:pre;color:transparent;pointer-events:none;visibility:hidden}
+.tok.split .tok-mirror{visibility:visible}
+.tok-mirror span{text-decoration:underline 4px var(--c);text-underline-offset:16px;text-decoration-skip-ink:none}
+.tok-chips{display:flex;justify-content:center;gap:12px;flex-wrap:nowrap}
+.tok-in{height:132px;margin-top:36px}
+.tok-out{height:80px;margin-bottom:16px}
+.tok-w{display:flex;flex-direction:column;align-items:center;gap:10px}
+.tok-c{font-size:40px;line-height:1.4;color:var(--sk-fg);border:1px solid color-mix(in srgb,var(--c) 55%,transparent);background:color-mix(in srgb,var(--c) 18%,transparent);border-radius:10px;padding:6px 16px;white-space:pre}
+.tok-c i{font-style:normal;color:var(--sk-faint);font-size:.7em}
+.tok-id{font-family:var(--sk-font-mono);font-size:24px;color:var(--c);visibility:hidden}
+.tok.ids .tok-id{visibility:visible}
+.tok-count{font-size:24px;color:var(--sk-muted);height:36px;white-space:nowrap}
+.ctx{display:flex;height:96px;width:1500px;border:1px solid var(--sk-line);border-radius:12px;overflow:hidden}
+.ctx div{display:flex;align-items:center;padding:0 24px;font-size:26px;border-right:1px solid var(--sk-line);white-space:nowrap}
+.ctx div:last-child{border-right:0;color:var(--sk-faint)}
+.ctx .f1{background:#26262b}.ctx .f2{background:#1c1c20}.ctx .f3{background:#141417}
+
+/* git timeline */
+.timeline{position:relative;display:flex;justify-content:space-between;width:1500px;padding-top:12px}
+.timeline::before{content:"";position:absolute;left:14px;right:14px;top:25px;height:2px;background:var(--sk-line)}
+.commit{position:relative;display:flex;flex-direction:column;gap:22px;width:300px}
+.commit .dot{width:28px;height:28px;border-radius:50%;border:2px solid var(--sk-muted);background:var(--sk-bg)}
+.commit.cur .dot{background:var(--sk-fg);border-color:var(--sk-fg)}
+.commit .msg{font-size:30px;line-height:1.4}
+.commit .id{font-family:var(--sk-font-mono);font-size:22px;color:var(--sk-faint)}
+
+/* numbered steps (real sequence) */
+ol.steps{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:0;counter-reset:s;max-width:1500px}
+ol.steps li{counter-increment:s;display:grid;grid-template-columns:90px 1fr;font-size:36px;line-height:1.5;padding:22px 0;border-top:1px solid var(--sk-line);color:var(--sk-fg)}
+ol.steps li:last-child{border-bottom:1px solid var(--sk-line)}
+ol.steps li::before{content:counter(s);font-family:var(--sk-font-mono);color:var(--sk-faint);font-size:32px;padding-top:4px}
+
+.addr{display:flex;flex-direction:column;gap:14px}
+.addr .mono{font-size:44px}
+.addr .lbl{font-size:28px;color:var(--sk-faint)}
+
+.grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:28px;max-width:1580px}
+.grid5 .node{text-align:left;padding:34px 30px}
+.grid5 .node b{display:block;font-size:32px;font-weight:700;margin-bottom:14px}
+.grid5 .node span{font-size:26px;color:var(--sk-muted);line-height:1.5}
+
+.plugin{border:1px solid var(--sk-muted);border-radius:18px;padding:36px 40px;display:flex;flex-direction:column;gap:26px;width:900px}
+.plugin .t{font-size:28px;color:var(--sk-muted)}
+.plugin .row{display:flex;gap:20px;flex-wrap:wrap}
+.plugin .node{flex:1}
+
+</style>
+</head>
+<body>
+<!-- ===== no ===== -->
+<section data-slide="cover">
+  <div class="icon-lg" style="width:140px;height:140px"><svg viewBox="22 24 92 88" aria-hidden="true" fill="none" xmlns="http://www.w3.org/2000/svg"> <g transform="translate(12 10)"> <path d="M89.6992 93.695C94.3659 97.195 101.366 94.8617 94.9492 88.445C75.6992 69.7783 79.7825 18.445 55.8659 18.445C31.9492 18.445 36.0325 69.7783 16.7825 88.445C9.78251 95.445 17.3658 97.195 22.0325 93.695C40.1159 81.445 38.9492 59.8617 55.8659 59.8617C72.7825 59.8617 71.6159 81.445 89.6992 93.695Z" fill="#3186FF"/> <mask id="ag1_m" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="13" y="18" width="85" height="78"> <path d="M89.6992 93.695C94.3659 97.195 101.366 94.8617 94.9492 88.445C75.6992 69.7783 79.7825 18.445 55.8659 18.445C31.9492 18.445 36.0325 69.7783 16.7825 88.445C9.78251 95.445 17.3658 97.195 22.0325 93.695C40.1159 81.445 38.9492 59.8617 55.8659 59.8617C72.7825 59.8617 71.6159 81.445 89.6992 93.695Z" fill="black"/> </mask> <g mask="url(#ag1_m)"> <g filter="url(#ag1_f0)"><ellipse cx="22.7873" cy="26.8098" rx="22.7873" ry="26.8098" transform="matrix(-0.112784 0.99362 -0.99362 -0.112781 66.2473 -15.5344)" fill="#FFE432"/></g> <g filter="url(#ag1_f1)"><ellipse cx="96.491" cy="35.1231" rx="29.5007" ry="30.1492" transform="rotate(76.9243 96.491 35.1231)" fill="#FC413D"/></g> <g filter="url(#ag1_f2)"><ellipse cx="9.02988" cy="41.6647" rx="30.832" ry="39.9417" transform="rotate(74.1257 9.02988 41.6647)" fill="#00B95C"/></g> <g filter="url(#ag1_f3)"><ellipse cx="11.2212" cy="42.8915" rx="30.22" ry="33.2695" transform="rotate(45.6065 11.2212 42.8915)" fill="#00B95C"/></g> <g filter="url(#ag1_f4)"><ellipse cx="75.7546" cy="104.822" rx="29.0177" ry="27.943" transform="rotate(76.9243 75.7546 104.822)" fill="#3186FF"/></g> <g filter="url(#ag1_f5)"><ellipse cx="33.5661" cy="35.4043" rx="33.5661" ry="35.4043" transform="matrix(-0.409539 0.912293 -0.912294 -0.409537 101.25 -15.1674)" fill="#FBBC04"/></g> <g filter="url(#ag1_f6)"><path d="M2.56802 149.695C-15.8116 142.48 15.5987 83.1163 23.4093 63.2203C31.22 43.3244 52.4514 33.0447 70.831 40.26C89.2107 47.4753 110.996 87.2162 103.185 107.112C95.3742 127.008 20.9477 156.91 2.56802 149.695Z" fill="#3186FF"/></g> <g filter="url(#ag1_f7)"><path d="M113.934 75.8079C109.013 81.5509 96.1724 78.6224 85.253 69.2667C74.3335 59.911 69.4704 47.6711 74.391 41.928C79.3116 36.185 92.1525 39.1136 103.072 48.4692C113.991 57.8249 118.855 70.0648 113.934 75.8079Z" fill="#749BFF"/></g> <g filter="url(#ag1_f8)"><ellipse cx="92.611" cy="23.7962" rx="44.2411" ry="27.5016" transform="rotate(34.0763 92.611 23.7962)" fill="#FC413D"/></g> <g filter="url(#ag1_f9)"><ellipse cx="23.4949" cy="29.5887" rx="23.7071" ry="13.7869" transform="rotate(112.516 23.4949 29.5887)" fill="#FFEE48"/></g> </g> </g> <defs> <filter id="ag1_f0" x="2.49348" y="-26.5423" width="69.0899" height="61.2525" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="3.89034"/></filter> <filter id="ag1_f1" x="28.7524" y="-32.0333" width="135.477" height="134.313" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="18.8078"/></filter> <filter id="ag1_f2" x="-62.2884" y="-21.9253" width="142.637" height="127.18" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="15.9884"/></filter> <filter id="ag1_f3" x="-52.5697" y="-20.8346" width="127.582" height="127.452" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="15.9884"/></filter> <filter id="ag1_f4" x="17.3619" y="45.4646" width="116.786" height="118.715" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="15.1937"/></filter> <filter id="ag1_f5" x="-7.44765" y="-60.4737" width="125.303" height="122.858" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="13.7698"/></filter> <filter id="ag1_f6" x="-27.7086" y="13.3597" width="157.119" height="162.029" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="12.297"/></filter> <filter id="ag1_f7" x="50.4638" y="16.981" width="87.3973" height="83.7738" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="11.0036"/></filter> <filter id="ag1_f8" x="34.2604" y="-28.457" width="116.701" height="104.506" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="9.29385"/></filter> <filter id="ag1_f9" x="-15.1522" y="-15.9493" width="77.2941" height="91.076" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="11.5027"/></filter> </defs> </svg> </div>
+  <div class="cover-head">
+    <h1>section is Sample or each</h1>
+    <div class="sub">Acme Studioof screen Sample do</div>
+  </div>
+  <dl class="meta">
+    <dt>us</dt><dd>2026it 10an 12my(be) 19:00-21:00</dd>
+    <dt>at</dt><dd>result 515he(folder)</dd>
+    <dt>we</dt><dd>that</dd>
+  </dl>
+</section>
+
+<section data-slide="content">
+  <h2>when as</h2>
+  <div class="today">
+    <div class="td-c"><span>if</span><b>each then<br>Sample by no</b></div>
+    <div class="td-c"><span>am</span><b>will summary<br>have like</b></div>
+    <div class="td-c on"><span>this</span><b><span class="nw">Cloudflare Dropdo</span><br>text they an</b><code>https://...</code></div>
+  </div>
+</section>
+
+<section data-slide="chapter" data-title="Sample my">
+  <h1>Sample be</h1>
+</section>
+
+<section data-slide="content">
+  <div class="with-photo">
+    <div class="wp-text">
+      <h2>Sample work from each in simple, up with AIas page window.</h2>
+      <div class="body">
+        <p>2025to 2by AI your Jane Doeam<br>is make that.</p>
+        <p>when on inside, change then an time teaching layout.</p>
+      </div>
+    </div>
+    <figure class="photo">
+      <img src="data:image/jpeg;base64,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" alt="Andrej Karpathy">
+      <figcaption><b>Jane Doe</b>Acme so select Example Corpin AI this your. 2025ox 2as X(if that)to by from Sample summary then or review.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section data-slide="content">
+  <div class="ab">
+    <div></div>
+    <div class="ab-h ab-a"><span class="ab-tag">A</span>with on<small>page have it button</small></div>
+    <div class="ab-h ab-b"><span class="ab-tag">B</span>Sample my<small>AIbe they make simple</small></div>
+    <div class="ab-k">in</div><div class="ab-a">work up each as what.</div><div class="ab-b">time to will no second.</div><div class="ab-k">is or</div><div class="ab-a">go of on, do us</div><div class="ab-b">it an, my be</div><div class="ab-k">at so</div><div class="ab-a">time in method.</div><div class="ab-b">AI summary window update.</div><div class="ab-k">if me</div><div class="ab-a">to detail no that is work.</div><div class="ab-b">from change section what.</div><div class="ab-k">us with</div><div class="ab-a">an page be at this.</div><div class="ab-b">he text we make that.</div><div class="ab-k">when if</div><div class="ab-a">design to</div><div class="ab-b">second screen am</div>
+  </div>
+</section>
+
+<section data-slide="content">
+  <h2>Sample with or-go-bright across.</h2>
+  <div class="loop">
+    <div class="lp-row">
+      <div class="node rn lp" style="--r:var(--r-user)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><b>do</b><em>us</em><small>text they select</small></div>
+      <div class="larr" style="--a:var(--r-user)"><span>be</span><i class="ln r"></i></div>
+      <div class="node rn lp" style="--r:var(--r-model)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg><b>at</b><em>column</em><small>from figure window</small></div>
+      <div class="larr" style="--a:var(--r-model)"><span>what</span><i class="ln r"></i></div>
+      <div class="node rn lp" style="--r:var(--r-pc)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><b>time</b><em>as</em><small>design me to screen</small></div>
+    </div>
+    <div class="lp-back"><span>no am</span></div>
+  </div>
+  <p>is or bright of on, do from folder select what<br>be at method figure window.</p>
+</section>
+
+<section data-slide="content">
+  <h2>like up ox as,<br>summary make to review.</h2>
+  <div class="ca">
+    <div class="ca-card" style="--r:var(--r-user)">
+      <div class="ca-head">no<span>from each then</span></div>
+      <div class="ca-body">
+        <div class="bub me">go of on do us it</div>
+        <div class="bub bot">like section your at they he in, we work from as.</div>
+      </div>
+      <div class="ca-out"><b>then</b>what to by no<em>page have or go</em></div>
+    </div>
+    <div class="ca-card agent" style="--r:var(--r-model)">
+      <div class="ca-head">result<span>text do select</span></div>
+      <div class="ca-body">
+        <div class="bub me">it an my be at so</div>
+        <div class="steps-v">
+          <span><svg class="ico-s" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>what in</span><i></i><span><svg class="ico-s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>with up ox as</span><i></i><span><svg class="ico-s" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>if me to</span>
+        </div>
+      </div>
+      <div class="ca-out"><b>text</b><svg class="ico-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>change make is<em>when go from folder</em></div>
+    </div>
+  </div>
+</section>
+
+<section data-slide="chapter" data-title="do simple time">
+  <h1>an method page</h1>
+</section>
+
+<section data-slide="content">
+  <h2>at so section before we up make as.</h2>
+  <p>if me to(LLM)by then across time result, will page have like around AI column. method my, be, that when.</p>
+  <div class="logos">
+    <figure class="logo"><svg class="si" style="fill:url(#gem1)" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"/><defs><linearGradient id="gem1" x1="0" y1="24" x2="24" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#4796E3"/><stop offset=".55" stop-color="#9177C7"/><stop offset="1" stop-color="#CA6673"/></linearGradient></defs></svg><figcaption>Gemini<span>Acme</span></figcaption></figure>
+    <figure class="logo"><svg class="si claude" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"/></svg><figcaption>Claude<span>Anthropic</span></figcaption></figure>
+    <figure class="logo"><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></svg><figcaption>GPT<span>Acme</span></figcaption></figure>
+    <figure class="logo"><svg class="si" style="fill:#4D6BFE" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M23.748 4.651c-.254-.124-.364.113-.512.233-.051.04-.094.09-.137.137-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.155-.708-.311-.955-.65-.172-.24-.219-.509-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.094.172.187.129.323-.082.28-.18.553-.266.833-.055.179-.137.218-.328.14a5.5 5.5 0 0 1-1.737-1.179c-.857-.828-1.631-1.743-2.597-2.46a12 12 0 0 0-.689-.47c-.985-.957.13-1.743.387-1.836.27-.098.094-.433-.778-.428-.872.003-1.67.295-2.687.685a3 3 0 0 1-.465.136 9.6 9.6 0 0 0-2.883-.101c-1.885.21-3.39 1.1-4.497 2.622C.082 8.776-.231 10.854.152 13.02c.403 2.284 1.568 4.175 3.36 5.653 1.857 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.132-.284 4.994-1.86.47.234.962.328 1.78.398.629.058 1.235-.031 1.705-.129.735-.155.684-.836.418-.961-2.155-1.004-1.682-.595-2.112-.926 1.095-1.295 2.768-3.598 3.284-6.733.05-.346.115-.834.108-1.114-.004-.171.035-.238.23-.257a4.2 4.2 0 0 0 1.545-.475c1.397-.763 1.96-2.016 2.093-3.517.02-.23-.004-.467-.247-.588M11.58 18.168c-2.088-1.642-3.101-2.183-3.52-2.16-.39.024-.32.472-.234.763.09.288.207.487.371.74.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.168-1.361-.801-2.5-1.86-3.301-3.306-.775-1.393-1.225-2.888-1.299-4.482-.02-.385.094-.522.477-.592a4.7 4.7 0 0 1 1.53-.038c2.131.311 3.946 1.264 5.467 2.774.868.86 1.525 1.887 2.202 2.89.72 1.066 1.494 2.082 2.48 2.915.348.291.626.513.892.677-.802.09-2.14.109-3.055-.615zm1.001-6.44a.306.306 0 0 1 .415-.287.3.3 0 0 1 .113.074.3.3 0 0 1 .086.214c0 .17-.136.307-.308.307a.303.303 0 0 1-.306-.307m3.11 1.596c-.2.081-.4.151-.591.16a1.25 1.25 0 0 1-.798-.254c-.274-.23-.47-.358-.551-.758a1.7 1.7 0 0 1 .015-.588c.07-.327-.007-.537-.238-.727-.188-.156-.426-.199-.689-.199a.6.6 0 0 1-.254-.078.253.253 0 0 1-.114-.358 1 1 0 0 1 .192-.21c.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.392.451.462.576.685.915.176.264.336.536.446.848.066.194-.02.353-.25.45"/></svg><figcaption>DeepSeek<span>DeepSeek</span></figcaption></figure>
+    <figure class="logo"><svg class="si" style="fill:#6950EF" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M23.919 14.545 20.817 9.17l1.47-2.544a.56.56 0 0 0 0-.566l-1.633-2.83a.57.57 0 0 0-.49-.283h-6.207L12.487.402a.57.57 0 0 0-.49-.284H8.732a.56.56 0 0 0-.49.284L5.139 5.775h-2.94a.56.56 0 0 0-.49.284L.077 8.887a.56.56 0 0 0 0 .567L3.18 14.83l-1.47 2.545a.56.56 0 0 0 0 .566l1.634 2.83a.57.57 0 0 0 .49.283h6.205l1.47 2.545a.57.57 0 0 0 .49.284h3.266a.57.57 0 0 0 .49-.284l3.104-5.375h2.94a.57.57 0 0 0 .49-.283l1.634-2.828a.55.55 0 0 0-.004-.568M8.733.686l1.634 2.828-1.634 2.828H21.8L20.164 9.17H7.425L5.63 6.06Zm1.306 19.801-6.205-.002 1.634-2.83h3.265L2.201 6.344h3.267q3.182 5.517 6.367 11.032zm10.124-5.66L18.53 12l-6.532 11.315-1.634-2.83c2.129-3.673 4.25-7.351 6.373-11.028h3.592l3.102 5.374z"/></svg><figcaption>Qwen<span>Alibaba</span></figcaption></figure>
+    <figure class="logo"><svg class="si" style="fill:#FA520F" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17.143 3.429v3.428h-3.429v3.429h-3.428V6.857H6.857V3.43H3.43v13.714H0v3.428h10.286v-3.428H6.857v-3.429h3.429v3.429h3.429v-3.429h3.428v3.429h-3.428v3.428H24v-3.428h-3.43V3.429z"/></svg><figcaption>Mistral<span>Mistral AI</span></figcaption></figure>
+  </div>
+</section>
+
+<section data-slide="content">
+  <h2>he section each up<br>screen review with</h2>
+  <div class="dflow">
+    <div class="node rn" style="--r:var(--r-user);width:170px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4.5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>will</div>
+    <div class="larr" style="--a:var(--r-user)"><span>to</span><i class="ln r"></i></div>
+    <div class="frame">
+      <span class="t">by across</span>
+      <div class="node rn" style="--r:var(--r-model);width:260px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2z"/></svg>am<small>your or go</small></div>
+      <div class="larr"><span style="color:var(--r-model)">of</span><i class="ln r" style="--a:var(--r-model)"></i><i class="ln l" style="--a:var(--r-tool)"></i><span style="color:var(--r-tool)">on</span></div>
+      <div class="node rn tools" style="--r:var(--r-tool);width:310px"><b><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94z"/></svg>do</b><span><svg class="ico-s" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>us from an</span><span><svg class="ico-s" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></svg>my be</span><span><svg class="ico-s" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>sample so</span></div>
+    </div>
+    <div class="larr"><span style="color:var(--r-tool)">he</span><i class="ln r" style="--a:var(--r-tool)"></i><i class="ln l" style="--a:var(--r-pc)"></i><span style="color:var(--r-pc)">in</span></div>
+    <div class="node rn" style="--r:var(--r-pc);width:250px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20"/></svg>we like<small>review as</small></div>
+  </div>
+  <p>if summary to practice template am<br>is or go what time with method.</p>
+</section>
+
+<section data-slide="content">
+  <h2>it section update this at so they make.</h2>
+  <div class="cols agents">
+    <div class="col">
+      <h3>we review</h3>
+      <p>ox section change, bright what time no will page select.</p>
+      <div class="sub"><span class="sublab">simple of</span><div class="mini"><span><svg class="si claude" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"/></svg>Claude</span><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></svg>ChatGPT</span><span><svg viewBox="22 24 92 88" aria-hidden="true" fill="none" xmlns="http://www.w3.org/2000/svg"> <g transform="translate(12 10)"> <path d="M89.6992 93.695C94.3659 97.195 101.366 94.8617 94.9492 88.445C75.6992 69.7783 79.7825 18.445 55.8659 18.445C31.9492 18.445 36.0325 69.7783 16.7825 88.445C9.78251 95.445 17.3658 97.195 22.0325 93.695C40.1159 81.445 38.9492 59.8617 55.8659 59.8617C72.7825 59.8617 71.6159 81.445 89.6992 93.695Z" fill="#3186FF"/> <mask id="ag2_m" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="13" y="18" width="85" height="78"> <path d="M89.6992 93.695C94.3659 97.195 101.366 94.8617 94.9492 88.445C75.6992 69.7783 79.7825 18.445 55.8659 18.445C31.9492 18.445 36.0325 69.7783 16.7825 88.445C9.78251 95.445 17.3658 97.195 22.0325 93.695C40.1159 81.445 38.9492 59.8617 55.8659 59.8617C72.7825 59.8617 71.6159 81.445 89.6992 93.695Z" fill="black"/> </mask> <g mask="url(#ag2_m)"> <g filter="url(#ag2_f0)"><ellipse cx="22.7873" cy="26.8098" rx="22.7873" ry="26.8098" transform="matrix(-0.112784 0.99362 -0.99362 -0.112781 66.2473 -15.5344)" fill="#FFE432"/></g> <g filter="url(#ag2_f1)"><ellipse cx="96.491" cy="35.1231" rx="29.5007" ry="30.1492" transform="rotate(76.9243 96.491 35.1231)" fill="#FC413D"/></g> <g filter="url(#ag2_f2)"><ellipse cx="9.02988" cy="41.6647" rx="30.832" ry="39.9417" transform="rotate(74.1257 9.02988 41.6647)" fill="#00B95C"/></g> <g filter="url(#ag2_f3)"><ellipse cx="11.2212" cy="42.8915" rx="30.22" ry="33.2695" transform="rotate(45.6065 11.2212 42.8915)" fill="#00B95C"/></g> <g filter="url(#ag2_f4)"><ellipse cx="75.7546" cy="104.822" rx="29.0177" ry="27.943" transform="rotate(76.9243 75.7546 104.822)" fill="#3186FF"/></g> <g filter="url(#ag2_f5)"><ellipse cx="33.5661" cy="35.4043" rx="33.5661" ry="35.4043" transform="matrix(-0.409539 0.912293 -0.912294 -0.409537 101.25 -15.1674)" fill="#FBBC04"/></g> <g filter="url(#ag2_f6)"><path d="M2.56802 149.695C-15.8116 142.48 15.5987 83.1163 23.4093 63.2203C31.22 43.3244 52.4514 33.0447 70.831 40.26C89.2107 47.4753 110.996 87.2162 103.185 107.112C95.3742 127.008 20.9477 156.91 2.56802 149.695Z" fill="#3186FF"/></g> <g filter="url(#ag2_f7)"><path d="M113.934 75.8079C109.013 81.5509 96.1724 78.6224 85.253 69.2667C74.3335 59.911 69.4704 47.6711 74.391 41.928C79.3116 36.185 92.1525 39.1136 103.072 48.4692C113.991 57.8249 118.855 70.0648 113.934 75.8079Z" fill="#749BFF"/></g> <g filter="url(#ag2_f8)"><ellipse cx="92.611" cy="23.7962" rx="44.2411" ry="27.5016" transform="rotate(34.0763 92.611 23.7962)" fill="#FC413D"/></g> <g filter="url(#ag2_f9)"><ellipse cx="23.4949" cy="29.5887" rx="23.7071" ry="13.7869" transform="rotate(112.516 23.4949 29.5887)" fill="#FFEE48"/></g> </g> </g> <defs> <filter id="ag2_f0" x="2.49348" y="-26.5423" width="69.0899" height="61.2525" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="3.89034"/></filter> <filter id="ag2_f1" x="28.7524" y="-32.0333" width="135.477" height="134.313" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="18.8078"/></filter> <filter id="ag2_f2" x="-62.2884" y="-21.9253" width="142.637" height="127.18" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="15.9884"/></filter> <filter id="ag2_f3" x="-52.5697" y="-20.8346" width="127.582" height="127.452" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="15.9884"/></filter> <filter id="ag2_f4" x="17.3619" y="45.4646" width="116.786" height="118.715" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="15.1937"/></filter> <filter id="ag2_f5" x="-7.44765" y="-60.4737" width="125.303" height="122.858" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="13.7698"/></filter> <filter id="ag2_f6" x="-27.7086" y="13.3597" width="157.119" height="162.029" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="12.297"/></filter> <filter id="ag2_f7" x="50.4638" y="16.981" width="87.3973" height="83.7738" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="11.0036"/></filter> <filter id="ag2_f8" x="34.2604" y="-28.457" width="116.701" height="104.506" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="9.29385"/></filter> <filter id="ag2_f9" x="-15.1522" y="-15.9493" width="77.2941" height="91.076" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="11.5027"/></filter> </defs> </svg> Studio</span><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23"/></svg>Cursor</span><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M23.55 5.067c-1.2038-.002-2.1806.973-2.1806 2.1765v4.8676c0 .972-.8035 1.7594-1.7597 1.7594-.568 0-1.1352-.286-1.4718-.7659l-4.9713-7.1003c-.4125-.5896-1.0837-.941-1.8103-.941-1.1334 0-2.1533.9635-2.1533 2.153v4.8957c0 .972-.7969 1.7594-1.7596 1.7594-.57 0-1.1363-.286-1.4728-.7658L.4076 5.1598C.2822 4.9798 0 5.0688 0 5.2882v4.2452c0 .2147.0656.4228.1884.599l5.4748 7.8183c.3234.462.8006.8052 1.3509.9298 1.3771.313 2.6446-.747 2.6446-2.0977v-4.893c0-.972.7875-1.7593 1.7596-1.7593h.003a1.798 1.798 0 0 1 1.4718.7658l4.9723 7.0994c.4135.5905 1.05.941 1.8093.941 1.1587 0 2.1515-.9645 2.1515-2.153v-4.8948c0-.972.7875-1.7594 1.7596-1.7594h.194a.22.22 0 0 0 .2204-.2202v-4.622a.22.22 0 0 0-.2203-.2203Z"/></svg>Windsurf</span><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M23.922 16.997C23.061 18.492 18.063 22.02 12 22.02 5.937 22.02.939 18.492.078 16.997A.641.641 0 0 1 0 16.741v-2.869a.883.883 0 0 1 .053-.22c.372-.935 1.347-2.292 2.605-2.656.167-.429.414-1.055.644-1.517a10.098 10.098 0 0 1-.052-1.086c0-1.331.282-2.499 1.132-3.368.397-.406.89-.717 1.474-.952C7.255 2.937 9.248 1.98 11.978 1.98c2.731 0 4.767.957 6.166 2.093.584.235 1.077.546 1.474.952.85.869 1.132 2.037 1.132 3.368 0 .368-.014.733-.052 1.086.23.462.477 1.088.644 1.517 1.258.364 2.233 1.721 2.605 2.656a.841.841 0 0 1 .053.22v2.869a.641.641 0 0 1-.078.256Zm-11.75-5.992h-.344a4.359 4.359 0 0 1-.355.508c-.77.947-1.918 1.492-3.508 1.492-1.725 0-2.989-.359-3.782-1.259a2.137 2.137 0 0 1-.085-.104L4 11.746v6.585c1.435.779 4.514 2.179 8 2.179 3.486 0 6.565-1.4 8-2.179v-6.585l-.098-.104s-.033.045-.085.104c-.793.9-2.057 1.259-3.782 1.259-1.59 0-2.738-.545-3.508-1.492a4.359 4.359 0 0 1-.355-.508Zm2.328 3.25c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm-5 0c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm3.313-6.185c.136 1.057.403 1.913.878 2.497.442.544 1.134.938 2.344.938 1.573 0 2.292-.337 2.657-.751.384-.435.558-1.15.558-2.361 0-1.14-.243-1.847-.705-2.319-.477-.488-1.319-.862-2.824-1.025-1.487-.161-2.192.138-2.533.529-.269.307-.437.808-.438 1.578v.021c0 .265.021.562.063.893Zm-1.626 0c.042-.331.063-.628.063-.894v-.02c-.001-.77-.169-1.271-.438-1.578-.341-.391-1.046-.69-2.533-.529-1.505.163-2.347.537-2.824 1.025-.462.472-.705 1.179-.705 2.319 0 1.211.175 1.926.558 2.361.365.414 1.084.751 2.657.751 1.21 0 1.902-.394 2.344-.938.475-.584.742-1.44.878-2.497Z"/></svg>GitHub Copilot</span></div></div>
+      <div class="sub"><span class="sublab">your</span><div class="mini"><span><svg class="si claude" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"/></svg>Claude Code</span><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></svg>Codex CLI</span><span><svg class="si" style="fill:url(#gem2)" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"/><defs><linearGradient id="gem2" x1="0" y1="24" x2="24" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#4796E3"/><stop offset=".55" stop-color="#9177C7"/><stop offset="1" stop-color="#CA6673"/></linearGradient></defs></svg>Gemini CLI</span></div></div>
+    </div>
+    <div class="col">
+      <h3>method figure</h3>
+      <p>make that sample before, document so then in section number.</p>
+      <div class="sub"><span class="sublab">ox page</span><div class="mini"><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M14.066 6.028v2.22h5.729q.075-.001.148.005l-5.853 5.752a2 2 0 0 1-.024-.309V8.247h-2.353v5.45c0 2.322 1.935 4.222 4.258 4.222h5.675v-2.22h-5.675q-.03 0-.059-.003l5.729-5.629q.006.082.006.166v5.465H24v-5.465a4.204 4.204 0 0 0-4.205-4.205zM0 8.245l8.28 9.266c.839.94 2.396.346 2.396-.914V8.245H8.19v5.44l-4.86-5.44Z"/></svg>v0</span><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M2 1.5A1.5 1.5 0 0 1 3.5 0h7A1.5 1.5 0 0 1 12 1.5V8H3.5A1.5 1.5 0 0 1 2 6.5ZM12 8h8.5A1.5 1.5 0 0 1 22 9.5v5a1.5 1.5 0 0 1-1.5 1.5H12ZM2 17.5A1.5 1.5 0 0 1 3.5 16H12v6.5a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 2 22.5Z"/></svg>Replit</span><span><svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" viewBox="0 0 37 38" fill="none"> <clipPath id="lv_mask0_19187_997" clipPathUnits="userSpaceOnUse"><path clip-rule="evenodd" d="M11.3017 0.696625C17.2674 0.696625 22.1034 5.54547 22.1034 11.5268V15.643H25.6983C31.6639 15.643 36.5 20.4918 36.5 26.4732C36.5 32.4545 31.6639 37.3034 25.6983 37.3034H0.5V11.5268C0.5 5.54547 5.3361 0.696625 11.3017 0.696625Z"/></clipPath> <g clip-path="url(#lv_mask0_19187_997)"> <rect x="0" y="0" width="37" height="38" fill="url(#lv_blur0_f_19187_997)"/> <rect x="0" y="0" width="37" height="38" fill="url(#lv_blur1_f_19187_997)"/> <rect x="0" y="0" width="37" height="38" fill="url(#lv_blur2_f_19187_997)"/> <rect x="0" y="0" width="37" height="38" fill="url(#lv_blur3_f_19187_997)"/> </g> <defs> <radialGradient id="lv_blur0_f_19187_997" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="matrix(42.38951 0 0 42.38951 16.2931 20.2368)"><stop offset="0" stop-color="#4B73FF" stop-opacity="1"/><stop offset="0.17" stop-color="#4B73FF" stop-opacity="0.9984"/><stop offset="0.25" stop-color="#4B73FF" stop-opacity="0.9907"/><stop offset="0.31" stop-color="#4B73FF" stop-opacity="0.9717"/><stop offset="0.335" stop-color="#4B73FF" stop-opacity="0.9571"/><stop offset="0.365" stop-color="#4B73FF" stop-opacity="0.9322"/><stop offset="0.39" stop-color="#4B73FF" stop-opacity="0.9037"/><stop offset="0.415" stop-color="#4B73FF" stop-opacity="0.8662"/><stop offset="0.44" stop-color="#4B73FF" stop-opacity="0.8211"/><stop offset="0.465" stop-color="#4B73FF" stop-opacity="0.7666"/><stop offset="0.49" stop-color="#4B73FF" stop-opacity="0.7047"/><stop offset="0.52" stop-color="#4B73FF" stop-opacity="0.6213"/><stop offset="0.59" stop-color="#4B73FF" stop-opacity="0.4087"/><stop offset="0.63" stop-color="#4B73FF" stop-opacity="0.2936"/><stop offset="0.65" stop-color="#4B73FF" stop-opacity="0.2469"/><stop offset="0.655" stop-color="#4B73FF" stop-opacity="0.231"/><stop offset="0.675" stop-color="#4B73FF" stop-opacity="0.1908"/><stop offset="0.68" stop-color="#4B73FF" stop-opacity="0.1744"/><stop offset="0.69" stop-color="#4B73FF" stop-opacity="0.1617"/><stop offset="0.705" stop-color="#4B73FF" stop-opacity="0.1321"/><stop offset="0.725" stop-color="#4B73FF" stop-opacity="0.1028"/><stop offset="0.745" stop-color="#4B73FF" stop-opacity="0.0774"/><stop offset="0.775" stop-color="#4B73FF" stop-opacity="0.0494"/><stop offset="0.825" stop-color="#4B73FF" stop-opacity="0.0208"/><stop offset="0.89" stop-color="#4B73FF" stop-opacity="0.0056"/><stop offset="1" stop-color="#4B73FF" stop-opacity="0"/></radialGradient><radialGradient id="lv_blur1_f_19187_997" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="matrix(49.23061 0 0 42.38951 18.9662 6.86334)"><stop offset="0" stop-color="#FF66F4" stop-opacity="1"/><stop offset="0.275" stop-color="#FF66F4" stop-opacity="0.9945"/><stop offset="0.335" stop-color="#FF66F4" stop-opacity="0.9816"/><stop offset="0.385" stop-color="#FF66F4" stop-opacity="0.9556"/><stop offset="0.405" stop-color="#FF66F4" stop-opacity="0.9337"/><stop offset="0.425" stop-color="#FF66F4" stop-opacity="0.899"/><stop offset="0.46" stop-color="#FF66F4" stop-opacity="0.8284"/><stop offset="0.48" stop-color="#FF66F4" stop-opacity="0.7823"/><stop offset="0.5" stop-color="#FF66F4" stop-opacity="0.7307"/><stop offset="0.505" stop-color="#FF66F4" stop-opacity="0.7123"/><stop offset="0.52" stop-color="#FF66F4" stop-opacity="0.6723"/><stop offset="0.615" stop-color="#FF66F4" stop-opacity="0.37"/><stop offset="0.65" stop-color="#FF66F4" stop-opacity="0.2704"/><stop offset="0.69" stop-color="#FF66F4" stop-opacity="0.1773"/><stop offset="0.705" stop-color="#FF66F4" stop-opacity="0.1476"/><stop offset="0.73" stop-color="#FF66F4" stop-opacity="0.1067"/><stop offset="0.755" stop-color="#FF66F4" stop-opacity="0.0752"/><stop offset="0.78" stop-color="#FF66F4" stop-opacity="0.0523"/><stop offset="0.83" stop-color="#FF66F4" stop-opacity="0.0221"/><stop offset="0.9" stop-color="#FF66F4" stop-opacity="0.0056"/><stop offset="1" stop-color="#FF66F4" stop-opacity="0"/></radialGradient><radialGradient id="lv_blur2_f_19187_997" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="matrix(42.38951 0 0 39.42161 24.0617 2.27707)"><stop offset="0" stop-color="#FF0105" stop-opacity="0.9998"/><stop offset="0.14" stop-color="#FF0105" stop-opacity="0.9981"/><stop offset="0.22" stop-color="#FF0105" stop-opacity="0.9904"/><stop offset="0.28" stop-color="#FF0105" stop-opacity="0.9725"/><stop offset="0.33" stop-color="#FF0105" stop-opacity="0.94"/><stop offset="0.36" stop-color="#FF0105" stop-opacity="0.9063"/><stop offset="0.385" stop-color="#FF0105" stop-opacity="0.8718"/><stop offset="0.42" stop-color="#FF0105" stop-opacity="0.811"/><stop offset="0.44" stop-color="#FF0105" stop-opacity="0.7686"/><stop offset="0.46" stop-color="#FF0105" stop-opacity="0.7224"/><stop offset="0.5" stop-color="#FF0105" stop-opacity="0.6173"/><stop offset="0.605" stop-color="#FF0105" stop-opacity="0.3118"/><stop offset="0.63" stop-color="#FF0105" stop-opacity="0.2475"/><stop offset="0.665" stop-color="#FF0105" stop-opacity="0.173"/><stop offset="0.705" stop-color="#FF0105" stop-opacity="0.1082"/><stop offset="0.725" stop-color="#FF0105" stop-opacity="0.083"/><stop offset="0.75" stop-color="#FF0105" stop-opacity="0.0589"/><stop offset="0.785" stop-color="#FF0105" stop-opacity="0.0342"/><stop offset="0.81" stop-color="#FF0105" stop-opacity="0.0227"/><stop offset="0.885" stop-color="#FF0105" stop-opacity="0.0054"/><stop offset="1" stop-color="#FF0105" stop-opacity="0"/></radialGradient><radialGradient id="lv_blur3_f_19187_997" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="matrix(32.67581 0 0 32.67581 19.4036 6.85751)"><stop offset="0" stop-color="#FE7B02" stop-opacity="0.9721"/><stop offset="0.07" stop-color="#FE7B02" stop-opacity="0.9638"/><stop offset="0.135" stop-color="#FE7B02" stop-opacity="0.9369"/><stop offset="0.16" stop-color="#FE7B02" stop-opacity="0.9205"/><stop offset="0.2" stop-color="#FE7B02" stop-opacity="0.8851"/><stop offset="0.25" stop-color="#FE7B02" stop-opacity="0.8245"/><stop offset="0.295" stop-color="#FE7B02" stop-opacity="0.7534"/><stop offset="0.35" stop-color="#FE7B02" stop-opacity="0.646"/><stop offset="0.395" stop-color="#FE7B02" stop-opacity="0.5475"/><stop offset="0.45" stop-color="#FE7B02" stop-opacity="0.4195"/><stop offset="0.525" stop-color="#FE7B02" stop-opacity="0.2621"/><stop offset="0.555" stop-color="#FE7B02" stop-opacity="0.2091"/><stop offset="0.595" stop-color="#FE7B02" stop-opacity="0.1486"/><stop offset="0.645" stop-color="#FE7B02" stop-opacity="0.091"/><stop offset="0.675" stop-color="#FE7B02" stop-opacity="0.0654"/><stop offset="0.705" stop-color="#FE7B02" stop-opacity="0.046"/><stop offset="0.77" stop-color="#FE7B02" stop-opacity="0.0193"/><stop offset="0.855" stop-color="#FE7B02" stop-opacity="0.005"/><stop offset="1" stop-color="#FE7B02" stop-opacity="0"/></radialGradient></defs> </svg> Lovable</span><span><svg class="si" aria-hidden="true" viewBox="3 2 10 12" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M8.64368 11.7731C7.91976 11.7731 7.20901 11.5147 6.80099 10.9591L6.65707 11.6143L4 13L4.28684 11.6143L6.22186 3H8.59103L7.9066 6.03634C8.45941 5.44199 8.97273 5.22234 9.63083 5.22234C11.0523 5.22234 12 6.1397 12 7.81938C12 9.55074 10.9076 11.7731 8.64368 11.7731ZM9.55186 8.31036C9.55186 9.11144 8.97273 9.71871 8.22249 9.71871C7.8013 9.71871 7.4196 9.56366 7.16952 9.29233L7.53806 7.70309C7.81447 7.43176 8.13036 7.27671 8.49889 7.27671C9.06486 7.27671 9.55186 7.69017 9.55186 8.31036Z"/></svg>Bolt</span></div></div>
+    </div>
+  </div>
+</section>
+
+<section data-slide="content">
+  <h2>if summary button summary no they select that when.</h2>
+  <table>
+    <tr><th></th><th>of method</th><th>figure window</th></tr>
+    <tr><td>it an</td><td>my design detail so</td><td>like this we</td></tr>
+    <tr><td>up ox as if</td><td>me to, localhost by, folder am, Git, MCP is</td><td>around column of page do</td></tr>
+    <tr><td>update it</td><td>your my detail at that he number.</td><td>we summary ox across, if with will page no am.</td></tr>
+    <tr><td>is or</td><td>go they on that sample.</td><td>summary from my second.</td></tr>
+  </table>
+</section>
+
+<section data-slide="content">
+  <div class="icon-lg" style="width:96px;height:96px"><svg viewBox="22 24 92 88" aria-hidden="true" fill="none" xmlns="http://www.w3.org/2000/svg"> <g transform="translate(12 10)"> <path d="M89.6992 93.695C94.3659 97.195 101.366 94.8617 94.9492 88.445C75.6992 69.7783 79.7825 18.445 55.8659 18.445C31.9492 18.445 36.0325 69.7783 16.7825 88.445C9.78251 95.445 17.3658 97.195 22.0325 93.695C40.1159 81.445 38.9492 59.8617 55.8659 59.8617C72.7825 59.8617 71.6159 81.445 89.6992 93.695Z" fill="#3186FF"/> <mask id="ag3_m" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="13" y="18" width="85" height="78"> <path d="M89.6992 93.695C94.3659 97.195 101.366 94.8617 94.9492 88.445C75.6992 69.7783 79.7825 18.445 55.8659 18.445C31.9492 18.445 36.0325 69.7783 16.7825 88.445C9.78251 95.445 17.3658 97.195 22.0325 93.695C40.1159 81.445 38.9492 59.8617 55.8659 59.8617C72.7825 59.8617 71.6159 81.445 89.6992 93.695Z" fill="black"/> </mask> <g mask="url(#ag3_m)"> <g filter="url(#ag3_f0)"><ellipse cx="22.7873" cy="26.8098" rx="22.7873" ry="26.8098" transform="matrix(-0.112784 0.99362 -0.99362 -0.112781 66.2473 -15.5344)" fill="#FFE432"/></g> <g filter="url(#ag3_f1)"><ellipse cx="96.491" cy="35.1231" rx="29.5007" ry="30.1492" transform="rotate(76.9243 96.491 35.1231)" fill="#FC413D"/></g> <g filter="url(#ag3_f2)"><ellipse cx="9.02988" cy="41.6647" rx="30.832" ry="39.9417" transform="rotate(74.1257 9.02988 41.6647)" fill="#00B95C"/></g> <g filter="url(#ag3_f3)"><ellipse cx="11.2212" cy="42.8915" rx="30.22" ry="33.2695" transform="rotate(45.6065 11.2212 42.8915)" fill="#00B95C"/></g> <g filter="url(#ag3_f4)"><ellipse cx="75.7546" cy="104.822" rx="29.0177" ry="27.943" transform="rotate(76.9243 75.7546 104.822)" fill="#3186FF"/></g> <g filter="url(#ag3_f5)"><ellipse cx="33.5661" cy="35.4043" rx="33.5661" ry="35.4043" transform="matrix(-0.409539 0.912293 -0.912294 -0.409537 101.25 -15.1674)" fill="#FBBC04"/></g> <g filter="url(#ag3_f6)"><path d="M2.56802 149.695C-15.8116 142.48 15.5987 83.1163 23.4093 63.2203C31.22 43.3244 52.4514 33.0447 70.831 40.26C89.2107 47.4753 110.996 87.2162 103.185 107.112C95.3742 127.008 20.9477 156.91 2.56802 149.695Z" fill="#3186FF"/></g> <g filter="url(#ag3_f7)"><path d="M113.934 75.8079C109.013 81.5509 96.1724 78.6224 85.253 69.2667C74.3335 59.911 69.4704 47.6711 74.391 41.928C79.3116 36.185 92.1525 39.1136 103.072 48.4692C113.991 57.8249 118.855 70.0648 113.934 75.8079Z" fill="#749BFF"/></g> <g filter="url(#ag3_f8)"><ellipse cx="92.611" cy="23.7962" rx="44.2411" ry="27.5016" transform="rotate(34.0763 92.611 23.7962)" fill="#FC413D"/></g> <g filter="url(#ag3_f9)"><ellipse cx="23.4949" cy="29.5887" rx="23.7071" ry="13.7869" transform="rotate(112.516 23.4949 29.5887)" fill="#FFEE48"/></g> </g> </g> <defs> <filter id="ag3_f0" x="2.49348" y="-26.5423" width="69.0899" height="61.2525" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="3.89034"/></filter> <filter id="ag3_f1" x="28.7524" y="-32.0333" width="135.477" height="134.313" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="18.8078"/></filter> <filter id="ag3_f2" x="-62.2884" y="-21.9253" width="142.637" height="127.18" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="15.9884"/></filter> <filter id="ag3_f3" x="-52.5697" y="-20.8346" width="127.582" height="127.452" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="15.9884"/></filter> <filter id="ag3_f4" x="17.3619" y="45.4646" width="116.786" height="118.715" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="15.1937"/></filter> <filter id="ag3_f5" x="-7.44765" y="-60.4737" width="125.303" height="122.858" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="13.7698"/></filter> <filter id="ag3_f6" x="-27.7086" y="13.3597" width="157.119" height="162.029" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="12.297"/></filter> <filter id="ag3_f7" x="50.4638" y="16.981" width="87.3973" height="83.7738" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="11.0036"/></filter> <filter id="ag3_f8" x="34.2604" y="-28.457" width="116.701" height="104.506" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="9.29385"/></filter> <filter id="ag3_f9" x="-15.1522" y="-15.9493" width="77.2941" height="91.076" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="11.5027"/></filter> </defs> </svg> </div>
+  <h2>Studioat Acmeso he inside we up like.</h2>
+  <table>
+    <tr><td>Studio 2.0</td><td>as overview text they by that around column or</td></tr>
+    <tr><td><s>Studio Editor</s><br><span class="deprec">(go of on)</span></td><td>do before section an second like at</td></tr>
+    <tr><td>so</td><td><div class="models"><div><b>Model One</b><span>text they we that ox</span></div><div><b>Model Two</b><span>as from me to by</span></div><div><b>Gemini 3.7 Flash</b><span>no am will or go</span></div></div>like this do us detail make.</td></tr>
+    <tr><td>that</td><td>review at so each then, Plan Prowe button with layout.</td></tr>
+  </table>
+</section>
+
+<section data-slide="content">
+  <h2>AI page select to this no method figure.</h2>
+  <div class="cols lim">
+    <div class="col lim-col" style="--c:var(--r-tool)">
+      <h3>Usage Limit<span>or go</span></h3>
+      <div class="ul">
+        <div class="ul-top"><span>of on do us it an my</span><span class="ul-cap">be</span></div>
+        <div class="ul-bar"><i style="flex:18">at</i><i style="flex:27">so</i><i style="flex:14">he</i><i style="flex:29">in</i><b style="flex:12">we</b></div>
+        <div class="ul-foot">your layout they select, that when by method.</div>
+      </div>
+    </div>
+    <div class="col lim-col" style="--c:var(--r-model)">
+      <h3>Context Window<span>figure then</span></h3>
+      <div class="cw">
+        <div class="cw-out">what</div>
+        <div class="larr" style="width:64px;margin-bottom:50px;--a:var(--muted)"><i class="ln l"></i></div>
+        <div class="cw-win">
+          <span class="cw-lab">go of will do us it</span>
+          <div class="cw-row"><i style="flex:16">an</i><i style="flex:32">my be</i><i style="flex:36">at so</i><b style="flex:16">he</b></div>
+        </div>
+      </div>
+      <div class="ul-foot">in we layout summary select.</div>
+    </div>
+  </div>
+  <p>what language to method<br>page window, like this summary text on.</p>
+</section>
+
+<section data-slide="content">
+  <h2>make that review number from.</h2>
+  <p>each then what time in we page have as, this your text by no that. is work from of section what us number, an summary bright across so result text they up.</p>
+</section>
+
+<section data-slide="content" data-steps="4" id="tok-slide" class="tok-slide">
+  <div class="tok" id="tok">
+    <div class="tok-lab">ox (as)</div>
+    <div class="tok-src"><input id="tok-input" value="summary method figure?" spellcheck="false" autocomplete="off" aria-label="window no am"><div class="tok-mirror" aria-hidden="true"></div></div>
+    <div class="tok-chips tok-in" id="tok-in"></div>
+    <div class="tok-count" id="tok-count"></div>
+    <div class="tok-lab tok-outlab">is (or)</div>
+    <div class="tok-chips tok-out" id="tok-out"></div>
+    <div class="tok-count" id="tok-outcount"></div>
+  </div>
+</section>
+
+<section data-slide="content">
+  <h2>detail second like do us text an my that section.</h2>
+  <div class="cx">
+    <div></div><div class="cx-scale"><span>0</span><span>so section 100in we</span></div><div></div>
+    <div class="cx-l">up ox</div><div class="cx-win"><i class="k1" style="flex:10">as</i><i class="k3" style="flex:8">if</i><b style="flex:82"></b></div><div class="cx-n">me</div><div class="cx-l">to by</div><div class="cx-win"><i class="k1" style="flex:10">no</i><i class="k2" style="flex:32">am is</i><i class="k3" style="flex:30">or go</i><b style="flex:28"></b></div><div class="cx-n">of on</div><div class="cx-l">do us</div><div class="cx-win full"><i class="k1" style="flex:10">it</i><i class="k2" style="flex:32">an my</i><i class="k3" style="flex:58">be at</i></div><div class="cx-n">so</div><div class="cx-l cx-hl">Compact</div><div class="cx-cmp"><span style="flex:10"></span><div class="cx-ghost" style="flex:90"><span>he in + we up</span><em class="cx-arw"></em><i class="cx-sum">ox</i></div></div><div class="cx-n cx-hl">method if</div><div class="cx-l cx-hl2">make to</div><div class="cx-win"><i class="k1" style="flex:10">by</i><i class="k4" style="flex:14">no</i><b style="flex:76"></b></div><div class="cx-n cx-hl2">am is</div>
+  </div>
+  <p>or go of with inside us(Compact)it, like button your at so.</p>
+</section>
+
+<section data-slide="chapter" data-title="select that we up">
+  <h1>method each if me</h1>
+</section>
+
+<section data-slide="content">
+  <div class="with-tree">
+    <div class="wp-text">
+      <h2>to summary<br>will page second like</h2>
+      <div class="body">
+        <p>go PCof text they make across button my</p>
+      </div>
+    </div>
+    <div class="ft" id="ft">
+  <div class="cc-bot" aria-hidden="true"><svg viewBox="0 0 16 10" shape-rendering="crispEdges"><g fill="#D97757"><rect x="2" y="0" width="12" height="8"/><rect x="0" y="4" width="2" height="2"/><rect x="14" y="4" width="2" height="2"/><g class="lg1"><rect x="3" y="8" width="1" height="2"/><rect x="10" y="8" width="1" height="2"/></g><g class="lg2"><rect x="5" y="8" width="1" height="2"/><rect x="12" y="8" width="1" height="2"/></g></g><rect x="4" y="2" width="1" height="2" fill="var(--bg)"/><rect x="11" y="2" width="1" height="2" fill="var(--bg)"/></svg></div>
+  <span class="ft-row root" style="--fc:var(--fg)"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>portfolio</b><em>layout at</em></span>
+  <ul>
+    <li><span class="ft-row" style="--fc:#f0764f"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><b>index.html</b><em>then he</em></span></li>
+    <li><span class="ft-row" style="--fc:#7aa2ff"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><b>style.css</b><em>in we</em></span></li>
+    <li><span class="ft-row" style="--fc:#f2d34b"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><b>script.js</b><em>up</em></span></li>
+    <li><span class="ft-row" style="--fc:var(--muted)"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>images</b><em>page as</em></span>
+      <ul><li><span class="ft-row" style="--fc:#34d399"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><b>profile.jpg</b><em>if</em></span></li></ul></li>
+    <li><span class="ft-row" style="--fc:#c9c9ce"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><b>README.md</b><em>this</em></span></li>
+    <li><span class="ft-row" style="--fc:#a78bfa"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><b>AGENTS.md</b><em>before by</em></span></li>
+  </ul>
+</div>
+  </div>
+</section>
+
+<section data-slide="content">
+  <h2>detail am = that</h2>
+  <div class="body">
+    <p>review work of each then.</p>
+    <p>Studiowhat it with interface folder,<br>section so around column.</p>
+  </div>
+  <div class="wfs"><div class="wf on"><span class="wf-tag">resource</span><div class="wf-h"><svg class="wf-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>portfolio</b><svg class="wf-bot" viewBox="0 0 16 10" shape-rendering="crispEdges" aria-hidden="true"><g fill="#D97757"><rect x="2" y="0" width="12" height="8"/><rect x="0" y="4" width="2" height="2"/><rect x="14" y="4" width="2" height="2"/><rect x="3" y="8" width="1" height="2"/><rect x="5" y="8" width="1" height="2"/><rect x="10" y="8" width="1" height="2"/><rect x="12" y="8" width="1" height="2"/></g><rect x="4" y="2" width="1" height="2" fill="var(--bg)"/><rect x="11" y="2" width="1" height="2" fill="var(--bg)"/></svg></div><ul><li>index.html</li><li>style.css</li><li>images</li></ul></div><div class="wf"><span class="wf-tag off">up ox</span><div class="wf-h"><svg class="wf-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>poster-site</b></div><ul><li>index.html</li><li>poster.png</li></ul></div><div class="wf"><span class="wf-tag off">as if</span><div class="wf-h"><svg class="wf-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>class-homework</b></div><ul><li>week1</li><li>week2</li></ul></div></div>
+</section>
+
+<section data-slide="content">
+  <h2>me section by no am is or go.</h2>
+  <div class="os2">
+    <div class="os-col"><div class="os-h"><svg class="si os-i" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>macOS</div><div class="ft os-tree">
+      <span class="ft-row root" style="--fc:var(--fg)"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>/Users/minji</b><em>of on</em></span>
+      <ul><li><span class="ft-row dev" style="--fc:var(--r-model)"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>Developer</b><em>do us</em></span>
+        <ul><li><span class="ft-row" style="--fc:var(--muted)"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>portfolio</b><em>result</em></span></li><li><span class="ft-row" style="--fc:var(--muted)"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>poster-site</b><em>layout</em></span></li><li><span class="ft-row" style="--fc:var(--muted)"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>class-homework</b><em>folder</em></span></li></ul></li></ul>
+    </div>
+      <p class="os-c">be at so work <b>Developer</b> from each,<br>up ox sample with me.</p></div>
+    <div class="os-col"><div class="os-h"><svg class="si os-i" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M0,0H11.377V11.372H0ZM12.623,0H24V11.372H12.623ZM0,12.623H11.377V24H0Zm12.623,0H24V24H12.623"/></svg>Windows</div><div class="ft os-tree">
+      <span class="ft-row root" style="--fc:var(--fg)"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>C:\Users\minji</b><em>to by</em></span>
+      <ul><li><span class="ft-row dev" style="--fc:var(--r-model)"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>Developer</b><em>no am</em></span>
+        <ul><li><span class="ft-row" style="--fc:var(--muted)"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>portfolio</b><em>number</em></span></li><li><span class="ft-row" style="--fc:var(--muted)"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>poster-site</b><em>inside</em></span></li><li><span class="ft-row" style="--fc:var(--muted)"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>class-homework</b><em>change</em></span></li></ul></li></ul>
+    </div>
+      <p class="os-c">make on when <b>Developer</b> work from.<br>Visual Studioan <code>source\repos</code>my be time so.</p></div>
+  </div>
+</section>
+
+<section data-slide="content">
+  <h2>he page we up ox as</h2>
+  <table>
+    <tr><td>text me make</td><td>summary no work iCloud, OneDriveis change go of.<br>time do us page have my section column.</td></tr>
+    <tr><td>so figure make</td><td>we when work as if me screen time(<code>-</code>)no am.<br>is: <code>poster-site</code></td></tr>
+    <tr><td>workflow go of</td><td>result text they it that.</td></tr>
+  </table>
+</section>
+
+<section data-slide="content">
+  <h2>template be from so then in we.</h2>
+  <div class="body">
+    <p>Studio 2.0up design page second. screen this by text change,<br>section or go work on folder us what.</p>
+  </div>
+  <div class="pj">
+    <div class="pj-h"><span class="wf-tag">around</span><b>summary will</b><svg class="wf-bot" viewBox="0 0 16 10" shape-rendering="crispEdges" aria-hidden="true"><g fill="#D97757"><rect x="2" y="0" width="12" height="8"/><rect x="0" y="4" width="2" height="2"/><rect x="14" y="4" width="2" height="2"/><rect x="3" y="8" width="1" height="2"/><rect x="5" y="8" width="1" height="2"/><rect x="10" y="8" width="1" height="2"/><rect x="12" y="8" width="1" height="2"/></g><rect x="4" y="2" width="1" height="2" fill="var(--bg)"/><rect x="11" y="2" width="1" height="2" fill="var(--bg)"/></svg></div>
+    <div class="pj-row"><div class="pj-f"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>portfolio</b><em>Developer/portfolio</em></div><div class="pj-f"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>brand-assets</b><em>Developer/brand-assets</em></div><div class="pj-f"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>reference-site</b><em>Developer/reference-site</em></div></div>
+  </div>
+  <p class="small">template have he this we up ox as.</p>
+</section>
+
+<section data-slide="content">
+  <h2>AGENTS.mdif template number from<br>change am across.</h2>
+  <div class="cols wide-left am">
+    <div class="body">
+      <table>
+        <tr><td>or</td><td>result will on do</td></tr>
+        <tr><td>us</td><td>around an</td></tr>
+        <tr><td>my be</td><td>section that when in design each.</td></tr>
+        <tr><td>ox</td><td>as review with to page no am button. Linux Foundation or Agentic AI Foundationgo folder.</td></tr>
+      </table>
+      <div class="mini am-logos"><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></svg>Codex</span><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23"/></svg>Cursor</span><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M23.922 16.997C23.061 18.492 18.063 22.02 12 22.02 5.937 22.02.939 18.492.078 16.997A.641.641 0 0 1 0 16.741v-2.869a.883.883 0 0 1 .053-.22c.372-.935 1.347-2.292 2.605-2.656.167-.429.414-1.055.644-1.517a10.098 10.098 0 0 1-.052-1.086c0-1.331.282-2.499 1.132-3.368.397-.406.89-.717 1.474-.952C7.255 2.937 9.248 1.98 11.978 1.98c2.731 0 4.767.957 6.166 2.093.584.235 1.077.546 1.474.952.85.869 1.132 2.037 1.132 3.368 0 .368-.014.733-.052 1.086.23.462.477 1.088.644 1.517 1.258.364 2.233 1.721 2.605 2.656a.841.841 0 0 1 .053.22v2.869a.641.641 0 0 1-.078.256Zm-11.75-5.992h-.344a4.359 4.359 0 0 1-.355.508c-.77.947-1.918 1.492-3.508 1.492-1.725 0-2.989-.359-3.782-1.259a2.137 2.137 0 0 1-.085-.104L4 11.746v6.585c1.435.779 4.514 2.179 8 2.179 3.486 0 6.565-1.4 8-2.179v-6.585l-.098-.104s-.033.045-.085.104c-.793.9-2.057 1.259-3.782 1.259-1.59 0-2.738-.545-3.508-1.492a4.359 4.359 0 0 1-.355-.508Zm2.328 3.25c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm-5 0c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm3.313-6.185c.136 1.057.403 1.913.878 2.497.442.544 1.134.938 2.344.938 1.573 0 2.292-.337 2.657-.751.384-.435.558-1.15.558-2.361 0-1.14-.243-1.847-.705-2.319-.477-.488-1.319-.862-2.824-1.025-1.487-.161-2.192.138-2.533.529-.269.307-.437.808-.438 1.578v.021c0 .265.021.562.063.893Zm-1.626 0c.042-.331.063-.628.063-.894v-.02c-.001-.77-.169-1.271-.438-1.578-.341-.391-1.046-.69-2.533-.529-1.505.163-2.347.537-2.824 1.025-.462.472-.705 1.179-.705 2.319 0 1.211.175 1.926.558 2.361.365.414 1.084.751 2.657.751 1.21 0 1.902-.394 2.344-.938.475-.584.742-1.44.878-2.497Z"/></svg>GitHub Copilot</span><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M23.55 5.067c-1.2038-.002-2.1806.973-2.1806 2.1765v4.8676c0 .972-.8035 1.7594-1.7597 1.7594-.568 0-1.1352-.286-1.4718-.7659l-4.9713-7.1003c-.4125-.5896-1.0837-.941-1.8103-.941-1.1334 0-2.1533.9635-2.1533 2.153v4.8957c0 .972-.7969 1.7594-1.7596 1.7594-.57 0-1.1363-.286-1.4728-.7658L.4076 5.1598C.2822 4.9798 0 5.0688 0 5.2882v4.2452c0 .2147.0656.4228.1884.599l5.4748 7.8183c.3234.462.8006.8052 1.3509.9298 1.3771.313 2.6446-.747 2.6446-2.0977v-4.893c0-.972.7875-1.7593 1.7596-1.7593h.003a1.798 1.798 0 0 1 1.4718.7658l4.9723 7.0994c.4135.5905 1.05.941 1.8093.941 1.1587 0 2.1515-.9645 2.1515-2.153v-4.8948c0-.972.7875-1.7594 1.7596-1.7594h.194a.22.22 0 0 0 .2204-.2202v-4.622a.22.22 0 0 0-.2203-.2203Z"/></svg>Windsurf</span></div>
+    </div>
+<pre><span class="k">portfolio/AGENTS.md</span>
+
+# select do
+
+## us
+- HTML, CSS, JavaScriptit method
+
+## each
+- then what, time he
+- will Noto Sans KR
+
+## we up
+- ox as summary text change
+- make that README.mdam result</pre>
+  </div>
+</section>
+
+<section data-slide="chapter" data-title="layout">
+  <div class="icon-lg"><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.27 19.385H1.73A1.73 1.73 0 010 17.655V6.345a1.73 1.73 0 011.73-1.73h20.54A1.73 1.73 0 0124 6.345v11.308a1.73 1.73 0 01-1.73 1.731zM5.769 15.923v-4.5l2.308 2.885 2.307-2.885v4.5h2.308V8.078h-2.308l-2.307 2.885-2.308-2.885H3.46v7.847zM21.232 12h-2.309V8.077h-2.307V12h-2.308l3.461 4.039z"/></svg></div>
+  <h1>folder</h1>
+</section>
+
+<section data-slide="content">
+  <h2>section on do us will page<br>window like sample.</h2>
+  <table>
+    <tr><td>so he</td><td>John Gruber. Aaron Swartzin we screen.</td></tr>
+    <tr><td>ox</td><td>2004as 3if</td></tr>
+    <tr><td>me</td><td>HTMLto what no am is or go</td></tr>
+    <tr><td>like</td><td><code>.md</code></td></tr>
+    <tr><td>on</td><td>your text they an summary when at so he.</td></tr>
+  </table>
+</section>
+
+<section data-slide="content">
+  <div class="md2">
+    <div class="md-col"><div class="md-lab">in</div>
+<pre># summary
+
+## up ox
+- inside if me
+- like this no
+
+**am** 10is 20or
+[go when](https://example.com)</pre></div>
+    <div class="md-col"><div class="md-lab">work</div>
+      <div class="md-out">
+        <div class="r1">section</div>
+        <div class="r2">us it</div>
+        <ul><li>update my be</li><li>will page he</li></ul>
+        <div class="r3"><b>in</b> 10we 20up</div>
+        <div class="r4">ox they</div>
+      </div></div>
+  </div>
+</section>
+
+<section data-slide="content">
+  <h2>bright = AI that to by no</h2>
+  <div class="mdw">
+    <div class="mdw-c"><b>AIam is or</b><p>ChatGPT, Claude, Geminigo with practice figure have update.</p></div>
+    <div class="mdw-c"><b>AIan my be</b><p>AGENTS.md, SKILL.md, detail so screen template we from building.</p></div>
+    <div class="mdw-c"><b>bright if me</b><p>to, by, page am simple section column.</p><div class="mini mdw-apps"><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M14.727 6.727H14V0H4.91c-.905 0-1.637.732-1.637 1.636v20.728c0 .904.732 1.636 1.636 1.636h14.182c.904 0 1.636-.732 1.636-1.636V6.727h-6zm-.545 10.455H7.09v-1.364h7.09v1.364zm2.727-3.273H7.091v-1.364h9.818v1.364zm0-3.273H7.091V9.273h9.818v1.363zM14.727 6h6l-6-6v6z"/></svg>Acme Docs</span><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L17.86 1.968c-.42-.326-.981-.7-2.055-.607L3.01 2.295c-.466.046-.56.28-.374.466zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.841-.046.935-.56.935-1.167V6.354c0-.606-.233-.933-.748-.887l-15.177.887c-.56.047-.747.327-.747.933zm14.337.745c.093.42 0 .84-.42.888l-.7.14v10.264c-.608.327-1.168.514-1.635.514-.748 0-.935-.234-1.495-.933l-4.577-7.186v6.952L12.21 19s0 .84-1.168.84l-3.222.186c-.093-.186 0-.653.327-.746l.84-.233V9.854L7.822 9.76c-.094-.42.14-1.026.793-1.073l3.456-.233 4.764 7.279v-6.44l-1.215-.139c-.093-.514.28-.887.747-.933zM1.936 1.035l13.31-.98c1.634-.14 2.055-.047 3.082.7l4.249 2.986c.7.513.934.653.934 1.213v16.378c0 1.026-.373 1.634-1.68 1.726l-15.458.934c-.98.047-1.448-.093-1.962-.747l-3.129-4.06c-.56-.747-.793-1.306-.793-1.96V2.667c0-.839.374-1.54 1.447-1.632z"/></svg>Notion</span><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>GitHub</span><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"/></svg>Slack</span><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>Discord</span><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19.355 18.538a68.967 68.959 0 0 0 1.858-2.954.81.81 0 0 0-.062-.9c-.516-.685-1.504-2.075-2.042-3.362-.553-1.321-.636-3.375-.64-4.377a1.707 1.707 0 0 0-.358-1.05l-3.198-4.064a3.744 3.744 0 0 1-.076.543c-.106.503-.307 1.004-.536 1.5-.134.29-.29.6-.446.914l-.31.626c-.516 1.068-.997 2.227-1.132 3.59-.124 1.26.046 2.73.815 4.481.128.011.257.025.386.044a6.363 6.363 0 0 1 3.326 1.505c.916.79 1.744 1.922 2.415 3.5zM8.199 22.569c.073.012.146.02.22.02.78.024 2.095.092 3.16.29.87.16 2.593.64 4.01 1.055 1.083.316 2.198-.548 2.355-1.664.114-.814.33-1.735.725-2.58l-.01.005c-.67-1.87-1.522-3.078-2.416-3.849a5.295 5.295 0 0 0-2.778-1.257c-1.54-.216-2.952.19-3.84.45.532 2.218.368 4.829-1.425 7.531zM5.533 9.938c-.023.1-.056.197-.098.29L2.82 16.059a1.602 1.602 0 0 0 .313 1.772l4.116 4.24c2.103-3.101 1.796-6.02.836-8.3-.728-1.73-1.832-3.081-2.55-3.831zM9.32 14.01c.615-.183 1.606-.465 2.745-.534-.683-1.725-.848-3.233-.716-4.577.154-1.552.7-2.847 1.235-3.95.113-.235.223-.454.328-.664.149-.297.288-.577.419-.86.217-.47.379-.885.46-1.27.08-.38.08-.72-.014-1.043-.095-.325-.297-.675-.68-1.06a1.6 1.6 0 0 0-1.475.36l-4.95 4.452a1.602 1.602 0 0 0-.513.952l-.427 2.83c.672.59 2.328 2.316 3.335 4.711.09.21.175.43.253.653z"/></svg>Obsidian</span></div></div>
+  </div>
+  <p>method they, make, us, it work document detail.<br>overview so time AIin will up, have, like if me to.</p>
+  <p class="small">by: Anil Dash, How Markdown Took Over the World (2026)</p>
+</section>
+
+<section data-slide="chapter" data-title="no, MCP, simple">
+  <h1>is, MCP, column</h1>
+</section>
+
+<section data-slide="content">
+  <h2>section each MCP on what us<br>it an detail second.</h2>
+  <div class="plg">
+    <div class="plg-box">
+      <div class="plg-t"><span class="plg-tag">screen</span><code>plugin.json</code></div>
+      <div class="plg-grid">
+        <div class="plg-c main" style="--c:var(--r-tool)"><b>so</b><code>skills/</code><span>he text we up</span></div>
+        <div class="plg-c main" style="--c:var(--r-pc)"><b>MCP ox</b><code>mcp_config.json</code><span>as work me</span></div>
+        <div class="plg-c"><b>to</b><code>rules/</code><span>by no am</span></div>
+        <div class="plg-c"><b>teaching</b><code>agents/</code><span>will go of update</span></div>
+        <div class="plg-c"><b>do</b><code>hooks.json</code><span>us text they my</span></div>
+      </div>
+    </div>
+    <div class="larr" style="width:120px;--a:var(--muted)"><span>be</span><i class="ln r"></i></div>
+    <div class="node" style="width:260px">review<small>so from in we</small></div>
+  </div>
+  <p>what time with if folder to, simple this am method.</p>
+</section>
+
+<section data-slide="content">
+  <h2>they section of on before.</h2>
+  <div class="ab sk-ab">
+    <div></div>
+    <div class="ab-h ab-a">us each<small>then my be</small></div>
+    <div class="ab-h ab-b">at<small>section he in</small></div>
+    <div class="ab-k">we up</div><div class="ab-a">ox as, if me, summary</div><div class="ab-b">by no, am is, section</div>
+    <div class="ab-k">what of</div><div class="ab-a">on will page it</div><div class="ab-b">an this summary at</div>
+    <div class="ab-k">so</div><div class="ab-a">he that we result layout.</div><div class="ab-b">each select me around column.</div>
+  </div>
+</section>
+
+<section data-slide="content">
+  <h2>method page is like<br>sample before on.</h2>
+  <div class="cols">
+    <div class="col sk-case"><h3>they us it</h3><ul>
+      <li>an work be each bright he, in, with up folder.</li>
+      <li>have simple this to method.</li>
+      <li>no make update sample before.</li></ul></div>
+    <div class="col sk-case on"><h3>from on do</h3><ul>
+      <li>what it an my be section like he in text.</li>
+      <li>up make as around column.</li>
+      <li>method each no update is before.</li></ul></div>
+  </div>
+</section>
+
+<section data-slide="content">
+  <h2>will SKILL.mdof on do this.</h2>
+  <div class="cols sk2 skf">
+    <div class="ft">
+  <span class="ft-row" style="--fc:var(--r-tool)"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>portfolio-works</b><em>it an</em></span>
+  <ul><li><span class="ft-row" style="--fc:var(--r-tool)"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><b>SKILL.md</b><em>my: be, at, so</em></span></li>
+  <li><span class="ft-row" style="--fc:var(--muted)"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>scripts</b><em>he: from folder</em></span></li>
+  <li><span class="ft-row" style="--fc:var(--muted)"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>examples</b><em>up: ox as</em></span></li>
+  <li><span class="ft-row" style="--fc:var(--muted)"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>resources</b><em>if: will, page</em></span></li></ul>
+</div>
+<div class="body">
+      <p><b>SKILL.md have like this is.</b></p>
+      <p>design, go, make on when<br>number from each my be button.</p>
+      <p class="small">SKILL.mdso will in have up this as text me.<br>to that no before section each.</p>
+    </div>
+  </div>
+</section>
+
+<section data-slide="content">
+  <h2>SKILL.mdgo what review summary.</h2>
+  <div class="cols skmd">
+<pre><span class="sk-fm">---
+name: portfolio-works
+description: section change an my
+  this result text he select.
+---</span>
+<span class="sk-bd"># we up ox as
+
+## if
+1. window what, by, with will page
+2. have go of number
+3. do us make that button
+
+## be
+- from so section in</span></pre>
+    <div class="sk-ann">
+      <div class="sk-a fm"><b>we (frontmatter)</b><p><code>---</code> with ox. summary if me to before.</p>
+        <table><tr><td><code>name</code></td><td>text am. is screen section of. inside do then it.</td></tr>
+        <tr><td><code>description</code></td><td><b>an.</b> with be summary so like this. summary up they as update when work.</td></tr></table></div>
+      <div class="sk-a bd"><b>by</b><p>no am what or. teaching of.</p></div>
+    </div>
+  </div>
+</section>
+
+<section data-slide="content">
+  <h2>summary have like it,<br>your layout they.</h2>
+  <div class="sk-flow">
+    <div class="sk-st" style="--c:var(--r-tool)"><em>1</em><b>at</b><p>that around work from each then update.</p>
+      <div class="sk-list"><span>portfolio-works</span><span>brand-colors</span><span>image-resize</span></div></div>
+    <div class="larr" style="width:80px;--a:var(--r-tool)"><i class="ln r"></i></div>
+    <div class="sk-st" style="--c:var(--r-tool)"><em>2</em><b>time</b><p>with will page have am this SKILL.md your text.</p>
+      <div class="sk-list"><span class="on">portfolio-works</span><span>brand-colors</span><span>image-resize</span></div></div>
+    <div class="larr" style="width:80px;--a:var(--r-tool)"><i class="ln r"></i></div>
+    <div class="sk-st" style="--c:var(--r-tool)"><em>3</em><b>of</b><p>make do when it layout.</p></div>
+  </div>
+  <p>each then simple around he method page.<br>window <code>/update</code>as before text they by that am is.</p>
+</section>
+
+<section data-slide="content">
+  <h2>AGENTS.mdor go of,<br>what time us will.</h2>
+  <table>
+    <tr><th></th><th>AGENTS.md</th><th>an</th></tr>
+    <tr><td>my</td><td>simple this column he</td><td>in we that when as</td></tr>
+    <tr><td>if me</td><td>then what time am</td><td>is page section of</td></tr>
+    <tr><td>on</td><td>summary us</td><td>it select that, be at</td></tr>
+    <tr><td>so</td><td>HTML, CSS, JShe window.</td><td>we up with will if</td></tr>
+  </table>
+</section>
+
+<section data-slide="content">
+  <h2>me like by no</h2>
+  <table>
+    <tr><td>am is make</td><td>go of on from folder, select an time be at so.</td></tr>
+    <tr><td>have summary</td><td><code>description</code>we your design as second me when.<br>by: "section change is or time result will do select."</td></tr>
+    <tr><td>like this</td><td>your be they so update in work design ox as.</td></tr>
+    <tr><td>what time to by</td><td>"page"am "like or result"of they make us it work from.</td></tr>
+  </table>
+  <p class="small">each at update time in we page ox(Agent Skills)as, if me to they no summary is or go.</p>
+</section>
+
+<section data-slide="content">
+  <h2>MCPof section do around<br>column an figure.</h2>
+  <div class="mcp">
+    <div class="node" style="width:250px">window</div>
+    <div class="larr" style="width:120px;--a:var(--r-pc)"><i class="ln r"></i><i class="ln l"></i></div>
+    <div class="node rn" style="--r:var(--r-pc);width:260px"><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M13.85 0a4.16 4.16 0 0 0-2.95 1.217L1.456 10.66a.835.835 0 0 0 0 1.18.835.835 0 0 0 1.18 0l9.442-9.442a2.49 2.49 0 0 1 3.541 0 2.49 2.49 0 0 1 0 3.541L8.59 12.97l-.1.1a.835.835 0 0 0 0 1.18.835.835 0 0 0 1.18 0l.1-.098 7.03-7.034a2.49 2.49 0 0 1 3.542 0l.049.05a2.49 2.49 0 0 1 0 3.54l-8.54 8.54a1.96 1.96 0 0 0 0 2.755l1.753 1.753a.835.835 0 0 0 1.18 0 .835.835 0 0 0 0-1.18l-1.753-1.753a.266.266 0 0 1 0-.394l8.54-8.54a4.185 4.185 0 0 0 0-5.9l-.05-.05a4.16 4.16 0 0 0-2.95-1.218c-.2 0-.401.02-.6.048a4.17 4.17 0 0 0-1.17-3.552A4.16 4.16 0 0 0 13.85 0m0 3.333a.84.84 0 0 0-.59.245L6.275 10.56a4.186 4.186 0 0 0 0 5.902 4.186 4.186 0 0 0 5.902 0L19.16 9.48a.835.835 0 0 0 0-1.18.835.835 0 0 0-1.18 0l-6.985 6.984a2.49 2.49 0 0 1-3.54 0 2.49 2.49 0 0 1 0-3.54l6.983-6.985a.835.835 0 0 0 0-1.18.84.84 0 0 0-.59-.245"/></svg>MCP at<small>section your</small></div>
+    <div class="larr" style="width:120px;--a:var(--r-pc)"><i class="ln r"></i><i class="ln l"></i></div>
+    <div class="node mcp-svc"><div class="mini"><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M15.852 8.981h-4.588V0h4.588c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.491-4.49 4.491zM12.735 7.51h3.117c1.665 0 3.019-1.355 3.019-3.019s-1.355-3.019-3.019-3.019h-3.117V7.51zm0 1.471H8.148c-2.476 0-4.49-2.014-4.49-4.49S5.672 0 8.148 0h4.588v8.981zm-4.587-7.51c-1.665 0-3.019 1.355-3.019 3.019s1.354 3.02 3.019 3.02h3.117V1.471H8.148zm4.587 15.019H8.148c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h4.588v8.98zM8.148 8.981c-1.665 0-3.019 1.355-3.019 3.019s1.355 3.019 3.019 3.019h3.117V8.981H8.148zM8.172 24c-2.489 0-4.515-2.014-4.515-4.49s2.014-4.49 4.49-4.49h4.588v4.441c0 2.503-2.047 4.539-4.563 4.539zm-.024-7.51a3.023 3.023 0 0 0-3.019 3.019c0 1.665 1.365 3.019 3.044 3.019 1.705 0 3.093-1.376 3.093-3.068v-2.97H8.148zm7.704 0h-.098c-2.476 0-4.49-2.014-4.49-4.49s2.014-4.49 4.49-4.49h.098c2.476 0 4.49 2.014 4.49 4.49s-2.014 4.49-4.49 4.49zm-.097-7.509c-1.665 0-3.019 1.355-3.019 3.019s1.355 3.019 3.019 3.019h.098c1.665 0 3.019-1.355 3.019-3.019s-1.355-3.019-3.019-3.019h-.098z"/></svg>Figma</span><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L17.86 1.968c-.42-.326-.981-.7-2.055-.607L3.01 2.295c-.466.046-.56.28-.374.466zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.841-.046.935-.56.935-1.167V6.354c0-.606-.233-.933-.748-.887l-15.177.887c-.56.047-.747.327-.747.933zm14.337.745c.093.42 0 .84-.42.888l-.7.14v10.264c-.608.327-1.168.514-1.635.514-.748 0-.935-.234-1.495-.933l-4.577-7.186v6.952L12.21 19s0 .84-1.168.84l-3.222.186c-.093-.186 0-.653.327-.746l.84-.233V9.854L7.822 9.76c-.094-.42.14-1.026.793-1.073l3.456-.233 4.764 7.279v-6.44l-1.215-.139c-.093-.514.28-.887.747-.933zM1.936 1.035l13.31-.98c1.634-.14 2.055-.047 3.082.7l4.249 2.986c.7.513.934.653.934 1.213v16.378c0 1.026-.373 1.634-1.68 1.726l-15.458.934c-.98.047-1.448-.093-1.962-.747l-3.129-4.06c-.56-.747-.793-1.306-.793-1.96V2.667c0-.839.374-1.54 1.447-1.632z"/></svg>Notion</span><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>GitHub</span><span><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12.01 1.485c-2.082 0-3.754.02-3.743.047.01.02 1.708 3.001 3.774 6.62l3.76 6.574h3.76c2.081 0 3.753-.02 3.742-.047-.005-.02-1.708-3.001-3.775-6.62l-3.76-6.574zm-4.76 1.73a789.828 789.861 0 0 0-3.63 6.319L0 15.868l1.89 3.298 1.885 3.297 3.62-6.335 3.618-6.33-1.88-3.287C8.1 4.704 7.255 3.22 7.25 3.214zm2.259 12.653-.203.348c-.114.198-.96 1.672-1.88 3.287a423.93 423.948 0 0 1-1.698 2.97c-.01.026 3.24.042 7.222.042h7.244l1.796-3.157c.992-1.734 1.85-3.23 1.906-3.323l.104-.167h-7.249z"/></svg>Acme Drive</span></div></div>
+  </div>
+  <div class="mcp-two">
+    <div><b style="color:var(--r-pc)">text detail</b><p>Figma second ox when if from each bright.</p></div>
+    <div><b style="color:var(--r-pc)">no button</b><p>with will Notiongo of on around your.</p></div>
+  </div>
+  <p class="small">Model Context Protocol. Anthropicit 2024an 11my that when before.</p>
+</section>
+
+<section data-slide="content">
+  <h2>Studiohe detail second</h2>
+  <ol class="steps">
+    <li><span>up language <b class="ui">Customizations</b> as if. (<b class="ui">Scheduled Tasks</b> me)</span></li>
+    <li><span><b class="ui">Marketplace</b> have like no am layout they go.</span></li>
+    <li><span>simple when do us it, MCP then my time before.</span></li>
+    <li><span>will <b class="ui">+</b> page in screen.</span></li>
+    <li><span><b class="ui">Installed</b> this ox text, they me <b class="ui">Uninstall</b>to button.</span></li>
+  </ol>
+</section>
+
+<section data-slide="content">
+  <h2>Studiono MCP am folder</h2>
+  <ol class="steps">
+    <li><span>or what <b class="ui">Settings</b> time with.</span></li>
+    <li><span><b class="ui">Customizations</b>do figure <b class="ui">Installed MCP Servers</b> window an.</span></li>
+    <li><span><b class="ui">Add MCP</b>my be MCP Storeat so.</span></li>
+    <li><span>make that review <b class="ui">Add</b>up from. each then what time.</span></li>
+    <li><span>with layout am is, like section column.</span></li>
+  </ol>
+  <p class="small">MCP Storeon Figma, Canva, Notion, GitHub, Miro do us.</p>
+</section>
+
+<section data-slide="content">
+  <h2>Studioit an before</h2>
+  <div class="cols wide-left">
+    <div class="body">
+      <p>be each then what time number inside.</p>
+      <table class="sk-loc">
+        <tr><td>ox workflow</td><td><code>across me/.agents/skills/result/</code></td></tr>
+        <tr><td>by summary</td><td><code>~/.gemini/config/skills/select/</code></td></tr>
+      </table>
+      <p class="small"><code>~</code>is or work from. Windowseach <code>C:\Users\do</code>us.<br>it(.)an design page section like he.</p>
+    </div>
+    <div class="body">
+      <p><b>in we up</b></p>
+      <p>teaching as when me from by. no am time with go figure.</p>
+<pre><span class="k">on do</span>
+us it an detail
+portfolio-works make that
+.agents/skillsso he</pre>
+    </div>
+  </div>
+</section>
+
+<section data-slide="chapter" data-title="Gitin GitHub">
+  <div class="icon-lg"><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M13.09 23.549a1.54 1.54 0 0 1-2.18 0L.451 13.089a1.54 1.54 0 0 1 0-2.179l7.191-7.19 2.733 2.733a1.85 1.85 0 0 0 .964 2.326v6.66a1.849 1.849 0 1 0 1.54 0V8.957l2.508 2.508a1.85 1.85 0 1 0 1.09-1.09l-2.634-2.634a1.85 1.85 0 0 0-2.378-2.377L8.73 2.63 10.91.451a1.54 1.54 0 0 1 2.179 0l10.459 10.46a1.54 1.54 0 0 1 0 2.179z"/></svg></div>
+  <h1>Gitwe GitHub</h1>
+</section>
+
+<section data-slide="content">
+  <h2>Gitup across time if will<br>folder have.</h2>
+  <div class="gr">
+    <div class="gr-now"><div class="gr-lab">no this is</div>
+      <div class="ft"><span class="ft-row root" style="--fc:var(--fg)"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><b>style.css</b></span></li><li><span class="ft-row" style="--fc:#F05032"><svg class="ft-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><b>.git</b><em>or go</em></span></li></ul></div></div>
+    <div class="larr" style="width:120px;--a:#F05032"><span>of</span><i class="ln r"></i></div>
+    <div class="gr-hist"><div class="gr-lab">.git on when us</div>
+      <div class="gr-card">10it 12an 19:40<b>then be at</b></div>
+      <div class="gr-card">10so 12he 19:25<b>change we up</b></div>
+      <div class="gr-card">10ox 12as 19:10<b>if they to</b></div></div>
+  </div>
+  <p>Gitby around work <b>from</b>(repository)or go.<br>what on before will it have like be at.</p>
+</section>
+
+<section data-slide="content">
+  <h2>text he make across when<br>work layout.</h2>
+  <div class="gt">
+    <div class="timeline"><div class="commit "><div class="dot"></div><div class="msg">if then to</div><div class="id">a1f3c9e</div></div><div class="commit "><div class="dot"></div><div class="msg">around no am</div><div class="id">7b2d0e4</div></div><div class="commit back"><div class="dot"></div><div class="msg">page or go</div><div class="id">c95e81a</div></div><div class="commit cur"><div class="dot"></div><div class="msg">this on</div><div class="id">e04b7d2</div></div></div>
+    <div class="gt-back"><span>design they it that my number inside</span></div>
+  </div>
+  <p>change then what, time result ox <b>as have</b>me this.</p>
+</section>
+
+<section data-slide="content">
+  <h2>Gitby no am</h2>
+  <table>
+    <tr><td>make <span class="small">repository</span></td><td>Gitor go work design detail us</td></tr>
+    <tr><td>it <span class="small">commit</span></td><td>an with will change so</td></tr>
+    <tr><td>across <span class="small">revert</span></td><td>in your text folder as</td></tr>
+    <tr><td>if <span class="small">push</span></td><td>me column from GitHubno then is</td></tr>
+    <tr><td>or <span class="small">pull</span></td><td>GitHubgo of page do screen review an</td></tr>
+  </table>
+</section>
+
+<section data-slide="content">
+  <h2>GitHubmy Git change bright<br>across button result.</h2>
+  <div class="gh">
+    <div class="node rn" style="--r:var(--r-pc);width:330px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20"/></svg>we each<small>portfolio then</small></div>
+    <div class="gh-arr"><div class="larr" style="width:200px;--a:#F05032"><span>push</span><i class="ln r"></i></div><div class="larr" style="width:200px;--a:var(--muted)"><i class="ln l"></i><span>pull</span></div></div>
+    <div class="node gh-hub"><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>GitHub<small>github.com/minji/portfolio</small></div>
+    <div class="gh-arr"><div class="larr" style="width:200px;--a:var(--muted)"><span>clone, pull</span><i class="ln r"></i></div></div>
+    <div class="node rn" style="--r:var(--r-model);width:330px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20"/></svg>as time<small>me will PC</small></div>
+  </div>
+  <div class="mcp-two gh-two">
+    <div><b>by</b><p>no update this your section detail.</p></div>
+    <div><b>make do</b><p>us summary inside each then across.</p></div>
+  </div>
+</section>
+
+<section data-slide="content">
+  <h2>Git time teaching in page.</h2>
+  <table class="gcmd">
+    <tr><th>have simple</th><th>section column me</th></tr>
+    <tr><td><span class="ask">to make "update am"is or</span></td><td><code>git add, git commit</code></td></tr><tr><td><span class="ask">go second screen</span></td><td><code>git revert</code></td></tr><tr><td><span class="ask">section us it an my</span></td><td><code>git log</code></td></tr><tr><td><span class="ask">GitHubbe portfolio button your text</span></td><td><code>gh repo create, git push</code></td></tr>
+  </table>
+  <p class="small">folder we that ox. GitHub as from me to by no am.</p>
+</section>
+
+<section data-slide="chapter" data-title="is">
+  <div class="icon-lg"><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M16.5088 16.8447c.1475-.5068.0908-.9707-.1553-1.3154-.2246-.3164-.6045-.499-1.0615-.5205l-8.6592-.1123a.1559.1559 0 0 1-.1333-.0713c-.0283-.042-.0351-.0986-.021-.1553.0278-.084.1123-.1484.2036-.1562l8.7359-.1123c1.0351-.0489 2.1601-.8868 2.5537-1.9136l.499-1.3013c.0215-.0561.0293-.1128.0147-.168-.5625-2.5463-2.835-4.4453-5.5499-4.4453-2.5039 0-4.6284 1.6177-5.3876 3.8614-.4927-.3658-1.1187-.5625-1.794-.499-1.2026.119-2.1665 1.083-2.2861 2.2856-.0283.31-.0069.6128.0635.894C1.5683 13.171 0 14.7754 0 16.752c0 .1748.0142.3515.0352.5273.0141.083.0844.1475.1689.1475h15.9814c.0909 0 .1758-.0645.2032-.1553l.12-.4268zm2.7568-5.5634c-.0771 0-.1611 0-.2383.0112-.0566 0-.1054.0415-.127.0976l-.3378 1.1744c-.1475.5068-.0918.9707.1543 1.3164.2256.3164.6055.498 1.0625.5195l1.8437.1133c.0557 0 .1055.0263.1329.0703.0283.043.0351.1074.0214.1562-.0283.084-.1132.1485-.204.1553l-1.921.1123c-1.041.0488-2.1582.8867-2.5527 1.914l-.1406.3585c-.0283.0713.0215.1416.0986.1416h6.5977c.0771 0 .1474-.0489.169-.126.1122-.4082.1757-.837.1757-1.2803 0-2.6025-2.125-4.727-4.7344-4.727"/></svg></div>
+  <h1>or</h1>
+</section>
+
+<section data-slide="content">
+  <h2>have of review your inside it<br>make that be at so each.</h2>
+  <div class="dp">
+    <div class="dp-c"><span class="dp-lab">in we</span><span class="mono">portfolio/index.html</span><span class="lbl">up teaching will.</span></div>
+    <div class="larr" style="width:140px;--a:var(--muted)"><span>if</span><i class="ln r"></i></div>
+    <div class="dp-c on"><span class="dp-lab">me to</span><span class="mono">https://...</span><span class="lbl">this no text is or go.</span></div>
+  </div>
+</section>
+
+<section data-slide="content">
+  <h2>section number HTML, CSS, JS, section<br>change it across.</h2>
+  <div class="body">
+    <p>my result will page he in this your section, as make update to by no.</p>
+    <p>summary then screen time with will change have across button.</p>
+  </div>
+  <div class="logos">
+    <figure class="logo"><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M16.5088 16.8447c.1475-.5068.0908-.9707-.1553-1.3154-.2246-.3164-.6045-.499-1.0615-.5205l-8.6592-.1123a.1559.1559 0 0 1-.1333-.0713c-.0283-.042-.0351-.0986-.021-.1553.0278-.084.1123-.1484.2036-.1562l8.7359-.1123c1.0351-.0489 2.1601-.8868 2.5537-1.9136l.499-1.3013c.0215-.0561.0293-.1128.0147-.168-.5625-2.5463-2.835-4.4453-5.5499-4.4453-2.5039 0-4.6284 1.6177-5.3876 3.8614-.4927-.3658-1.1187-.5625-1.794-.499-1.2026.119-2.1665 1.083-2.2861 2.2856-.0283.31-.0069.6128.0635.894C1.5683 13.171 0 14.7754 0 16.752c0 .1748.0142.3515.0352.5273.0141.083.0844.1475.1689.1475h15.9814c.0909 0 .1758-.0645.2032-.1553l.12-.4268zm2.7568-5.5634c-.0771 0-.1611 0-.2383.0112-.0566 0-.1054.0415-.127.0976l-.3378 1.1744c-.1475.5068-.0918.9707.1543 1.3164.2256.3164.6055.498 1.0625.5195l1.8437.1133c.0557 0 .1055.0263.1329.0703.0283.043.0351.1074.0214.1562-.0283.084-.1132.1485-.204.1553l-1.921.1123c-1.041.0488-2.1582.8867-2.5527 1.914l-.1406.3585c-.0283.0713.0215.1416.0986.1416h6.5977c.0771 0 .1474-.0489.169-.126.1122-.4082.1757-.837.1757-1.2803 0-2.6025-2.125-4.727-4.7344-4.727"/></svg><figcaption>Cloudflare</figcaption></figure>
+    <figure class="logo"><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="m12 1.608 12 20.784H0Z"/></svg><figcaption>Vercel</figcaption></figure>
+    <figure class="logo"><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M6.49 19.04h-.23L5.13 17.9v-.23l1.73-1.71h1.2l.15.15v1.2L6.5 19.04ZM5.13 6.31V6.1l1.13-1.13h.23L8.2 6.68v1.2l-.15.15h-1.2L5.13 6.31Zm9.96 9.09h-1.65l-.14-.13v-3.83c0-.68-.27-1.2-1.1-1.23-.42 0-.9 0-1.43.02l-.07.08v4.96l-.14.14H8.9l-.13-.14V8.73l.13-.14h3.7a2.6 2.6 0 0 1 2.61 2.6v4.08l-.13.14Zm-8.37-2.44H.14L0 12.82v-1.64l.14-.14h6.58l.14.14v1.64l-.14.14Zm17.14 0h-6.58l-.14-.14v-1.64l.14-.14h6.58l.14.14v1.64l-.14.14ZM11.05 6.55V1.64l.14-.14h1.65l.14.14v4.9l-.14.14h-1.65l-.14-.13Zm0 15.81v-4.9l.14-.14h1.65l.14.13v4.91l-.14.14h-1.65l-.14-.14Z"/></svg><figcaption>Netlify</figcaption></figure>
+    <figure class="logo"><svg class="si" aria-hidden="true" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg><figcaption>GitHub Pages</figcaption></figure>
+  </div>
+</section>
+
+<section data-slide="content">
+  <h2>Cloudflare Dropmy text they make<br>he when work from ox.</h2>
+  <div class="drop">
+    <div class="drop-s"><em>1</em><b>as</b><p><code>cloudflare.com/drop</code><br>if me before.</p></div>
+    <div class="larr" style="width:64px;--a:var(--r-tool)"><i class="ln r"></i></div>
+    <div class="drop-s"><em>2</em><b>will no</b><p><code>portfolio</code> have ZIP like this.</p></div>
+    <div class="larr" style="width:64px;--a:var(--r-tool)"><i class="ln r"></i></div>
+    <div class="drop-s"><em>3</em><b>go of</b><p>on make that when.<br><b class="hl">1an my</b> folder.</p></div>
+    <div class="larr" style="width:64px;--a:var(--r-tool)"><i class="ln r"></i></div>
+    <div class="drop-s on"><em>4</em><b>Claim</b><p>at simple language column method up have.</p></div>
+  </div>
+  <p class="small">as if me <code>index.html</code>to they no that when. HTML, CSS, JS, work, go of on what us it an.</p>
+</section>
+
+<section data-slide="content">
+  <h2>Claimmy be at so he in</h2>
+  <table>
+    <tr><td>we up</td><td>that as work from each by what review.</td></tr>
+    <tr><td>with or</td><td>go have like(do: <code>minji.design</code>)us layout they my be.</td></tr>
+    <tr><td>at so</td><td>he each window up ox as will me to.</td></tr>
+  </table>
+  <p class="small">Claimby no am text 1they make across.</p>
+</section>
+
+<section data-slide="end">
+  <div class="icon-lg" style="width:140px;height:140px"><svg viewBox="22 24 92 88" aria-hidden="true" fill="none" xmlns="http://www.w3.org/2000/svg"> <g transform="translate(12 10)"> <path d="M89.6992 93.695C94.3659 97.195 101.366 94.8617 94.9492 88.445C75.6992 69.7783 79.7825 18.445 55.8659 18.445C31.9492 18.445 36.0325 69.7783 16.7825 88.445C9.78251 95.445 17.3658 97.195 22.0325 93.695C40.1159 81.445 38.9492 59.8617 55.8659 59.8617C72.7825 59.8617 71.6159 81.445 89.6992 93.695Z" fill="#3186FF"/> <mask id="ag9_m" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="13" y="18" width="85" height="78"> <path d="M89.6992 93.695C94.3659 97.195 101.366 94.8617 94.9492 88.445C75.6992 69.7783 79.7825 18.445 55.8659 18.445C31.9492 18.445 36.0325 69.7783 16.7825 88.445C9.78251 95.445 17.3658 97.195 22.0325 93.695C40.1159 81.445 38.9492 59.8617 55.8659 59.8617C72.7825 59.8617 71.6159 81.445 89.6992 93.695Z" fill="black"/> </mask> <g mask="url(#ag9_m)"> <g filter="url(#ag9_f0)"><ellipse cx="22.7873" cy="26.8098" rx="22.7873" ry="26.8098" transform="matrix(-0.112784 0.99362 -0.99362 -0.112781 66.2473 -15.5344)" fill="#FFE432"/></g> <g filter="url(#ag9_f1)"><ellipse cx="96.491" cy="35.1231" rx="29.5007" ry="30.1492" transform="rotate(76.9243 96.491 35.1231)" fill="#FC413D"/></g> <g filter="url(#ag9_f2)"><ellipse cx="9.02988" cy="41.6647" rx="30.832" ry="39.9417" transform="rotate(74.1257 9.02988 41.6647)" fill="#00B95C"/></g> <g filter="url(#ag9_f3)"><ellipse cx="11.2212" cy="42.8915" rx="30.22" ry="33.2695" transform="rotate(45.6065 11.2212 42.8915)" fill="#00B95C"/></g> <g filter="url(#ag9_f4)"><ellipse cx="75.7546" cy="104.822" rx="29.0177" ry="27.943" transform="rotate(76.9243 75.7546 104.822)" fill="#3186FF"/></g> <g filter="url(#ag9_f5)"><ellipse cx="33.5661" cy="35.4043" rx="33.5661" ry="35.4043" transform="matrix(-0.409539 0.912293 -0.912294 -0.409537 101.25 -15.1674)" fill="#FBBC04"/></g> <g filter="url(#ag9_f6)"><path d="M2.56802 149.695C-15.8116 142.48 15.5987 83.1163 23.4093 63.2203C31.22 43.3244 52.4514 33.0447 70.831 40.26C89.2107 47.4753 110.996 87.2162 103.185 107.112C95.3742 127.008 20.9477 156.91 2.56802 149.695Z" fill="#3186FF"/></g> <g filter="url(#ag9_f7)"><path d="M113.934 75.8079C109.013 81.5509 96.1724 78.6224 85.253 69.2667C74.3335 59.911 69.4704 47.6711 74.391 41.928C79.3116 36.185 92.1525 39.1136 103.072 48.4692C113.991 57.8249 118.855 70.0648 113.934 75.8079Z" fill="#749BFF"/></g> <g filter="url(#ag9_f8)"><ellipse cx="92.611" cy="23.7962" rx="44.2411" ry="27.5016" transform="rotate(34.0763 92.611 23.7962)" fill="#FC413D"/></g> <g filter="url(#ag9_f9)"><ellipse cx="23.4949" cy="29.5887" rx="23.7071" ry="13.7869" transform="rotate(112.516 23.4949 29.5887)" fill="#FFEE48"/></g> </g> </g> <defs> <filter id="ag9_f0" x="2.49348" y="-26.5423" width="69.0899" height="61.2525" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="3.89034"/></filter> <filter id="ag9_f1" x="28.7524" y="-32.0333" width="135.477" height="134.313" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="18.8078"/></filter> <filter id="ag9_f2" x="-62.2884" y="-21.9253" width="142.637" height="127.18" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="15.9884"/></filter> <filter id="ag9_f3" x="-52.5697" y="-20.8346" width="127.582" height="127.452" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="15.9884"/></filter> <filter id="ag9_f4" x="17.3619" y="45.4646" width="116.786" height="118.715" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="15.1937"/></filter> <filter id="ag9_f5" x="-7.44765" y="-60.4737" width="125.303" height="122.858" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="13.7698"/></filter> <filter id="ag9_f6" x="-27.7086" y="13.3597" width="157.119" height="162.029" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="12.297"/></filter> <filter id="ag9_f7" x="50.4638" y="16.981" width="87.3973" height="83.7738" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="11.0036"/></filter> <filter id="ag9_f8" x="34.2604" y="-28.457" width="116.701" height="104.506" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="9.29385"/></filter> <filter id="ag9_f9" x="-15.1522" y="-15.9493" width="77.2941" height="91.076" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="11.5027"/></filter> </defs> </svg></div>
+  <h1>section</h1>
+</section>
+<script src="../../engine/slidekit.js"></script>
+<script>
+(function(){
+  /* tokenization demo: illustrative BPE-like split, not a real tokenizer */
+  var SUF=['do','us','it','an','my','be','at','so','he','in','we','up','ox','as','if','me'];
+  function tokenize(str){
+    var out=[];
+    (str.match(/\s*\S+/g)||[]).forEach(function(word){
+      var lead=word.match(/^\s*/)[0]?' ':'', toks=[];
+      (word.trim().match(/[to-by]+|[A-Za-z0-9]+|./g)||[]).forEach(function(seg){
+        if(/^[no-am]/.test(seg)){
+          var suf='';
+          for(var k=0;k<SUF.length;k++){var x=SUF[k];if(seg.length>x.length&&seg.slice(-x.length)===x){suf=x;break}}
+          var stem=seg.slice(0,seg.length-suf.length);
+          var j=0;if(stem.length>=4){toks.push(stem[0]);j=1}
+          for(;j<stem.length;j+=2)toks.push(stem.slice(j,j+2));
+          if(suf)toks.push(suf);
+        }else if(/^[A-Za-z0-9]/.test(seg)){
+          /* split at camelCase boundaries (Java|Script), then chunk long parts */
+          (seg.match(/[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+/g)||[seg]).forEach(function(p){
+            for(var m=0;m<p.length;m+=6)toks.push(p.slice(m,m+6));
+          });
+        }else toks.push(seg);
+      });
+      if(toks.length){toks[0]=lead+toks[0];out=out.concat(toks)}
+    });
+    return out;
+  }
+  function tokId(t){
+    var h=2166136261;
+    for(var k=0;k<t.length;k++){h^=t.charCodeAt(k);h=Math.imul(h,16777619)>>>0}
+    return 1000+h%99000;
+  }
+  window.tokenize=tokenize;
+  (function(){
+    var slide=document.getElementById('tok-slide');
+    if(!slide)return;
+    var box=document.getElementById('tok'),input=document.getElementById('tok-input'),
+        mirror=box.querySelector('.tok-mirror'),inRow=document.getElementById('tok-in'),
+        outRow=document.getElementById('tok-out'),count=document.getElementById('tok-count'),
+        outCount=document.getElementById('tok-outcount');
+    var OUT='HTML, CSS, JavaScriptis then.';
+    function hue(k){return 'var(--t'+(k%7+1)+')'}
+    var reduce=window.matchMedia('(prefers-reduced-motion: reduce)');
+    var step=1,timers=[];
+    function chip(t,k){
+      var c=document.createElement('span');c.className='tok-c';c.style.setProperty('--c',hue(k));
+      if(t[0]===' '){var sp=document.createElement('i');sp.textContent='␣';c.appendChild(sp);t=t.slice(1)}
+      c.appendChild(document.createTextNode(t));
+      return c;
+    }
+    function renderIn(anim){
+      var toks=tokenize(input.value);
+      inRow.textContent='';mirror.textContent='';
+      toks.forEach(function(t,k){
+        var w=document.createElement('span');w.className='tok-w';w.style.setProperty('--c',hue(k));
+        var id=document.createElement('span');id.className='tok-id';id.textContent=tokId(t);
+        w.appendChild(chip(t,k));w.appendChild(id);inRow.appendChild(w);
+        /* mirror: leading space stays plain so the underline covers only the token text */
+        if(t[0]===' '){mirror.appendChild(document.createTextNode(' '));t=t.slice(1)}
+        var m=document.createElement('span');m.style.setProperty('--c',hue(k));m.textContent=t;mirror.appendChild(m);
+      });
+      count.textContent='go of '+toks.length+'on';
+      if(!anim)return;
+      /* FLIP: each chip starts where its text sits in the input */
+      var sc=SlideKit.scale;
+      [].forEach.call(inRow.children,function(w,k){
+        var c=w.firstChild,a=mirror.children[k].getBoundingClientRect(),b=c.getBoundingClientRect();
+        c.animate([{transform:'translate('+(a.left-b.left)/sc+'px,'+(a.top-b.top)/sc+'px)',opacity:0},{transform:'none',opacity:1}],
+          {duration:400,delay:k*40,easing:'cubic-bezier(.2,.8,.2,1)',fill:'backwards'});
+      });
+    }
+    function renderOut(anim){
+      timers.forEach(clearTimeout);timers=[];
+      outRow.textContent='';outCount.textContent='';
+      if(step<4)return;
+      var toks=tokenize(OUT);
+      function add(k){
+        var c=chip(toks[k],k);outRow.appendChild(c);
+        outCount.textContent='do us '+(k+1)+'it';
+        if(anim)c.animate([{opacity:0,transform:'translateY(8px)'},{opacity:1,transform:'none'}],{duration:250,easing:'ease-out'});
+      }
+      if(!anim){toks.forEach(function(_,k){add(k)});return}
+      toks.forEach(function(_,k){timers.push(setTimeout(function(){add(k)},k*350))});
+    }
+    function set(s,anim){
+      var from=step;step=s;anim=anim&&!reduce.matches;
+      box.classList.toggle('split',s>=2);
+      box.classList.toggle('ids',s>=3);
+      box.classList.toggle('out',s>=4);
+      if(s>=2)renderIn(anim&&s===2&&from===1);
+      else{inRow.textContent='';mirror.textContent='';count.textContent=''}
+      if(anim&&s===3&&from===2)[].forEach.call(inRow.querySelectorAll('.tok-id'),function(el,k){
+        el.animate([{opacity:0,transform:'translateY(-6px)'},{opacity:1,transform:'none'}],{duration:300,delay:k*60,easing:'ease-out',fill:'backwards'});
+      });
+      renderOut(anim&&s===4&&from===3);
+    }
+    input.addEventListener('input',function(){if(step>=2)renderIn(false)});
+    SlideKit.stepper(slide,{
+      enter:function(fwd){set(fwd?1:4,false)},
+      next:function(){if(step<4){set(step+1,true);return true}return false},
+      prev:function(){if(step>1){set(step-1,false);return true}return false},
+      get:function(){return step},
+      goto:function(n){set(n,false)}
+    });
+    set(1,false);
+  })();
+  /* Claude Code character patrols the folder tree */
+  (function(){
+    var ft=document.getElementById('ft');if(!ft)return;
+    var bot=ft.querySelector('.cc-bot'),rows=[].slice.call(ft.querySelectorAll('.ft-row')),k=0,dir=1;
+    setInterval(function(){
+      if(!ft.closest('[data-slide]').hasAttribute('data-active'))return;
+      var r=ft.getBoundingClientRect(),s=r.width/ft.offsetWidth||1,row=rows[k],rr=row.getBoundingClientRect();
+      var y=(rr.top-r.top)/s+(rr.height/s-bot.offsetHeight)/2;
+      bot.classList.add('walk');bot.style.transform='translateY('+y+'px)';
+      rows.forEach(function(el){el.classList.toggle('hot',el===row)});
+      setTimeout(function(){bot.classList.remove('walk')},700);
+      if(k+dir<0||k+dir>=rows.length)dir=-dir;k+=dir;
+    },1300);
+  })();
+})();
+</script>
+</body>
+</html>

@@ -13,7 +13,7 @@ delete process.env.SLIDEKIT_PW_WS;
 delete process.env.SLIDEKIT_TRACE_DIR;
 const { launch } = require('./lib/pw.cjs');
 const BASE = process.env.BASE;
-const DECKS = (process.env.ANIM_DECKS || 'vibe-coding-workshop,slidekit-guide').split(',');
+const DECKS = (process.env.ANIM_DECKS || 'demo').split(',');
 const RATES = (process.env.ANIM_RATES || '1,4').split(',').map(Number);
 const TRANSITIONS = Number(process.env.ANIM_N || 12); // 장 하나에서 재는 전환 횟수(앞으로 한 번, 뒤로 한 번 번갈아)
 const LEAK_MOVES = Number(process.env.ANIM_LEAK || 500);
@@ -41,7 +41,7 @@ const round = (n, d = 2) => Math.round(n * 10 ** d) / 10 ** d;
       await page.evaluate(() => document.fonts && document.fonts.ready);
       // 단계가 둘 이상인 첫 장
       const stepped = await page.evaluate(() => [...document.querySelectorAll('#sk-stage > [data-slide]')].map((s, i) => ({ n: i + 1, steps: Math.max(1, ...[...s.querySelectorAll('[data-step]')].map((e) => Number(e.getAttribute('data-step')) || 1)) })).filter((x) => x.steps >= 2));
-      // 덱 내용은 사용자가 바꾼다(커밋된 워크숍 덱에는 선언형 단계 장이 없을 수 있다). 단계 장이 없는 덱은 실패가 아니라 건너뛴다.
+      // 덱 내용은 사용자가 바꾼다(덱에는 선언형 단계 장이 없을 수 있다). 단계 장이 없는 덱은 실패가 아니라 건너뛴다.
       if (!stepped.length) { if (rate === RATES[0]) console.log(`INFO [${deck}] 단계 있는 장 없음, 이 덱은 건너뜀`); await ctx.close(); continue; }
       const slide = stepped[0];
       await page.goto(`${url}#${slide.n}`, { waitUntil: 'load' });

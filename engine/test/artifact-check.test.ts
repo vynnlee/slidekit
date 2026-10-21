@@ -93,9 +93,9 @@ test("엔진 파일은 저장소, 네트워크 식별자와 외부 주소가 없
   }
 });
 
-test("커밋된 안내 덱과 워크숍 덱은 정적 검사를 통과한다", () => {
+test("시험용 덱 둘은 정적 검사를 통과한다", () => {
   const { makeTestDeck } = createRequire(import.meta.url)("../../scripts/lib/test-deck.cjs");
-  for (const from of ["slidekit-guide", "vibe-coding-workshop"]) {
+  for (const from of ["guide", "sample"]) {
     const t = makeTestDeck(`art-${from.slice(0, 5)}`, from);
     try {
       const r = artifactCheck(t.dir);

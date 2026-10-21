@@ -832,8 +832,8 @@ export function Editor({ id }: { id: string }) {
     else if (mod && (k === "=" || k === "+")) { e.preventDefault(); canvas.current?.zoom(1); }
     else if (mod && k === "-") { e.preventDefault(); canvas.current?.zoom(-1); }
     else if (!mod && e.key === "Tab") { if (e.view === window && t !== document.body) return; e.preventDefault(); cycle(e.shiftKey ? -1 : 1); } // 패널 안에서는 브라우저의 Tab 이동을 지킨다
-    else if (!mod && !e.shiftKey && k === "c" && sel && (t === document.body || e.view !== window)) { e.preventDefault(); canvas.current?.compose(); }
-    else if (!mod && !e.altKey && k === "c" && (e.shiftKey || !sel) && (t === document.body || e.view !== window)) { e.preventDefault(); setCommentMode((v) => !v); } // 선택이 없으면 C가, 언제나 Shift+C가 코멘트 모드를 켜고 끈다
+    else if (!mod && !e.shiftKey && k === "c" && sel && (t === document.body || e.view !== window || t.tagName === "BUTTON")) { e.preventDefault(); canvas.current?.compose(); }
+    else if (!mod && !e.altKey && k === "c" && (e.shiftKey || !sel) && (t === document.body || e.view !== window || t.tagName === "BUTTON")) { e.preventDefault(); setCommentMode((v) => !v); } // 선택이 없으면 C가, 언제나 Shift+C가 코멘트 모드를 켜고 끈다. 단추에 포커스가 있어도 된다(Esc로 모드를 끄면 포커스가 Comment mode 단추로 돌아온다)
     else if (e.key === "F2" && sel) { e.preventDefault(); setRenameTick((n) => n + 1); }
     else if (mod && (k === "[" || k === "]") && sel) { e.preventDefault(); reorder(k === "[" ? -1 : 1); }
     else if (mod && k === "z") { e.preventDefault(); e.shiftKey ? restore(future.current, past.current) : restore(past.current, future.current); }

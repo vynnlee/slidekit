@@ -27,7 +27,7 @@ if (arg === "--smoke") {
   if (!pub) { console.error("사용: bun run deploy --smoke <공개덱> [비밀번호덱]"); process.exit(1); }
   let bad = 0;
   const ok = (name: string, good: boolean, extra = "") => { if (!good) bad++; console.log(`${good ? "PASS" : "FAIL"} ${name}${good || !extra ? "" : "  " + extra}`); };
-  const get = (p: string) => fetch(`${base}/${p}`, { redirect: "manual" }).catch((e) => { console.error(`접속 실패: ${e.message}. mac-cloud의 DNS 캐시 문제면 HANDOFF의 dig 안내를 본다`); process.exit(1); });
+  const get = (p: string) => fetch(`${base}/${p}`, { redirect: "manual" }).catch((e) => { console.error(`접속 실패: ${e.message}. 로컬 DNS 캐시 문제면 dig +short @1.1.1.1 <호스트>로 주소를 확인한다`); process.exit(1); });
   const common = (r: Response, name: string) => {
     ok(`${name}: nosniff`, r.headers.get("x-content-type-options") === "nosniff");
     ok(`${name}: COOP same-origin`, r.headers.get("cross-origin-opener-policy") === "same-origin");

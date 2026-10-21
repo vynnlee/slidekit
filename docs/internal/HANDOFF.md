@@ -61,7 +61,7 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 
 ## 팀 운영 규칙
 
-- mac-cloud는 열에 약하다. 빌드, 타입 검사, 브라우저 테스트는 팀 전체에서 한 번에 하나: `mkdir /tmp/slidekit-heavy.lock`(잡을 때 `echo <이름> > .../pid`로 표시, 끝나면 내 표시일 때만 `rm -rf`), `taskpolicy -b`, 작업자 1개. 서브에이전트는 빌드와 테스트를 직접 돌리지 않는다.
+- 개발 서버 기계는 열에 약하다. 빌드, 타입 검사, 브라우저 테스트는 팀 전체에서 한 번에 하나: `mkdir /tmp/slidekit-heavy.lock`(잡을 때 `echo <이름> > .../pid`로 표시, 끝나면 내 표시일 때만 `rm -rf`), `taskpolicy -b`, 작업자 1개. 서브에이전트는 빌드와 테스트를 직접 돌리지 않는다.
 - 담당: engine-dev(engine, bundler, deploy, channel, guard, 스킬, SPEC 1~8절), editor-dev(편집기와 속성 패널, SPEC 9절), app-dev(앱 서버와 발표자 화면, 덱 목록). 남의 영역 결함은 고치지 않고 team-lead에게 파일, 줄, 재현 방법으로 보고한다.
 - 커밋: 내 파일만 `git add`(남의 미커밋 변경이 섞인 파일은 내 hunk만 index에 올린다). 한국어 한 줄 제목, 끝에 trailer 두 줄(Co-Authored-By, Claude-Session). 푸시는 사용자가 한다. 서버는 내가 띄운 PID만 종료.
 - 커밋 전 비밀 값 검사: `.githooks/pre-commit`(`git config core.hooksPath .githooks`, 저장소 로컬 설정). 값은 키체인에만 두고, 비밀이 아닌 오탐은 `scripts/scan-secrets.allow`에 등록한다. 설정은 clone마다 다시 해야 한다.
@@ -83,10 +83,10 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 
 ## 배포 상태
 
-- 주소 `static.vynnlee.com/<덱>`, 덱마다 공개 또는 비밀번호. Worker(`slidekit-static`)와 KV(`DECKS`, id는 `deploy/worker/wrangler.toml`). Cloudflare 토큰은 키체인 `slidekit-cloudflare-token`(값은 출력 금지), `COOKIE_SECRET`은 `wrangler secret`. 배포 순서는 meta 먼저, html 나중(공개에서 비밀번호로 바꿀 때 노출 방지).
-- 2026-10-13에 Worker와 워크숍 덱(public)을 배포했다: https://static.vynnlee.com/vibe-coding-workshop . mac-cloud의 로컬 DNS 캐시가 실패를 들고 있어 `curl`이 000일 수 있다. 그때는 `dig +short @1.1.1.1 static.vynnlee.com`의 IP로 `curl --resolve static.vynnlee.com:443:<IP> ...`로 확인한다. 응답 없음을 미배포로 판단하지 않는다.
+- 주소 `your-domain.example/<덱>`, 덱마다 공개 또는 비밀번호. Worker(`slidekit-static`)와 KV(`DECKS`, id는 `deploy/worker/wrangler.toml`). Cloudflare 토큰은 키체인 `slidekit-cloudflare-token`(값은 출력 금지), `COOKIE_SECRET`은 `wrangler secret`. 배포 순서는 meta 먼저, html 나중(공개에서 비밀번호로 바꿀 때 노출 방지).
+- 2026-10-13에 Worker와 워크숍 덱(public)을 배포했다: https://your-domain.example/vibe-coding-workshop . 개발 서버 기계의 로컬 DNS 캐시가 실패를 들고 있어 `curl`이 000일 수 있다. 그때는 `dig +short @1.1.1.1 your-domain.example`의 IP로 `curl --resolve your-domain.example:443:<IP> ...`로 확인한다. 응답 없음을 미배포로 판단하지 않는다.
 - **2026-10-15 Worker 배포 완료**(사용자 승인, 버전 ID `1e8ae8bc-4516-40a1-bb54-7a5ac73f8b04`): 리허설 전체 통과, `bun run deploy --worker`, `--smoke vibe-coding-workshop` 전체 통과. 올라간 변경은 안내 페이지, Durable Object 시도 제한 `Limiter`, 쿠키 salt 바인딩, 보호된 덱은 문서 요청에만 서빙, COOP와 HSTS와 CORP, nonce CSP, `lockTitle`, 405와 Origin 검사, 캐시 `must-revalidate`, 로그인 POST 500 수정이다. 이 변경으로 비밀번호 덱의 기존 쿠키는 모두 무효가 되었으므로 비밀번호 덱을 쓰는 사람은 첫 접속에서 비밀번호를 다시 입력해야 한다. 롤백은 `cd deploy/worker && bunx wrangler@4.150.0 rollback`, 이력과 구버전과의 차이는 `deploy/README.md`. `unpublish --yes`의 실제 실행과 비밀번호 덱 업로드는 아직 한 번도 하지 않았다(드라이런과 가짜 KV 단위 테스트만).
-- 게시 기록(`.publish.json`)의 `url`은 `https://static.vynnlee.com/<name>`만 받는다. 취소 라우트는 기록의 name이 폴더와 다르면 이름 직접 입력(`confirmName`)을 요구한다.
+- 게시 기록(`.publish.json`)의 `url`은 `https://your-domain.example/<name>`만 받는다. 취소 라우트는 기록의 name이 폴더와 다르면 이름 직접 입력(`confirmName`)을 요구한다.
 
 ## 알려진 한계
 
@@ -94,7 +94,7 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 - 인쇄(PDF)는 `data-step` 요소를 모두 보인다. 전체 보기 축소판과 필름스트립은 1단계 모습이다. 그라디언트는 PDF에 벡터 셰이딩으로 들어가고 투명도 스톱은 SMask다(`engine-gradient`가 PDF 바이트로 확인).
 - production JS는 단일 청크(약 1MB, 2026-10-13 측정). Bun.serve HTML 번들이 코드 분할을 하지 않는다.
 - lint는 정규식 기반이라 특이한 마크업에서 오탐이 있을 수 있다. error만 종료 코드에 반영한다.
-- 발표 동기화는 같은 출처의 BroadcastChannel 전용. Chrome 계열 전용(Window Management API). mac-cloud에는 화면이 없어 외장 모니터는 검증하지 못한다.
+- 발표 동기화는 같은 출처의 BroadcastChannel 전용. Chrome 계열 전용(Window Management API). 개발 서버 기계에는 화면이 없어 외장 모니터는 검증하지 못한다.
 - 편집기는 슬라이드 단위 원문 보존(`app/src/lib/deck-source.ts`)을 전제로 한다. 인라인 편집은 글자만 담은 요소 중심.
 - 리모컨은 서버 메모리에만 세션을 두고(재시작하면 사라짐) 명령을 next, prev, goto, blank, timer로 제한한다. **tailnet 안의 기기가 앱 전체 API에 닿을 수 있다는 한계를 넓히지도 좁히지도 않는다.** 휴대폰이 편집 API에 닿지 못하게 하려면 `/remote/*`와 `/api/remote/*`만 허용하는 전용 프록시를 별도 포트에 두는 후속 작업이 필요하다.
 - 번들에는 노트(`aside[data-notes]`)가 그대로 남는다. 청중에게 노트가 새는 것을 막으려면 게시 전에 지우는 옵션이 필요하다(후속 후보).
@@ -121,12 +121,12 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 - 러너: `bun scripts/test.ts --only`는 **반복해서** 줘야 여러 단계가 선택된다. `--help`를 붙이면 전체가 돈다.
 
 ### main에 안 넣은 것 (브랜치 `wip/m4-live-update`, 미검증)
-- M4 발표 화면 실시간 갱신(엔진 `refresh`, `app/src/Presenter.tsx` 연결, `live-update`, 시험 `engine-refresh`/`present-live`), `editor-anim-perf`의 에이전트 효과 항목, 러너 단계 두 개. 엔진 변경이라 브라우저 검증 없이는 main에 넣지 않았다. 재개: 그 브랜치를 main 위로 합치고 mac-local에서 `present-live`, `engine-refresh`, `present`, `engine-verify`, `engine-anim`, `anim-perf`, `editor-anim-perf`를 통과시킨 뒤 푸시.
+- M4 발표 화면 실시간 갱신(엔진 `refresh`, `app/src/Presenter.tsx` 연결, `live-update`, 시험 `engine-refresh`/`present-live`), `editor-anim-perf`의 에이전트 효과 항목, 러너 단계 두 개. 엔진 변경이라 브라우저 검증 없이는 main에 넣지 않았다. 재개: 그 브랜치를 main 위로 합치고 주 노트북에서 `present-live`, `engine-refresh`, `present`, `engine-verify`, `engine-anim`, `anim-perf`, `editor-anim-perf`를 통과시킨 뒤 푸시.
 
-### 검증하지 못한 것 (mac-local에서 돌릴 것)
+### 검증하지 못한 것 (주 노트북에서 돌릴 것)
 - 전체 게이트(느린 단계 포함). 마지막 주 노트북 부분 결과(4d28788 기준 34단계 통과)에서 실패는 `channel`(시험 결함, 수정됨)과 `present` 두 시나리오(`?sync=1` 팝업 주소 타이밍, 시험 수정 `9b27cb3`, 재현 확인 못 함) 둘뿐이었다. 그 뒤 코멘트 UX와 M1~M5 변경은 브라우저 검증을 아직 못 봤다.
 - 코멘트 UX 1단계 화면(`d71d08f` 등)의 `comments-e2e`, `comment-mode`, `comments-a11y`, `comments-perf`, 핀의 접근성 이름은 아직 예전 상태 이름.
-- 방법: `scripts/remote-gate.sh start HEAD --slow`(커밋된 상태를 mac-local의 `~/Developer/ci/slidekit-gate`에 풀어 낮은 우선순위로 실행), `status`, `log`, `stop`. 개발 중 작업물은 `NAME=이름 WORKTREE=1`. 러너 잠금이 mac-local에서 공유되어 한 번에 하나만 돈다. mac-cloud에서는 브라우저 시험을 돌리지 않는다(발열).
+- 방법: `scripts/remote-gate.sh start HEAD --slow`(커밋된 상태를 주 노트북의 `~/Developer/ci/slidekit-gate`에 풀어 낮은 우선순위로 실행), `status`, `log`, `stop`. 개발 중 작업물은 `NAME=이름 WORKTREE=1`. 러너 잠금이 주 노트북에서 공유되어 한 번에 하나만 돈다. 개발 서버 기계에서는 브라우저 시험을 돌리지 않는다(발열).
 
 ### 남은 일
 - 코멘트 UX 2단계(핀 모양, 호버 미리보기, 패널 재구성, 하단 트레이)와 3단계(스레드, 읽지 않음, 팝오버, 바텀 시트): `spec/COMMENT-UX.md`, `spec/COMMENT-UX-UI.md`.
@@ -135,7 +135,7 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 - 알려진 흔들림: `editor-anim-perf`, `editor-perf`는 부하에서 흔들려 재실행 통과가 불안정 WARN으로 남는다. `routes`가 재시도에서 한 번 "Blocked script execution in about:srcdoc"로 실패한 적이 있다(재현 못 함).
 
 ### 운영 메모
-- mac-cloud는 전원이 연결돼도 유휴 잠자기에 들 수 있어 오래 걸리는 실행은 `caffeinate -s -i`로 감쌌다(전원 설정은 건드리지 않음). 백그라운드 실행은 세션과 분리(`setsid`)해야 세션이 끝나도 살아남는다.
+- 개발 서버 기계는 전원이 연결돼도 유휴 잠자기에 들 수 있어 오래 걸리는 실행은 `caffeinate -s -i`로 감쌌다(전원 설정은 건드리지 않음). 백그라운드 실행은 세션과 분리(`setsid`)해야 세션이 끝나도 살아남는다.
 - 포트 3250/3251은 안정판 미리보기의 앱 포트(번갈아 사용)라 시험에 쓰지 않는다. 시험 포트: channel-edit 3249, channel-flood 3262, channel-stall 3263.
 
 ## 사용자 확인이 필요한 것
@@ -150,6 +150,6 @@ HTML 슬라이드를 만들고, 편집하고, 발표하고, 배포하는 로컬 
 
 ## 환경 메모
 
-- 경로 `~/Developer/slidekit`(mac-local과 개발 서버 기계 동일). 기계 지침은 `~/.claude/CLAUDE.md`. 점검은 `bun app/server.ts doctor`.
+- 경로 `~/Developer/slidekit`(주 노트북과 개발 서버 기계 동일). 점검은 `bun app/server.ts doctor`.
 
-- 코멘트 모드(spec/COMMENT-MODE.md): 모드 층 `CommentModeLayer.tsx`, 순수 계산 `lib/comment-mode.ts`, 캡처 `app/capture.ts`(Chrome CLI와 sips, 이미지 `.comments/<id>.png`, gitignore). 테스트 `comment-mode` 단계와 단위 `comment-mode.test.ts`, `capture.test.ts`. 미검증: 시스템 Chrome(`--headless=new`) 캡처는 mac-local에서 확인 필요.
+- 코멘트 모드(spec/COMMENT-MODE.md): 모드 층 `CommentModeLayer.tsx`, 순수 계산 `lib/comment-mode.ts`, 캡처 `app/capture.ts`(Chrome CLI와 sips, 이미지 `.comments/<id>.png`, gitignore). 테스트 `comment-mode` 단계와 단위 `comment-mode.test.ts`, `capture.test.ts`. 미검증: 시스템 Chrome(`--headless=new`) 캡처는 주 노트북에서 확인 필요.

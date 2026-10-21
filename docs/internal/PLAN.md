@@ -10,7 +10,7 @@
 - Keynote처럼 발표한다. 맥 내장 화면에는 발표자 화면, 외장 모니터에는 발표 화면만 띄운다.
 - 텍스트, 간단한 스타일, 슬라이드 순서를 마우스와 키보드로 직접 고친다.
 - 요소에 코멘트를 남기면 열려 있는 Claude Code 세션이 받아서 고치고 답한다.
-- 덱을 완전한 HTML 파일 하나로 묶어 `static.vynnlee.com/<덱이름>`에 올린다.
+- 덱을 완전한 HTML 파일 하나로 묶어 `your-domain.example/<덱이름>`에 올린다.
 
 ## 확정된 결정
 
@@ -25,15 +25,15 @@
 | 발표 브라우저 | Chrome 계열. 외장 모니터 자동 배치 사용. |
 | 발표자 화면 | 현재와 다음 슬라이드, 노트, 타이머와 시계, 현재 장과 목차 위치. 항목마다 켜고 끌 수 있다. |
 | 내보내기 | 글꼴과 이미지까지 넣은 완전한 HTML 파일 하나 |
-| 배포 | `static.vynnlee.com/<덱이름>`, 덱마다 공개 범위 선택(공개, 비밀번호) |
+| 배포 | `your-domain.example/<덱이름>`, 덱마다 공개 범위 선택(공개, 비밀번호) |
 | 덱 보관 | `slidekit/decks/<덱이름>/` |
 | 첫 예제 | 디자이너를 위한 바이브 코딩 워크숍 덱 |
 | 첫 버전 | 규격 + 발표 |
 | 런타임 | Bun (서버, 코멘트 채널, 번들러, `slidekit` 명령) |
 | 앱 화면 | React + Tailwind v4 + shadcn/ui + Fluid Functionalism 컴포넌트 |
 | 덱 엔진 | 순수 HTML/CSS/JS. 덱은 파일 하나로 어디서나 열려야 하므로 React를 넣지 않는다. |
-| 도메인 | vynnlee.com은 Cloudflare에서 관리 중 |
-| 저장소 | github.com/vynnlee/slidekit (비공개) |
+| 도메인 | your-domain.example은 Cloudflare에서 관리 중 |
+| 저장소 | github.com/vynnlee/slidekit (공개) |
 
 ## 구성 요소
 
@@ -44,7 +44,7 @@ slidekit/
 ├── app/         로컬 웹앱 (덱 목록, 발표자 화면, 편집기, 코멘트). 덱은 iframe 안에 띄운다.
 ├── channel/     코멘트를 Claude Code 세션으로 보내는 MCP 서버 (Claude Code가 자식 프로세스로 띄움)
 ├── bundler/     덱을 HTML 파일 하나로 묶는 명령
-├── deploy/      static.vynnlee.com 배포 (Cloudflare)
+├── deploy/      your-domain.example 배포 (Cloudflare)
 └── decks/       강의 덱 모음
     └── vibe-coding-workshop/
 ```
@@ -109,7 +109,7 @@ slidekit/
 ## 번들링과 배포 (3단계)
 
 - `slidekit bundle <덱>`: 엔진과 이미지를 HTML 안에 넣고, 덱에 쓰인 글자만 골라 글꼴을 넣는다. 결과는 `dist/<덱>.html` 하나.
-- `slidekit deploy <덱>`: Cloudflare에 올려 `static.vynnlee.com/<덱>`으로 연다. 비밀번호 덱은 Cloudflare Worker가 비밀번호를 확인한 뒤 보여 준다.
+- `slidekit deploy <덱>`: Cloudflare에 올려 `your-domain.example/<덱>`으로 연다. 비밀번호 덱은 Cloudflare Worker가 비밀번호를 확인한 뒤 보여 준다.
 
 ## 단계별 계획
 
@@ -123,7 +123,7 @@ slidekit/
    - channel MCP 서버와 코멘트 흐름
 3. **번들링 + 배포**
    - 파일 하나로 묶기, 글꼴 서브셋
-   - static.vynnlee.com 배포와 덱별 비밀번호
+   - your-domain.example 배포와 덱별 비밀번호
 
 ## 아직 정하지 않은 것
 

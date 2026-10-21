@@ -19,7 +19,7 @@ const POS: [string, string][] = [
 const NEG: string[] = [
   "const token = process.env.CLOUDFLARE_API_TOKEN;",
   'export CLOUDFLARE_API_TOKEN=$(security find-generic-password -s x -w)',
-  "id = \"b368a418ca274335947e4c4074eedd8c\" # kv namespace",
+  "id = \"b96f1dc5a1e21b82ca630ab77ac5b21c\" # kv namespace",
   "const password = askHidden(\"덱 비밀번호: \");",
   "const secret = c.env.COOKIE_SECRET;",
   "token: string; password?: string;",

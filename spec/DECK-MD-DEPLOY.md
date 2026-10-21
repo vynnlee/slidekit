@@ -4,7 +4,7 @@ M3a(`spec/DECK-MD.md`, engine-dev)가 `dist/<덱>.md`를 만든다(노트 없음
 
 ## 1. 주소와 저장
 
-- 덱은 `https://static.vynnlee.com/<덱>`이다. `deck.md`는 **`/<덱>/deck.md`** 에 둔다. 이유: 비밀번호 쿠키가 `Path=/<덱>`이라 `/<덱>.md`에는 쿠키가 가지 않는다(경로 일치 규칙은 다음 글자가 `/`여야 한다). `/<덱>/deck.md`는 같은 쿠키가 가서 같은 관문을 지난다.
+- 덱은 `https://your-domain.example/<덱>`이다. `deck.md`는 **`/<덱>/deck.md`** 에 둔다. 이유: 비밀번호 쿠키가 `Path=/<덱>`이라 `/<덱>.md`에는 쿠키가 가지 않는다(경로 일치 규칙은 다음 글자가 `/`여야 한다). `/<덱>/deck.md`는 같은 쿠키가 가서 같은 관문을 지난다.
 - KV 키 `md:<덱>`에 마크다운 본문을 저장한다(`html:<덱>`, `meta:<덱>` 옆). 올리는 순서는 meta, md, html이다(html이 마지막이라 alternate 링크가 있는 덱이 열릴 때 md는 이미 있다. 공개에서 비밀번호로 바꿀 때 노출 방지 순서도 그대로).
 - 게시 취소(`unpublish`)는 `md:<덱>`도 지운다(meta, html, md 순. 먼저 meta를 지우는 기존 규칙 유지). 키 이름은 지울 목록에 나온다.
 
@@ -41,7 +41,7 @@ M3a(`spec/DECK-MD.md`, engine-dev)가 `dist/<덱>.md`를 만든다(노트 없음
   This deck is password protected: <url>
   Ask me for its contents.
   ```
-- 복사는 기존 Copy link와 같은 방식(`navigator.clipboard`, 실패하면 토스트)이다. URL은 서버가 준 게시 기록의 URL만 쓴다(`https://static.vynnlee.com/<이름>` 검증은 기존 게시 기록 규칙).
+- 복사는 기존 Copy link와 같은 방식(`navigator.clipboard`, 실패하면 토스트)이다. URL은 서버가 준 게시 기록의 URL만 쓴다(`https://your-domain.example/<이름>` 검증은 기존 게시 기록 규칙).
 
 ## 5. 합격 기준
 
